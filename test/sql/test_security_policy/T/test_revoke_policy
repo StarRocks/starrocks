@@ -27,13 +27,13 @@ alter table t0 modify column v1 set masking policy mp1;
 select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
 alter table t0 modify column v1 set masking policy mp1;
 
-alter table t0 add row access policy rp1;
+alter table t0 add row access policy rp1 on(v1);
 select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
-alter table t0 add row access policy rp1;
+alter table t0 add row access policy rp1 on(v1);
 
-alter table t0 add row access policy rp2;
+alter table t0 add row access policy rp2 on(v1);
 select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
-alter table t0 add row access policy rp3;
+alter table t0 add row access policy rp3 on(v1);
 select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";
 alter table t0 drop all row access policies;
 select * from sys.policy_references where POLICY_DATABASE="test_revoke_policy";

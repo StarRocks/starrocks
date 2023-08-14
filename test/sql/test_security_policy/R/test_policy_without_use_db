@@ -1,0 +1,85 @@
+-- name: test_policy_without_use_db
+create database test_policy_without_use_db;
+-- result:
+-- !result
+create masking policy mp1 as (v1 bigint) returns bigint -> v1 + 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+create row access policy rp1 as (v1 bigint) returns boolean -> true;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+create masking policy test_policy_without_use_db.mp1 as (v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+create row access policy test_policy_without_use_db.rp1 as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+create user user_test_show_grants;
+-- result:
+-- !result
+grant apply on masking policy test_policy_without_use_db.mp1 to user_test_show_grants;
+-- result:
+-- !result
+grant drop on masking policy test_policy_without_use_db.mp1 to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP ON MASKING POLICY test_policy_without_use_db.mp1 TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke apply on masking policy test_policy_without_use_db.mp1 from user_test_show_grants;
+-- result:
+-- !result
+revoke drop on masking policy test_policy_without_use_db.mp1 from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+grant all on all masking policies in database test_policy_without_use_db to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke all on all masking policies in database test_policy_without_use_db from user_test_show_grants;
+-- result:
+-- !result
+grant apply on row access policy test_policy_without_use_db.rp1 to user_test_show_grants;
+-- result:
+-- !result
+grant drop on row access policy test_policy_without_use_db.rp1 to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP ON ROW ACCESS POLICY test_policy_without_use_db.rp1 TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke apply on row access policy test_policy_without_use_db.rp1 from user_test_show_grants;
+-- result:
+-- !result
+revoke drop on row access policy test_policy_without_use_db.rp1 from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+grant all on all row access policies in database test_policy_without_use_db to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke all on all row access policies in database test_policy_without_use_db from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+drop user user_test_show_grants;
+-- result:
+-- !result

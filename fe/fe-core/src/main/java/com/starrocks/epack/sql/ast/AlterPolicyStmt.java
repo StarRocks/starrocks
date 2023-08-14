@@ -14,8 +14,15 @@ public class AlterPolicyStmt extends DdlStmt {
     private final PolicyName policyName;
     private final AlterPolicyClause alterPolicyClause;
 
-    //Resolved by analyzer
     private Long policyId;
+
+    public void setPolicyId(Long policyId) {
+        this.policyId = policyId;
+    }
+
+    public Long getPolicyId() {
+        return policyId;
+    }
 
     public AlterPolicyStmt(PolicyType policyType, PolicyName policyName, boolean ifExists, AlterPolicyClause alterPolicyClause,
                            NodePosition pos) {

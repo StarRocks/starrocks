@@ -23,7 +23,7 @@ public class ViewAnalyzerEPack {
             ViewAnalyzer.analyze(statement, context);
             Map<String, WithColumnMaskingPolicy> maskingPolicyMap = statement.getMaskingPolicyContextMap();
             for (Map.Entry<String, WithColumnMaskingPolicy> entry : maskingPolicyMap.entrySet()) {
-                entry.getValue().analyze(context);
+                entry.getValue().analyze(context, entry.getKey());
             }
 
             for (WithRowAccessPolicy withRowAccessPolicy : statement.getWithRowAccessPolicies()) {

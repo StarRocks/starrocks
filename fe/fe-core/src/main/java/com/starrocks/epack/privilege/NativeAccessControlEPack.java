@@ -38,6 +38,13 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
     }
 
     @Override
+    public void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+                                          String db) {
+        checkAnyActionOnPolicy(currentUser, roleIds, policyType, catalogName, db, "*");
+    }
+
+
+    @Override
     public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
         if (!checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.WAREHOUSE,
                 Collections.singletonList(name))) {

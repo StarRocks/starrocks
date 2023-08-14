@@ -75,7 +75,7 @@ grant all privileges on all tables in database sys to u2;
 execute as u2 with no revert;
 -- result:
 -- !result
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
@@ -103,7 +103,7 @@ show grants for u2;
 execute as u2 with no revert;
 -- result:
 -- !result
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 -- result:
 E: (1064, 'Access denied; you need (at least one of) the APPLY privilege(s) on ROW ACCESS POLICY rp for this operation')
 -- !result

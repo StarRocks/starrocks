@@ -1,0 +1,80 @@
+-- name: test_show_grants
+create database test_show_grants;
+-- result:
+-- !result
+use test_show_grants;
+-- result:
+-- !result
+create masking policy mp1 as (v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+create row access policy rp1 as (v1 bigint) returns boolean -> true;
+-- result:
+-- !result
+create user user_test_show_grants;
+-- result:
+-- !result
+grant apply on masking policy mp1 to user_test_show_grants;
+-- result:
+-- !result
+grant drop on masking policy mp1 to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP ON MASKING POLICY test_show_grants.mp1 TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke apply on masking policy mp1 from user_test_show_grants;
+-- result:
+-- !result
+revoke drop on masking policy mp1 from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+grant all on all masking policies in database test_show_grants to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke all on all masking policies in database test_show_grants from user_test_show_grants;
+-- result:
+-- !result
+grant apply on row access policy rp1 to user_test_show_grants;
+-- result:
+-- !result
+grant drop on row access policy rp1 to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP ON ROW ACCESS POLICY test_show_grants.rp1 TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke apply on row access policy rp1 from user_test_show_grants;
+-- result:
+-- !result
+revoke drop on row access policy rp1 from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+grant all on all row access policies in database test_show_grants to user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+-- !result
+revoke all on all row access policies in database test_show_grants from user_test_show_grants;
+-- result:
+-- !result
+show grants for user_test_show_grants;
+-- result:
+-- !result
+drop user user_test_show_grants;
+-- result:
+-- !result

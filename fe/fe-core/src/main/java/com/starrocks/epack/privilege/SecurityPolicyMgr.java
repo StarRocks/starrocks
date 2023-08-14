@@ -4,7 +4,6 @@ package com.starrocks.epack.privilege;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.persist.AlterPolicyLog;
 import com.starrocks.epack.persist.ApplyOrRevokeMaskingPolicyLog;
@@ -38,7 +37,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 public class SecurityPolicyMgr {
 
@@ -86,7 +84,7 @@ public class SecurityPolicyMgr {
                     policyName,
                     dbUID,
                     stmt.getArgNames(),
-                    stmt.getArgTypeDefs().stream().map(TypeDef::getType).collect(Collectors.toList()),
+                    stmt.getArgTypeDefs(),
                     stmt.getReturnType().getType(),
                     stmt.getExpression(),
                     stmt.getComment());

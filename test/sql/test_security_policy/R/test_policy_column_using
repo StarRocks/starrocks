@@ -1,0 +1,216 @@
+-- name: test_policy_column_using
+create database test_policy_column_using;
+-- result:
+-- !result
+use test_policy_column_using;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 values(1,2,3);
+-- result:
+-- !result
+insert into t0 values(4,5,6);
+-- result:
+-- !result
+create masking policy mp1 as (col1 bigint) returns bigint -> if (col1 = 1, 2, 3);
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp1;
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+2	2	3
+3	5	6
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp1 using(v1);
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+2	2	3
+3	5	6
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp1 using(v2);
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+3	5	6
+3	2	3
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+create row access policy rp as (col bigint) returns boolean -> if (col = 1, true, false);
+-- result:
+-- !result
+alter table t0 add row access policy rp;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The number of on columns does not match the number of parameters required by the policy.')
+-- !result
+alter table t0 add row access policy rp on (v2);
+-- result:
+-- !result
+select * from sys.policy_references where POLICY_DATABASE="test_policy_column_using";
+-- result:
+test_policy_column_using	rp	Row Access	default_catalog	test_policy_column_using	t0	None
+-- !result
+alter table t0 drop row access policy rp;
+-- result:
+-- !result
+create masking policy mp2 as (col1 bigint, col2 bigint) returns bigint -> if (current_role() = 'root', col1, col2);
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp2 using(v2, v3);
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+2	2	3
+5	5	6
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+create masking policy mp3 as (col1 bigint, col2 bigint, col3 bigint) returns bigint -> if (col1=2, col2, col3);
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp3 using(v2, v1, v3);
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+1	2	3
+6	5	6
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+create masking policy empty_param_mp as () returns bigint -> 1;
+-- result:
+-- !result
+create row access policy empty_param_rp as () returns boolean -> if (current_role() = 'root', true, false);
+-- result:
+-- !result
+alter table t0 modify column v2 set masking policy empty_param_mp;
+-- result:
+-- !result
+alter table t0 add row access policy empty_param_rp;
+-- result:
+-- !result
+select * from t0 order by v1;
+-- result:
+1	1	3
+4	1	6
+-- !result
+alter table t0 modify column v2 unset masking policy;
+-- result:
+-- !result
+alter table t0 drop row access policy empty_param_rp;
+-- result:
+-- !result
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0) else col end;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+-- !result
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0, 1) else col end;
+-- result:
+-- !result
+alter table t0 modify column v2 set masking policy policy_struct;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+-- !result
+alter table t0 modify column v2 set masking policy policy_struct using(v1);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+-- !result
+alter table t0 modify column v2 set masking policy policy_struct using(v2);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+-- !result
+create row access policy policy_row_access_struct as (col struct<s1 int,sa2 int>) returns boolean
+        -> case when current_role() = 'root' then true else false end;
+-- result:
+-- !result
+alter table t0 add row access policy policy_row_access_struct;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The number of on columns does not match the number of parameters required by the policy.')
+-- !result
+alter table t0 add row access policy policy_row_access_struct on (v1);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+-- !result
+alter table t0 add row access policy policy_row_access_struct on (v1, v2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The number of on columns does not match the number of parameters required by the policy.')
+-- !result
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` struct<s1 int,sa2 int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+create masking policy return_struct as (col1 bigint, col2 bigint) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(col1, col2) else row(col2, col1) end;
+-- result:
+-- !result
+alter table t1 modify column v1 set masking policy return_struct using(v1, v2);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't cast return type from struct<s1 int(11), sa2 int(11)> to BIGINT.")
+-- !result
+alter table t1 modify column v1 set masking policy return_struct using(v3);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The number of using columns does not match the number of parameters required by the policy.')
+-- !result
+alter table t1 modify column v3 set masking policy return_struct using(v1, v2);
+-- result:
+-- !result
+select * from sys.policy_references where POLICY_DATABASE="test_policy_column_using" and POLICY_NAME="return_struct";
+-- result:
+test_policy_column_using	return_struct	Column Masking	default_catalog	test_policy_column_using	t1	v3
+-- !result
+insert into t1 values(1,2, row(1,2));
+-- result:
+-- !result
+insert into t1 values(3,4, row(0,0));
+-- result:
+-- !result
+select * from t1 order by v1;
+-- result:
+1	2	{"col1":1,"col2":2}
+3	4	{"col1":3,"col2":4}
+-- !result

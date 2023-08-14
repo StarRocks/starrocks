@@ -44,7 +44,7 @@ public class WithColumnMaskingPolicy implements ParseNode {
         this.policyId = policyId;
     }
 
-    public void analyze(ConnectContext context) {
+    public void analyze(ConnectContext context, String maskingColumnName) {
         AnalyzerUtilsEPack.normalizationPolicyName(context, policyName);
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         Policy policy = securityPolicyMgr.getPolicyByName(PolicyType.MASKING, policyName);
@@ -54,7 +54,11 @@ public class WithColumnMaskingPolicy implements ParseNode {
         policyId = policy.getPolicyId();
 
         if (usingColumns == null || usingColumns.isEmpty()) {
-            usingColumns = Lists.newArrayList(policy.getArgNames().get(0));
+            if (policy.getArgNames().size() > 1) {
+                throw new SemanticException("Multi-parameter policies need to use `using` to specify input parameters");
+            } else if (policy.getArgNames().size() == 1) {
+                usingColumns = Lists.newArrayList(maskingColumnName);
+            }
         }
 
         if (policy.getArgNames().size() != usingColumns.size()) {

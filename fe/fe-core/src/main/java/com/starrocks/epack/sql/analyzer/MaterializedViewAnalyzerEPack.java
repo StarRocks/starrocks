@@ -29,7 +29,7 @@ public class MaterializedViewAnalyzerEPack {
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             for (Map.Entry<String, WithColumnMaskingPolicy> entry : statement.getMaskingPolicyContextMap().entrySet()) {
-                entry.getValue().analyze(context);
+                entry.getValue().analyze(context, entry.getKey());
             }
 
             for (WithRowAccessPolicy withRowAccessPolicy : statement.getWithRowAccessPolicies()) {

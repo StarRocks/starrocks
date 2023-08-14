@@ -40,7 +40,11 @@ alter table t0 modify column v1 unset masking policy;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_table";
 -- result:
 -- !result
-alter table t0 add row access policy rp;
+alter table t0 modify column v1 set masking policy mp using (vv);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column vv is not exist in table t0.')
+-- !result
+alter table t0 add row access policy rp on (v1);
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_table";
@@ -52,4 +56,8 @@ alter table t0 drop row access policy rp;
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_table";
 -- result:
+-- !result
+alter table t0 add row access policy rp on (vv);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column vv is not exist in table t0.')
 -- !result

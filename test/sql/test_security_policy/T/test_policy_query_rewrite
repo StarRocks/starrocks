@@ -1,6 +1,6 @@
 -- name: test_policy_query_rewrite
-CREATE DATABASE test_create_masking_policy;
-use test_create_masking_policy;
+CREATE DATABASE test_policy_query_rewrite;
+use test_policy_query_rewrite;
 create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
 
 CREATE TABLE `t0` (

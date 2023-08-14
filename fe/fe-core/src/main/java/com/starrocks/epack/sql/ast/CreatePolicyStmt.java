@@ -4,11 +4,13 @@ package com.starrocks.epack.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class CreatePolicyStmt extends DdlStmt {
     private final boolean ifNotExists;
@@ -50,8 +52,8 @@ public class CreatePolicyStmt extends DdlStmt {
         return argNames;
     }
 
-    public List<TypeDef> getArgTypeDefs() {
-        return argTypeDefs;
+    public List<Type> getArgTypeDefs() {
+        return argTypeDefs.stream().map(TypeDef::getType).collect(Collectors.toList());
     }
 
     public TypeDef getReturnType() {

@@ -2,7 +2,6 @@
 
 package com.starrocks.epack.sql.ast;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
@@ -16,7 +15,7 @@ import java.util.List;
 
 public class WithRowAccessPolicy implements ParseNode {
     private final PolicyName policyName;
-    private List<String> onColumns;
+    private final List<String> onColumns;
     private final NodePosition pos;
 
     //Resolved by Analyzer
@@ -58,11 +57,7 @@ public class WithRowAccessPolicy implements ParseNode {
         }
         policyId = policy.getPolicyId();
 
-        if (onColumns == null || onColumns.isEmpty()) {
-            onColumns = Lists.newArrayList(policy.getArgNames().get(0));
-        }
-
-        if (policy.getArgNames().size() != onColumns.size()) {
+        if (onColumns != null && policy.getArgNames().size() != onColumns.size()) {
             throw new SemanticException("The number of on columns does not match " +
                     "the number of parameters required by the policy");
         }

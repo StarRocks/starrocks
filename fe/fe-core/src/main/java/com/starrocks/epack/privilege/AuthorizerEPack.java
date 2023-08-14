@@ -11,6 +11,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.util.Set;
 
 public class AuthorizerEPack extends Authorizer {
+
     public static void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                          String db, String policy, PrivilegeType privilegeType) {
         ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalogName))

@@ -26,13 +26,13 @@ select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_
 alter materialized view mv modify column v1 unset masking policy;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 
-alter materialized view mv add row access policy rp;
+alter materialized view mv add row access policy rp on (v1);
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 alter materialized view mv drop row access policy rp;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 
 alter table t0 modify column v1 set masking policy mp;
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 
 CREATE TABLE `test_policy` (
   `v1` bigint(20) NULL WITH MASKING POLICY mp COMMENT "",

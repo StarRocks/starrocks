@@ -1638,7 +1638,7 @@ privObjectTypePlural
 
 createMaskingPolicyStatement
     : CREATE MASKING POLICY (IF NOT EXISTS)? policyName=qualifiedName
-        AS '(' policySignature (',' policySignature)* ')' RETURNS type ARROW expression comment?
+        AS '(' policySignature? (',' policySignature)* ')' RETURNS type ARROW expression comment?
     ;
 
 dropMaskingPolicyStatement
@@ -1661,7 +1661,7 @@ showCreateMaskingPolicyStatement
 
 createRowAccessPolicyStatement
     : CREATE ROW ACCESS POLICY (IF NOT EXISTS)? policyName=qualifiedName
-      AS '(' policySignature (',' policySignature)* ')' RETURNS BOOLEAN ARROW expression comment?
+      AS '(' policySignature? (',' policySignature)* ')' RETURNS BOOLEAN ARROW expression comment?
     ;
 
 dropRowAccessPolicyStatement

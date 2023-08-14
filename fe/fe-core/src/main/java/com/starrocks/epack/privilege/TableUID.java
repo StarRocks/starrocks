@@ -43,6 +43,9 @@ public class TableUID {
                 return null;
             }
             Table table = db.getTable(Long.parseLong(this.tableUUID));
+            if (table == null) {
+                return null;
+            }
             return new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), table.getName());
         } else {
             Optional<Catalog> catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogById(catalogId);
@@ -57,6 +60,9 @@ public class TableUID {
             }
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTable(catalog.get().getName(), dbName, tblName);
+            if (table == null) {
+                return null;
+            }
 
             return new TableName(catalog.get().getName(), db.getFullName(), table.getName());
         }

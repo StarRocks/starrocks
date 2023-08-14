@@ -43,7 +43,7 @@ alter materialized view mv modify column v1 unset masking policy;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
 -- result:
 -- !result
-alter materialized view mv add row access policy rp;
+alter materialized view mv add row access policy rp on (v1);
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_mv";
@@ -60,7 +60,7 @@ alter table t0 modify column v1 set masking policy mp;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Can not apply policy to table which has related materialized view.')
 -- !result
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Can not apply policy to table which has related materialized view.')
 -- !result

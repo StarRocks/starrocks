@@ -28,6 +28,7 @@ import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -35,6 +36,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
+import com.starrocks.epack.sql.analyzer.AnalyzerUtilsEPack;
+import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -63,6 +66,7 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -496,14 +500,40 @@ public class PrivilegeStmtAnalyzer {
                         }
                     } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                            PolicyName policyName;
+                            if (tokens.size() == 2) {
+                                policyName = new PolicyName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                        tokens.get(0), tokens.get(1), NodePosition.ZERO);
+                            } else if (tokens.size() == 1) {
+                                policyName = new PolicyName(null, null, tokens.get(0), NodePosition.ZERO);
+                                AnalyzerUtilsEPack.normalizationPolicyName(session, policyName);
+                            } else {
+                                throw new SemanticException(
+                                        "Invalid grant statement with error privilege object " + tokens);
+                            }
+
                             PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                    PolicyType.MASKING, Lists.newArrayList(session.getDatabase(), tokens.get(0)));
+                                    PolicyType.MASKING,
+                                    Lists.newArrayList(policyName.getCatalog(), policyName.getDbName(), policyName.getName()));
                             objectList.add(pEntryObject);
                         }
                     } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                            PolicyName policyName;
+                            if (tokens.size() == 2) {
+                                policyName = new PolicyName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                        tokens.get(0), tokens.get(1), NodePosition.ZERO);
+                            } else if (tokens.size() == 1) {
+                                policyName = new PolicyName(null, null, tokens.get(0), NodePosition.ZERO);
+                                AnalyzerUtilsEPack.normalizationPolicyName(session, policyName);
+                            } else {
+                                throw new SemanticException(
+                                        "Invalid grant statement with error privilege object " + tokens);
+                            }
+
                             PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                    PolicyType.ROW_ACCESS, Lists.newArrayList(session.getDatabase(), tokens.get(0)));
+                                    PolicyType.ROW_ACCESS,
+                                    Lists.newArrayList(policyName.getCatalog(), policyName.getDbName(), policyName.getName()));
                             objectList.add(pEntryObject);
                         }
                     } else {

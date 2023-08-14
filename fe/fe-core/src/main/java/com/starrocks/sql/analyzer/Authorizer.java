@@ -22,8 +22,10 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.privilege.AccessControlEPack;
 import com.starrocks.epack.privilege.NativeAccessControlEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
+import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
@@ -188,8 +190,7 @@ public class Authorizer {
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
-    public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
-                                              String db) {
+    public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
         Preconditions.checkNotNull(db, "db should not null");
 
         try {
@@ -208,8 +209,20 @@ public class Authorizer {
                             getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                                     .checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db);
                         } catch (AccessDeniedException e4) {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
+                            try {
+                                getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                        .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
+                            } catch (AccessDeniedException e5) {
+                                AccessControlEPack accessControlEPack = (AccessControlEPack) getInstance()
+                                        .getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                                try {
+                                    accessControlEPack.checkAnyActionOnAnyPolicy(
+                                            currentUser, roleIds, PolicyType.MASKING, catalogName, db);
+                                } catch (AccessDeniedException e6) {
+                                    accessControlEPack.checkAnyActionOnAnyPolicy(
+                                            currentUser, roleIds, PolicyType.ROW_ACCESS, catalogName, db);
+                                }
+                            }
                         }
                     }
                 } else {

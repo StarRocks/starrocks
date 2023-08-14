@@ -350,9 +350,11 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitCreateMaskingPolicyStatement(StarRocksParser.CreateMaskingPolicyStatementContext context) {
         List<String> argNames = new ArrayList<>();
         List<TypeDef> argTypes = new ArrayList<>();
-        for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
-            argNames.add(((Identifier) visit(arg.identifier())).getValue());
-            argTypes.add(new TypeDef(getType(arg.type())));
+        if (context.policySignature() != null) {
+            for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
+                argNames.add(((Identifier) visit(arg.identifier())).getValue());
+                argTypes.add(new TypeDef(getType(arg.type())));
+            }
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.policyName);
@@ -422,9 +424,11 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitCreateRowAccessPolicyStatement(StarRocksParser.CreateRowAccessPolicyStatementContext context) {
         List<String> argNames = new ArrayList<>();
         List<TypeDef> argTypes = new ArrayList<>();
-        for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
-            argNames.add(((Identifier) visit(arg.identifier())).getValue());
-            argTypes.add(new TypeDef(getType(arg.type())));
+        if (context.policySignature() != null) {
+            for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
+                argNames.add(((Identifier) visit(arg.identifier())).getValue());
+                argTypes.add(new TypeDef(getType(arg.type())));
+            }
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.policyName);

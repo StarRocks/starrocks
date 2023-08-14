@@ -96,7 +96,7 @@ grant all privileges on table t0 to u2;
 grant all privileges on all tables in database sys to u2;
 
 execute as u2 with no revert;
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 select * from sys.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
 alter table t0 drop row access policy rp;
 select * from sys.policy_references where POLICY_DATABASE='test_row_access_policy_grant';
@@ -106,7 +106,7 @@ revoke apply on row access policy rp from u2;
 show grants for u2;
 
 execute as u2 with no revert;
-alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v1);
 select * from sys.policy_references where POLICY_DATABASE='test_policy_grant';
 
 drop row access policy rp;

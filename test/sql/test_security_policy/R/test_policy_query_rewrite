@@ -1,0 +1,145 @@
+-- name: test_policy_query_rewrite
+CREATE DATABASE test_policy_query_rewrite;
+-- result:
+-- !result
+use test_policy_query_rewrite;
+-- result:
+-- !result
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+-- !result
+alter table t0 modify column v2 set masking policy mp using (v2);
+-- result:
+-- !result
+ explain select * from t0;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: expr | 5: expr | 3: v3
+  PARTITION: RANDOM
+
+  RESULT SINK
+
+  1:Project
+  |  <slot 3> : 3: v3
+  |  <slot 4> : 1: v1 + 1
+  |  <slot 5> : 2: v2 + 1
+  |  
+  0:OlapScanNode
+     TABLE: t0
+     PREAGGREGATION: ON
+     partitions=0/1
+     rollup: t0
+     tabletRatio=0/0
+     tabletList=
+     cardinality=1
+     avgRowSize=5.0
+-- !result
+alter table t0 modify column v1 unset masking policy;
+-- result:
+-- !result
+alter table t0 modify column v2 unset masking policy;
+-- result:
+-- !result
+ explain select * from t0;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3
+  PARTITION: RANDOM
+
+  RESULT SINK
+
+  0:OlapScanNode
+     TABLE: t0
+     PREAGGREGATION: ON
+     partitions=0/1
+     rollup: t0
+     tabletRatio=0/0
+     tabletList=
+     cardinality=1
+     avgRowSize=3.0
+-- !result
+create masking policy mp2 as ( v1 bigint, v2 bigint, v3 bigint) returns bigint -> if (v1 = 1, v2, v3);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `a` bigint(20) NULL COMMENT "",
+  `b` bigint(20) NULL COMMENT "",
+  `c` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`a`, `b`, `c`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+alter table t1 modify column a set masking policy mp2 using (a, b, c);
+-- result:
+-- !result
+ explain select * from t1;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:4: if | 2: b | 3: c
+  PARTITION: RANDOM
+
+  RESULT SINK
+
+  1:Project
+  |  <slot 2> : 2: b
+  |  <slot 3> : 3: c
+  |  <slot 4> : if(1: a = 1, 2: b, 3: c)
+  |  
+  0:OlapScanNode
+     TABLE: t1
+     PREAGGREGATION: ON
+     partitions=0/1
+     rollup: t1
+     tabletRatio=0/0
+     tabletList=
+     cardinality=1
+     avgRowSize=4.0
+-- !result
+alter table t1 modify column a unset masking policy;
+-- result:
+-- !result
+ explain select * from t1;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: a | 2: b | 3: c
+  PARTITION: RANDOM
+
+  RESULT SINK
+
+  0:OlapScanNode
+     TABLE: t1
+     PREAGGREGATION: ON
+     partitions=0/1
+     rollup: t1
+     tabletRatio=0/0
+     tabletList=
+     cardinality=1
+     avgRowSize=3.0
+-- !result

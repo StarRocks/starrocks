@@ -1,8 +1,8 @@
 -- name: test_create_policy
-CREATE DATABASE test_create_masking_policy;
+CREATE DATABASE test_create_policy;
 -- result:
 -- !result
-use test_create_masking_policy;
+use test_create_policy;
 -- result:
 -- !result
 create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
@@ -10,7 +10,7 @@ create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
 -- !result
 show masking policies;
 -- result:
-mp	MASKING	default_catalog	test_create_masking_policy
+mp	MASKING	default_catalog	test_create_policy
 -- !result
 show create masking policy mp;
 -- result:
@@ -21,9 +21,51 @@ create row access policy rp as (v1 bigint) returns boolean -> true;
 -- !result
 show row access policies;
 -- result:
-rp	ROW ACCESS	default_catalog	test_create_masking_policy
+rp	ROW ACCESS	default_catalog	test_create_policy
 -- !result
 show create row access policy rp;
 -- result:
 rp	CREATE ROW ACCESS POLICY rp AS (v1 bigint(20)) RETURNS boolean -> TRUE
+-- !result
+alter row access policy if exists not_exists_policy set comment = "foo";
+-- result:
+-- !result
+alter row access policy rp set body -> row(0, 1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: WHERE clause row(0, 1) can not be converted to boolean type.')
+-- !result
+alter row access policy rp set body -> if (v2 = 2, true, false);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'v2' cannot be resolved.")
+-- !result
+alter row access policy rp set body -> if (v1 = 2, row(0, 1), row(1,1));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: WHERE clause if(`__policy`.`v1` = 2, row(0, 1), row(1, 1)) can not be converted to boolean type.')
+-- !result
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0) else col end;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+-- !result
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0,0) else col end;
+-- result:
+-- !result
+alter masking policy if exists not_exists_policy set comment = "foo";
+-- result:
+-- !result
+alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0) else col end;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+-- !result
+alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0, 0) else col end;
+-- result:
+-- !result
+alter masking policy policy_struct set body -> col2;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'col2' cannot be resolved.")
+-- !result
+create row access policy rp1 as (col array<int>) returns boolean -> cast('[1,1]' as array<int>);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: WHERE clause CAST('[1,1]' AS ARRAY<INT>) can not be converted to boolean type.")
 -- !result

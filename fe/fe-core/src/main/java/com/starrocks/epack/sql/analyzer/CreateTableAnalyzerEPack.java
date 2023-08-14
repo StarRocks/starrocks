@@ -17,7 +17,7 @@ public class CreateTableAnalyzerEPack {
         if (statement.getMaskingPolicyContextMap() != null) {
             Map<String, WithColumnMaskingPolicy> maskingPolicyMap = statement.getMaskingPolicyContextMap();
             for (Map.Entry<String, WithColumnMaskingPolicy> entry : maskingPolicyMap.entrySet()) {
-                entry.getValue().analyze(context);
+                entry.getValue().analyze(context, entry.getKey());
             }
         }
 

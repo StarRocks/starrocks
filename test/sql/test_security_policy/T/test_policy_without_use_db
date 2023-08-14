@@ -1,0 +1,32 @@
+-- name: test_policy_without_use_db
+create database test_policy_without_use_db;
+
+create masking policy mp1 as (v1 bigint) returns bigint -> v1 + 1;
+create row access policy rp1 as (v1 bigint) returns boolean -> true;
+
+create masking policy test_policy_without_use_db.mp1 as (v1 bigint) returns bigint -> v1 + 1;
+create row access policy test_policy_without_use_db.rp1 as (v1 bigint) returns boolean -> true;
+
+create user user_test_show_grants;
+grant apply on masking policy test_policy_without_use_db.mp1 to user_test_show_grants;
+grant drop on masking policy test_policy_without_use_db.mp1 to user_test_show_grants;
+show grants for user_test_show_grants;
+revoke apply on masking policy test_policy_without_use_db.mp1 from user_test_show_grants;
+revoke drop on masking policy test_policy_without_use_db.mp1 from user_test_show_grants;
+show grants for user_test_show_grants;
+grant all on all masking policies in database test_policy_without_use_db to user_test_show_grants;
+show grants for user_test_show_grants;
+revoke all on all masking policies in database test_policy_without_use_db from user_test_show_grants;
+
+grant apply on row access policy test_policy_without_use_db.rp1 to user_test_show_grants;
+grant drop on row access policy test_policy_without_use_db.rp1 to user_test_show_grants;
+show grants for user_test_show_grants;
+revoke apply on row access policy test_policy_without_use_db.rp1 from user_test_show_grants;
+revoke drop on row access policy test_policy_without_use_db.rp1 from user_test_show_grants;
+show grants for user_test_show_grants;
+grant all on all row access policies in database test_policy_without_use_db to user_test_show_grants;
+show grants for user_test_show_grants;
+revoke all on all row access policies in database test_policy_without_use_db from user_test_show_grants;
+show grants for user_test_show_grants;
+
+drop user user_test_show_grants;

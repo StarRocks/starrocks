@@ -50,6 +50,7 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ObjectType;
@@ -189,7 +190,17 @@ public class AstToStringBuilder {
                 if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
                     sb.append(stmt.getObjectList().get(0).toString());
                 } else {
-                    sb.append(stmt.getObjectType().name()).append(" ");
+                    if (stmt.getObjectType().getId() > 20000) {
+                        if (stmt.getObjectType().equals(ObjectTypeEPack.MASKING_POLICY)) {
+                            sb.append(ObjectTypeEPack.MASKING_POLICY.name()).append(" ");
+                        } else if (stmt.getObjectType().equals(ObjectTypeEPack.ROW_ACCESS_POLICY)) {
+                            sb.append(ObjectTypeEPack.ROW_ACCESS_POLICY.name()).append(" ");
+                        } else if (stmt.getObjectType().equals(ObjectTypeEPack.WAREHOUSE)) {
+                            sb.append(ObjectTypeEPack.WAREHOUSE.name()).append(" ");
+                        }
+                    } else {
+                        sb.append(stmt.getObjectType().name()).append(" ");
+                    }
 
                     List<String> objectString = new ArrayList<>();
                     for (PEntryObject tablePEntryObject : stmt.getObjectList()) {

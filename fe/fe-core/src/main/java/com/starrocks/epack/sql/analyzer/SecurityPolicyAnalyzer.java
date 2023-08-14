@@ -6,7 +6,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Type;
+import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
@@ -15,7 +18,9 @@ import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
@@ -41,38 +46,12 @@ public class SecurityPolicyAnalyzer {
         }
 
         @Override
-        public Void visitCreatePolicyStatement(CreatePolicyStmt statement, ConnectContext session) {
-            PolicyName policyName = statement.getPolicyName();
+        public Void visitCreatePolicyStatement(CreatePolicyStmt stmt, ConnectContext session) {
+            PolicyName policyName = stmt.getPolicyName();
+            FeNameFormat.checkColumnName(policyName.getName());
             normalizationPolicyName(session, policyName);
-
-            SelectList selectList;
-            if (statement.getPolicyType().equals(PolicyType.MASKING)) {
-                selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(statement.getExpression(), null)), false);
-            } else {
-                selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(null)), false);
-            }
-            List<Expr> row = Lists.newArrayList();
-            for (TypeDef typeDef : statement.getArgTypeDefs()) {
-                row.add(NullLiteral.create(typeDef.getType()));
-            }
-            List<List<Expr>> rows = Collections.singletonList(row);
-            ValuesRelation valuesRelation = new ValuesRelation(rows, statement.getArgNames());
-
-            Expr predicate = null;
-            if (statement.getPolicyType().equals(PolicyType.ROW_ACCESS)) {
-                predicate = statement.getExpression();
-            }
-
-            SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, predicate, null, null);
-            QueryStatement queryStatement = new QueryStatement(selectRelation);
-            Analyzer.analyze(queryStatement, session);
-
-            Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
-            //Check compatible between expr result type and return type
-            TypeManager.addCastExpr(result, statement.getReturnType().getType());
-
+            analyzePolicyBody(session, stmt.getPolicyType(), stmt.getExpression().clone(),
+                    stmt.getArgTypeDefs(), stmt.getReturnType().getType(), stmt.getArgNames());
             return null;
         }
 
@@ -87,7 +66,60 @@ public class SecurityPolicyAnalyzer {
         public Void visitAlterPolicyStatement(AlterPolicyStmt stmt, ConnectContext session) {
             PolicyName policyName = stmt.getPolicyName();
             normalizationPolicyName(session, policyName);
+
+            if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicyRename) {
+                AlterPolicyStmt.PolicyRename policyRename = (AlterPolicyStmt.PolicyRename) stmt.getAlterPolicyClause();
+                FeNameFormat.checkColumnName(policyRename.getNewPolicyName());
+            } else if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicySetBody) {
+                AlterPolicyStmt.PolicySetBody policySetBody = (AlterPolicyStmt.PolicySetBody) stmt.getAlterPolicyClause();
+
+                SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+                Policy policy = securityPolicyMgr.getPolicyByName(stmt.getPolicyType(), stmt.getPolicyName(), stmt.isIfExists());
+                if (policy == null) {
+                    return null;
+                }
+                analyzePolicyBody(session, stmt.getPolicyType(), policySetBody.getPolicyBody(),
+                        policy.getArgTypes(), policy.getRetType(), policy.getArgNames());
+
+                stmt.setPolicyId(policy.getPolicyId());
+            }
             return null;
+        }
+
+        private void analyzePolicyBody(ConnectContext context, PolicyType policyType, Expr policyBody,
+                                       List<Type> argTypeDefs, Type returnType, List<String> argNames) {
+            SelectList selectList;
+            Expr predicate = null;
+            if (policyType.equals(PolicyType.MASKING)) {
+                selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(policyBody.clone(), null)), false);
+            } else {
+                selectList = new SelectList(Lists.newArrayList(
+                        new SelectListItem(null)), false);
+                predicate = policyBody.clone();
+            }
+
+            List<Expr> row = Lists.newArrayList();
+            ValuesRelation valuesRelation;
+            if (!argNames.isEmpty()) {
+                for (Type argType : argTypeDefs) {
+                    row.add(NullLiteral.create(argType));
+                }
+                List<List<Expr>> rows = Collections.singletonList(row);
+                valuesRelation = new ValuesRelation(rows, argNames);
+                valuesRelation.setAlias(new TableName(null, "__policy"));
+            } else {
+                valuesRelation = ValuesRelation.newDualRelation();
+            }
+
+            SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, predicate, null, null);
+            QueryStatement queryStatement = new QueryStatement(selectRelation);
+            Analyzer.analyze(queryStatement, context);
+            if (policyType.equals(PolicyType.MASKING)) {
+                Expr result = queryStatement.getQueryRelation().getOutputExpression().get(0);
+                //Check compatible between expr result type and return type
+                TypeManager.addCastExpr(result, returnType);
+            }
         }
 
         @Override

@@ -19,6 +19,10 @@ public interface AccessControlEPack extends AccessControl {
                                         String db, String policy) {
     }
 
+    default void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+                                           String db) {
+    }
+
     default void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
     }
 

@@ -1,0 +1,99 @@
+-- name: test_policy_column_using
+
+create database test_policy_column_using;
+use test_policy_column_using;
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 values(1,2,3);
+insert into t0 values(4,5,6);
+
+create masking policy mp1 as (col1 bigint) returns bigint -> if (col1 = 1, 2, 3);
+alter table t0 modify column v1 set masking policy mp1;
+select * from t0 order by v1;
+alter table t0 modify column v1 unset masking policy;
+alter table t0 modify column v1 set masking policy mp1 using(v1);
+select * from t0 order by v1;
+alter table t0 modify column v1 unset masking policy;
+alter table t0 modify column v1 set masking policy mp1 using(v2);
+select * from t0 order by v1;
+alter table t0 modify column v1 unset masking policy;
+
+create row access policy rp as (col bigint) returns boolean -> if (col = 1, true, false);
+alter table t0 add row access policy rp;
+alter table t0 add row access policy rp on (v2);
+select * from sys.policy_references where POLICY_DATABASE="test_policy_column_using";
+alter table t0 drop row access policy rp;
+
+create masking policy mp2 as (col1 bigint, col2 bigint) returns bigint -> if (current_role() = 'root', col1, col2);
+alter table t0 modify column v1 set masking policy mp2 using(v2, v3);
+select * from t0 order by v1;
+alter table t0 modify column v1 unset masking policy;
+
+create masking policy mp3 as (col1 bigint, col2 bigint, col3 bigint) returns bigint -> if (col1=2, col2, col3);
+alter table t0 modify column v1 set masking policy mp3 using(v2, v1, v3);
+select * from t0 order by v1;
+alter table t0 modify column v1 unset masking policy;
+
+create masking policy empty_param_mp as () returns bigint -> 1;
+create row access policy empty_param_rp as () returns boolean -> if (current_role() = 'root', true, false);
+alter table t0 modify column v2 set masking policy empty_param_mp;
+alter table t0 add row access policy empty_param_rp;
+select * from t0 order by v1;
+alter table t0 modify column v2 unset masking policy;
+alter table t0 drop row access policy empty_param_rp;
+
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0) else col end;
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0, 1) else col end;
+alter table t0 modify column v2 set masking policy policy_struct;
+alter table t0 modify column v2 set masking policy policy_struct using(v1);
+alter table t0 modify column v2 set masking policy policy_struct using(v2);
+
+create row access policy policy_row_access_struct as (col struct<s1 int,sa2 int>) returns boolean
+        -> case when current_role() = 'root' then true else false end;
+alter table t0 add row access policy policy_row_access_struct;
+alter table t0 add row access policy policy_row_access_struct on (v1);
+alter table t0 add row access policy policy_row_access_struct on (v1, v2);
+
+
+CREATE TABLE `t1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` struct<s1 int,sa2 int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+create masking policy return_struct as (col1 bigint, col2 bigint) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(col1, col2) else row(col2, col1) end;
+alter table t1 modify column v1 set masking policy return_struct using(v1, v2);
+alter table t1 modify column v1 set masking policy return_struct using(v3);
+alter table t1 modify column v3 set masking policy return_struct using(v1, v2);
+select * from sys.policy_references where POLICY_DATABASE="test_policy_column_using" and POLICY_NAME="return_struct";
+insert into t1 values(1,2, row(1,2));
+insert into t1 values(3,4, row(0,0));
+select * from t1 order by v1;
+
+
+

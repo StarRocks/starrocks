@@ -43,7 +43,7 @@ alter view v modify column v1 unset masking policy;
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_view";
 -- result:
 -- !result
-alter view v add row access policy rp;
+alter view v add row access policy rp on (v1);
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_apply_policy_to_view";

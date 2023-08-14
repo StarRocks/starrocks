@@ -1,6 +1,6 @@
 -- name: test_create_policy
-CREATE DATABASE test_create_masking_policy;
-use test_create_masking_policy;
+CREATE DATABASE test_create_policy;
+use test_create_policy;
 
 create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
 show masking policies;
@@ -9,3 +9,19 @@ show create masking policy mp;
 create row access policy rp as (v1 bigint) returns boolean -> true;
 show row access policies;
 show create row access policy rp;
+alter row access policy if exists not_exists_policy set comment = "foo";
+alter row access policy rp set body -> row(0, 1);
+alter row access policy rp set body -> if (v2 = 2, true, false);
+alter row access policy rp set body -> if (v1 = 2, row(0, 1), row(1,1));
+
+-- Test create and alter masking policy analyze
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0) else col end;
+create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
+    -> case when current_role() = 'root' then row(0,0) else col end;
+alter masking policy if exists not_exists_policy set comment = "foo";
+alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0) else col end;
+alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0, 0) else col end;
+alter masking policy policy_struct set body -> col2;
+
+create row access policy rp1 as (col array<int>) returns boolean -> cast('[1,1]' as array<int>);
