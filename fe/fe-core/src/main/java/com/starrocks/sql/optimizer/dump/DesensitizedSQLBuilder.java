@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.CollectionUtils;
@@ -61,7 +62,6 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -134,7 +134,7 @@ public class DesensitizedSQLBuilder {
 
                 SelectListItem item = selectList.getItems().get(i);
                 Expr expr = item.getExpr();
-                String aliasName = item.getAlias() == null ? null : item.getAlias().toLowerCase(Locale.ROOT);
+                String aliasName = item.getAlias() == null ? null : StringUtils.lowerCase(item.getAlias());
 
                 if (item.isStar()) {
                     selectListString.add(
@@ -204,7 +204,7 @@ public class DesensitizedSQLBuilder {
                         .append(Joiner.on(", ").join(
                                 relation.getColumnOutputNames()
                                         .stream()
-                                        .map(c -> desensitizeValue(c, "column"))
+                                        .map(c -> desensitizeValue(StringUtils.lowerCase(c), "column"))
                                         .collect(toList())))
                         .append(")");
             }
@@ -317,10 +317,51 @@ public class DesensitizedSQLBuilder {
                 if (node.getExplicitColumnNames() != null) {
                     sqlBuilder.append("(");
                     sqlBuilder.append(Joiner.on(",")
-                            .join(desensitizeValues(node.getExplicitColumnNames(), "column alias")));
+                            .join(desensitizeValues(
+                                    node.getExplicitColumnNames().stream().map(String::toLowerCase).collect(toList()),
+                                    "column alias")));
                     sqlBuilder.append(")");
                 }
             }
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitValues(ValuesRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (node.isNullValues()) {
+                return null;
+            }
+
+            sqlBuilder.append("(VALUES");
+            List<String> values = new ArrayList<>();
+            for (int i = 0; i < node.getRows().size(); ++i) {
+                StringBuilder rowBuilder = new StringBuilder();
+                rowBuilder.append("(");
+                List<String> rowStrings =
+                        node.getRows().get(i).stream().map(this::visit).collect(Collectors.toList());
+                rowBuilder.append(Joiner.on(", ").join(rowStrings));
+                rowBuilder.append(")");
+                values.add(rowBuilder.toString());
+            }
+            sqlBuilder.append(Joiner.on(", ").join(values));
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append("tbl_").append(
+                        desensitizeValue(StringUtils.lowerCase(node.getAlias().getTbl()),
+                                "column"));
+
+                if (node.getExplicitColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(
+                            desensitizeValues(node.getExplicitColumnNames()
+                                    .stream()
+                                    .map(StringUtils::lowerCase).collect(toList()),
+                                    "column alias")));
+                    sqlBuilder.append(")");
+                }
+            }
+
             return sqlBuilder.toString();
         }
 
@@ -347,18 +388,7 @@ public class DesensitizedSQLBuilder {
 
         public String desensitizeViewDef(View view, QueryStatement stmt) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE VIEW ").append("tbl_")
-                    .append(desensitizeValue(view.getName(), "view name"))
-                    .append(" (");
-            List<String> colDef = Lists.newArrayList();
-            for (Column column : view.getBaseSchema()) {
-                StringBuilder colSb = new StringBuilder();
-                colSb.append(desensitizeValue(column.getName().toLowerCase(Locale.ROOT), "column"));
-                colDef.add(colSb.toString());
-            }
-            sb.append(Joiner.on(", ").join(colDef));
-            sb.append(")");
-            sb.append(" AS ").append(visit(stmt)).append(";");
+            sb.append(visit(stmt)).append(";");
             return sb.toString();
         }
 
@@ -389,7 +419,7 @@ public class DesensitizedSQLBuilder {
             List<String> keysColumnNames = Lists.newArrayList();
             for (Column column : olapTable.getBaseSchema()) {
                 if (column.isKey()) {
-                    keysColumnNames.add(desensitizeValue(column.getName().toLowerCase(Locale.ROOT), " column"));
+                    keysColumnNames.add(desensitizeValue(StringUtils.lowerCase(column.getName()), " column"));
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
@@ -408,7 +438,7 @@ public class DesensitizedSQLBuilder {
                 List<String> sortKeysColumnNames = Lists.newArrayList();
                 for (Integer i : index.getSortKeyIdxes()) {
                     sortKeysColumnNames.add(desensitizeValue(
-                            olapTable.getBaseSchema().get(i).getName().toLowerCase(Locale.ROOT), "column")
+                            StringUtils.lowerCase(olapTable.getBaseSchema().get(i).getName()), "column")
                     );
                 }
                 sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
@@ -482,7 +512,7 @@ public class DesensitizedSQLBuilder {
 
         private String desensitizeColumnDef(Column column, OlapTable olapTable) {
             StringBuilder sb = new StringBuilder();
-            sb.append(desensitizeValue(column.getName().toLowerCase(Locale.ROOT), "column")).append(" ");
+            sb.append(desensitizeValue(StringUtils.lowerCase(column.getName()), "column")).append(" ");
             String typeStr = column.getType().toSql();
             sb.append(typeStr).append(" ");
             if (column.isAggregated() && !column.isAggregationTypeImplicit() &&
@@ -517,7 +547,7 @@ public class DesensitizedSQLBuilder {
             sb.append(" (");
             List<String> indexCols = Lists.newArrayList();
             for (String col : index.getColumns()) {
-                indexCols.add(desensitizeValue(col.toLowerCase(Locale.ROOT), "column"));
+                indexCols.add(desensitizeValue(StringUtils.lowerCase(col), "column"));
             }
             sb.append(Joiner.on(", ").join(indexCols));
             sb.append(")");
@@ -535,7 +565,7 @@ public class DesensitizedSQLBuilder {
                 String colsString = partition.substring(startIdx + 1, endIdx);
                 String[] cols = colsString.split(", ");
                 String desensitizeCols = Arrays.stream(cols)
-                        .map(e -> desensitizeValue(e.substring(1, e.length() - 1).toLowerCase(Locale.ROOT)))
+                        .map(e -> desensitizeValue(StringUtils.lowerCase(e.substring(1, e.length() - 1))))
                         .collect(Collectors.joining(", "));
 
                 return "\n" + partition.substring(0, startIdx + 1) + desensitizeCols + partition.substring(endIdx);
@@ -552,7 +582,7 @@ public class DesensitizedSQLBuilder {
                 String colsString = distribution.substring(startIdx + 1, endIdx);
                 String[] cols = colsString.split(", ");
                 String desensitizeCols = Arrays.stream(cols)
-                        .map(e -> desensitizeValue(e.substring(1, e.length() - 1).toLowerCase(Locale.ROOT)))
+                        .map(e -> desensitizeValue(StringUtils.lowerCase(e.substring(1, e.length() - 1))))
                         .collect(Collectors.joining(", "));
                 return "\n" + distribution.substring(0, startIdx + 1) + desensitizeCols + distribution.substring(endIdx);
             } else {
@@ -571,9 +601,9 @@ public class DesensitizedSQLBuilder {
                 res += ".";
             }
 
-            res += desensitizeValue(fieldName.toLowerCase(Locale.ROOT), "column");
+            res += desensitizeValue(StringUtils.lowerCase(fieldName), "column");
             if (StringUtils.isNotEmpty(aliasName) && !StringUtils.equalsIgnoreCase(fieldName, aliasName)) {
-                res += " AS " + desensitizeValue(aliasName.toLowerCase(Locale.ROOT), "column alias");
+                res += " AS " + desensitizeValue(StringUtils.lowerCase(aliasName), "column alias");
             }
             return res;
         }
@@ -616,7 +646,7 @@ public class DesensitizedSQLBuilder {
             String[] fields = name.split("\\.");
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < fields.length; i++) {
-                sb.append(desensitizeValue(fields[i].toLowerCase(Locale.ROOT), "column"));
+                sb.append(desensitizeValue(StringUtils.lowerCase(fields[i]), "column"));
                 if (i < fields.length - 1) {
                     sb.append(".");
                 }
