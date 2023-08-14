@@ -110,7 +110,7 @@ The following limits apply when you use a StarRocks external table:
 * The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
 * The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
-## Elasticsearch external table
+## (Deprecated) Elasticsearch external table
 
 StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
 

@@ -37,6 +37,9 @@ You can find a function based on the following categories:
 - [avg](../sql-functions/aggregate-functions/avg.md)
 - [bitmap](../sql-functions/aggregate-functions/bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
+- [corr](../sql-functions/aggregate-functions/corr.md)
+- [covar_pop](../sql-functions/aggregate-functions/covar_pop.md)
+- [covar_samp](../sql-functions/aggregate-functions/covar_samp.md)
 - [count](../sql-functions/aggregate-functions/count.md)
 - [group_concat](../sql-functions/string-functions/group_concat.md)
 - [grouping](../sql-functions/aggregate-functions/grouping.md)
@@ -410,8 +413,10 @@ You can find a function based on the following categories:
 
 ## Utility functions
 
+- [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
 - [current_role](../sql-functions/utility-functions/current_role.md)
 - [current_version](../sql-functions/utility-functions/current_version.md)
+- [database](./sql-reference/sql-functions/utility-functions/database.md)
 - [host_name](../sql-functions/utility-functions/host_name.md)
 - [isnull](../sql-functions/utility-functions/isnull.md)
 - [isnotnull](../sql-functions/utility-functions/isnotnull.md)
