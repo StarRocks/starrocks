@@ -337,7 +337,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
 
-* `log_rejected_record_num`
+* `log_rejected_record_num` (v3.1 and later)
 
   Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
   
