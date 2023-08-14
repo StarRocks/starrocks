@@ -235,9 +235,10 @@ public class DateUtils {
                         break;
                     case 'f': // %f Microseconds (000000..999999)
                         if (isOutputFormat) {
-                            builder.padNext(6, '0');
+                            builder.appendFraction(ChronoField.MICRO_OF_SECOND, 6, 6, false);
+                        } else {
+                            builder.appendFraction(ChronoField.MICRO_OF_SECOND, 1, 6, false);
                         }
-                        builder.appendFraction(ChronoField.MICRO_OF_SECOND, 1, 6, false);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);
