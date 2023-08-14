@@ -113,7 +113,7 @@ insert into external_t select * from other_table;
 * 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
 * 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
-## Elasticsearch 外部表
+## (Deprecated) Elasticsearch 外部表
 
 如要查询 Elasticsearch 中的数据，需要在 StarRocks 中创建 Elasticsearch 外部表，并将外部表与待查询的 Elasticsearch 表建立映射。StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。
 
