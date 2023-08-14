@@ -50,7 +50,6 @@ import com.starrocks.utframe.MockGenericPool;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.awaitility.Awaitility;
 import org.junit.After;
@@ -134,20 +133,22 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testNotWait(@Mocked DefaultCoordinator coordinator) throws Exception {
-        // Case 1: Coordinator needn't check queue.
-        mockNotNeedCheckQueue();
-        mockEnableQueue();
-        GlobalVariable.setEnableQueryQueueSelect(true);
-        manager.maybeWait(connectContext, coordinator);
-        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+    public void testNotWait() throws Exception {
+        {
+            //  Case 1: Coordinator needn't check queue.
+            GlobalVariable.setEnableQueryQueueSelect(true);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
+            manager.maybeWait(connectContext, coordinator);
+            Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        }
 
-        // Case 2: Coordinator doesn't enable to check queue.
-        mockNeedCheckQueue();
-        mockNotEnableCheckQueue();
-        GlobalVariable.setEnableQueryQueueSelect(true);
-        manager.maybeWait(connectContext, coordinator);
-        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        {
+            //  Case 1: Coordinator needn't check queue.
+            GlobalVariable.setEnableQueryQueueSelect(false);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coordinator);
+            Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        }
     }
 
     @Test
