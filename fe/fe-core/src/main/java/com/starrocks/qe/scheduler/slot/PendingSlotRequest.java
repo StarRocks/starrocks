@@ -14,14 +14,27 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.thrift.TNetworkAddress;
+
 import java.util.concurrent.CompletableFuture;
 
 public class PendingSlotRequest {
     private final Slot slot;
+    private final TNetworkAddress leaderEndpoint;
     private final CompletableFuture<Slot> slotFuture = new CompletableFuture<>();
 
-    public PendingSlotRequest(Slot slot) {
+    public PendingSlotRequest(Slot slot, TNetworkAddress leaderEndpoint) {
         this.slot = slot;
+        this.leaderEndpoint = leaderEndpoint;
+    }
+
+    Slot getSlot() {
+        return slot;
+    }
+
+    public TNetworkAddress getLeaderEndpoint() {
+        return leaderEndpoint;
     }
 
     public CompletableFuture<Slot> getSlotFuture() {
@@ -34,6 +47,11 @@ public class PendingSlotRequest {
 
     public void onFailed(Exception cause) {
         slot.onCancel();
+        slotFuture.completeExceptionally(cause);
+    }
+
+    public void onRetry(RecoverableException cause) {
+        slot.onRetry();
         slotFuture.completeExceptionally(cause);
     }
 

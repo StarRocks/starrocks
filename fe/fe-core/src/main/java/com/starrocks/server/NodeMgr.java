@@ -92,6 +92,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class NodeMgr {
     private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
@@ -101,11 +103,11 @@ public class NodeMgr {
      * LeaderInfo
      */
     @SerializedName(value = "r")
-    private int leaderRpcPort;
+    private volatile int leaderRpcPort;
     @SerializedName(value = "h")
-    private int leaderHttpPort;
+    private volatile int leaderHttpPort;
     @SerializedName(value = "ip")
-    private String leaderIp;
+    private volatile String leaderIp;
 
     /**
      * Frontends
@@ -147,6 +149,9 @@ public class NodeMgr {
 
     private final Map<Integer, SystemInfoService> systemInfoMap = new ConcurrentHashMap<>();
 
+    private final AtomicInteger leaderChangeListenerIndex = new AtomicInteger();
+    private final Map<Integer, Consumer<LeaderInfo>> leaderChangeListeners = new ConcurrentHashMap<>();
+
     public NodeMgr() {
         this.role = FrontendNodeType.UNKNOWN;
         this.leaderRpcPort = 0;
@@ -168,6 +173,11 @@ public class NodeMgr {
 
     private void unlock() {
         GlobalStateMgr.getCurrentState().unlock();
+    }
+
+    public void registerLeaderChangeListener(Consumer<LeaderInfo> listener) {
+        Integer index = leaderChangeListenerIndex.getAndIncrement();
+        leaderChangeListeners.put(index, listener);
     }
 
     public List<Frontend> getAllFrontends() {
@@ -1068,6 +1078,11 @@ public class NodeMgr {
         }
     }
 
+    public TNetworkAddress getLeaderRpcEndpoint() {
+        Pair<String, Integer> ipAndRpcPort = getLeaderIpAndRpcPort();
+        return new TNetworkAddress(ipAndRpcPort.first, ipAndRpcPort.second);
+    }
+
     public Pair<String, Integer> getLeaderIpAndHttpPort() {
         if (GlobalStateMgr.getServingState().isReady()) {
             return new Pair<>(this.leaderIp, this.leaderHttpPort);
@@ -1091,6 +1106,8 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
+
+        leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
     public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {

@@ -24,7 +24,6 @@ public class Slot {
 
     private final TUniqueId slotId;
     private final TNetworkAddress requestEndpoint;
-    private TNetworkAddress leaderEndpoint;
 
     private final long groupId;
 
@@ -36,11 +35,10 @@ public class Slot {
 
     private State state = State.CREATED;
 
-    public Slot(TUniqueId slotId, TNetworkAddress requestEndpoint, TNetworkAddress leaderEndpoint, long groupId, int numSlots,
+    public Slot(TUniqueId slotId, TNetworkAddress requestEndpoint, long groupId, int numSlots,
                 long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
         this.slotId = slotId;
         this.requestEndpoint = requestEndpoint;
-        this.leaderEndpoint = leaderEndpoint;
         this.groupId = groupId;
         this.numSlots = numSlots;
         this.expiredPendingTimeMs = expiredPendingTimeMs;
@@ -63,6 +61,10 @@ public class Slot {
         transitionState(state, State.CANCELLED);
     }
 
+    public void onRetry() {
+        transitionState(state, State.CREATED);
+    }
+
     public void onRelease() {
         transitionState(State.ALLOCATED, State.RELEASED);
     }
@@ -80,7 +82,7 @@ public class Slot {
     }
 
     public static Slot fromThrift(TResourceSlot tslot) {
-        return new Slot(tslot.getSlot_id(), tslot.getRequest_endpoint(), null, tslot.getGroup_id(), tslot.getNum_slots(),
+        return new Slot(tslot.getSlot_id(), tslot.getRequest_endpoint(), tslot.getGroup_id(), tslot.getNum_slots(),
                 tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms());
     }
 
@@ -90,14 +92,6 @@ public class Slot {
 
     public TNetworkAddress getRequestEndpoint() {
         return requestEndpoint;
-    }
-
-    public TNetworkAddress getLeaderEndpoint() {
-        return leaderEndpoint;
-    }
-
-    public void setLeaderEndpoint(TNetworkAddress leaderEndpoint) {
-        this.leaderEndpoint = leaderEndpoint;
     }
 
     public long getGroupId() {
@@ -129,7 +123,6 @@ public class Slot {
         return "Slot{" +
                 "slotId=" + DebugUtil.printId(slotId) +
                 ", requestEndpoint=" + requestEndpoint +
-                ", leaderEndpoint=" + leaderEndpoint +
                 ", groupId=" + groupId +
                 ", numSlots=" + numSlots +
                 ", expiredPendingTimeMs=" + expiredPendingTimeMs +

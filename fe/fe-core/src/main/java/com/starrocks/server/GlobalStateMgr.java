@@ -792,6 +792,8 @@ public class GlobalStateMgr {
                 LOG.warn("check config failed", e);
             }
         });
+
+        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
     public static void destroyCheckpoint() {

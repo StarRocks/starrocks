@@ -18,7 +18,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.ha.LeaderInfo;
+import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReleaseSlotRequest;
 import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
@@ -31,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * The slot manager view in the follower FEs. It receives the slot operations from {@link com.starrocks.qe.scheduler.Coordinator}
@@ -44,13 +49,22 @@ public class SlotProvider {
     private final ConcurrentMap<TUniqueId, PendingSlotRequest> pendingSlots = new ConcurrentHashMap<>();
 
     public CompletableFuture<Slot> requireSlot(Slot slot) {
-        PendingSlotRequest slotRequest = new PendingSlotRequest(slot);
+        TNetworkAddress leaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
+        PendingSlotRequest slotRequest = new PendingSlotRequest(slot, leaderEndpoint);
         slotRequest.onRequire();
 
         pendingSlots.put(slot.getSlotId(), slotRequest);
 
+        // The leader may be changed between getting leaderEndpoint and putting request to pendingSlots,
+        // so check whether leader changed after putting request to pendingSlots.
+        TNetworkAddress newLeaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
+        if (!newLeaderEndpoint.equals(leaderEndpoint)) {
+            failSlotRequestByLeaderChange(slotRequest);
+            return slotRequest.getSlotFuture();
+        }
+
         try {
-            requireSlotFromSlotManager(slot);
+            requireSlotFromSlotManager(slotRequest);
         } catch (Exception e) {
             LOG.warn("[Slot] failed to require slot [slot={}]", slot, e);
             pendingSlots.remove(slot.getSlotId());
@@ -101,23 +115,36 @@ public class SlotProvider {
         releaseSlotToSlotManager(slot);
     }
 
-    private void requireSlotFromSlotManager(Slot slot) throws Exception {
-        TRequireSlotRequest request = new TRequireSlotRequest();
-        request.setSlot(slot.toThrift());
+    public void leaderChangeListener(LeaderInfo leaderInfo) {
+        pendingSlots.values().stream()
+                .filter(slot -> !slot.getLeaderEndpoint().getHostname().equals(leaderInfo.getIp()))
+                .collect(Collectors.toList())
+                .forEach(this::failSlotRequestByLeaderChange);
+    }
 
-        FrontendServiceProxy.call(slot.getLeaderEndpoint(),
+    private void failSlotRequestByLeaderChange(PendingSlotRequest slotRequest) {
+        pendingSlots.remove(slotRequest.getSlot().getSlotId());
+        slotRequest.onRetry(new RecoverableException("leader is changed and need require slot again"));
+    }
+
+    private void requireSlotFromSlotManager(PendingSlotRequest slotRequest) throws Exception {
+        TRequireSlotRequest request = new TRequireSlotRequest();
+        request.setSlot(slotRequest.getSlot().toThrift());
+
+        FrontendServiceProxy.call(slotRequest.getLeaderEndpoint(),
                 Config.thrift_rpc_timeout_ms,
                 Config.thrift_rpc_retry_times,
                 client -> client.requireSlotAsync(request));
     }
 
     private void releaseSlotToSlotManager(Slot slot) {
+        TNetworkAddress leaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
         TReleaseSlotRequest slotRequest = new TReleaseSlotRequest();
         slotRequest.setSlot_id(slot.getSlotId());
 
         try {
             TReleaseSlotResponse res = FrontendServiceProxy.call(
-                    slot.getLeaderEndpoint(),
+                    leaderEndpoint,
                     Config.thrift_rpc_timeout_ms,
                     Config.thrift_rpc_retry_times,
                     client -> client.releaseSlot(slotRequest));

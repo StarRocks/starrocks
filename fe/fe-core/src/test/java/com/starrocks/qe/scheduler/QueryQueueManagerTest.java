@@ -21,6 +21,7 @@ import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.CoordinatorPreprocessor;
@@ -1185,12 +1186,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
      * The mocked methods including {@link NodeMgr#getLeaderIpAndRpcPort()} and {@link NodeMgr#getSelfIpAndRpcPort()}.
      */
     private static void mockNodeMgr(String leaderHost, Integer leaderPort, String selfHost, Integer selfPort) {
+        LeaderInfo leaderInfo = new LeaderInfo();
+        leaderInfo.setIp(leaderHost);
+        leaderInfo.setHttpPort(80);
+        leaderInfo.setRpcPort(leaderPort);
+        GlobalStateMgr.getCurrentState().getNodeMgr().setLeader(leaderInfo);
         new MockUp<NodeMgr>() {
-            @Mock
-            public Pair<String, Integer> getLeaderIpAndRpcPort() {
-                return Pair.create(leaderHost, leaderPort);
-            }
-
             @Mock
             public Pair<String, Integer> getSelfIpAndRpcPort() {
                 return Pair.create(selfHost, selfPort);

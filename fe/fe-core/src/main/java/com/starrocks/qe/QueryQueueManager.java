@@ -19,6 +19,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
+import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.slot.Slot;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
@@ -39,7 +40,6 @@ public class QueryQueueManager {
     private static final String PENDING_TIMEOUT_ERROR_MSG_FORMAT =
             "Failed to allocate resource to query: pending timeout [%d], " +
                     "you could modify the session variable [%s] to pending more time";
-    private static final long CHECK_INTERVAL_MS = 1000L;
 
     private static class SingletonHolder {
         private static final QueryQueueManager INSTANCE = new QueryQueueManager();
@@ -59,7 +59,6 @@ public class QueryQueueManager {
         try {
             Slot slotRequirement = createSlot(coord);
             coord.setSlot(slotRequirement);
-            Future<Slot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
 
             isPending = true;
             context.setPending(true);
@@ -80,21 +79,16 @@ public class QueryQueueManager {
                     throw new UserException(errMsg);
                 }
 
-                // Check leader changed.
-                Pair<String, Integer> masterIpAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
-                if (!slotRequirement.getLeaderEndpoint().getHostname().equals(masterIpAndPort.first)) {
-                    LOG.warn("[Slot] leader changed from [{}] to [{}] and require slot again",
-                            slotRequirement.getLeaderEndpoint().getHostname(), masterIpAndPort.first);
-                    TNetworkAddress leaderEndpoint = new TNetworkAddress(masterIpAndPort.first, masterIpAndPort.second);
-                    slotRequirement.setLeaderEndpoint(leaderEndpoint);
-                    slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
-                }
+                Future<Slot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
 
-                // Wait slot allocated.
+                // Wait for slot allocated.
                 try {
-                    allocatedSlot = slotFuture.get(Math.min(timeoutMs - currentMs, CHECK_INTERVAL_MS), TimeUnit.MILLISECONDS);
+                    allocatedSlot = slotFuture.get(timeoutMs - currentMs, TimeUnit.MILLISECONDS);
                 } catch (ExecutionException e) {
                     LOG.warn("[Slot] failed to allocate resource to query [slot={}]", slotRequirement, e);
+                    if (e.getCause() instanceof RecoverableException) {
+                        continue;
+                    }
                     throw new UserException("Failed to allocate resource to query: " + e.getMessage(), e);
                 } catch (TimeoutException e) {
                     // Check timeout in the next loop.
@@ -135,9 +129,6 @@ public class QueryQueueManager {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         TNetworkAddress requestEndpoint = new TNetworkAddress(selfIpAndPort.first, selfIpAndPort.second);
 
-        Pair<String, Integer> masterIpAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
-        TNetworkAddress leaderEndpoint = new TNetworkAddress(masterIpAndPort.first, masterIpAndPort.second);
-
         TWorkGroup group = coord.getJobSpec().getResourceGroup();
         long groupId = group == null ? Slot.ABSENT_GROUP_ID : group.getId();
 
@@ -147,7 +138,7 @@ public class QueryQueueManager {
                 nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
-        return new Slot(coord.getQueryId(), requestEndpoint, leaderEndpoint, groupId, 1, expiredPendingTimeMs,
+        return new Slot(coord.getQueryId(), requestEndpoint, groupId, 1, expiredPendingTimeMs,
                 expiredAllocatedTimeMs);
     }
 }
