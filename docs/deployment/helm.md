@@ -9,10 +9,6 @@
 
 ## Procedure
 
-> **NOTICE**
->
-> It is not recommended to use Helm to deploy a StarRocks cluster in a production environment.
-
 1. Add the Helm Chart Repo for StarRocks. The Helm Chart contains the definitions of the StarRocks Operator and the custom resource StarRocksCluster.
    1. Add the Helm Chart Repo.
 
