@@ -583,7 +583,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockT1();
         mockT2();
         mockT3();
-        mockT1WithMultiPartitionColumns();
+        mockT1WithMultiPartitionColumns(); // t1_par
+        mockT2WithMultiPartitionColumns(); // t2_par
+        mockTablesWithSinglePartitionColumn();
         mockOrders();
     }
 
@@ -959,6 +961,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         cols.add(new FieldSchema("c1", "int", null));
         cols.add(new FieldSchema("c2", "string", null));
         cols.add(new FieldSchema("c3", "string", null));
+
         StorageDescriptor sd =
                 new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                                       Maps.newHashMap());
@@ -966,10 +969,9 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                              ImmutableList.of(new FieldSchema("par_col", "int", null),
                                               new FieldSchema("par_date", "date", null)), Maps.newHashMap(), null, null,
                              "EXTERNAL_TABLE");
-        List<String> partitionNames = ImmutableList.of("par_col=0/par_date=2020-01-01", "par_col=0/par_date=2020-01-02",
-                                                       "par_col=0/par_date=2020-01-03", "par_col=1/par_date=2020-01-02",
-                                                       "par_col=1/par_date=2020-01-03",
-                                                       "par_col=3/par_date=2020-01-04");
+        List<String> partitionNames = Lists.newArrayList("par_col=0/par_date=2020-01-01", "par_col=0/par_date=2020-01-02",
+                                                         "par_col=0/par_date=2020-01-03", "par_col=1/par_date=2020-01-02",
+                                                         "par_col=1/par_date=2020-01-03", "par_col=3/par_date=2020-01-04");
         Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
         double avgNumPerPartition = (double) (100 / 3);
         double rowCount = 100;
@@ -1013,6 +1015,179 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockTables.put(t1.getTableName(),
                        new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
                                          partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+    }
+
+    public static void mockT2WithMultiPartitionColumns() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c1", "int", null));
+        cols.add(new FieldSchema("c2", "string", null));
+        cols.add(new FieldSchema("c3", "string", null));
+        StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+        Table t2 = new Table("t2_par", "partitioned_db", null, 0, 0, 0,  sd,
+                ImmutableList.of(new FieldSchema("par_col", "int", null),
+                        new FieldSchema("par_date", "date", null)), Maps.newHashMap(),
+                null, null, "EXTERNAL_TABLE");
+        List<String> partitionNames = Lists.newArrayList("par_col=0/par_date=2020-01-01",
+                "par_col=0/par_date=2020-01-02",
+                "par_col=0/par_date=2020-01-03",
+                "par_col=1/par_date=2020-01-02",
+                "par_col=1/par_date=2020-01-03",
+                "par_col=3/par_date=2020-01-04");
+        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+        double avgNumPerPartition = (double) (100 / 3);
+        double rowCount = 100;
+
+        List<PartitionKey> partitionKeyList = Lists.newArrayList();
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(0), new DateLiteral(2020, 1, 1)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(0), new DateLiteral(2020, 1, 2)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(0), new DateLiteral(2020, 1, 3)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(1), new DateLiteral(2020, 1, 2)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(1), new DateLiteral(2020, 1, 3)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(3), new DateLiteral(2020, 1, 4)),
+                ImmutableList.of(PrimitiveType.INT, PrimitiveType.DATE)));
+
+        Column partitionColumn1 = new Column("par_col", Type.INT);
+        Column partitionColumn2 = new Column("par_date", Type.DATE);
+
+        List<String> partitionColumnNames = ImmutableList.of("par_col", "par_date");
+        ColumnStatistic partitionColumnStats1 = getPartitionColumnStatistic(partitionColumn1, partitionKeyList,
+                partitionColumnNames, hivePartitionStatsMap, avgNumPerPartition, rowCount);
+        ColumnStatistic partitionColumnStats2 = getPartitionColumnStatistic(partitionColumn2, partitionKeyList,
+                partitionColumnNames, hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+        Map<String, ColumnStatistic> columnStatisticMap;
+        List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+        columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                col -> ColumnStatistic.unknown()));
+        columnStatisticMap.put("par_col", partitionColumnStats1);
+        columnStatisticMap.put("par_date", partitionColumnStats2);
+
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+
+        mockTables.put(t2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t2, MOCKED_HIVE_CATALOG_NAME),
+                partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+    }
+
+    public static void mockTablesWithSinglePartitionColumn() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+
+        {
+            List<FieldSchema> cols = Lists.newArrayList();
+            cols.add(new FieldSchema("c1", "int", null));
+            cols.add(new FieldSchema("c2", "string", null));
+            cols.add(new FieldSchema("c3", "string", null));
+            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                    Lists.newArrayList(), Maps.newHashMap());
+            Table partTbl1 = new Table("part_tbl1", "partitioned_db", null, 0, 0, 0,  sd,
+                    ImmutableList.of(new FieldSchema("par_date", "date", null)), Maps.newHashMap(),
+                    null, null, "EXTERNAL_TABLE");
+            List<String> partitionNames = Lists.newArrayList("par_date=2020-01-01",
+                    "par_date=2020-01-02",
+                    "par_date=2020-01-03",
+                    "par_date=2020-01-04");
+            Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+            double avgNumPerPartition = (double) (100 / 3);
+            double rowCount = 100;
+
+            List<PartitionKey> partitionKeyList = Lists.newArrayList();
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 1)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 2)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 3)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 2)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 3)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 4)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+
+            Column partitionCol = new Column("par_date", Type.DATE);
+
+            List<String> partitionColumnNames = ImmutableList.of("par_date");
+            ColumnStatistic partitionColStats = getPartitionColumnStatistic(partitionCol, partitionKeyList,
+                    partitionColumnNames, hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+            Map<String, ColumnStatistic> columnStatisticMap;
+            List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+            columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                    col -> ColumnStatistic.unknown()));
+            columnStatisticMap.put("par_date", partitionColStats);
+
+            List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC,
+                    ImmutableList.of(), null)));
+
+            mockTables.put(partTbl1.getTableName(),
+                    new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl1, MOCKED_HIVE_CATALOG_NAME),
+                    partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+        }
+
+        {
+            List<FieldSchema> cols = Lists.newArrayList();
+            cols.add(new FieldSchema("c1", "int", null));
+            cols.add(new FieldSchema("c2", "string", null));
+            cols.add(new FieldSchema("c3", "string", null));
+            StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false,
+                    -1, null, Lists.newArrayList(),
+                    Lists.newArrayList(), Maps.newHashMap());
+            Table partTbl2 = new Table("part_tbl2", "partitioned_db", null, 0, 0, 0,  sd,
+                    ImmutableList.of(new FieldSchema("par_date", "date", null)), Maps.newHashMap(),
+                    null, null, "EXTERNAL_TABLE");
+            List<String> partitionNames = Lists.newArrayList("par_date=2020-01-01",
+                    "par_date=2020-01-02",
+                    "par_date=2020-01-03",
+                    "par_date=2020-01-04");
+            Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+            double avgNumPerPartition = (double) (100 / 3);
+            double rowCount = 100;
+
+            List<PartitionKey> partitionKeyList = Lists.newArrayList();
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 1)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 2)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 3)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 2)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 3)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+            partitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(2020, 1, 4)),
+                    ImmutableList.of(PrimitiveType.DATE)));
+
+            Column partitionCol = new Column("par_date", Type.DATE);
+
+            List<String> partitionColumnNames = ImmutableList.of("par_date");
+            ColumnStatistic partitionColStats = getPartitionColumnStatistic(partitionCol, partitionKeyList,
+                    partitionColumnNames, hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+            Map<String, ColumnStatistic> columnStatisticMap;
+            List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+            columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                    col -> ColumnStatistic.unknown()));
+            columnStatisticMap.put("par_date", partitionColStats);
+
+            List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC,
+                    ImmutableList.of(), null)));
+
+            mockTables.put(partTbl2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl2,
+                    MOCKED_HIVE_CATALOG_NAME),
+                    partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+        }
     }
 
     public static ColumnStatistic getPartitionColumnStatistic(Column partitionColumn,
