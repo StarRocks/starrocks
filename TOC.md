@@ -455,7 +455,9 @@
       + [regexp_extract](/sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](/sql-reference/sql-functions/string-functions/regexp_replace.md)
     + 工具函数
+      + [catalog](/sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](/sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
