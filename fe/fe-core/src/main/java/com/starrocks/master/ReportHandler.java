@@ -858,6 +858,7 @@ public class ReportHandler extends Daemon {
             }
         }
 
+        AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
 
