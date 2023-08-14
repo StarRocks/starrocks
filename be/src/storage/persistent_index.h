@@ -649,6 +649,31 @@ private:
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
+<<<<<<< HEAD
+=======
+    void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
+                                        size_t& total_usage);
+
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
+
+    uint64_t _l1_l2_file_size() const;
+
+    void _get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                      std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
+
+    StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
+                                                 const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
+
+    bool _enable_minor_compaction();
+
+    void _calc_write_amp_score();
+
+    size_t _get_tmp_l1_count();
+
+    bool _l0_is_full();
+
+protected:
+>>>>>>> b7812a65d5 ([Enhancement] improve persistent index l0 memory usage (#28769))
     // prevent concurrent operations
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
     mutable std::shared_mutex _lock;
