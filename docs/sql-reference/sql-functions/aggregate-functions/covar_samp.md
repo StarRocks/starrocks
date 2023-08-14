@@ -20,9 +20,11 @@ If `expr1` and `expr2` are table columns, this function calculates the sample co
 
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
-$$
+![covar_samp formula](../../../assets/covar_samp_formula.png)
+
+<!--$$
 \frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n-1}
-$$
+$$-->
 
 ## Usage notes
 

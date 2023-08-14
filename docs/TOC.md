@@ -683,8 +683,10 @@
       + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
       + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + Utility Functions
+      + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](./sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
