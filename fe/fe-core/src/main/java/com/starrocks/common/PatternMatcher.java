@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
 public class PatternMatcher {
     private Pattern pattern;
 
-    private static final Set<Character> FORBIDDEN_CHARS = Sets.newHashSet('<', '(', '[', '{', '^', '=',
+    private static final Set<Character> SPECIAL_CHARS = Sets.newHashSet('<', '(', '[', '{', '^', '=',
             '$', '!', '|', ']', '}', ')',
             '?', '*', '+', '>', '@');
 
@@ -71,7 +71,6 @@ public class PatternMatcher {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < newMysqlPattern.length(); ++i) {
             char ch = newMysqlPattern.charAt(i);
-            checkPermittedCharacter(ch);
             switch (ch) {
                 case '%':
                     sb.append(".*");
@@ -133,18 +132,16 @@ public class PatternMatcher {
                     sb.append('\\').append('\\');
                     break;
                 default:
-                    sb.append(ch);
+                    if (SPECIAL_CHARS.contains(ch)) {
+                        sb.append('\\').append(ch);
+                    } else {
+                        sb.append(ch);
+                    }
                     break;
             }
         }
 
         return sb.toString();
-    }
-
-    private static void checkPermittedCharacter(char c) {
-        if (FORBIDDEN_CHARS.contains(c)) {
-            throw new SemanticException("Forbidden character: '" + c + "'");
-        }
     }
 
     public static PatternMatcher createMysqlPattern(String mysqlPattern, boolean caseSensitive) {
