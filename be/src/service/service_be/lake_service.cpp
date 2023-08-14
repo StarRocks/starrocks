@@ -42,6 +42,7 @@
 namespace starrocks {
 
 static ThreadPool* get_thread_pool(TTaskType::type type) {
+#ifndef BE_TEST
     auto env = ExecEnv::GetInstance();
     if (UNLIKELY(env == nullptr)) {
         return nullptr;
@@ -51,6 +52,9 @@ static ThreadPool* get_thread_pool(TTaskType::type type) {
         return nullptr;
     }
     return as->get_thread_pool(type);
+#else
+    return nullptr;
+#endif
 }
 
 static int get_num_queued_tasks(TTaskType::type type) {
@@ -78,22 +82,30 @@ static int get_num_publish_active_tasks(void*) {
 }
 
 static int get_num_vacuum_queued_tasks(void*) {
+#ifndef BE_TEST
     auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
     return tp ? tp->num_queued_tasks() : 0;
+#else
+    return 0;
+#endif
 }
 
 static int get_num_vacuum_active_tasks(void*) {
+#ifndef BE_TEST
     auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
     return tp ? tp->active_threads() : 0;
+#else
+    return 0;
+#endif
 }
 
+static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
+static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
+static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
 static bvar::PassiveStatus<int> g_publish_version_queued_tasks("lake_publish_version_queued_tasks",
                                                                get_num_publish_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_active_tasks",
                                                                get_num_publish_active_tasks, nullptr);
-static bvar::Adder<int64_t> g_publish_version_failed_tasks("lake_publish_version_failed_tasks");
-static bvar::LatencyRecorder g_publish_tablet_version_latency("lake_publish_tablet_version");
-static bvar::LatencyRecorder g_publish_tablet_version_queuing_latency("lake_putlish_tablet_version_queuing");
 static bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 static bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
