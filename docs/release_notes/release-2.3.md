@@ -27,8 +27,8 @@ Fixed the following issues:
 - Incorrect table-level scan statistics in the FEs cause inaccurate metrics related to table queries and loading. [#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- Partitions cannot be automatically created for recovered tables. [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created after the table is recovered by using [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - The loading transaction remains in a pending state and the DDL statements hang when the strict mode is enabled for loading data by using INSERT INTO, and data to be loaded do not satisfy the quality requirement.
 - Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled.
