@@ -139,19 +139,6 @@ public class SlotManager {
         copiedSlotIds.forEach(this::handleReleaseSlotTask);
     }
 
-    private boolean tryAllocateSlots() {
-        List<Slot> slotsToAllocate = slotRequestQueue.peakSlotsToAllocate(allocatedSlots);
-        slotsToAllocate.forEach(this::allocateSlot);
-        return !slotsToAllocate.isEmpty();
-    }
-
-    private void allocateSlot(Slot slot) {
-        slot.onAllocate();
-        slotRequestQueue.removePendingSlot(slot.getSlotId());
-        allocatedSlots.allocateSlot(slot);
-        finishSlotRequirementToEndpoint(slot, new TStatus(TStatusCode.OK));
-    }
-
     private void finishSlotRequirementToEndpoint(Slot slot, TStatus status) {
         responseExecutor.execute(() -> {
             TFinishSlotRequirementRequest request = new TFinishSlotRequirementRequest();
@@ -200,6 +187,19 @@ public class SlotManager {
             return tryAllocateSlots();
         }
 
+        private boolean tryAllocateSlots() {
+            List<Slot> slotsToAllocate = slotRequestQueue.peakSlotsToAllocate(allocatedSlots);
+            slotsToAllocate.forEach(this::allocateSlot);
+            return !slotsToAllocate.isEmpty();
+        }
+
+        private void allocateSlot(Slot slot) {
+            slot.onAllocate();
+            slotRequestQueue.removePendingSlot(slot.getSlotId());
+            allocatedSlots.allocateSlot(slot);
+            finishSlotRequirementToEndpoint(slot, new TStatus(TStatusCode.OK));
+        }
+
         @Override
         public void run() {
             List<Runnable> newTasks = Lists.newArrayList();
@@ -233,11 +233,11 @@ public class SlotManager {
                     newTasks.forEach(Runnable::run);
                     newTasks.clear();
 
-                    boolean allocatedSlots = true;
-                    while (allocatedSlots) {
-                        allocatedSlots = schedule();
+                    boolean isAllocatedSlots = true;
+                    while (isAllocatedSlots) {
+                        isAllocatedSlots = schedule();
                     }
-                } catch (Throwable e) {
+                } catch (Exception e) {
                     LOG.warn("[Slot] RequestWorker throws unexpected error", e);
                 }
 

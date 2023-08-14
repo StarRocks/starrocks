@@ -92,14 +92,14 @@ public class SlotRequestQueue {
         }
 
         int numAllocatedSlots = allocatedSlots.getNumSlots();
-        if (!isGlobalSlotAvailable(numAllocatedSlots) || isResourceOverloaded.get()) {
+        if (!isGlobalSlotAvailable(numAllocatedSlots) || Boolean.TRUE.equals(isResourceOverloaded.get())) {
             return slotsToAllocate;
         }
 
         // Traverse groups round-robin from nextGroupIndex.
-        int nextGroupIndex = this.nextGroupIndex;
+        int localNextGroupIndex = nextGroupIndex;
         Iterator<Map.Entry<Long, LinkedHashMap<TUniqueId, Slot>>> groupIterator = groupIdToSubQueue.entrySet().iterator();
-        for (int i = 0; i < nextGroupIndex && groupIterator.hasNext(); i++) {
+        for (int i = 0; i < localNextGroupIndex && groupIterator.hasNext(); i++) {
             groupIterator.next();
         }
 
@@ -108,7 +108,7 @@ public class SlotRequestQueue {
                 break;
             }
 
-            nextGroupIndex = (nextGroupIndex + 1) % groupIdToSubQueue.size();
+            localNextGroupIndex = (localNextGroupIndex + 1) % groupIdToSubQueue.size();
             if (!groupIterator.hasNext()) {
                 groupIterator = groupIdToSubQueue.entrySet().iterator();
             }
@@ -125,7 +125,7 @@ public class SlotRequestQueue {
             // If the group of the current index peaks slots to allocate, update nextGroupIndex to make the next turn starts
             // from the next group index.
             if (numSlotsToAllocateOfGroup > 0) {
-                this.nextGroupIndex = nextGroupIndex;
+                nextGroupIndex = localNextGroupIndex;
             }
         }
 
@@ -161,7 +161,6 @@ public class SlotRequestQueue {
                 break;
             }
 
-            System.out.println("group=" + (group == null ? "-" : group.getId()) + ", " + slot);
             slotsToAllocate.add(slot);
             numSlotsToAllocate += slot.getNumSlots();
         }

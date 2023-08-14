@@ -54,7 +54,6 @@ public class ResourceUsageMonitor {
         while (!updated) {
             prev = isResourceOverloaded.get();
             now = judgeResourceOverloaded();
-            System.out.println("ResourceUsageMonitor prev=" + prev + ", now=" + now);
             updated = isResourceOverloaded.compareAndSet(prev, now);
             if (updated && prev && !now) {
                 for (Runnable listener : resourceAvailableListeners.values()) {
