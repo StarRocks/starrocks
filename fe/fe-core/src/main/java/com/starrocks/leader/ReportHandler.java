@@ -30,7 +30,6 @@ import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -951,20 +950,6 @@ public class ReportHandler extends Daemon {
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
-                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
-                if (db == null) {
-                    continue;
-                }
-                db.readLock();
-                try {
-                    OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
-                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                        // Currently, primary key table doesn't support tablet migration between local disks.
-                        continue;
-                    }
-                } finally {
-                    db.readUnlock();
-                }
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,
@@ -973,6 +958,7 @@ public class ReportHandler extends Daemon {
             }
         }
 
+        AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
 
