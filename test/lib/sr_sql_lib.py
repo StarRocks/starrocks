@@ -1093,6 +1093,8 @@ class StarrocksSQLApiLib(object):
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
+            if ".gitkeep" in data: 
+                continue
             label = "%s_load_label_%s" % (data_name, uuid.uuid1().hex)
             file_name = data.split("/")[-1]
             table_name = file_name.split(".")[0]
