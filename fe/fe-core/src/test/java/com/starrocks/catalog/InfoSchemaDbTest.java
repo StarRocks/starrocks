@@ -415,4 +415,35 @@ public class InfoSchemaDbTest {
         Set<TGetGrantsToRolesOrUserItem> s = Deencapsulation.invoke(GrantsTo.class, "getGrantItems",
                 authorizationMgr, "root", privileges);
     }
+
+    @Test
+    public void testView() throws Exception {
+        String sql = "grant select on all tables in database db to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.grant(grantStmt);
+
+        TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
+        request.setType(TGrantsToType.USER);
+
+        TGetGrantsToRolesOrUserItem item = new TGetGrantsToRolesOrUserItem();
+        item.setGrantee("'test_user'@'%'");
+        item.setObject_catalog("default_catalog");
+        item.setObject_database("db");
+        item.setObject_name("v");
+        item.setObject_type("TABLE");
+        item.setPrivilege_type("SELECT");
+        item.setIs_grantable(false);
+
+        TGetGrantsToRolesOrUserItem item2 = new TGetGrantsToRolesOrUserItem();
+        item2.setGrantee("'test_user'@'%'");
+        item2.setObject_catalog("default_catalog");
+        item2.setObject_database("db");
+        item2.setObject_name("mv");
+        item2.setObject_type("TABLE");
+        item2.setPrivilege_type("SELECT");
+        item2.setIs_grantable(false);
+
+        Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item));
+        Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item2));
+    }
 }
