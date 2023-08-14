@@ -241,12 +241,20 @@ build_llvm() {
     -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
     -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
+    -DLLVM_INCLUDE_TOOLS:BOOL=False \
+    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
+    -DLLVM_INCLUDE_TESTS:BOOL=False \
+    -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
     -DCMAKE_BUILD_TYPE="RELEASE" \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
-    ${BUILD_SYSTEM} install
+    # TODO(yueyang): Add more targets.
+    # This is a little bit hack, we need to minimize the build time and binary size.
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 LLVMOrcJIT
+    ${BUILD_SYSTEM} install-llvm-headers
+    ${BUILD_SYSTEM} install-LLVMOrcJIT
 }
 
 # protobuf
