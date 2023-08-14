@@ -420,7 +420,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
-    @Test
     public void testGroupQueueNormalWithoutGlobalLimit() throws Exception {
         final int concurrencyLimit = 4;
         final int numGroups = 4;

@@ -57,10 +57,6 @@ public class QueryQueueManager {
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
         try {
-            if (!isEnableQueue(coord)) {
-                return;
-            }
-
             Slot slotRequirement = createSlot(coord);
             coord.setSlot(slotRequirement);
             Future<Slot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
@@ -116,12 +112,12 @@ public class QueryQueueManager {
     }
 
     public boolean isEnableQueue(DefaultCoordinator coord) {
-        if (coord.isLoadType()) {
-            return GlobalVariable.isEnableQueryQueueLoad();
-        }
-
         if (coord.getJobSpec().isStatisticsJob()) {
             return GlobalVariable.isEnableQueryQueueStatistic();
+        }
+
+        if (coord.isLoadType()) {
+            return GlobalVariable.isEnableQueryQueueLoad();
         }
 
         return GlobalVariable.isEnableQueryQueueSelect();

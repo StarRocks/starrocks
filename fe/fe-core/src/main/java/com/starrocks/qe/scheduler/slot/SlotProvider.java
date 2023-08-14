@@ -63,7 +63,6 @@ public class SlotProvider {
         }
 
         if (status.ok()) {
-            LOG.warn("[DEBUG] finishSlotRequirement receives [slot={}] [status={}]", slotRequest, status);
             slotRequest.onFinished();
         } else {
             LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]", slotRequest, status);
