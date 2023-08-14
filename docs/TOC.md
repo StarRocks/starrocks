@@ -601,7 +601,13 @@
     + Scalar Functions
       + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
+<<<<<<< HEAD
+=======
+      + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
+      + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
+>>>>>>> 5b79670a6 ([Doc] Add db/catalog function and update replicated storage default value (#29136))
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](./sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
