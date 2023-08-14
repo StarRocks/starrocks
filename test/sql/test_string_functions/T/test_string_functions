@@ -88,12 +88,12 @@ select substring_index("hello world", " ", 1);
 select substring_index("hello world", " ", 2);
 select substring_index("hello world", " ", -1);
 select substring_index("hello world", " ", -2);
-select substring_index("2023年5月23号", "月", 1);
-select substring_index("2023年5月23号", "月", -1);
-select substring_index("abc##567###234", "##", 1);
-select substring_index("abc##567###234", "##", 2);
-select substring_index("abc##567###234", "##", -1);
-select substring_index("abc##567###234", "##", -2);
+select substring_index("com.mysql.com", ".", 1);
+select substring_index("com.mysql.com", ".", 2);
+select substring_index("com.mysql.com", ".", 3);
+select substring_index("com.mysql.com", ".", -1);
+select substring_index("com.mysql.com", ".", -2);
+select substring_index("com.mysql.com", ".", -3);
 
 create table t2(c0 varchar(20), c1 varchar(20))
         DUPLICATE KEY(c0)
@@ -101,14 +101,14 @@ create table t2(c0 varchar(20), c1 varchar(20))
         BUCKETS 1
         PROPERTIES('replication_num'='1');
 -- insert 1 rows
-insert into t2 values ('hello world', 'abc##567###234');
+insert into t2 values ('hello world', 'com.mysql.com');
 select substring_index(c0, " ", 1) from t2;
 select substring_index(c0, " ", 2) from t2;
 select substring_index(c0, " ", -1) from t2;
 select substring_index(c0, " ", -2) from t2;
-select substring_index(c1, "##", 1) from t2;
-select substring_index(c1, "##", 2) from t2;
-select substring_index(c1, "##", 3) from t2;
-select substring_index(c1, "##", -1) from t2;
-select substring_index(c1, "##", -2) from t2;
-select substring_index(c1, "##", -3) from t2;
+select substring_index(c1, ".", 1) from t2;
+select substring_index(c1, ".", 2) from t2;
+select substring_index(c1, ".", 3) from t2;
+select substring_index(c1, ".", -1) from t2;
+select substring_index(c1, ".", -2) from t2;
+select substring_index(c1, ".", -3) from t2;

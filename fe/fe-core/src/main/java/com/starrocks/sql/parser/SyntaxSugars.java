@@ -35,7 +35,6 @@ public class SyntaxSugars {
         FUNCTION_PARSER = ImmutableMap.<String, Function<FunctionCallExpr, FunctionCallExpr>>builder()
                 .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
-                .put(FunctionSet.SUBSTRING_INDEX, SyntaxSugars::substringIndex)
                 .build();
     }
 
@@ -70,9 +69,5 @@ public class SyntaxSugars {
      */
     private static FunctionCallExpr struct(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.ROW, call.getChildren());
-    }
-
-    private static FunctionCallExpr substringIndex(FunctionCallExpr call) {
-        return new FunctionCallExpr(FunctionSet.SPLIT_PART, call.getChildren());
     }
 }
