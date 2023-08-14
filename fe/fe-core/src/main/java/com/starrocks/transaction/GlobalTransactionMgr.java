@@ -371,14 +371,15 @@ public class GlobalTransactionMgr implements Writable {
     @NotNull
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
                                                 @NotNull List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
     }
 
     @NotNull
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos)
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
