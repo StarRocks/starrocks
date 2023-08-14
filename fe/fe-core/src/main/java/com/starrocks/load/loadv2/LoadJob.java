@@ -139,6 +139,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     @SerializedName("p")
     protected boolean partialUpdate = false;
+    @SerializedName("pum")
     protected String partialUpdateMode = "row";
     @SerializedName("pr")
     protected int priority = LoadPriority.NORMAL_VALUE;

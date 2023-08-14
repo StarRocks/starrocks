@@ -52,6 +52,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -1064,6 +1065,23 @@ public class LoadPlannerTest {
             // check fragment
             List<PlanFragment> fragments = planner.getFragments();
             Assert.assertEquals(1, fragments.size());
+        }
+        {
+            // set partial update mode
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPSERT_MODE);
+            planner.plan();
+        }
+        {
+            // complete table sink
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPSERT_MODE);
+            planner.plan();
+            planner.completeTableSink(100);
         }
     }
 }
