@@ -536,7 +536,7 @@ public class MaterializedViewRewriter {
 
         // Check whether mv can be applicable for the query.
         if (!isMVApplicable(mvExpression, queryTables, mvTables, matchMode, queryExpression)) {
-            logMVRewrite(mvRewriteContext, "mv applicable check failed");
+            logMVRewrite(mvRewriteContext, "mv {} applicable check failed", materializationContext.getMv().getName());
             return null;
         }
 
