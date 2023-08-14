@@ -322,7 +322,7 @@ private:
     static StatusOr<ColumnPtr> _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
         if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target));
+            ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target))
             DCHECK_EQ(nullable->size(), result->size());
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
@@ -637,7 +637,7 @@ private:
     static StatusOr<ColumnPtr> _array_contains_generic(const Column& array, const Column& target) {
         if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            ASSIGN_OR_RETURN(auto result, _array_contains_non_nullable(*array_col, target));
+            ASSIGN_OR_RETURN(auto result, _array_contains_non_nullable(*array_col, target))
             DCHECK_EQ(nullable->size(), result->size());
             if (!nullable->has_null()) {
                 return result;
@@ -661,10 +661,17 @@ private:
                            const ElementColumn& targets, uint32 target_start, uint32 target_end,
                            const NullColumn::Container* null_map_elements,
                            const NullColumn::Container* null_map_targets) {
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
         using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn>, uint8_t,
                                              typename ElementColumn::ValueType>;
         [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
         [[maybe_unused]] auto targets_ptr = (const ValueType*)(targets.raw_data());
+=======
+        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
+                                                     std::is_same_v<MapColumn, ElementColumn> ||
+                                                     std::is_same_v<StructColumn, ElementColumn>,
+                                             uint8_t, typename ElementColumn::ValueType>;
+>>>>>>> bdb8442e3b ([BugFix] Fix the array_contains_all crash in asan mode (#29170)):be/src/exprs/array_functions.cpp
 
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
@@ -707,6 +714,8 @@ private:
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
+                    auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
                     found = (elements_ptr[j] == targets_ptr[i]);
                 }
                 if (found) {
@@ -909,7 +918,7 @@ private:
             return _array_has_non_nullable(*array_col, *target_col);
         }
 
-        ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
+        ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col))
         DCHECK_EQ(array_col->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
