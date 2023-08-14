@@ -43,7 +43,7 @@ private:
 
 void HashFunctionsBench::SetUp() {
     for (int i = 0; i < _num_column; i++) {
-        auto columnPtr = Bench::create_random_column(type_desc, _num_rows, false, false);
+        auto columnPtr = Bench::create_random_column(type_desc, _num_rows, false, false, 32);
         _columns.push_back(std::move(columnPtr));
     }
 }
@@ -60,23 +60,22 @@ void HashFunctionsBench::do_bench(benchmark::State& state, size_t num_rows, bool
 }
 
 static void BM_HashFunctions_Eval_Arg(benchmark::internal::Benchmark* b) {
-    b->Args({1, 10, true});
-    b->Args({1, 10, false});
-    b->Args({1, 100, true});
-    b->Args({1, 100, false});
-    b->Args({1, 10000, true});
-    b->Args({1, 10000, false});
-    b->Args({1, 1000000, true});
-    b->Args({1, 1000000, false});
+    b->Args({10, true});
+    b->Args({10, false});
+    b->Args({100, true});
+    b->Args({100, false});
+    b->Args({10000, true});
+    b->Args({10000, false});
+    b->Args({1000000, true});
+    b->Args({1000000, false});
     b->Iterations(10000);
 }
 
 static void BM_HashFunctions_Eval(benchmark::State& state) {
-    size_t num_column = state.range(0);
-    size_t num_rows = state.range(1);
-    bool test_default_hash = state.range(3);
+    size_t num_rows = state.range(0);
+    bool test_default_hash = state.range(1);
 
-    HashFunctionsBench hashFunctionsBench(num_column, num_rows);
+    HashFunctionsBench hashFunctionsBench(1, num_rows);
     hashFunctionsBench.SetUp();
 
     for (auto _ : state) {
