@@ -153,7 +153,7 @@ The following two examples explain how to load data with Spark DataFrames Batch 
 
 Construct data in memory and load data into the StarRocks table.
 
-1. You can write the spark job using scala or python
+1. You can write the spark job using scala or python.
 
    For scala, run the following codes in `spark-shell`:
 
@@ -165,8 +165,8 @@ Construct data in memory and load data into the StarRocks table.
     // 2. Write to starrocks with the format "starrocks",
     // and replace the options with your own.
     df.write.format("starrocks")
-        .option("starrocks.fe.http.url", "127.0.0.1:8038")
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
+        .option("starrocks.fe.http.url", "127.0.0.1:8030")
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
         .option("starrocks.table.identifier", "test.score_board")
         .option("starrocks.user", "root")
         .option("starrocks.password", "")
@@ -192,8 +192,8 @@ For python, run the following codes in `pyspark`:
     # 2. Write to starrocks with the format "starrocks",
     # and replace the options with your own.
     df.write.format("starrocks") \
-        .option("starrocks.fe.http.url", "127.0.0.1:8038") \
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
         .option("starrocks.table.identifier", "test.score_board") \
         .option("starrocks.user", "root") \
         .option("starrocks.password", "") \
@@ -225,7 +225,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
     4,spark,100
     ```
 
-2. You can write the spark job using scala or python 
+2. You can write the spark job using scala or python. 
 
    For scala, run the following codes in `spark-shell`:
 
@@ -248,8 +248,8 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
 
     // 2. Write to starrocks with the format "starrocks", and replace the options with your own.
     val query = (df.writeStream.format("starrocks")
-            .option("starrocks.fe.http.url", "127.0.0.1:8038")
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
+            .option("starrocks.fe.http.url", "127.0.0.1:8030")
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
             .option("starrocks.table.identifier", "test.score_board")
             .option("starrocks.user", "root")
             .option("starrocks.password", "")
@@ -286,8 +286,8 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
 
     # 2. Write to starrocks with the format "starrocks", and replace the options with your own.
     query = df.writeStream.format("starrocks") \
-            .option("starrocks.fe.http.url", "127.0.0.1:8038") \
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
             .option("starrocks.table.identifier", "test.score_board") \
             .option("starrocks.user", "root") \
             .option("starrocks.password", "") \
@@ -322,8 +322,8 @@ The following example explains how to load data with Spark SQL by using the `INS
     CREATE TABLE `score_board`
     USING starrocks
     OPTIONS(
-    "starrocks.fe.http.url"="127.0.0.1:8038",
-    "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9038",
+    "starrocks.fe.http.url"="127.0.0.1:8030",
+    "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
     "starrocks.table.identifier"="test.score_board",
     "starrocks.user"="root",
     "starrocks.password"=""
