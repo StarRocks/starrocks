@@ -740,7 +740,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 Pair<QueryDumpInfo, String> replayPair =
                         getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
                                 null, TExplainLevel.NORMAL);
-                Assert.assertTrue(replayPair.second, replayPair.second.contains("PLAN FRAGMENT"));
+                Assert.assertTrue(replayPair.second, replayPair.second.contains("mock"));
             } catch (Throwable e) {
                 fail("file: " + fileName + " should success. errMsg: " + e.getMessage());
             }
