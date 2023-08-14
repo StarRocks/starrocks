@@ -66,7 +66,7 @@
   + [使用 EXPORT 导出数据](/unloading/Export.md)
   + [使用 Spark Connector 读取数据](/unloading/Spark_connector.md)
   + [使用 Flink Connector 读取数据](/unloading/Flink_connector.md)
-+ 查询数据源
++ 查询数据湖
   + Catalog
     + [概述](/data_source/catalog/catalog_overview.md)
     + [Default catalog](/data_source/catalog/default_catalog.md)
