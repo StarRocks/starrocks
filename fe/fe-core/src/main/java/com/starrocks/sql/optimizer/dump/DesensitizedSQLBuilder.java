@@ -72,6 +72,14 @@ import static java.util.stream.Collectors.toList;
 
 public class DesensitizedSQLBuilder {
 
+    private static final String COLUMN = "column";
+
+    private static final String COLUMN_ALIAS = "column alias";
+
+    private static final String TABLE_ALIAS = "table alias";
+
+
+
     public static String desensitizeSQL(StatementBase statement, Map<String, String> desensitizedDict) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
@@ -83,7 +91,7 @@ public class DesensitizedSQLBuilder {
         new QueryAnalyzer(connectContext).analyze(stmt);
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(stmt);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).desensitizeViewDef(view, stmt);
+        return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).desensitizeViewDef(stmt);
     }
 
     public static String desensitizeTableDef(Pair<String, Table> pair, Map<String, String> desensitizedDict) {
@@ -156,7 +164,7 @@ public class DesensitizedSQLBuilder {
                 } else {
                     selectListString.add(StringUtils.isEmpty(aliasName) ?
                             visit(expr) :
-                            visit(expr) + " AS " + desensitizeValue(aliasName, "column alias"));
+                            visit(expr) + " AS " + desensitizeValue(aliasName, COLUMN_ALIAS));
                 }
             }
 
@@ -204,7 +212,7 @@ public class DesensitizedSQLBuilder {
                         .append(Joiner.on(", ").join(
                                 relation.getColumnOutputNames()
                                         .stream()
-                                        .map(c -> desensitizeValue(StringUtils.lowerCase(c), "column"))
+                                        .map(c -> desensitizeValue(StringUtils.lowerCase(c), COLUMN))
                                         .collect(toList())))
                         .append(")");
             }
@@ -220,7 +228,7 @@ public class DesensitizedSQLBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("tbl_")
-                        .append(desensitizeValue(node.getAlias().getTbl(), "table alias"));
+                        .append(desensitizeValue(node.getAlias().getTbl(), TABLE_ALIAS));
             }
             return sqlBuilder.toString();
         }
@@ -250,7 +258,7 @@ public class DesensitizedSQLBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("tbl_")
-                        .append(desensitizeValue(node.getAlias().getTbl(), "table alias"));
+                        .append(desensitizeValue(node.getAlias().getTbl(), TABLE_ALIAS));
             }
             return sqlBuilder.toString();
         }
@@ -312,14 +320,14 @@ public class DesensitizedSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
-                sqlBuilder.append(" ").append("tbl_" + desensitizeValue(node.getAlias().getTbl(), "table alias"));
+                sqlBuilder.append(" ").append("tbl_" + desensitizeValue(node.getAlias().getTbl(), TABLE_ALIAS));
 
                 if (node.getExplicitColumnNames() != null) {
                     sqlBuilder.append("(");
                     sqlBuilder.append(Joiner.on(",")
                             .join(desensitizeValues(
                                     node.getExplicitColumnNames().stream().map(String::toLowerCase).collect(toList()),
-                                    "column alias")));
+                                    COLUMN_ALIAS)));
                     sqlBuilder.append(")");
                 }
             }
@@ -349,7 +357,7 @@ public class DesensitizedSQLBuilder {
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append("tbl_").append(
                         desensitizeValue(StringUtils.lowerCase(node.getAlias().getTbl()),
-                                "column"));
+                                COLUMN));
 
                 if (node.getExplicitColumnNames() != null) {
                     sqlBuilder.append("(");
@@ -357,7 +365,7 @@ public class DesensitizedSQLBuilder {
                             desensitizeValues(node.getExplicitColumnNames()
                                     .stream()
                                     .map(StringUtils::lowerCase).collect(toList()),
-                                    "column alias")));
+                                    COLUMN_ALIAS)));
                     sqlBuilder.append(")");
                 }
             }
@@ -386,7 +394,7 @@ public class DesensitizedSQLBuilder {
             }
         }
 
-        public String desensitizeViewDef(View view, QueryStatement stmt) {
+        public String desensitizeViewDef(QueryStatement stmt) {
             StringBuilder sb = new StringBuilder();
             sb.append(visit(stmt)).append(";");
             return sb.toString();
@@ -438,7 +446,7 @@ public class DesensitizedSQLBuilder {
                 List<String> sortKeysColumnNames = Lists.newArrayList();
                 for (Integer i : index.getSortKeyIdxes()) {
                     sortKeysColumnNames.add(desensitizeValue(
-                            StringUtils.lowerCase(olapTable.getBaseSchema().get(i).getName()), "column")
+                            StringUtils.lowerCase(olapTable.getBaseSchema().get(i).getName()), COLUMN)
                     );
                 }
                 sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
@@ -457,7 +465,7 @@ public class DesensitizedSQLBuilder {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                         .append("\" = \"");
                 List<String> desensitizedCols = olapTable.getCopiedBfColumns().stream()
-                        .map(e -> desensitizeValue(e, "column")).
+                        .map(e -> desensitizeValue(e, COLUMN)).
                         collect(toList());
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
             }
@@ -500,7 +508,7 @@ public class DesensitizedSQLBuilder {
                         .stream()
                         .forEach(e -> cols.addAll(e.getUniqueColumns()));
                 List<String> desensitizedCols = Lists.newArrayList();
-                cols.stream().forEach(e -> desensitizedCols.add(desensitizeValue(e, "column")));
+                cols.stream().forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
             }
 
@@ -512,7 +520,7 @@ public class DesensitizedSQLBuilder {
 
         private String desensitizeColumnDef(Column column, OlapTable olapTable) {
             StringBuilder sb = new StringBuilder();
-            sb.append(desensitizeValue(StringUtils.lowerCase(column.getName()), "column")).append(" ");
+            sb.append(desensitizeValue(StringUtils.lowerCase(column.getName()), COLUMN)).append(" ");
             String typeStr = column.getType().toSql();
             sb.append(typeStr).append(" ");
             if (column.isAggregated() && !column.isAggregationTypeImplicit() &&
@@ -547,7 +555,7 @@ public class DesensitizedSQLBuilder {
             sb.append(" (");
             List<String> indexCols = Lists.newArrayList();
             for (String col : index.getColumns()) {
-                indexCols.add(desensitizeValue(StringUtils.lowerCase(col), "column"));
+                indexCols.add(desensitizeValue(StringUtils.lowerCase(col), COLUMN));
             }
             sb.append(Joiner.on(", ").join(indexCols));
             sb.append(")");
@@ -601,9 +609,9 @@ public class DesensitizedSQLBuilder {
                 res += ".";
             }
 
-            res += desensitizeValue(StringUtils.lowerCase(fieldName), "column");
+            res += desensitizeValue(StringUtils.lowerCase(fieldName), COLUMN);
             if (StringUtils.isNotEmpty(aliasName) && !StringUtils.equalsIgnoreCase(fieldName, aliasName)) {
-                res += " AS " + desensitizeValue(StringUtils.lowerCase(aliasName), "column alias");
+                res += " AS " + desensitizeValue(StringUtils.lowerCase(aliasName), COLUMN_ALIAS);
             }
             return res;
         }
@@ -646,7 +654,7 @@ public class DesensitizedSQLBuilder {
             String[] fields = name.split("\\.");
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < fields.length; i++) {
-                sb.append(desensitizeValue(StringUtils.lowerCase(fields[i]), "column"));
+                sb.append(desensitizeValue(StringUtils.lowerCase(fields[i]), COLUMN));
                 if (i < fields.length - 1) {
                     sb.append(".");
                 }

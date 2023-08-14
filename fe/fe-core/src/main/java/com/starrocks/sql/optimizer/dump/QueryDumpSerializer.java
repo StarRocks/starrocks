@@ -84,7 +84,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;
-            } catch (Throwable e) {
+            } catch (Exception e) {
                 LOG.info("failed to desensitize content, use the original content", e);
                 dumpJson = new JsonObject();
             }

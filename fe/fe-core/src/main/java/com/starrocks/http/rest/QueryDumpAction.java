@@ -74,8 +74,7 @@ public class QueryDumpAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
-        boolean enableMock = request.getSingleParameter(MOCK) == null ? true :
-                "true".equalsIgnoreCase(request.getSingleParameter(MOCK).trim());
+        boolean enableMock = "true".equalsIgnoreCase(request.getSingleParameter(MOCK).trim());
 
         if (!Strings.isNullOrEmpty(catalogDbName)) {
             String[] catalogDbNames = catalogDbName.split("\\.");

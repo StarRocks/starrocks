@@ -89,6 +89,7 @@ public class QueryDumpInfo implements DumpInfo {
         return originStmt;
     }
 
+    @Override
     public void setStatement(StatementBase statement) {
         this.statementBase = statement;
     }
