@@ -451,7 +451,8 @@ public class StmtExecutor {
                 }
             }
 
-            if (context.shouldDumpQuery()) {
+            // no need to execute http query dump request in BE
+            if (context.isHTTPQueryDump) {
                 return;
             }
             if (isForwardToLeader()) {
