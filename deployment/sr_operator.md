@@ -151,7 +151,7 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 
     ```YAML
     starRocksFeSpec:
-      image: starrocks/fe-ubuntu:latest
+      image: starrocks/fe-ubuntu:3.0-latest
       replicas: 3
       requests:
         cpu: 4
@@ -184,18 +184,18 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 
 **升级 BE 节点**
 
-执行如下命令，指定新的 BE 镜像文件，例如 `starrocks/be-ubuntu:2.5.0-fix-uid`。
+执行如下命令，指定新的 BE 镜像文件，例如 `starrocks/be-ubuntu:latest`。
 
 ```Bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:2.5.0-fix-uid"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:latest"}}}'
 ```
 
 **升级 FE 节点**
 
-执行如下命令，指定新的 FE 镜像文件，例如 `starrocks/fe-ubuntu:2.5.0-fix-uid`。
+执行如下命令，指定新的 FE 镜像文件，例如 `starrocks/fe-ubuntu:latest`。
 
 ```Bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:2.5.0-fix-uid"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:latest"}}}'
 ```
 
 升级过程会持续一段时间，您可以通过 `kubectl -n starrocks get pods` 命令观察升级进度。
@@ -236,35 +236,37 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
 
 ```Bash
   starRocksCnSpec:
-    image: starrocks/centos-cn:2.4.1
+    image: starrocks/cn-ubuntu:3.0-latest
     requests:
       cpu: 4
       memory: 4Gi
       #when you use autoscalingPolicy, it is recommended that replicas removed from manifests.
     autoScalingPolicy: # auto-scaling policy of CN cluster
-          maxReplicas: 10 # CN 数量的上限 10
-          minReplicas: 1 # CN 数量的下限 1
-          hpaPolicy:
-            metrics: # 资源指标
-              - type: Resource
-                resource: 
-                  name: memory # 资源指标为内存
-                  target:
-                    averageUtilization: 30 # 触发水平扩缩容的阈值为 30%。 Kubernetes 集群中 CN 内存使用率超过 30% 时，增加 CN 数量进行扩容，低于 30% 时，减少 CN 数量进行缩容。
-                    type: Utilization
-              - type: Resource
-                resource: # 触发水平扩缩容的阈值为 60%。Kubernetes 集群中 CN CPU 内存使用率超过 60% 时，增加 CN 数量进行扩容，低于 60% 时，减少 CN 数量进行缩容。
-                  name: cpu
-                  target:
-                    averageUtilization: 60type: Utilization
-            behavior: # 根据业务场景定制扩缩容行为，实现快速扩容、缓慢缩容、禁用缩容等。 
-              scaleUp:
-                policies:
-                  - type: Pods
-                    value: 1
-                    periodSeconds: 10
-              scaleDown:
-                selectPolicy: Disabled
+      maxReplicas: 10 #  CN 数量的上限 10
+      minReplicas: 1 # CN 数量的下限 1
+      hpaPolicy:
+        metrics: # 资源指标
+          - type: Resource
+            resource: 
+              name: memory # 资源指标为内存
+              target:
+                averageUtilization: 30 
+                # 触发水平扩缩容的阈值为 30%。 Kubernetes 集群中 CN 内存使用率超过 30% 时，增加 CN 数量进行扩容，低于 30% 时，减少 CN 数量进行缩容。
+                type: Utilization
+          - type: Resource
+            resource: 
+              name: cpu # 触发水平扩缩容的阈值为 60%。Kubernetes 集群中 CN CPU 内存使用率超过 60% 时，增加 CN 数量进行扩容，低于 60% 时，减少 CN 数量进行缩容。
+              target:
+                averageUtilization: 60
+                type: Utilization
+        behavior: # 根据业务场景定制扩缩容行为，实现快速扩容、缓慢缩容、禁用缩容等。 
+          scaleUp:
+            policies:
+              - type: Pods
+                value: 1
+                periodSeconds: 10
+          scaleDown:
+            selectPolicy: Disabled
 ```
 
 主要字段以及说明如下：
