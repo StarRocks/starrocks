@@ -142,8 +142,14 @@ public class LoadLoadingTask extends LoadTask {
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
+<<<<<<< HEAD
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
                 brokerDesc, fileGroups, fileStatusList, fileNum);
+=======
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum);
+            loadPlanner.setPartialUpdateMode(partialUpdateMode);
+>>>>>>> 67ac7847b2 ([BugFix] fix partial update by column not work in broker load (#29161))
             loadPlanner.plan();
         }
     }
