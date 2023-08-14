@@ -68,6 +68,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -80,12 +81,14 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -702,8 +705,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
-            // Before schema change, collect modified columns for related mvs.
-            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
+            // Before schema change, collect modified columns and drop columns.
+            Set<String> modifiedColumns = collectDropAndModifiedColumns(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -748,6 +751,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
             inactiveRelatedMv(modifiedColumns, tbl);
+            inactiveViews(modifiedColumns, tbl);
 
             pruneMeta();
             this.jobState = JobState.FINISHED;
@@ -765,10 +769,34 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.span.end();
     }
 
-    private Set<String> collectModifiedColumnsForRelatedMVs(OlapTable tbl) {
-        if (tbl.getRelatedMaterializedViews().isEmpty()) {
-            return Sets.newHashSet();
+    private void inactiveViews(Set<String> modifiedColumns, OlapTable tbl) {
+        if (modifiedColumns.isEmpty()) {
+            return;
         }
+
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<View> views = Lists.newArrayList();
+        for (Long viewDbId : allDbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(viewDbId);
+            if (null == db) {
+                continue;
+            }
+            db.getTables().stream().filter(v -> v instanceof View).forEach(v -> views.add((View) v));
+        }
+
+        Database db = MetaUtils.getDatabase(dbId);
+        for (View view : views) {
+            Map<TableName, com.starrocks.catalog.Table> usedTable =
+                    AnalyzerUtils.collectAllTableAndView(view.getQueryStatement());
+            if (usedTable.containsKey(new TableName(db.getOriginName(), tbl.getName()))) {
+                String error = "column [" + String.join(", ", modifiedColumns) + "] on table [" + tbl.getName() + "] "
+                        + "has been modified";
+                view.setInvalid(error);
+            }
+        }
+    }
+
+    private Set<String> collectDropAndModifiedColumns(OlapTable tbl) {
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
         for (Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {

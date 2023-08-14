@@ -660,6 +660,10 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            if (node.getView().isInvalid()) {
+                throw new SemanticException("View " + node.getName() + " need re-build, " + node.getView().getReason());
+            }
+
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);

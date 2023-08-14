@@ -62,6 +62,9 @@ import java.util.List;
 public class View extends Table {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
 
+    public static final int VIEW_STATUS_NORMAL = 0;
+    public static final int VIEW_STATUS_REBUILD = 2;
+
     // The original SQL-string given as view definition. Set during analysis.
     // Corresponds to Hive's viewOriginalText.
     @Deprecated
@@ -85,6 +88,12 @@ public class View extends Table {
     // for persist
     @SerializedName(value = "m")
     private long sqlMode = 0L;
+
+    @SerializedName(value = "status")
+    private int status = 0;
+
+    @SerializedName(value = "reason")
+    private String reason = "";
 
     // Used for read from image
     public View() {
@@ -119,6 +128,8 @@ public class View extends Table {
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
+        this.status = 0;
+        this.reason = "";
     }
 
     public String getInlineViewDef() {
@@ -153,6 +164,19 @@ public class View extends Table {
                     "is not a query statement", name));
         }
         return (QueryStatement) node;
+    }
+
+    public void setInvalid(String reason) {
+        this.status = VIEW_STATUS_REBUILD;
+        this.reason = reason;
+    }
+
+    public boolean isInvalid() {
+        return status == VIEW_STATUS_REBUILD;
+    }
+
+    public String getReason() {
+        return reason;
     }
 
     @Override
