@@ -420,7 +420,13 @@ public class MaterializedViewAnalyzer {
             }
 
             // Without specified sortkeys, set keys from columns
-            Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
+            // Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
+            Map<String, Column> columnMap = new HashMap<>();
+            for (Column col : mvColumns) {
+                if (columnMap.putIfAbsent(col.getName(), col) != null) {
+                    throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
+                }
+            }
             if (CollectionUtils.isEmpty(statement.getSortKeys())) {
                 for (String col : keyCols) {
                     columnMap.get(col).setIsKey(true);
