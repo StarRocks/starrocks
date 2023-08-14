@@ -129,9 +129,7 @@ public:
 private:
     Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
 
-    void _consume_levels(size_t num_values) {
-        _reader->def_level_decoder().consume_levels(num_values);
-    }
+    void _consume_levels(size_t num_values) { _reader->def_level_decoder().consume_levels(num_values); }
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _lazy_skip_values(uint64_t begin) override;
@@ -298,8 +296,8 @@ Status RepeatedStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_
     level_t* rep_levels = nullptr;
     size_t avail_levels = _reader->rep_level_decoder().get_avail_levels(*num_rows, &rep_levels);
     if (UNLIKELY(avail_levels == 0)) {
-        return Status::InternalError(
-                fmt::format("num values left in cur page: {}, but no available rep levels", _num_values_left_in_cur_page));
+        return Status::InternalError(fmt::format("num values left in cur page: {}, but no available rep levels",
+                                                 _num_values_left_in_cur_page));
     }
     if (UNLIKELY(avail_levels != _reader->def_level_decoder().get_avail_levels(*num_rows, def_levels))) {
         return Status::InternalError("rep/def levels' length do not match");
@@ -806,8 +804,8 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
 
 void RepeatedStoredColumnReader::_collect_not_null_values(size_t num_levels, bool lazy_flag) {
     if (lazy_flag) {
-        _not_null_to_skip +=
-                count_not_null(_reader->def_level_decoder().get_forward_levels(num_levels), num_levels, _field->max_def_level());
+        _not_null_to_skip += count_not_null(_reader->def_level_decoder().get_forward_levels(num_levels), num_levels,
+                                            _field->max_def_level());
     }
 }
 

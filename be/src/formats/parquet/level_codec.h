@@ -67,9 +67,7 @@ public:
         *num_levels = _levels_parsed;
     }
 
-    level_t* get_forward_levels(size_t num_levels) {
-        return &_levels[_levels_parsed - num_levels];
-    }
+    level_t* get_forward_levels(size_t num_levels) { return &_levels[_levels_parsed - num_levels]; }
 
     void reset() {
         size_t num_levels = _levels_decoded - _levels_parsed;
@@ -86,9 +84,7 @@ public:
         _levels_parsed = 0;
     }
 
-    void consume_levels(size_t num_levels) {
-        _levels_parsed += num_levels;
-    }
+    void consume_levels(size_t num_levels) { _levels_parsed += num_levels; }
 
     size_t get_avail_levels(size_t row, level_t** levels) {
         size_t batch_size = get_level_to_decode_batch_size(row);
