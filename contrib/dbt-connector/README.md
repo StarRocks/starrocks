@@ -1,5 +1,9 @@
 # dbt-starrocks
 
+![PyPI](https://img.shields.io/pypi/v/dbt-starrocks)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/dbt-starrocks)
+![PyPI - Downloads](https://img.shields.io/pypi/dw/dbt-starrocks)
+
 This project is **under development**.
 
 
@@ -21,6 +25,18 @@ $ pip install dbt-starrocks
 ```
 
 ## Supported features
+| Starrocks <= 2.5 | Starrocks 2.5 ~ 3.1  | Starrocks >= 3.1  |              Feature              |
+|:----------------:|:--------------------:|:-----------------:|:---------------------------------:|
+|        ✅         |          ✅           |         ✅         |       Table materialization       |
+|        ✅         |          ✅           |         ✅         |       View materialization        |
+|        ❌         |          ❌           |         ✅         | Materialized View materialization |
+|        ❌         |          ✅           |         ✅         |    Incremental materialization    |
+|        ❌         |          ✅           |         ✅         |         Primary Key Model         |
+|        ✅         |          ✅           |         ✅         |              Sources              |
+|        ✅         |          ✅           |         ✅         |         Custom data tests         |
+|        ✅         |          ✅           |         ✅         |           Docs generate           |
+|        ❌         |          ❌           |         ❌         |               Kafka               |
+
 ### Notice
 1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
 2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
@@ -59,28 +75,25 @@ starrocks:
 ### dbt seed properties(yml):
 #### Complete configuration:
 ```
-config:
+models:
+  materialized: table       // table or view or materialized_view
   engine: 'OLAP'
   keys: ['id', 'name', 'some_date']
-  table_type: 'PRIMARY'     //PRIMARY or DUPLICATE or UNIQUE
+  table_type: 'PRIMARY'     // PRIMARY or DUPLICATE or UNIQUE
   distributed_by: ['id']
-  buckets: 3                //default 10
+  buckets: 3                // default 10
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
   properties: [{"replication_num":"1", "in_memory": "true"}]
 ```
   
-### dbt run config(table/incremental):
-#### Minimum configuration:
+### dbt run config:
+#### Example configuration:
 ```
-{{ config(materialized=var("materialized_var", "table"), distributed_by=['id'])}}
-{{ config(materialized='incremental', distributed_by=['id']) }}
-```
-
-#### Complete configuration:
-```
-{{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id'], properties={"in_memory": "true"}) }}
-{{ config(materialized='incremental', engine='OLAP', buckets=32, distributed_by=['id'], properties={"in_memory": "true"}) }}
+{{ config(materialized='view') }}
+{{ config(materialized='materialized_view') }}        
+{{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
 ```
 
 ## Test Adapter
