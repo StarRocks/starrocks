@@ -287,6 +287,9 @@ void TabletSchema::append_column(TabletColumn column) {
     }
     _field_id_to_index[column.unique_id()] = _num_columns;
     _cols.push_back(std::move(column));
+    if (_sort_key_idxes_set.count(_num_columns) > 0) {
+        _cols[_num_columns].set_is_sort_key(true);
+    }
     _num_columns++;
 }
 
@@ -395,6 +398,7 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _id = schema.has_id() ? schema.id() : invalid_id();
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
+    _num_columns = 0;
     _cols.clear();
     _compression_type = schema.compression_type();
     for (auto& column_pb : schema.column()) {
@@ -411,11 +415,13 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _sort_key_idxes.reserve(_num_key_columns);
         for (auto i = 0; i < _num_key_columns; ++i) {
             _sort_key_idxes.push_back(i);
+            _sort_key_idxes_set.emplace(i);
         }
     } else {
         _sort_key_idxes.reserve(schema.sort_key_idxes_size());
         for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
+            _sort_key_idxes_set.emplace(schema.sort_key_idxes(i));
         }
     }
     for (auto cid : _sort_key_idxes) {
@@ -446,6 +452,7 @@ void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version
     _next_column_unique_id = ori_tablet_schema->next_column_unique_id();
     // copy from table_schema_param
     _num_key_columns = 0;
+    _num_columns = 0;
     bool has_bf_columns = false;
     _cols.clear();
     _field_id_to_index.clear();
@@ -465,6 +472,10 @@ void TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version
             _cols.emplace_back(std::move(column));
             _num_columns++;
         }
+    }
+
+    for (auto cid : _sort_key_idxes) {
+        _cols[cid].set_is_sort_key(true);
     }
     if (has_bf_columns) {
         _has_bf_fpp = true;
