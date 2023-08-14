@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -129,6 +130,7 @@ public class LoadPlanner {
     private String label;
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -221,6 +223,10 @@ public class LoadPlanner {
         if (Config.enable_pipeline_load) {
             this.context.getSessionVariable().setEnablePipelineEngine(true);
         }
+    }
+
+    public void setPartialUpdateMode(TPartialUpdateMode mode) {
+        this.partialUpdateMode = mode;
     }
 
     public void plan() throws UserException {
@@ -435,6 +441,7 @@ public class LoadPlanner {
             }
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
+                ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
                 ((OlapTableSink) dataSink).complete();
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -454,6 +461,7 @@ public class LoadPlanner {
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
+            dataSink.setPartialUpdateMode(partialUpdateMode);
             dataSink.complete();
         }
         this.txnId = txnId;
