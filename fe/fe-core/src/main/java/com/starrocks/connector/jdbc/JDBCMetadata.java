@@ -143,23 +143,15 @@ public class JDBCMetadata implements ConnectorMetadata {
         try (Connection connection = getConnection()) {
             List<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName);
             ImmutableList.Builder<Column> list = ImmutableList.builder();
-            System.out.println("JDBCMD listPartitionColumns partitionColumnNames : " + partitionColumnNames);
-            System.out.println("JDBCMD listPartitionColumns fullSchema : " + fullSchema);
             if (partitionColumnNames.size() > 0) {
                 for (String colName : partitionColumnNames) {
                     for (Column col : fullSchema) {
-                        System.out.println("JDBCMD listPartitionColumns colName : " + colName);
-                        System.out.println("JDBCMD listPartitionColumns col.getName() : " + col.getName());
                         if (colName.equals(col.getName())) {
-                            System.out.println("JDBCMD listPartitionColumns equals");
                             list.add(col);
-                            System.out.println("JDBCMD listPartitionColumns add");
                         }
                     }
                 }
-                List<Column> re = list.build();
-                System.out.println("JDBCMD listPartitionColumns return : " + re);
-                return re;
+                return list.build();
             } else {
                 return Lists.newArrayList();
             }
