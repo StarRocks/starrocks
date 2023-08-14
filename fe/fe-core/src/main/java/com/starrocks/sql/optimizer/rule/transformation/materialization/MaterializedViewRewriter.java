@@ -67,7 +67,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -1716,6 +1718,53 @@ public class MaterializedViewRewriter {
         return createUnion(queryInput, viewInput, rewriteContext);
     }
 
+    // the queryExpression may contains LogicalViewScanOperators,
+    // should replace them to view's original plan after mv rewrite
+    private OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression) {
+        if (optimizerContext.getViewPlanMap() == null) {
+            return queryExpression;
+        }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            logMVRewrite(mvRewriteContext, "the query still has {} logical view scan operators", viewScanOperators.size());
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private void doReplaceLogicalViewScanOperator(OptExpression parent, int index, OptExpression queryExpression) {
+        Map<LogicalViewScanOperator, OptExpression> viewPlanMap = optimizerContext.getViewPlanMap();
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            if (!viewPlanMap.containsKey(op)) {
+                LogicalViewScanOperator viewScanOperator = op.cast();
+                logMVRewrite(mvRewriteContext, "invalid view scan operator, view:{}, relationId:",
+                        viewScanOperator.getTable().getName(), viewScanOperator.getRelationId());
+                return;
+            }
+            OptExpression viewPlan = viewPlanMap.get(op);
+            /*if (op.getPredicate() != null) {
+                // update predicates
+                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
+                builder.withOperator(viewPlan.getOp());
+                builder.setPredicate(Utils.compoundAnd(viewPlan.getOp().getPredicate(), op.getPredicate()));
+                Operator newOperator = builder.build();
+                viewPlan = OptExpression.create(newOperator, viewPlan.getInputs());
+            }*/
+            parent.setChild(index, viewPlan);
+        } else {
+            for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+                doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i));
+            }
+        }
+    }
+
     // retry to rewrite the rewritten failed predicates by enforcing the columns not exists in query
     private Pair<ScalarOperator, OptExpression> tryRewritePredicates(
             RewriteContext rewriteContext,
@@ -1782,6 +1831,10 @@ public class MaterializedViewRewriter {
 
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
+        queryExpression = replaceLogicalViewScanOperator(queryExpression);
+        if (queryExpression == null) {
+            return null;
+        }
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
         ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
                 Utils.compoundAnd(
@@ -1924,19 +1977,16 @@ public class MaterializedViewRewriter {
             // when query has no partition related predicates and mv has,
             // we should consider to add null value predicate into compensation predicates
             ColumnRefOperator partitionColumnRef =
-                    getColumnRefFromPredicate(mvPredicate, partitionColumns.get(0).getName());
-            Preconditions.checkState(partitionColumnRef != null);
+                    findQueryPartitionColumnRef(mvPredicate, partitionColumns.get(0), rewriteContext);
             if (!partitionColumnRef.isNullable()) {
                 // only add null value into compensation predicate when partition column is nullable
                 return queryCompensationPredicate;
             }
-            ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
-            partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
             IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
             IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
             List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
             List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
-                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumnRef.getName()))
                     .collect(Collectors.toList());
             predicates.removeAll(partitionRelatedPredicates);
             if (partitionRelatedPredicates.contains(isNullPredicateOperator)
@@ -1957,6 +2007,31 @@ public class MaterializedViewRewriter {
             queryCompensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(predicates));
         }
         return queryCompensationPredicate;
+    }
+
+    private ColumnRefOperator findQueryPartitionColumnRef(
+            ScalarOperator mvPredicate, Column partitionColumn, RewriteContext rewriteContext) {
+        // when query has no partition related predicates and mv has,
+        // we should consider to add null value predicate into compensation predicates
+        ColumnRefOperator partitionColumnRef =
+                getColumnRefFromPredicate(mvPredicate, partitionColumn.getName());
+        Preconditions.checkState(partitionColumnRef != null);
+        ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
+        // for view based mv rewrite, we should mapping the partition column to output column of view scan
+        if (optimizerContext.getViewPlanMap() != null) {
+            for (LogicalViewScanOperator viewScanOperator : optimizerContext.getViewPlanMap().keySet()) {
+                Projection projection = viewScanOperator.getProjection();
+                if (viewScanOperator.getProjection() != null) {
+                    for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                        if (entry.getValue().equivalent(partitionColumnRef)) {
+                            return entry.getKey();
+                        }
+                    }
+                }
+            }
+        }
+        return partitionColumnRef;
     }
 
     private boolean isRelatedPredicate(ScalarOperator scalarOperator, String name) {

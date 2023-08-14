@@ -78,6 +78,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -92,6 +93,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -389,8 +391,9 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        TransformerContext transformerContext =
+                new TransformerContext(columnRefFactory, connectContext, true);
+        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -1039,6 +1042,9 @@ public class MvUtils {
         if (scanOperators.isEmpty()) {
             return false;
         }
+        if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
+            return true;
+        }
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
@@ -1218,14 +1224,23 @@ public class MvUtils {
 
         Column partitionColumn = partitionTableAndColumns.second;
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
-
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            return convertPartitionKeysToPredicate(columnRef, latestBaseTableRanges);
+            final Optional<ColumnRefOperator> columnRefOption;
+            if (scanOperator instanceof LogicalViewScanOperator) {
+                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
+                columnRefOption = Optional.ofNullable(viewScanOperator.getExpressionMapping(partitionExpr));
+            } else {
+                columnRefOption = Optional.ofNullable(scanOperator.getColumnReference(partitionColumn));
+            }
+            if (!columnRefOption.isPresent()) {
+                continue;
+            }
+            return convertPartitionKeysToPredicate(columnRefOption.get(), latestBaseTableRanges);
         }
         return null;
     }
@@ -1234,6 +1249,9 @@ public class MvUtils {
         Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
             return false;
+        }
+        if (scanOperator instanceof LogicalViewScanOperator) {
+            return true;
         }
         if (!scanTable.isNativeTableOrMaterializedView() && !scanTable.getTableIdentifier().equals(
                 refBaseTable.getTableIdentifier())) {
@@ -1454,5 +1472,15 @@ public class MvUtils {
         paritionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
         return slotRefs.get(0);
+    }
+
+    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
     }
 }

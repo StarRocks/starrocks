@@ -1125,4 +1125,280 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "test_mv1");
         starRocksAssert.dropTable("base_tbl1");
     }
+
+    @Test
+    public void testViewBaseMvRewriteOnHive() throws Exception {
+        String view = "create view hive_view_1 " +
+                "as " +
+                "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders`";
+        starRocksAssert.withView(view);
+        String mv = "CREATE MATERIALIZED VIEW `view_based_mv_1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY date_trunc('month', o_orderdate)\n" +
+                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+        starRocksAssert.withMaterializedView(mv);
+        refreshMaterializedView("test", "view_based_mv_1");
+        {
+            String query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM hive_view_1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "view_based_mv_1");
+        }
+        starRocksAssert.dropMaterializedView("view_based_mv_1");
+    }
+
+    @Test
+    public void testViewBaseMvRewriteWithPartitionExpr() throws Exception {
+        {
+            starRocksAssert.withView("create view view_with_expr" +
+                    " as" +
+                    " SELECT DATE_TRUNC('DAY', `id_datetime`) AS `day_date`, \n" +
+                    "  COUNT(`t1a`) AS `cnt` \n" +
+                    "FROM `table_with_datetime_partition` \n" +
+                    "GROUP BY DATE_TRUNC('DAY', `id_datetime`)");
+            createAndRefreshMv("test", "mv_on_view_1",
+                    "create materialized view mv_on_view_1" +
+                            " partition by day_date" +
+                            " distributed by hash(`day_date`)" +
+                            " as" +
+                            " select * from view_with_expr");
+            cluster.runSql("test", "insert into table_with_datetime_partition partition(p19910330)" +
+                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
+            String query5 = "select * from view_with_expr";
+            String plan5 = getFragmentPlan(query5);
+            PlanTestBase.assertContains(plan5, "mv_on_view_1");
+            PlanTestBase.assertContains(plan5, "UNION",
+                    "((17: date_trunc < '1991-03-31 00:00:00') OR (17: date_trunc >= '1991-04-03 00:00:00'))" +
+                            " OR (17: date_trunc IS NULL)");
+            dropMv("test", "mv_on_view_1");
+            starRocksAssert.dropView("view_with_expr");
+        }
+
+        {
+            starRocksAssert.withView("create view view_with_expr" +
+                    " as" +
+                    " SELECT DATE_TRUNC('DAY', `id_date`) AS `day_date`, \n" +
+                    "  COUNT(`t1a`) AS `cnt` \n" +
+                    "FROM `table_with_day_partition` \n" +
+                    "GROUP BY DATE_TRUNC('DAY', `id_date`)");
+            createAndRefreshMv("test", "mv_on_view_1",
+                    "create materialized view mv_on_view_1" +
+                            " partition by day_date" +
+                            " distributed by hash(`day_date`)" +
+                            " as" +
+                            " select * from view_with_expr");
+            cluster.runSql("test", "insert into table_with_day_partition partition(p19910330)" +
+                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
+            String query5 = "select * from view_with_expr";
+            String plan5 = getFragmentPlan(query5);
+            PlanTestBase.assertContains(plan5, "mv_on_view_1");
+            PlanTestBase.assertContains(plan5, "UNION",
+                    "((12: id_date < '1991-03-31') OR (12: id_date >= '1991-04-03')) OR (12: id_date IS NULL)");
+            dropMv("test", "mv_on_view_1");
+            starRocksAssert.dropView("view_with_expr");
+        }
+
+        {
+            starRocksAssert.withView("create view view_with_expr" +
+                    " as" +
+                    " SELECT DATE_TRUNC('MONTH', `id_date`) AS `day_month`, \n" +
+                    "  COUNT(`t1a`) AS `cnt` \n" +
+                    "FROM `table_with_day_partition` \n" +
+                    "GROUP BY DATE_TRUNC('MONTH', `id_date`)");
+            createAndRefreshMv("test", "mv_on_view_1",
+                    "create materialized view mv_on_view_1" +
+                            " partition by day_month" +
+                            " distributed by hash(`day_month`)" +
+                            " as" +
+                            " select * from view_with_expr");
+            cluster.runSql("test", "insert into table_with_day_partition partition(p19910330)" +
+                    " values(\"varchar12\", '1991-03-30', 2, 2, 1)");
+            String query5 = "select * from view_with_expr";
+            String plan5 = getFragmentPlan(query5);
+            PlanTestBase.assertContains(plan5, "mv_on_view_1");
+            PlanTestBase.assertContains(plan5, "UNION",
+                    "((17: date_trunc < '1991-04-01') OR (17: date_trunc >= '1991-04-03')) OR (17: date_trunc IS NULL)");
+            dropMv("test", "mv_on_view_1");
+            starRocksAssert.dropView("view_with_expr");
+        }
+    }
+
+    @Test
+    public void testViewBaseMvRewrite2() throws Exception {
+        {
+            starRocksAssert.withTable("CREATE TABLE `adm_dim_d_product_lvl_partition` (\n" +
+                    "  `as_of_date` date NOT NULL COMMENT \"\",\n" +
+                    "  `product_id_lv1` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv1` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv2` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv2` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv3` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv3` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv4` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv4` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv5` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv5` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv6` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv6` varchar(4000) NULL COMMENT \"\",\n" +
+                    "  `product_id_lv7` varchar(1024) NULL COMMENT \"\",\n" +
+                    "  `product_name_lv7` varchar(4000) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP \n" +
+                    "DUPLICATE KEY(`as_of_date`, `product_id_lv1`)\n" +
+                    "PARTITION BY RANGE(`as_of_date`)\n" +
+                    "(\n" +
+                    "    PARTITION p20210618 VALUES LESS THAN (\"2021-06-19\"),\n" +
+                    "    PARTITION p20210619 VALUES LESS THAN (\"2021-06-20\"),\n" +
+                    "    PARTITION p20210620 VALUES LESS THAN (\"2021-06-21\"),\n" +
+                    "    PARTITION p20210621 VALUES LESS THAN (\"2021-06-22\"),\n" +
+                    "    PARTITION p20210622 VALUES LESS THAN (\"2021-06-23\"),\n" +
+                    "    PARTITION p20210623 VALUES LESS THAN (\"2021-06-24\"),\n" +
+                    "    PARTITION p20210624 VALUES LESS THAN (\"2021-06-25\"),\n" +
+                    "    PARTITION p20210625 VALUES LESS THAN (\"2021-06-26\"),\n" +
+                    "    PARTITION p20210626 VALUES LESS THAN (\"2021-06-27\"),\n" +
+                    "    PARTITION p20210627 VALUES LESS THAN (\"2021-06-28\"),\n" +
+                    "    PARTITION p20210628 VALUES LESS THAN (\"2021-06-29\"),\n" +
+                    "    PARTITION p20210629 VALUES LESS THAN (\"2021-06-30\"),\n" +
+                    "    PARTITION p20210630 VALUES LESS THAN (\"2021-07-01\")\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY hash(`as_of_date`, `product_id_lv1`)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"LZ4\"\n" +
+                    ");");
+
+            starRocksAssert.withTable("CREATE TABLE `smart_date_table__20230101a238000000` (\n" +
+                    "  `day_col` date NOT NULL COMMENT \"\",\n" +
+                    "  `year_col` date NOT NULL COMMENT \"\",\n" +
+                    "  `month_col` date NOT NULL COMMENT \"\",\n" +
+                    "  `quarter_col` date NOT NULL COMMENT \"\",\n" +
+                    "  `week_col` date NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP \n" +
+                    "DUPLICATE KEY(`day_col`, `year_col`, `month_col`)\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"LZ4\"\n" +
+                    ");");
+
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-30','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-29','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-29','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-28','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-27','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-26','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-25','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-24','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition`" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-23','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+
+            cluster.runSql("test", "INSERT INTO `smart_date_table__20230101a238000000`" +
+                    " (day_col,year_col,month_col,quarter_col,week_col) VALUES\n" +
+                    "\t ('2021-06-29','2021-01-01','2021-06-01','2021-04-01','2021-06-28')\n");
+
+            starRocksAssert.withView("CREATE OR REPLACE view `rolling_view_1` AS \n" +
+                    "SELECT \n" +
+                    "  DATE_TRUNC('DAY', `adm_dim_d_product_lvl_partition`.`as_of_date`) AS `DIMENSION_metric_time_day`, \n" +
+                    "  COUNT(`adm_dim_d_product_lvl_partition`.`product_id_lv5`) AS `METRIC_xm_metric_partition` \n" +
+                    "FROM \n" +
+                    "  `adm_dim_d_product_lvl_partition` AS `adm_dim_d_product_lvl_partition` \n" +
+                    "GROUP BY \n" +
+                    "  DATE_TRUNC('DAY', `adm_dim_d_product_lvl_partition`.`as_of_date`)");
+
+            createAndRefreshMv("test", "mv_rolling_view_1",
+                    "CREATE MATERIALIZED VIEW `mv_rolling_view_1`\n" +
+                            "PARTITION BY (`DIMENSION_metric_time_day`)\n" +
+                            "DISTRIBUTED BY RANDOM\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replicated_storage\" = \"true\",\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS select \n" +
+                            "  `DIMENSION_metric_time_day`, \n" +
+                            "  `METRIC_xm_metric_partition` \n" +
+                            "  from `rolling_view_1`");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition` partition(p20210622)" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-22','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            cluster.runSql("test", "INSERT INTO `adm_dim_d_product_lvl_partition` partition(p20210623)" +
+                    " (as_of_date,product_id_lv1,product_name_lv1,product_id_lv2,product_name_lv2,product_id_lv3," +
+                    "product_name_lv3,product_id_lv4,product_name_lv4,product_id_lv5,product_name_lv5,product_id_lv6," +
+                    "product_name_lv6,product_id_lv7,product_name_lv7) VALUES\n" +
+                    "\t ('2021-06-23','13105237365','庄祟','15967575633','官铀','14142880073','桑业','17181996243','江稂'," +
+                    "'18463673000','欧阳樟','18661039439','官川','17722636448','侯拌')");
+            {
+                String query5 = "select * from rolling_view_1";
+                String plan5 = getFragmentPlan(query5);
+                PlanTestBase.assertContains(plan5, "mv_rolling_view_1");
+            }
+            {
+                String query = "select" +
+                        " v1.DIMENSION_metric_time_day, v1.METRIC_xm_metric_partition, v2.METRIC_xm_metric_partition" +
+                        " from rolling_view_1 v1 join rolling_view_1 v2" +
+                        " on v1.DIMENSION_metric_time_day = v2.DIMENSION_metric_time_day";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_rolling_view_1");
+            }
+        }
+    }
 }

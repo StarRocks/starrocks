@@ -66,12 +66,14 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
+    private final boolean keepView;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext) {
+                            CTETransformerContext cteContext, boolean keepView) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
+        this.keepView = keepView;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -154,9 +156,13 @@ class QueryTransformer {
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
-        return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
-                .visit(node).getRootBuilder();
+        TransformerContext transformerContext = new TransformerContext(
+                columnRefFactory,
+                session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                newCteContext,
+                keepView);
+        return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,

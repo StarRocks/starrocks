@@ -30,6 +30,7 @@ import java.util.List;
 public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule AGGREGATE = new MergeLimitDirectRule(OperatorType.LOGICAL_AGGR);
     public static final MergeLimitDirectRule OLAP_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_OLAP_SCAN);
+    public static final MergeLimitDirectRule VIEW_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_VIEW_SCAN);
     public static final MergeLimitDirectRule HIVE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergeLimitDirectRule ICEBERG_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);

@@ -69,9 +69,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
@@ -82,7 +79,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -256,6 +252,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
             // Get a faked distribution name
             this.exception = null;
             this.rewritePlan = "";
+            connectContext.setThreadLocalInfo();
 
             try {
                 // create mv if needed

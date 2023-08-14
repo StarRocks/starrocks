@@ -92,10 +92,31 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k1);");
 
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl_for_view (\n" +
+                " k1 date NOT NULL,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(k1)\n" +
+                " (\n" +
+                "   PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "   PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "   PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "   PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "   PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "   PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+
         cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
                 "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
                 "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
                 "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+
+        cluster.runSql("test", "insert into test_partition_tbl_for_view values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2),\n" +
+                "(\"2020-03-11\",1,1),(\"2020-04-11\",1,2),(\"2020-05-11\",2,1),(\"2020-05-11\",2,2);");
     }
 
     @Test
@@ -2189,5 +2210,27 @@ public class MvRewriteTest extends MvRewriteTestBase {
             Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
             Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
         }
+    }
+
+    @Test
+    public void testViewBasedPartitionedMvRewrite() throws Exception {
+        starRocksAssert.withView("create view view_based_test_1 " +
+                "as " +
+                "select * from test_partition_tbl_for_view");
+        starRocksAssert.withMaterializedView("create materialized view view_based_mv_1 " +
+                " partition by k1" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT k1, v1, v2 from view_based_test_1");
+        {
+            cluster.runSql("test", "refresh materialized view view_based_mv_1" +
+                    " partition start('2020-04-01') end ('2020-07-01') with sync mode;");
+            String query = "SELECT * from view_based_test_1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "view_based_mv_1");
+
+        }
+        starRocksAssert.dropView("view_based_test_1");
+        starRocksAssert.dropMaterializedView("view_based_mv_1");
     }
 }
