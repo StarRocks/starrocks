@@ -50,14 +50,7 @@ public:
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
-<<<<<<< HEAD
     bool only_null() const override { return _data->is_null(0); }
-=======
-    bool only_null() const override {
-        DCHECK(_data->is_nullable() ? _size == 0 || _data->is_null(0) : true);
-        return _data->is_nullable();
-    }
->>>>>>> f0f6bc2a6b ([BugFix] map_element process const input error (#29060))
 
     bool has_null() const override { return _data->has_null(); }
 
