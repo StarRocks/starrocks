@@ -3752,4 +3752,64 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK("select * from t5 full outer join t4 on k1=a",
                 "select * from t5 left outer join t4 on k1=a where k1=3;");
     }
+
+    @Test
+    public void testComplexExpressionRewrite() {
+        {
+            String mv = "select" +
+                    " case" +
+                    "    when lo_custkey is not null then lo_custkey" +
+                    "    when lo_partkey is not null then lo_partkey" +
+                    "    else null" +
+                    " end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5," +
+                    " lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            String query = "select" +
+                    " case" +
+                    "    when lo_custkey is not null then lo_custkey" +
+                    "    when lo_partkey is not null then lo_partkey" +
+                    "    else null" +
+                    " end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5," +
+                    " lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            testRewriteOK(mv, query);
+        }
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_custkey is not null";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_shipmode like 'mode'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_orderdate in (20230101, 20230102)";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_revenue between 100 and 200";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where not lo_revenue > 0";
+            testRewriteOK(mv, query);
+        }
+    }
 }
