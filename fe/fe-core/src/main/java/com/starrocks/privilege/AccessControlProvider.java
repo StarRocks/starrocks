@@ -14,15 +14,23 @@
 
 package com.starrocks.privilege;
 
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class AccessControlProvider {
     protected final AuthorizerStmtVisitor privilegeCheckerVisitor;
     protected final AccessControl accessControl;
+    public final Map<String, AccessControl> catalogToAccessControl;
 
     public AccessControlProvider(AuthorizerStmtVisitor privilegeCheckerVisitor, AccessControl accessControl) {
         this.privilegeCheckerVisitor = privilegeCheckerVisitor;
         this.accessControl = accessControl;
+
+        this.catalogToAccessControl = new ConcurrentHashMap<>();
+        this.catalogToAccessControl.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, this.accessControl);
     }
 
     public AuthorizerStmtVisitor getPrivilegeCheckerVisitor() {
@@ -30,6 +38,23 @@ public class AccessControlProvider {
     }
 
     public AccessControl getAccessControlOrDefault(String catalogName) {
-        return this.accessControl;
+        if (catalogName == null) {
+            return this.accessControl;
+        }
+
+        AccessControl catalogAccessController = catalogToAccessControl.get(catalogName);
+        if (catalogAccessController != null) {
+            return catalogAccessController;
+        } else {
+            return this.accessControl;
+        }
+    }
+
+    public void setAccessControl(String catalog, AccessControl accessControl) {
+        catalogToAccessControl.put(catalog, accessControl);
+    }
+
+    public void removeAccessControl(String catalog) {
+        catalogToAccessControl.remove(catalog);
     }
 }
