@@ -972,7 +972,8 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
+CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
