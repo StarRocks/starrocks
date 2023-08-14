@@ -143,7 +143,7 @@ PROPERTIES (
 
 #### Set up your Spark environment
 
-Note that the following examples are run in Spark 3.2.4 and use `spark-shell` and `spark-sql`.  Before running the examples, make sure to place the Spark connector JAR file in the `$SPARK_HOME/jars` directory.
+Note that the following examples are run in Spark 3.2.4 and use `spark-shell`, `pyspark` and `spark-sql`.  Before running the examples, make sure to place the Spark connector JAR file in the `$SPARK_HOME/jars` directory.
 
 ### Load data with Spark DataFrames
 
@@ -153,7 +153,9 @@ The following two examples explain how to load data with Spark DataFrames Batch 
 
 Construct data in memory and load data into the StarRocks table.
 
-1. Write the following scala code snippet in `spark-shell`:
+1. You can write the spark job using scala or python
+
+   For scala, run the following codes in `spark-shell`:
 
     ```Scala
     // 1. Create a DataFrame from a sequence.
@@ -169,6 +171,32 @@ Construct data in memory and load data into the StarRocks table.
         .option("starrocks.user", "root")
         .option("starrocks.password", "")
         .mode("append")
+        .save()
+    ```
+For python, run the following codes in `pyspark`:
+
+   ```python
+   from pyspark.sql import SparkSession
+
+   spark = SparkSession \
+        .builder \
+        .appName("StarRocks Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from a sequence.
+    data = [(1, "starrocks", 100), (2, "spark", 100)]
+    df = spark.sparkContext.parallelize(data) \
+            .toDF(["id", "name", "score"])
+
+    # 2. Write to starrocks with the format "starrocks",
+    # and replace the options with your own.
+    df.write.format("starrocks") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8038") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+        .option("starrocks.table.identifier", "test.score_board") \
+        .option("starrocks.user", "root") \
+        .option("starrocks.password", "") \
+        .mode("append") \
         .save()
     ```
 
@@ -196,7 +224,9 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
     4,spark,100
     ```
 
-2. Write the following scala code snippet in the `spark-shell`:
+2. You can write the spark job using scala or python 
+
+   For scala, run the following codes in `spark-shell`:
 
     ```Scala
     import org.apache.spark.sql.types.StructType
@@ -225,6 +255,44 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
             // replace it with your checkpoint directory
             .option("checkpointLocation", "/path/to/checkpoint")
             .outputMode("append")
+            .start()
+        )
+    ```
+
+   For python, run the following codes in `pyspark`:
+
+   ```python
+   from pyspark.sql import SparkSession
+   from pyspark.sql.types import IntegerType, StringType, StructType, StructField
+
+   spark = SparkSession \
+        .builder \
+        .appName("StarRocks SS Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from CSV.
+    schema = StructType([ \
+            StructField("id", IntegerType()), \
+            StructField("name", StringType()), \
+            StructField("score", IntegerType()) \
+        ])
+    df = spark.readStream \
+            .option("sep", ",") \
+            .schema(schema) \
+            .format("csv") \
+            # Replace it with your path to the directory "csv-data".
+            .load("/path/to/csv-data")
+
+    # 2. Write to starrocks with the format "starrocks", and replace the options with your own.
+    query = df.writeStream.format("starrocks") \
+            .option("starrocks.fe.http.url", "127.0.0.1:8038") \
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+            .option("starrocks.table.identifier", "test.score_board") \
+            .option("starrocks.user", "root") \
+            .option("starrocks.password", "") \
+            # replace it with your checkpoint directory
+            .option("checkpointLocation", "/path/to/checkpoint") \
+            .outputMode("append") \
             .start()
         )
     ```
