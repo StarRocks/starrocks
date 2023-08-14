@@ -2259,15 +2259,41 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
-    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
+    @ConfField(mutable = true, comment =
+            "History versions within this time range will not be deleted by auto vacuum.\n" +
             "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
             "versions still being accessed.\n" +
             "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
-    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
-            "threshold, auto vacuum operations will no longer be triggered for that partition")
+    @ConfField(mutable = true, comment =
+            "time threshold in hours, if a partition has not been updated for longer than this " +
+            "threshold, auto vacuum operations will no longer be triggered for that partition.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
+
+    @ConfField(mutable = true, comment =
+            "Whether enable delaying ingestion transaction commits when compaction score exceeds the threshold.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.\n" +
+            "Enabling this may reduce small files and improve query performance, but may increase ingestion\n" +
+            "transaction duration.")
+    public static boolean lake_enable_delay_commit = false;
+
+    @ConfField(mutable = true, comment =
+            "Delaying transaction commits if the compaction score of a table exceeds this threshold.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.\n" +
+            "NOTE: The actual effective value is the max of the configured value and " +
+            "'lake_compaction_score_selector_min_score'.")
+    public static long lake_delay_commit_compaction_score_threshold = 50;
+
+    @ConfField(mutable = true, comment =
+            "Ratio to reduce commit speed if compaction score exceeds threshold.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.\n" +
+            "Commit will be delayed by this percentage of the data write duration.\n" +
+            "E.g. with write duration 10min, ratio 0.1:\n" +
+            "- exceed 3 points -> 30% of 10min -> 3min delay\n" +
+            "- Exceed 5 points -> 50% of 10min -> 5min delay\n")
+    public static double lake_delay_commit_compaction_score_ratio = 0.1;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;

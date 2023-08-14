@@ -193,7 +193,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         // check status is committed
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
@@ -234,7 +235,8 @@ public class GlobalTransactionMgrTest {
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId);
@@ -256,7 +258,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo3);
         try {
-            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets);
+            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
+                    Lists.newArrayList(), null);
             Assert.fail();
         } catch (TabletQuorumFailedException e) {
             transactionState = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId2);
@@ -287,7 +290,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
+                Lists.newArrayList(), null);
         transactionState = fakeEditLog.getTransaction(transactionId2);
         // check status is commit
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
@@ -390,7 +394,8 @@ public class GlobalTransactionMgrTest {
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
                 "idToRunningTransactionState", idToTransactionState);
-        masterTransMgr.commitTransaction(1L, 1L, transTablets, txnCommitAttachment);
+        masterTransMgr.commitTransaction(1L, 1L, transTablets, Lists.newArrayList(),
+                txnCommitAttachment);
 
         Assert.assertEquals(Long.valueOf(101), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
         Assert.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
@@ -462,7 +467,8 @@ public class GlobalTransactionMgrTest {
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
                 "idToRunningTransactionState", idToTransactionState);
-        masterTransMgr.commitTransaction(1L, 1L, transTablets, txnCommitAttachment);
+        masterTransMgr.commitTransaction(1L, 1L, transTablets, Lists.newArrayList(),
+                txnCommitAttachment);
 
         Assert.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentTotalRows"));
         Assert.assertEquals(Long.valueOf(0), Deencapsulation.getField(routineLoadJob, "currentErrorRows"));
@@ -491,7 +497,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
@@ -545,7 +552,8 @@ public class GlobalTransactionMgrTest {
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
 
         // follower globalStateMgr replay the transaction
         transactionState = fakeEditLog.getTransaction(transactionId);
@@ -604,7 +612,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo3);
         try {
-            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets);
+            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
+                    Lists.newArrayList(), null);
             Assert.fail();
         } catch (TabletQuorumFailedException e) {
             transactionState = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId2);
@@ -620,7 +629,8 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
-        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, transTablets,
+                Lists.newArrayList(), null);
         transactionState = fakeEditLog.getTransaction(transactionId2);
         // check status is commit
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());

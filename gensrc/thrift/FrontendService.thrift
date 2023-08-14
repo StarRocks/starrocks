@@ -922,6 +922,8 @@ struct TLoadTxnCommitRequest {
 
 struct TLoadTxnCommitResult {
     1: required Status.TStatus status
+    2: optional bool allow_retry
+    3: optional i64 retry_interval_ms
 }
 
 struct TLoadTxnRollbackRequest {

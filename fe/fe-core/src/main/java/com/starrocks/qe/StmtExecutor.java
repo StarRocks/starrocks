@@ -172,12 +172,14 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.VisibleStateWaiter;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -194,6 +196,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -1561,6 +1564,7 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
@@ -1604,9 +1608,7 @@ public class StmtExecutor {
             authenticateParams.setHost(context.getRemoteIP());
             authenticateParams.setDb_name(externalTable.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
-            transactionId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .beginRemoteTransaction(externalTable.getSourceTableDbId(),
+            transactionId = transactionMgr.beginRemoteTransaction(externalTable.getSourceTableDbId(),
                                     Lists.newArrayList(externalTable.getSourceTableId()), label,
                                     externalTable.getSourceTableHost(),
                                     externalTable.getSourceTablePort(),
@@ -1618,7 +1620,7 @@ public class StmtExecutor {
         } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
             // schema table and iceberg table does not need txn
         } else {
-            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+            transactionId = transactionMgr.beginTransaction(
                     database.getId(),
                     Lists.newArrayList(targetTable.getId()),
                     label,
@@ -1628,8 +1630,7 @@ public class StmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
-            txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                    .getTransactionState(database.getId(), transactionId);
+            txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
@@ -1770,7 +1771,7 @@ public class StmtExecutor {
                 if (filteredRows > 0) {
                     if (targetTable instanceof ExternalOlapTable) {
                         ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                        transactionMgr.abortRemoteTransaction(
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
@@ -1780,7 +1781,7 @@ public class StmtExecutor {
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
                     } else {
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                        transactionMgr.abortTransaction(
                                 database.getId(),
                                 transactionId,
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
@@ -1797,7 +1798,7 @@ public class StmtExecutor {
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
+                if (transactionMgr.commitRemoteTransaction(
                         externalTable.getSourceTableDbId(), transactionId,
                         externalTable.getSourceTableHost(),
                         externalTable.getSourceTablePort(),
@@ -1822,29 +1823,30 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
+            } else if (isExplainAnalyze) {
+                transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze");
+                txnStatus = TransactionStatus.ABORTED;
             } else {
-                if (isExplainAnalyze) {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .abortTransaction(database.getId(), transactionId, "Explain Analyze");
-                    txnStatus = TransactionStatus.ABORTED;
-                } else if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
-                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
-                        new InsertTxnCommitAttachment(loadedRows))) {
+                        new InsertTxnCommitAttachment(loadedRows),
+                        jobDeadLineMs - System.currentTimeMillis());
+
+                long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
+
+                if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
-                    if (null != targetTable) {
-                        TableMetricsEntity entity =
-                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
-                        entity.counterInsertLoadFinishedTotal.increase(1L);
-                        entity.counterInsertLoadRowsTotal.increase(loadedRows);
-                        entity.counterInsertLoadBytesTotal.increase(loadedBytes);
-                    }
+                    TableMetricsEntity entity =
+                            TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
+                    entity.counterInsertLoadFinishedTotal.increase(1L);
+                    entity.counterInsertLoadRowsTotal.increase(loadedRows);
+                    entity.counterInsertLoadBytesTotal.increase(loadedBytes);
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;
                 }
@@ -1864,13 +1866,13 @@ public class StmtExecutor {
             try {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    transactionMgr.abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             errMsg);
                 } else {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                    transactionMgr.abortTransaction(
                             database.getId(), transactionId,
                             errMsg,
                             coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
@@ -1919,8 +1921,7 @@ public class StmtExecutor {
 
         String errMsg = "";
         if (txnStatus.equals(TransactionStatus.COMMITTED)) {
-            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                    .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
+            String timeoutInfo = transactionMgr.getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
             if (timeoutInfo.length() > 240) {
                 timeoutInfo = timeoutInfo.substring(0, 240) + "...";

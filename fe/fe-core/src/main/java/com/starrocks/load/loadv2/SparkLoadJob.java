@@ -108,6 +108,7 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletQuorumFailedException;
 import com.starrocks.transaction.TransactionState;
@@ -732,8 +733,8 @@ public class SparkLoadJob extends BulkLoadJob {
                     dbId, transactionId, commitInfos, Lists.newArrayList(),
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
-        } catch (TabletQuorumFailedException e) {
-            // retry in next loop
+        } catch (TabletQuorumFailedException | CommitRateExceededException e) {
+            LOG.info("Failed commit for txn {}, will retry. Error: {}", transactionId, e.getMessage());
         } finally {
             db.writeUnlock();
         }

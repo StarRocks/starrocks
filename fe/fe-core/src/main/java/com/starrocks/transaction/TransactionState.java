@@ -271,6 +271,8 @@ public class TransactionState implements Writable {
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
+    private long doneWriteTime = -1;
+    private long allowCommitTime = -1;
 
     @SerializedName("cb")
     private long callbackId = -1;
@@ -691,6 +693,8 @@ public class TransactionState implements Writable {
         sb.append(", error replicas num: ").append(errorReplicas.size());
         sb.append(", replica ids: ").append(Joiner.on(",").join(errorReplicas.stream().limit(5).toArray()));
         sb.append(", prepare time: ").append(prepareTime);
+        sb.append(", done write time: ").append(doneWriteTime);
+        sb.append(", allow commit time: ").append(allowCommitTime);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
         if (commitTime > prepareTime) {
@@ -1022,5 +1026,21 @@ public class TransactionState implements Writable {
 
     public String getTraceParent() {
         return traceParent;
+    }
+
+    public long getDoneWriteTime() {
+        return doneWriteTime;
+    }
+
+    public void setDoneWriteTime(long doneWriteTime) {
+        this.doneWriteTime = doneWriteTime;
+    }
+
+    public long getAllowCommitTime() {
+        return allowCommitTime;
+    }
+
+    public void setAllowCommitTime(long allowCommitTime) {
+        this.allowCommitTime = allowCommitTime;
     }
 }
