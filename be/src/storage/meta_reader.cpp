@@ -130,7 +130,6 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             chunk->append_column(std::move(column), slot->id());
         }
     }
-    _collect_context.seg_collecter_params.tablet_schema = _params.tablet->tablet_schema();
     return Status::OK();
 }
 
