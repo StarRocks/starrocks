@@ -387,7 +387,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = 'async';
 
 ### 通过返回结果查看
 
-INSERT 导入作业会根据执行结果的不同，返回以下两种作业状态：
+同步 INSERT 导入作业会根据执行结果的不同，返回以下两种作业状态：
 
 - **执行成功**
 
@@ -413,83 +413,57 @@ Query OK, 2 rows affected, 2 warnings (0.05 sec)
 ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http://x.x.x.x:yyyy/api/_load_error_log?file=error_log_9f0a4fd0b64e11ec_906bbede076e9d08
 ```
 
-### 通过 SHOW LOAD 语句查看
+### 通过 Information Schema 查看
 
-您可以通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看 INSERT 导入作业状态。
+您可以通过 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
 
-以下示例通过 SHOW LOAD 语句查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
+示例一：查看 `load_test` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示一条结果数据：
 
 ```SQL
-SHOW LOAD WHERE label="insert_load_wikipedia"\G
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test'
+ORDER BY create_time DESC
+LIMIT 1\G
 ```
 
-返回如下：
+示例二：查看 `load_test` 数据库中 Label 为 `insert_load_wikipedia` 的导入作业的执行情况：
+
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test' and label = 'insert_load_wikipedia'\G
+```
+
+以上示例返回如下：
 
 ```Plain
 *************************** 1. row ***************************
-         JobId: 10278
-         Label: insert_load_wikipedia
-         State: FINISHED
-      Progress: ETL:100%; LOAD:100%
-          Type: INSERT
-      Priority: NORMAL
-      ScanRows: 0
-  FilteredRows: 0
-UnselectedRows: 0
-      SinkRows: 2
-       EtlInfo: NULL
-      TaskInfo: resource:N/A; timeout(s):300; max_filter_ratio:0.0
-      ErrorMsg: NULL
-    CreateTime: 2023-06-12 18:31:07
-  EtlStartTime: 2023-06-12 18:31:07
- EtlFinishTime: 2023-06-12 18:31:07
- LoadStartTime: 2023-06-12 18:31:07
-LoadFinishTime: 2023-06-12 18:31:08
-   TrackingSQL: 
-    JobDetails: {"All backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[10142]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[]}}
-1 row in set (0.00 sec)
+              JOB_ID: 21319
+               LABEL: insert_load_wikipedia
+       DATABASE_NAME: load_test
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: INSERT
+            PRIORITY: NORMAL
+           SCAN_ROWS: 0
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 2
+            ETL_INFO: 
+           TASK_INFO: resource:N/A; timeout(s):300; max_filter_ratio:0.0
+         CREATE_TIME: 2023-08-09 10:42:23
+      ETL_START_TIME: 2023-08-09 10:42:23
+     ETL_FINISH_TIME: 2023-08-09 10:42:23
+     LOAD_START_TIME: 2023-08-09 10:42:23
+    LOAD_FINISH_TIME: 2023-08-09 10:42:24
+         JOB_DETAILS: {"All backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[10006]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+1 row in set (0.01 sec)
 ```
 
-### 通过 curl 命令查看
-
-您可以通过 curl 命令查看 INSERT 导入作业状态。
-
-启动终端，并运行以下命令：
-
-```Plain
-curl --location-trusted -u <username>:<password> \
-  http://<fe_address>:<fe_http_port>/api/<db_name>/_load_info?label=<label_name>
-```
-
-以下示例通过 curl 命令查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
-
-```Plain
-curl --location-trusted -u <username>:<password> \
-  http://x.x.x.x:8030/api/load_test/_load_info?label=insert_load_wikipedia
-```
-
-> **说明**
->
-> 如果账号没有设置密码，这里只需要传入 `<username>:`。
-
-返回如下：
-
-```Plain
-{
-   "jobInfo":{
-      "dbName":"load_test",
-      "tblNames":[
-         "source_wiki_edit"
-      ],
-      "label":"insert_load_wikipedia",
-      "state":"FINISHED",
-      "failMsg":"",
-      "trackingUrl":""
-   },
-   "status":"OK",
-   "msg":"Success"
-}
-```
+有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
 
 ## 相关配置项
 
