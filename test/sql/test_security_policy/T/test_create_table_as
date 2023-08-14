@@ -1,0 +1,41 @@
+-- name: test_create_table_as
+CREATE DATABASE test_create_table_as;
+use test_create_table_as;
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 values(1,2);
+insert into t0 values(3,4);
+insert into t0 values(5,6);
+insert into t0 values(7,8);
+
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+alter table t0 modify column v1 set masking policy mp;
+alter table t0 modify column v2 set masking policy mp;
+create row access policy rp as (col bigint) returns boolean -> if (col=1 or col=3 or col=5, true, false);
+create row access policy rp2 as (col bigint) returns boolean -> if (col=1 or col=5, true, false);
+alter table t0 add row access policy rp on (v1);
+alter table t0 add row access policy rp2 on (v1);
+
+create table t1 properties("replication_num"="1") as select * from t0;
+select * from t1 order by v1;
+
+create view v as select * from t0;
+select * from v order by v1;
+
+alter view v modify column v1 set masking policy mp;
+select * from v order by v1;
+
+select * from t0,v order by t0.v1;

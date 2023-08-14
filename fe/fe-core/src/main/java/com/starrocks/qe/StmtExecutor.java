@@ -716,7 +716,7 @@ public class StmtExecutor {
         // and for other cases the exception will throw and the rest of the code will not be executed.
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
-            ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
+            ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(),
                     beginTimeInNanoSecond);
             if (context.getState().getStateType() == MysqlStateType.ERR) {

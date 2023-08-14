@@ -96,7 +96,6 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME
 public class QueryAnalyzer {
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
-    public boolean hasRewrite = false;
 
     public QueryAnalyzer(ConnectContext session) {
         this.session = session;
@@ -320,7 +319,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                if (hasRewrite) {
+                if (r.isPolicyRewritten()) {
                     return r;
                 }
                 assert tableName != null;
@@ -328,7 +327,7 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
-                    hasRewrite = true;
+                    r.setPolicyRewritten(true);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
                     subqueryRelation.setAlias(tableName);
                     return subqueryRelation;

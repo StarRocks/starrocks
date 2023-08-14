@@ -24,10 +24,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -49,9 +51,15 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
-            QueryAnalyzer queryAnalyzer = new QueryAnalyzer(context);
-            queryAnalyzer.hasRewrite = true;
-            queryAnalyzer.analyze(stmt.getQueryStatement());
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setPolicyRewritten(true);
+                    return null;
+                }
+            }.visit(stmt.getQueryStatement());
+            Analyzer.analyze(stmt.getQueryStatement(), context);
 
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
@@ -76,9 +84,15 @@ public class ViewAnalyzer {
             if (alterClause instanceof AlterViewClause) {
                 AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
-                QueryAnalyzer queryAnalyzer = new QueryAnalyzer(context);
-                queryAnalyzer.hasRewrite = true;
-                queryAnalyzer.analyze(alterViewClause.getQueryStatement());
+                //Build View SQL without Policy Rewrite
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitRelation(Relation relation, Void context) {
+                        relation.setPolicyRewritten(true);
+                        return null;
+                    }
+                }.visit(alterViewClause.getQueryStatement());
+                Analyzer.analyze(alterViewClause.getQueryStatement(), context);
 
                 List<Column> viewColumns = analyzeViewColumns(alterViewClause.getQueryStatement().getQueryRelation(),
                         alterViewClause.getColWithComments());

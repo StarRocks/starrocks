@@ -228,10 +228,7 @@ public class MaterializedViewAnalyzer {
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
-            QueryAnalyzer queryAnalyzer = new QueryAnalyzer(context);
-            queryAnalyzer.hasRewrite = true;
-            queryAnalyzer.analyze(statement.getQueryStatement());
-
+            Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
 
             // convert queryStatement to sql and set
