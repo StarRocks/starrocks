@@ -25,6 +25,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.slot.Slot;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -90,6 +91,8 @@ public abstract class Coordinator {
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
     public abstract void onFinished();
+
+    public abstract Slot getSlot();
 
     // ------------------------------------------------------------------------------------
     // Methods for query.

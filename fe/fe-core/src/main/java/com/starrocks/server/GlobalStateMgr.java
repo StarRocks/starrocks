@@ -228,6 +228,9 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
@@ -294,7 +297,6 @@ import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -539,6 +541,10 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+
+    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final SlotProvider slotProvider = new SlotProvider();
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -1412,6 +1418,8 @@ public class GlobalStateMgr {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
+
+        slotManager.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -3398,11 +3406,9 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
@@ -3813,10 +3819,6 @@ public class GlobalStateMgr {
         localMetastore.replayTruncateTable(info);
     }
 
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        nodeMgr.updateResourceUsage(backendId, usage);
-    }
-
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         nodeMgr.setConfig(stmt);
     }
@@ -4097,5 +4099,17 @@ public class GlobalStateMgr {
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);
         }
+    }
+
+    public SlotManager getSlotManager() {
+        return slotManager;
+    }
+
+    public SlotProvider getSlotProvider() {
+        return slotProvider;
+    }
+
+    public ResourceUsageMonitor getResourceUsageMonitor() {
+        return resourceUsageMonitor;
     }
 }

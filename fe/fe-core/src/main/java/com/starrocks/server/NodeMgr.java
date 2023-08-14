@@ -73,13 +73,10 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TUpdateResourceUsageRequest;
-import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1053,6 +1050,10 @@ public class NodeMgr {
         return this.selfNode;
     }
 
+    public Pair<String, Integer> getSelfIpAndRpcPort() {
+        return Pair.create(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
+    }
+
     public String getNodeName() {
         return this.nodeName;
     }
@@ -1090,32 +1091,6 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
-    }
-
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        List<Frontend> allFrontends = getFrontends(null);
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TUpdateResourceUsageRequest request = new TUpdateResourceUsageRequest();
-            request.setBackend_id(backendId);
-            request.setResource_usage(usage);
-
-            try {
-                TUpdateResourceUsageResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.updateResourceUsage(request));
-                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
-                    LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost());
-                }
-            } catch (Exception e) {
-                LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost(), e);
-            }
-        }
     }
 
     public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {

@@ -141,6 +141,7 @@ public class Frontend implements Writable {
      */
     public boolean handleHbResponse(FrontendHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
+        boolean prevIsAlive = isAlive;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive && !isReplay) {
                 if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
@@ -185,6 +186,11 @@ public class Frontend implements Writable {
                 heartbeatRetryTimes = 0;
             }
         }
+
+        if (!GlobalStateMgr.isCheckpointThread() && prevIsAlive && !isAlive) {
+            GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(host);
+        }
+
         return isChanged;
     }
 
