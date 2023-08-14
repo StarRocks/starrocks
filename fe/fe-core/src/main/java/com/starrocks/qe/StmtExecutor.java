@@ -463,6 +463,7 @@ public class StmtExecutor {
                 }
             }
 
+            // no need to execute http query dump request in BE
             if (context.isHTTPQueryDump) {
                 return;
             }
