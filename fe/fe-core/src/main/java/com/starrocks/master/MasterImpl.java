@@ -848,14 +848,14 @@ public class MasterImpl {
 
             TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
             long tabletId = reportedTablet.getTablet_id();
-            TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
             if (tabletMeta == null) {
                 LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
                 return;
             }
 
             long dbId = tabletMeta.getDbId();
-            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 LOG.warn("db does not exist. db id: {}", dbId);
                 return;
@@ -864,7 +864,7 @@ public class MasterImpl {
             db.writeLock();
             try {
                 // local migration just set path hash
-                Replica replica = Catalog.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
+                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {

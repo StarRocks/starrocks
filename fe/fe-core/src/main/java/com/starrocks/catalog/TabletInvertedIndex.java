@@ -298,7 +298,6 @@ public class TabletInvertedIndex {
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
     }
 
-<<<<<<< HEAD
     private void deleteTabletByConsistencyChecker(TabletMeta tabletMeta, long tabletId, long backendId,
                                                   String reason, Set<Long> invalidTablets) {
         if (tabletMeta != null) {
@@ -488,7 +487,7 @@ public class TabletInvertedIndex {
         }
 
         //4. If the table is Primary key, do not send
-        Database db = Catalog.getCurrentCatalog().getDb(tabletMeta.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
         if (db == null) {
             return;
         }
