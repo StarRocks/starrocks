@@ -222,9 +222,7 @@ public class LeaderImpl {
                 errorMsgs.add(errMsg);
                 tStatus.setError_msgs(errorMsgs);
             }
-            if (taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
-                return result;
-            }
+            return result;
         } else {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
