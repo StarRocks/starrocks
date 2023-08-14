@@ -745,6 +745,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
+CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
