@@ -65,7 +65,9 @@ void DiskInfo::get_device_names() {
         }
 
         // Remove the partition# from the name.  e.g. sda2 --> sda
-        boost::trim_right_if(name, boost::is_any_of("0123456789"));
+        if (!boost::starts_with(name, "nvme")) {
+            boost::trim_right_if(name, boost::is_any_of("0123456789"));
+        }
 
         // Create a mapping of all device ids (one per partition) to the disk id.
         int major_dev_id = atoi(fields[0].c_str());
@@ -192,7 +194,9 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
                 continue;
             }
             std::string dev(basename(dev_path));
-            boost::trim_right_if(dev, boost::is_any_of("0123456789"));
+            if (!boost::starts_with(dev, "nvme")) {
+                boost::trim_right_if(dev, boost::is_any_of("0123456789"));
+            }
             if (_s_disk_name_to_disk_id.find(dev) != std::end(_s_disk_name_to_disk_id)) {
                 max_mount_size = mount_size;
                 match_dev = dev;

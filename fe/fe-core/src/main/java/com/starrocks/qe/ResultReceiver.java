@@ -142,6 +142,9 @@ public class ResultReceiver {
                 status.setStatus(new Status(TStatusCode.TIMEOUT,
                         String.format("Query exceeded time limit of %d seconds",
                                 ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
+                if (MetricRepo.isInit) {
+                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+                }
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlacklist(backendId);
