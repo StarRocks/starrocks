@@ -103,15 +103,9 @@ import javax.validation.constraints.NotNull;
 
 public class DatabaseTransactionMgr {
 
-<<<<<<< HEAD
-    private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
-
-=======
-    public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
->>>>>>> 5160b8f18c ([Refactor] Refactor DatabaseTransactionMgr class (#29054))
     private long dbId;
     // the lock is used to control the access to transaction states
     // no other locks should be inside this lock
