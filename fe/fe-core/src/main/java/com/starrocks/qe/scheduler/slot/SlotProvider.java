@@ -31,6 +31,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TApplicationException;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -134,7 +135,24 @@ public class SlotProvider {
         FrontendServiceProxy.call(slotRequest.getLeaderEndpoint(),
                 Config.thrift_rpc_timeout_ms,
                 Config.thrift_rpc_retry_times,
-                client -> client.requireSlotAsync(request));
+                client -> {
+                    try {
+                        return client.requireSlotAsync(request);
+                    } catch (TApplicationException e) {
+                        if (e.getType() == TApplicationException.UNKNOWN_METHOD) {
+                            LOG.warn("[Slot] leader doesn't have the RPC method requireSlotAsync. " +
+                                            "It is grayscale upgrading, so admit this query without requiring slots. [slot={}]",
+                                    slotRequest);
+                            pendingSlots.remove(slotRequest.getSlot().getSlotId());
+                            slotRequest.onFinished();
+                            slotRequest.getSlot().onRelease(); // Avoid sending releaseSlot RPC.
+                            return null;
+                        } else {
+                            throw e;
+                        }
+                    }
+                });
+
     }
 
     private void releaseSlotToSlotManager(LogicalSlot slot) {
