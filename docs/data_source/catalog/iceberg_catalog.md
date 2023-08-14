@@ -204,9 +204,11 @@ PROPERTIES
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
+Note the following points:
 
-If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+- If you use HDFS as storage, you do not need to configure `StorageCredentialParams`. If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+
+- If you use REST as metastore, you do not need to configure `StorageCredentialParams`. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
 
 ##### AWS S3
 
