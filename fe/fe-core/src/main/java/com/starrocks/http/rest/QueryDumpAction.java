@@ -74,7 +74,7 @@ public class QueryDumpAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
-        boolean enableMask = request.getSingleParameter(MOCK) == null ? true :
+        boolean enableMock = request.getSingleParameter(MOCK) == null ? true :
                 "true".equalsIgnoreCase(request.getSingleParameter(MOCK).trim());
 
         if (!Strings.isNullOrEmpty(catalogDbName)) {
@@ -117,7 +117,7 @@ public class QueryDumpAction extends RestBaseAction {
 
         DumpInfo dumpInfo = context.getDumpInfo();
         if (dumpInfo != null) {
-            if (enableMask && dumpInfo instanceof QueryDumpInfo) {
+            if (enableMock && dumpInfo instanceof QueryDumpInfo) {
                 QueryDumpInfo queryDumpInfo = (QueryDumpInfo) dumpInfo;
                 // TODO support desensitize HMS table
                 queryDumpInfo.setDesensitizedInfo(queryDumpInfo.getResourceSet().isEmpty()
