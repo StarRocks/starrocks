@@ -208,7 +208,7 @@ Note the following points:
 
 - If you use HDFS as storage, you do not need to configure `StorageCredentialParams` and can skip this section. If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
 
-- If you use REST as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
+- If you use Tabular as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
 
 ##### AWS S3
 
