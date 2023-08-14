@@ -32,7 +32,25 @@ class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:
     StarletFileSystemTest() { srand(time(nullptr)); }
     ~StarletFileSystemTest() override = default;
+
     void SetUp() override {
+        if (config::object_storage_access_key_id.empty()) {
+            _is_skipped = true;
+            GTEST_SKIP() << "Need set object_storage_access_key_id in be_test.conf";
+        }
+        if (config::object_storage_secret_access_key.empty()) {
+            _is_skipped = true;
+            GTEST_SKIP() << "Need set object_storage_secret_access_key in be_test.conf";
+        }
+        if (config::object_storage_endpoint.empty()) {
+            _is_skipped = true;
+            GTEST_SKIP() << "Need set object_storage_endpoint in be_test.conf";
+        }
+        if (config::object_storage_bucket.empty()) {
+            _is_skipped = true;
+            GTEST_SKIP() << "Need set object_storage_bucket in be_test.conf";
+        }
+
         std::string test_type = GetParam();
 
         staros::starlet::fslib::register_builtin_filesystems();
@@ -41,13 +59,13 @@ public:
         auto fs_info = shard_info.path_info.mutable_fs_info();
         fs_info->set_fs_type(staros::FileStoreType::S3);
         auto s3_fs_info = fs_info->mutable_s3_fs_info();
-        s3_fs_info->set_bucket("starrocks-test-bucket");
-        s3_fs_info->set_endpoint("172.26.92.205:39000");
+        s3_fs_info->set_bucket(config::object_storage_bucket);
+        s3_fs_info->set_endpoint(config::object_storage_endpoint);
         s3_fs_info->set_region("us-east-1");
         auto credential = s3_fs_info->mutable_credential();
         auto simple_credential = credential->mutable_simple_credential();
-        simple_credential->set_access_key("5LXNPOQY3KB1LH4X4UQ6");
-        simple_credential->set_access_key_secret("EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb");
+        simple_credential->set_access_key(config::object_storage_access_key_id);
+        simple_credential->set_access_key_secret(config::object_storage_secret_access_key);
         // set full path
         shard_info.path_info.set_full_path(absl::StrFormat("s3://%s/%d/", s3_fs_info->bucket(), time(NULL)));
 
@@ -73,6 +91,9 @@ public:
         fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
+        if (_is_skipped) {
+            return;
+        }
         (void)g_worker->remove_shard(10086);
         g_worker.reset();
         std::string test_type = GetParam();
@@ -93,6 +114,9 @@ public:
             EXPECT_EQ(expected_is_dir, status_or.value());
         }
     }
+
+public:
+    bool _is_skipped = false;
 };
 
 TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
