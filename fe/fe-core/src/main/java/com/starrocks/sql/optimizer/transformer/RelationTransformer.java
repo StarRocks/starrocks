@@ -109,6 +109,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableSca
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -140,19 +141,30 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
+    private final boolean keepView;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
+        this(columnRefFactory, session, false);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, boolean keepView) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext());
+                new CTETransformerContext(), keepView);
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext) {
+        this(columnRefFactory, session, outer, cteContext, false);
+    }
+
+    public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
+                               CTETransformerContext cteContext, boolean keepView) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
+        this.keepView = keepView;
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -227,7 +239,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, keepView).plan(node, outer);
     }
 
     @Override
@@ -628,12 +640,39 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
-        LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
-        OptExprBuilder builder = new OptExprBuilder(
-                logicalPlan.getRoot().getOp(),
-                logicalPlan.getRootBuilder().getInputs(),
-                new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
-        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        if (keepView) {
+            ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+            ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+            ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+
+            int relationId = columnRefFactory.getNextRelationId();
+            for (Column column : node.getView().getColumns()) {
+                ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                        column.getType(),
+                        column.isAllowNull());
+                columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+                columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+                outputVariablesBuilder.add(columnRef);
+                colRefToColumnMetaMapBuilder.put(columnRef, column);
+                columnMetaToColRefMapBuilder.put(column, columnRef);
+            }
+
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+            List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+
+            LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(
+                    node.getView(), colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap);
+            OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
+                    new ExpressionMapping(node.getScope(), outputVariables));
+            return new LogicalPlan(scanBuilder, outputVariables, null);
+        } else {
+            LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+            OptExprBuilder builder = new OptExprBuilder(
+                    logicalPlan.getRoot().getOp(),
+                    logicalPlan.getRootBuilder().getInputs(),
+                    new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+            return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        }
     }
 
     @Override

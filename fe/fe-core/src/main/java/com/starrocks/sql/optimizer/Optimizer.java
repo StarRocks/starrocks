@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -30,8 +31,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -83,6 +87,7 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.optimizer.validate.PlanValidator;
@@ -93,6 +98,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.Map;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
@@ -129,8 +135,33 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
+        return optimize(connectContext, logicOperatorTree, null, requiredProperty, requiredColumns, columnRefFactory);
+    }
+
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  LogicalPlan logicalPlanWithView,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
         context.setUpdateTableId(updateTableId);
+        {
+            // optimize logicalOperatorTreeWithView by rules
+            // TODO: judge whether has views
+            if (logicalPlanWithView != null) {
+                OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+                Optimizer optimizer = new Optimizer(optimizerConfig);
+                OptExpression optimizedPlan = optimizer.optimize(
+                        connectContext,
+                        logicalPlanWithView.getRoot(),
+                        null,
+                        new PhysicalPropertySet(),
+                        new ColumnRefSet(logicalPlanWithView.getOutputColumn()),
+                        columnRefFactory);
+                context.setLogicalTreeWithView(optimizedPlan);
+            }
+        }
         if (optimizerConfig.isRuleBased()) {
             return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
@@ -184,6 +215,32 @@ public class Optimizer {
         }
 
         memo.init(logicOperatorTree);
+        if (context.getLogicalTreeWithView() != null) {
+            ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+            OptExpression planWithView = context.getLogicalTreeWithView();
+            // should add projection to make sure the output columns are the same with original logical tree
+            Map<ColumnRefOperator, ColumnRefOperator> columnMap = Maps.newHashMap();
+            List<ColumnRefOperator> originColumns = logicOperatorTree.getOutputColumns().getColumnRefOperators(columnRefFactory);
+            List<ColumnRefOperator> newColumns = planWithView.getOutputColumns().getColumnRefOperators(columnRefFactory);
+            for (int i = 0; i < originColumns.size(); i++) {
+                columnMap.put(newColumns.get(i), originColumns.get(i));
+            }
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+            if (planWithView.getOp().getProjection() == null) {
+                for (int i = 0; i < originColumns.size(); i++) {
+                    columnRefMap.put(originColumns.get(i), newColumns.get(i));
+                }
+            } else {
+                Map<ColumnRefOperator, ScalarOperator> oldRefMap = planWithView.getOp().getProjection().getColumnRefMap();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : oldRefMap.entrySet()) {
+                    columnRefMap.put(columnMap.get(entry.getKey()), entry.getValue());
+                }
+            }
+            Projection projection = new Projection(columnRefMap);
+            planWithView.getOp().setProjection(projection);
+            planWithView.deriveLogicalPropertyItself();
+            memo.copyIn(memo.getRootGroup(), planWithView);
+        }
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // Currently, we cache output columns in logic property.

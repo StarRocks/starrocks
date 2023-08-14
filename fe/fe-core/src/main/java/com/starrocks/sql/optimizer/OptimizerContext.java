@@ -50,6 +50,8 @@ public class OptimizerContext {
     private boolean enableLeftRightJoinEquivalenceDerive = true;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
 
+    private OptExpression logicalTreeWithView;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -165,5 +167,13 @@ public class OptimizerContext {
 
     public long getCostTimeMs() {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
+    }
+
+    public OptExpression getLogicalTreeWithView() {
+        return logicalTreeWithView;
+    }
+
+    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
+        this.logicalTreeWithView = logicalTreeWithView;
     }
 }

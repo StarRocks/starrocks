@@ -141,6 +141,14 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
         }
 
+        LogicalPlan logicalPlanWithView;
+
+        // just poc
+        // TODO: consider where and how to pass it?
+        try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
+            logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);
+        }
+
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -148,6 +156,7 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
+                    logicalPlanWithView,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -202,6 +211,13 @@ public class StatementPlanner {
                 logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
             }
 
+            // just poc
+            // TODO: consider where and how to pass it?
+            LogicalPlan logicalPlanWithView;
+            try (Timer ignored = Tracers.watchScope("TransformerWithView")) {
+                logicalPlanWithView = new RelationTransformer(columnRefFactory, session, true).transformWithSelectLimit(query);
+            }
+
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
@@ -209,6 +225,7 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
+                        logicalPlanWithView,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);

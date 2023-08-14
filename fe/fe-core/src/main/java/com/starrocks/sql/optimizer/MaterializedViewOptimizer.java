@@ -30,7 +30,7 @@ public class MaterializedViewOptimizer {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig);
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig, true);
         if (plans == null) {
             return null;
         }
@@ -40,6 +40,15 @@ public class MaterializedViewOptimizer {
         }
         MvPlanContext mvRewriteContext =
                 new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+        /*
+        Pair<OptExpression, LogicalPlan> planWithViews =
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig, true);
+        if (planWithViews == null) {
+            return null;
+        }
+        mvRewriteContext.setLogicalPlanWithView(planWithViews.first);
+
+         */
         return mvRewriteContext;
     }
 }

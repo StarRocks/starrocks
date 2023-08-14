@@ -372,6 +372,15 @@ public class MvUtils {
                                                                                ColumnRefFactory columnRefFactory,
                                                                                ConnectContext connectContext,
                                                                                OptimizerConfig optimizerConfig) {
+        return getRuleOptimizedLogicalPlan(mv, sql, columnRefFactory, connectContext, optimizerConfig, false);
+    }
+
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
+                                                                               String sql,
+                                                                               ColumnRefFactory columnRefFactory,
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig,
+                                                                               boolean keepView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -386,7 +395,25 @@ public class MvUtils {
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+                new RelationTransformer(columnRefFactory, connectContext, keepView).transformWithSelectLimit(query);
+        Optimizer optimizer = new Optimizer(optimizerConfig);
+        OptExpression optimizedPlan = optimizer.optimize(
+                connectContext,
+                logicalPlan.getRoot(),
+                new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
+        return Pair.create(optimizedPlan, logicalPlan);
+    }
+
+    // ColumnRefFactory会冲突，是否使用新的？跟原始的query区分开
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(QueryRelation query,
+                                                                               ColumnRefFactory columnRefFactory,
+                                                                               ConnectContext connectContext,
+                                                                               OptimizerConfig optimizerConfig,
+                                                                               boolean keepView) {
+        LogicalPlan logicalPlan =
+                new RelationTransformer(columnRefFactory, connectContext, keepView).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,

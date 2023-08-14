@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -58,6 +59,13 @@ public class PartitionPruneRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        /*
+        if (input.getOp() instanceof LogicalViewScanOperator) {
+            return Collections.emptyList();
+        }
+
+         */
+
         LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
         if (logicalOlapScanOperator.getSelectedPartitionId() != null) {
             return Collections.emptyList();

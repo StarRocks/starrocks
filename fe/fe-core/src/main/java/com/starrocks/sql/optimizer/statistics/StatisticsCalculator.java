@@ -81,6 +81,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableSca
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
@@ -147,6 +148,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.PREDICATE_UNKNOWN_FILTER_COEFFICIENT;
+import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.lang.Math.pow;
@@ -234,6 +236,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalViewScan(LogicalViewScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        List<ColumnRefOperator> requiredColumnRefs = Lists.newArrayList(node.getColRefToColumnMetaMap().keySet());
+        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
+            builder.addColumnStatistic(requiredColumnRefs.get(i), ColumnStatistic.unknown());
+        }
+        // set output row count to max to make optimizer skip this plan
+        builder.setOutputRowCount(POSITIVE_INFINITY);
+        builder.setTableRowCountMayInaccurate(true);
+        // 4. estimate cardinality
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     @Override

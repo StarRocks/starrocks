@@ -4701,19 +4701,44 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     @Test
     public void testOlapTable_ViewDeltaJoin_CaseSensitive4() {
         try {
-        String mv = "SELECT EMPS.EMPID, EMPS.DEPTNO, DEPENDENTS.NAME FROM EMPS_NO_CONSTRAINT EMPS\n"
-                + "JOIN DEPENDENTS USING (EMPID)"
-                + "INNER JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO)\n"
-                + "WHERE EMPS.EMPID = 1";
-        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
-                + "WHERE EMPID = 1";
-        // Olap Table doesn't support case-insensitive.
-        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
-                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+            String mv = "SELECT EMPS.EMPID, EMPS.DEPTNO, DEPENDENTS.NAME FROM EMPS_NO_CONSTRAINT EMPS\n"
+                    + "JOIN DEPENDENTS USING (EMPID)"
+                    + "INNER JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO)\n"
+                    + "WHERE EMPS.EMPID = 1";
+            String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                    + "WHERE EMPID = 1";
+            // Olap Table doesn't support case-insensitive.
+            String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                    "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
             rewrite(mv, query, constraint);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
+    }
+
+    @Test
+    public void testViewBasedMvRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        starRocksAssert.withView("create view agg_view_1" +
+                " as " +
+                " select c1, sum(c2) as total from t1 group by c1");
+
+        /*
+        starRocksAssert.withMaterializedView("create materialized view mv_view_1 " +
+                "DISTRIBUTED by hash(c_custkey) buckets 10" +
+                " properties (" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"TRUE\"\n" +
+                ")\n" +
+                "As select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1");
+
+         */
+
+        {
+            String mv = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            String query = "select c5, c6, c1, total from t2 join agg_view_1 on c5 = c1";
+            testRewriteOK(mv, query);
         }
     }
 }

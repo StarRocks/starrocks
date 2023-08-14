@@ -295,6 +295,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.META_SCAN,
                 PushDownPredicateScanRule.BINLOG_SCAN,
                 PushDownPredicateScanRule.TABLE_FUNCTION_TABLE_SCAN,
+                PushDownPredicateScanRule.VIEW_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
