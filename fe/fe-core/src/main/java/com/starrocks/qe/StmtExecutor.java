@@ -1264,15 +1264,11 @@ public class StmtExecutor {
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
-<<<<<<< HEAD
             handleDMLStmtImpl(execPlan, stmt);
-=======
-            handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
->>>>>>> 4a39a4df22 ([Enhancement] Support reporting proifle for insert into statement when error occurs (#29098))
             if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
