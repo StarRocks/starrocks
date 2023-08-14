@@ -319,7 +319,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             Assert.assertFalse(plan.contains("partitions=5/5"));
         } catch (Exception e) {
             e.printStackTrace();
@@ -445,7 +444,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
         taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-04-05");
@@ -457,7 +456,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
         taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-03-01");
@@ -473,7 +472,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
-        Assert.assertEquals(1, materializedView.getPartition("p202204_202205").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
 
         taskRunProperties.put(PARTITION_START, "2021-12-03");
         taskRunProperties.put(TaskRun.PARTITION_END, "2022-05-06");
@@ -485,7 +484,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertEquals(3, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
-        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202204_202205").getVisibleVersion());
     }
 
     @Test
@@ -682,7 +681,7 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=6/6");
+        assertPlanContains(execPlan, "partitions=7/7");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -693,7 +692,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
+        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/7");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "t1",
                 ImmutableList.of("par_col=0"));
@@ -702,7 +701,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
+        assertPlanContains(execPlan, "partitions=7/7", "partitions=3/3");
     }
 
     @Test
@@ -822,7 +821,6 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        System.out.println(execPlan.getExplainString(TExplainLevel.NORMAL));
         assertPlanContains(execPlan, "partitions=6/6", "PARTITION PREDICATES: (16: l_shipdate < '1998-01-06') " +
                 "OR (16: l_shipdate IS NULL)");
 
@@ -1155,7 +1153,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
-        Assert.assertTrue(plan.contains("partitions=3/6"));
+        Assert.assertTrue(plan.contains("partitions=3/7"));
     }
 
     @Test
@@ -1598,6 +1596,83 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+    public void testRefreshMaterializedViewDefaultConfig1() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_config1\n" +
+                "partition by date_trunc('month',k1) \n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "properties(" +
+                "'replication_num' = '1',\n" +
+                "'storage_medium' = 'SSD'" +
+                ")\n" +
+                "as select k1, k2 from tbl1;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config1"));
+
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        // by default, enable spill
+        {
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+        }
+
+        {
+            // change global config
+            Config.enable_materialized_view_spill = false;
+
+            // insert again.
+            new StmtExecutor(connectContext, insertSql).execute();
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+
+            Config.enable_materialized_view_spill = true;
+        }
+    }
+
+    @Test
+    public void testRefreshMaterializedViewDefaultConfig2() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_config2\n" +
+                "partition by date_trunc('month',k1) \n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "properties(" +
+                "'replication_num' = '1',\n" +
+                "'session.enable_spill' = 'false'" +
+                ")\n" +
+                "as select k1, k2 from tbl1;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config2"));
+
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        taskRun.executeTaskRun();
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+    }
+
+    @Test
     public void testSyncPartitionWithSsdStorage() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_with_ssd\n" +
                 "partition by date_trunc('month',k1) \n" +
@@ -1646,5 +1721,358 @@ public class PartitionBasedMvRefreshProcessorTest {
             e.printStackTrace();
             Assert.fail("refresh failed");
         }
+    }
+
+    @Test
+    public void testPartitionPruneNonRefBaseTable1() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`partition_prune_non_ref_tables1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`k1`)\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
+                        "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables1"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // run 1
+        {
+            // just refresh to avoid dirty data
+            taskRun.executeTaskRun();
+        }
+
+        // run 2
+        {
+            // base table partition insert data
+            String insertSql = "insert into tbl4 partition(p4) values('2022-04-01', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertFalse(plan.contains("partitions=5/5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl4"));
+        }
+
+        // run 3
+        {
+            // TODO: non-ref base table partition's updated will cause the materialized view's refresh all partitions
+            String insertSql = "insert into tbl5 partition(p4) values('2022-04-01', '2021-04-01 00:02:11', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl4"));
+        }
+        starRocksAssert.dropMaterializedView("partition_prune_non_ref_tables1");
+    }
+
+    @Test
+    public void testPartitionPruneNonRefBaseTable2() throws Exception {
+        // partition column with alias
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`partition_prune_non_ref_tables2`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`k11`)\n" +
+                        "DISTRIBUTED BY HASH(`k11`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT t1.k1 as k11, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
+                        "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables2"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // run 1
+        {
+            // just refresh to avoid dirty data
+            taskRun.executeTaskRun();
+        }
+
+        // run 2
+        {
+            // base table partition insert data
+            String insertSql = "insert into tbl4 partition(p4) values('2022-04-01', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertFalse(plan.contains("partitions=5/5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=1/5\n" +
+                    "     rollup: tbl4"));
+        }
+
+        // run 3
+        {
+            // TODO: non-ref base table partition's updated will cause the materialized view's refresh all partitions
+            String insertSql = "insert into tbl5 partition(p4) values('2022-04-01', '2021-04-01 00:02:11', 3, 10);";
+            new StmtExecutor(connectContext, insertSql).execute();
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl5"));
+            Assert.assertTrue(plan.contains("partitions=5/5\n" +
+                    "     rollup: tbl4"));
+        }
+        starRocksAssert.dropMaterializedView("partition_prune_non_ref_tables2");
+    }
+
+    @Test
+    public void testHivePartitionPruneNonRefBaseTable1() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_partition_prune_non_ref_tables2`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`par_date`)\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT part_tbl1.c1, part_tbl2.c2, part_tbl1.par_date FROM `hive0`.`partitioned_db`.`part_tbl1` join " +
+                "`hive0`.`partitioned_db`.`part_tbl2` using (par_date)");
+
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_partition_prune_non_ref_tables2"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        // run 1
+        {
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
+                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-01', 4: par_date < '2020-01-05'\n" +
+                    "     partitions=4/4"));
+            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
+                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-01', 8: par_date < '2020-01-05'\n" +
+                    "     partitions=4/4"));
+        }
+
+        // run 2
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.addPartition("partitioned_db", "part_tbl1", "par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
+                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-05', 4: par_date < '2020-01-06'\n" +
+                    "     partitions=1/5"));
+            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
+                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-05', 8: par_date < '2020-01-06'\n" +
+                    "     partitions=0/4"));
+        }
+
+        // run 3
+        {
+            // TODO: If update non-ref base table, all materialized view's partitions need to be refreshed.
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.addPartition("partitioned_db", "part_tbl2", "par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
+                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-01', 4: par_date < '2020-01-06'\n" +
+                    "     partitions=5/5"));
+            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
+                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-01', 8: par_date < '2020-01-06'\n" +
+                    "     partitions=5/5"));
+        }
+
+        // run 4
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.dropPartition("partitioned_db", "part_tbl1", "par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan == null);
+        }
+
+        // run 5
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.dropPartition("partitioned_db", "part_tbl2", "par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("TABLE: part_tbl1\n" +
+                    "     PARTITION PREDICATES: 4: par_date >= '2020-01-01', 4: par_date < '2020-01-05'\n" +
+                    "     partitions=4/4"));
+            Assert.assertTrue(plan.contains("TABLE: part_tbl2\n" +
+                    "     PARTITION PREDICATES: 8: par_date >= '2020-01-01', 8: par_date < '2020-01-05'\n" +
+                    "     partitions=4/4"));
+        }
+
+        starRocksAssert.dropMaterializedView("hive_partition_prune_non_ref_tables2");
+    }
+
+    @Test
+    public void testHivePartitionPruneNonRefBaseTable2() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_partition_prune_non_ref_tables1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`par_date`)\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT t2_par.c1, t2_par.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t2_par` join " +
+                "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_partition_prune_non_ref_tables1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        // run 1
+        {
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(plan.contains("TABLE: t1_par\n" +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-01', 10: par_date < '2020-01-05'\n" +
+                    "     partitions=6/6"));
+            Assert.assertTrue(plan.contains("TABLE: t2_par\n" +
+                    "     PARTITION PREDICATES: 4: par_col IS NOT NULL\n" +
+                    "     partitions=6/6"));
+        }
+
+        // run 2
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.addPartition("partitioned_db", "t1_par", "par_col=4/par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            Assert.assertTrue(plan.contains("TABLE: t1_par\n" +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-05', 10: par_date < '2020-01-06'\n" +
+                    "     partitions=1/7"));
+            // TODO: multi-column partitions cannot prune partitions.
+            Assert.assertTrue(plan.contains("TABLE: t2_par\n" +
+                    "     PARTITION PREDICATES: 4: par_col IS NOT NULL\n" +
+                    "     partitions=6/6"));
+        }
+
+        // run 3
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.addPartition("partitioned_db", "t2_par", "par_col=4/par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            // TODO: non-ref base table's update will refresh all the materialized views' partitions.
+            Assert.assertTrue(plan.contains("TABLE: t1_par\n" +
+                    "     PARTITION PREDICATES: 10: par_date >= '2020-01-01', 10: par_date < '2020-01-06'\n" +
+                    "     partitions=7/7"));
+            // TODO: multi-column partitions cannot prune partitions.
+            Assert.assertTrue(plan.contains("TABLE: t2_par\n" +
+                    "     PARTITION PREDICATES: 4: par_col IS NOT NULL\n" +
+                    "     partitions=7/7"));
+        }
+
+        // run 4
+        {
+            MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                    getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+            mockedHiveMetadata.dropPartition("partitioned_db", "t1_par", "par_col=3/par_date=2020-01-05");
+            mockedHiveMetadata.dropPartition("partitioned_db", "t2_par", "par_col=3/par_date=2020-01-05");
+
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan == null);
+        }
+        starRocksAssert.dropMaterializedView("hive_partition_prune_non_ref_tables1");
     }
 }

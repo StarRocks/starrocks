@@ -48,6 +48,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -78,9 +79,11 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
@@ -98,6 +101,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -280,9 +284,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setResourceGroup(rg);
         }
 
-        // enable spill by default for mv if spill is not set by default and `session.enable_spill` session variable
-        // is not set.
-        if (!mvSessionVariable.getEnableSpill() &&
+        // enable spill by default for mv if spill is not set by default and
+        // `session.enable_spill` session variable is not set.
+        if (Config.enable_materialized_view_spill &&
+                !mvSessionVariable.getEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
             mvSessionVariable.setEnableSpill(true);
         }
@@ -891,32 +896,42 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Multimap<String, TableRelation> tableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
+
         for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entries()) {
             if (refTableRefreshPartitions.containsKey(nameTableRelationEntry.getKey())) {
+                // set partition names for ref base table
                 Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
                 TableRelation tableRelation = nameTableRelationEntry.getValue();
-                tableRelation.setPartitionNames(
-                        new PartitionNames(false, tablePartitionNames == null ? null :
-                                new ArrayList<>(tablePartitionNames)));
-                // generate partition predicate for external table because it can not use partition names
-                // to scan partial partitions
-                Table table = tableRelation.getTable();
-                if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
-                    generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation);
+                tableRelation.setPartitionNames(new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+
+                // generate partition predicate for the select relation, so can generate partition predicates
+                // for non-ref base tables.
+                // eg:
+                //  mv: create mv mv1 partition by t1.dt
+                //  as select  * from t1 join t2 on t1.dt = t2.dt.
+                //  ref-base-table      : t1.dt
+                //  non-ref-base-table  : t2.dt
+                // so add partition predicates for select relation when refresh partitions incrementally(eg: dt=20230810):
+                // (select * from t1 join t2 on t1.dt = t2.dt) where t1.dt=20230810
+                Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
+                        materializedView.getPartitionInfo());
+                if (partitionPredicates != null) {
+                    tableRelation.setPartitionPredicate(partitionPredicates);
+                    QueryRelation queryRelation = queryStatement.getQueryRelation();
+                    if (queryRelation instanceof SelectRelation) {
+                        SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+                        selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(selectRelation.getWhereClause(),
+                                partitionPredicates)));
+                    }
                 }
             }
         }
         return insertStmt;
     }
 
-    private void generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
-                                            TableRelation tableRelation) {
-        List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
-        for (String partitionName : tablePartitionNames) {
-            sourceTablePartitionRange.add(mvContext.getRefBaseTableRangePartitionMap().get(partitionName));
-        }
-        sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
-
+    private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
+                                            PartitionInfo mvPartitionInfo)
+            throws AnalysisException {
         SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
         List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
@@ -925,10 +940,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (columnOutputNames.get(i).equalsIgnoreCase(partitionSlot.getColumnName())) {
                 outputPartitionSlot = outputExpressions.get(i);
                 break;
+            } else {
+                // alias name.
+                SlotRef slotRef = outputExpressions.get(i).unwrapSlotRef();
+                if (slotRef != null && slotRef.getColumnName().equals(partitionSlot.getColumnName())) {
+                    outputPartitionSlot = outputExpressions.get(i);
+                    break;
+                }
             }
         }
 
-        if (outputPartitionSlot != null) {
+        if (outputPartitionSlot == null) {
+            LOG.warn("Generate partition predicate failed: " +
+                    "cannot find partition slot ref {} from query relation", partitionSlot);
+            return null;
+        }
+
+        if (mvPartitionInfo.isRangePartition()) {
+            List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
+            Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap = mvContext.getRefBaseTableRangePartitionMap();
+            for (String partitionName : tablePartitionNames) {
+                sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
+            }
+            sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
             // range contains the min value could be null value
@@ -938,7 +972,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
                 partitionPredicates.add(isNullPredicate);
             }
-            tableRelation.setPartitionPredicate(Expr.compoundOr(partitionPredicates));
+
+            return Expr.compoundOr(partitionPredicates);
+        } else {
+            LOG.warn("Generate partition predicate failed: " +
+                    "partition slot {} is not supported yet: {}", partitionSlot, mvPartitionInfo);
+            return null;
         }
     }
 
@@ -1374,11 +1413,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Set<String> selectedPartitionNames = Sets.newHashSet();
             if (scanNode instanceof OlapScanNode) {
                 OlapScanNode olapScanNode = (OlapScanNode) scanNode;
-                List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
                 OlapTable olapTable = olapScanNode.getOlapTable();
-                selectedPartitionNames = selectedPartitionIds.stream().map(p -> olapTable.getPartition(p).getName())
-                        .collect(Collectors.toSet());
-                baseTableRefreshPartitionNames.put(olapTable.getName(), selectedPartitionNames);
+                if (olapScanNode.getSelectedPartitionNames() != null && !olapScanNode.getSelectedPartitionNames().isEmpty()) {
+                    baseTableRefreshPartitionNames.put(olapTable.getName(),
+                            new HashSet<>(olapScanNode.getSelectedPartitionNames()));
+                } else {
+                    List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
+                    selectedPartitionNames = selectedPartitionIds.stream().map(p -> olapTable.getPartition(p).getName())
+                            .collect(Collectors.toSet());
+                    baseTableRefreshPartitionNames.put(olapTable.getName(), selectedPartitionNames);
+                }
             } else if (scanNode instanceof HdfsScanNode) {
                 HdfsScanNode hdfsScanNode = (HdfsScanNode) scanNode;
                 HiveTable hiveTable = (HiveTable) hdfsScanNode.getHiveTable();
@@ -1395,41 +1439,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         return baseTableRefreshPartitionNames;
-    }
-
-    /**
-     * Extract olap table partition name and its partition info from olap scan node.
-     */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(OlapScanNode olapScanNode) {
-        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
-        OlapTable olapTable = olapScanNode.getOlapTable();
-        for (long partitionId : selectedPartitionIds) {
-            Partition partition = olapTable.getPartition(partitionId);
-            MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                    partitionId, partition.getVisibleVersion(), partition.getVisibleVersionTime());
-            partitionInfos.put(partition.getName(), basePartitionInfo);
-        }
-        return partitionInfos;
-    }
-
-    /**
-     * Extract hive partition name and its partition info from hdfs scan node.
-     */
-    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(HdfsScanNode hdfsScanNode,
-                                                                                      BaseTableInfo baseTableInfo) {
-        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        HiveTable hiveTable = hdfsScanNode.getHiveTable();
-        List<String> selectedPartitionNames = getSelectedPartitionNamesOfHiveTable(hiveTable, hdfsScanNode);
-        List<com.starrocks.connector.PartitionInfo> hivePartitions = GlobalStateMgr.
-                getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), hiveTable,
-                        selectedPartitionNames);
-        for (int index = 0; index < selectedPartitionNames.size(); ++index) {
-            long modifiedTime = hivePartitions.get(index).getModifiedTime();
-            partitionInfos.put(selectedPartitionNames.get(index),
-                    new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
-        }
-        return partitionInfos;
     }
 
     /**
