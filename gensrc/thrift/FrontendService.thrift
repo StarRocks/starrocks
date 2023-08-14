@@ -1339,17 +1339,18 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
-struct TResourceSlot {
+struct TResourceLogicalSlot {
     1: optional Types.TUniqueId slot_id
-    2: optional Types.TNetworkAddress request_endpoint
+    2: optional string request_fe_name
     3: optional i64 group_id
     4: optional i32 num_slots
     5: optional i64 expired_pending_time_ms
     6: optional i64 expired_allocated_time_ms
+    7: optional i64 fe_start_time_ms
 }
 
 struct TRequireSlotRequest {
-    1: optional TResourceSlot slot
+    1: optional TResourceLogicalSlot slot
 }
 
 struct TRequireSlotResponse {

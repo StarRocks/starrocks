@@ -22,7 +22,7 @@ import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,9 +125,12 @@ public class QueryQueueManager {
         return !notNeed;
     }
 
-    private LogicalSlot createSlot(DefaultCoordinator coord) {
+    private LogicalSlot createSlot(DefaultCoordinator coord) throws UserException {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
-        TNetworkAddress requestEndpoint = new TNetworkAddress(selfIpAndPort.first, selfIpAndPort.second);
+        Frontend frontend = GlobalStateMgr.getCurrentState().getFeByHost(selfIpAndPort.first);
+        if (frontend == null) {
+            throw new UserException("cannot get frontend from the local host: " + selfIpAndPort.first);
+        }
 
         TWorkGroup group = coord.getJobSpec().getResourceGroup();
         long groupId = group == null ? LogicalSlot.ABSENT_GROUP_ID : group.getId();
@@ -138,7 +141,7 @@ public class QueryQueueManager {
                 nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
-        return new LogicalSlot(coord.getQueryId(), requestEndpoint, groupId, 1, expiredPendingTimeMs,
-                expiredAllocatedTimeMs);
+        return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, 1, expiredPendingTimeMs,
+                expiredAllocatedTimeMs, frontend.getStartTime());
     }
 }

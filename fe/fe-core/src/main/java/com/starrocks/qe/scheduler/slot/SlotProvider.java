@@ -140,7 +140,7 @@ public class SlotProvider {
                         return client.requireSlotAsync(request);
                     } catch (TApplicationException e) {
                         if (e.getType() == TApplicationException.UNKNOWN_METHOD) {
-                            LOG.warn("[Slot] leader doesn't have the RPC method requireSlotAsync. " +
+                            LOG.warn("[Slot] leader doesn't have the RPC method [requireSlotAsync]. " +
                                             "It is grayscale upgrading, so admit this query without requiring slots. [slot={}]",
                                     slotRequest);
                             pendingSlots.remove(slotRequest.getSlot().getSlotId());

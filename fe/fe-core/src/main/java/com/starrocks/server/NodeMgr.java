@@ -845,8 +845,9 @@ public class NodeMgr {
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
+        Frontend fe = null;
         try {
-            Frontend fe = unprotectCheckFeExist(host, port);
+            fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
@@ -866,6 +867,10 @@ public class NodeMgr {
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
         } finally {
             unlock();
+
+            if (fe != null) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+            }
         }
     }
 
@@ -917,8 +922,9 @@ public class NodeMgr {
 
     public void replayDropFrontend(Frontend frontend) {
         tryLock(true);
+        Frontend removedFe = null;
         try {
-            Frontend removedFe = frontends.remove(frontend.getNodeName());
+            removedFe = frontends.remove(frontend.getNodeName());
             if (removedFe == null) {
                 LOG.error(frontend.toString() + " does not exist.");
                 return;
@@ -930,6 +936,10 @@ public class NodeMgr {
             removedFrontends.add(removedFe.getNodeName());
         } finally {
             unlock();
+
+            if (removedFe != null) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(removedFe.getNodeName());
+            }
         }
     }
 
@@ -1022,12 +1032,7 @@ public class NodeMgr {
     }
 
     public Frontend getFeByName(String name) {
-        for (Frontend fe : frontends.values()) {
-            if (fe.getNodeName().equals(name)) {
-                return fe;
-            }
-        }
-        return null;
+        return frontends.get(name);
     }
 
     public int getFollowerCnt() {
@@ -1282,6 +1287,8 @@ public class NodeMgr {
         this.leaderHttpPort = Config.http_port;
         LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
         GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
+
+        leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
     public boolean isFirstTimeStartUp() {

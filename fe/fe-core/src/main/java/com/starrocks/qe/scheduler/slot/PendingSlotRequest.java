@@ -65,4 +65,12 @@ public class PendingSlotRequest {
         slotFuture.cancel(true);
     }
 
+    @Override
+    public String toString() {
+        return "PendingSlotRequest{" +
+                "slot=" + slot +
+                ", leaderEndpoint=" + leaderEndpoint +
+                ", slotFuture=" + slotFuture +
+                '}';
+    }
 }

@@ -17,8 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TResourceSlot;
+import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
 
 /**
@@ -33,7 +32,7 @@ public class LogicalSlot {
     public static final long ABSENT_GROUP_ID = -1;
 
     private final TUniqueId slotId;
-    private final TNetworkAddress requestEndpoint;
+    private final String requestFeName;
 
     private final long groupId;
 
@@ -43,16 +42,19 @@ public class LogicalSlot {
 
     private final long expiredAllocatedTimeMs;
 
+    private final long feStartTimeMs;
+
     private State state = State.CREATED;
 
-    public LogicalSlot(TUniqueId slotId, TNetworkAddress requestEndpoint, long groupId, int numPhysicalSlots,
-                       long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
+    public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
+                       long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs) {
         this.slotId = slotId;
-        this.requestEndpoint = requestEndpoint;
+        this.requestFeName = requestFeName;
         this.groupId = groupId;
         this.numPhysicalSlots = numPhysicalSlots;
         this.expiredPendingTimeMs = expiredPendingTimeMs;
         this.expiredAllocatedTimeMs = expiredAllocatedTimeMs;
+        this.feStartTimeMs = feStartTimeMs;
     }
 
     public State getState() {
@@ -79,29 +81,30 @@ public class LogicalSlot {
         transitionState(State.ALLOCATED, State.RELEASED);
     }
 
-    public TResourceSlot toThrift() {
-        TResourceSlot tslot = new TResourceSlot();
+    public TResourceLogicalSlot toThrift() {
+        TResourceLogicalSlot tslot = new TResourceLogicalSlot();
         tslot.setSlot_id(slotId)
-                .setRequest_endpoint(requestEndpoint)
+                .setRequest_fe_name(requestFeName)
                 .setGroup_id(groupId)
                 .setNum_slots(numPhysicalSlots)
                 .setExpired_pending_time_ms(expiredPendingTimeMs)
-                .setExpired_allocated_time_ms(expiredAllocatedTimeMs);
+                .setExpired_allocated_time_ms(expiredAllocatedTimeMs)
+                .setFe_start_time_ms(feStartTimeMs);
 
         return tslot;
     }
 
-    public static LogicalSlot fromThrift(TResourceSlot tslot) {
-        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_endpoint(), tslot.getGroup_id(), tslot.getNum_slots(),
-                tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms());
+    public static LogicalSlot fromThrift(TResourceLogicalSlot tslot) {
+        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getGroup_id(), tslot.getNum_slots(),
+                tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms());
     }
 
     public TUniqueId getSlotId() {
         return slotId;
     }
 
-    public TNetworkAddress getRequestEndpoint() {
-        return requestEndpoint;
+    public String getRequestFeName() {
+        return requestFeName;
     }
 
     public long getGroupId() {
@@ -128,15 +131,20 @@ public class LogicalSlot {
         return nowMs >= expiredAllocatedTimeMs;
     }
 
+    public long getFeStartTimeMs() {
+        return feStartTimeMs;
+    }
+
     @Override
     public String toString() {
-        return "Slot{" +
+        return "LogicalSlot{" +
                 "slotId=" + DebugUtil.printId(slotId) +
-                ", requestEndpoint=" + requestEndpoint +
+                ", requestFeName='" + requestFeName + '\'' +
                 ", groupId=" + groupId +
-                ", numSlots=" + numPhysicalSlots +
+                ", numPhysicalSlots=" + numPhysicalSlots +
                 ", expiredPendingTimeMs=" + expiredPendingTimeMs +
                 ", expiredAllocatedTimeMs=" + expiredAllocatedTimeMs +
+                ", feStartTimeMs=" + feStartTimeMs +
                 ", state=" + state +
                 '}';
     }

@@ -56,9 +56,7 @@ public class ResourceUsageMonitor {
             now = judgeResourceOverloaded();
             updated = isResourceOverloaded.compareAndSet(prev, now);
             if (updated && prev && !now) {
-                for (Runnable listener : resourceAvailableListeners.values()) {
-                    listener.run();
-                }
+                resourceAvailableListeners.values().forEach(Runnable::run);
             }
         }
     }
