@@ -2882,16 +2882,13 @@ bool PersistentIndex::_enable_minor_compaction() {
 // both case1 and case2 will create a new l1 file and a new empty l0 file
 // case3 will write a new snapshot l0
 // case4 will append wals into l0 file
-Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) {
-    MonotonicStopWatch watch;
-    watch.start();
+Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     DCHECK_EQ(index_meta->key_size(), _key_size);
     // check if _l0 need be flush, there are two conditions:
     //   1. _l1 is not exist, _flush_l0 and build _l1
     //   2. _l1 is exist, merge _l0 and _l1
     // rebuild _l0 and _l1
     // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
-    const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_l2_file_size = _l1_l2_file_size();
     bool do_minor_compaction = false;
     // if l1 is not empty,
@@ -2902,14 +2899,10 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         } else {
             RETURN_IF_ERROR(_merge_compaction());
         }
-        if (stat != nullptr) {
-            stat->compaction_cost += watch.elapsed_time();
-            watch.reset();
-        }
     } else {
         if (l1_l2_file_size != 0) {
             // and l0 memory usage is large enough,
-            if (l0_mem_size * config::l0_l1_merge_ratio > l1_l2_file_size) {
+            if (_l0_is_full()) {
                 // do l0 l1 merge compaction
                 _flushed = true;
                 if (_enable_minor_compaction()) {
@@ -2918,20 +2911,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
                 } else {
                     RETURN_IF_ERROR(_merge_compaction());
                 }
-                if (stat != nullptr) {
-                    stat->compaction_cost += watch.elapsed_time();
-                    watch.reset();
-                }
             }
             // if l1 is empty, and l0 memory usage is large enough
-        } else if (l0_mem_size > config::l0_snapshot_size) {
+        } else if (_l0_is_full()) {
             // do flush l0
             _flushed = true;
             RETURN_IF_ERROR(_flush_l0());
-            if (stat != nullptr) {
-                stat->flush_or_wal_cost += watch.elapsed_time();
-                watch.reset();
-            }
         }
     }
     _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
@@ -2972,9 +2957,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
             // major compaction happen, reload
             RETURN_IF_ERROR(_reload(*index_meta));
         }
-    }
-    if (stat != nullptr) {
-        stat->reload_meta_cost += watch.elapsed_time();
     }
     return Status::OK();
 }
@@ -3022,7 +3004,7 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
             }
             KeysInfo found_keys_info;
             // get data from l2
-            RETURN_IF_ERROR(_l2_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size, stat));
+            RETURN_IF_ERROR(_l2_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size));
             if (found_keys_info.size() != 0) {
                 std::sort(found_keys_info.key_infos.begin(), found_keys_info.key_infos.end());
                 // modify keys_info
@@ -3424,12 +3406,16 @@ bool PersistentIndex::_can_dump_directly() {
     return _dump_bound() <= config::l0_snapshot_size;
 }
 
-bool PersistentIndex::_need_flush_advance() {
+bool PersistentIndex::_l0_is_full() {
     const auto l0_mem_size = _l0->memory_usage();
-    uint64_t l1_l2_file_size = _l1_l2_file_size();
-    bool flush_advance = (l1_l2_file_size != 0) ? l0_mem_size * config::l0_l1_merge_ratio > l1_l2_file_size
-                                                : l0_mem_size > config::l0_max_mem_usage;
-    return flush_advance;
+    auto manager = StorageEngine::instance()->update_manager();
+    return l0_mem_size >= config::l0_max_mem_usage ||
+           (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+            l0_mem_size >= config::l0_min_mem_usage);
+}
+
+bool PersistentIndex::_need_flush_advance() {
+    return _l0_is_full();
 }
 
 bool PersistentIndex::_need_merge_advance() {

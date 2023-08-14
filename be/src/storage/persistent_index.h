@@ -560,7 +560,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
+    Status commit(PersistentIndexMetaPB* index_meta);
 
     // apply modification
     Status on_commited();
@@ -698,6 +698,8 @@ private:
     void _calc_write_amp_score();
 
     size_t _get_tmp_l1_count();
+
+    bool _l0_is_full();
 
 protected:
     // prevent concurrent operations
