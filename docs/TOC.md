@@ -67,7 +67,7 @@
   + [Export data using EXPORT](./unloading/Export.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
-+ Query Data Sources
++ Query Data Lakes
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
