@@ -398,6 +398,9 @@ public class DatabaseTransactionMgr {
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
+        if (transactionState.getWriteEndTimeMs() < 0) {
+            transactionState.setWriteEndTimeMs(System.currentTimeMillis());
+        }
         if (!tabletCommitInfos.isEmpty()) {
             transactionState.setTabletCommitInfos(tabletCommitInfos);
         }

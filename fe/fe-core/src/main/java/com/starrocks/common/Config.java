@@ -2291,15 +2291,45 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
-    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
+    @ConfField(mutable = true, comment =
+            "History versions within this time range will not be deleted by auto vacuum.\n" +
             "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
             "versions still being accessed.\n" +
             "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
-    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
-            "threshold, auto vacuum operations will no longer be triggered for that partition")
+    @ConfField(mutable = true, comment =
+            "time threshold in hours, if a partition has not been updated for longer than this " +
+            "threshold, auto vacuum operations will no longer be triggered for that partition.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
+
+    @ConfField(mutable = true, comment =
+            "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
+            "Only takes effect for tables in clusters with run_mode=shared_data.")
+    public static boolean lake_enable_ingest_slowdown = false;
+
+    @ConfField(mutable = true, comment =
+            "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
+            "NOTE: The actual effective value is the max of the configured value and " +
+            "'lake_compaction_score_selector_min_score'.")
+    public static long lake_ingest_slowdown_threshold = 100;
+
+    @ConfField(mutable = true, comment =
+            "Ratio to reduce ingestion speed for each point of compaction score over the threshold.\n" +
+            "E.g. 0.05 ratio, 10min normal ingestion, exceed threshold by:\n" +
+            " - 1 point -> Delay by 0.05 (30secs)\n" +
+            " - 5 points -> Delay by 0.25 (2.5mins)")
+    public static double lake_ingest_slowdown_ratio = 0.1;
+
+    @ConfField(mutable = true, comment =
+            "The upper limit for compaction score, only takes effect when lake_enable_ingest_slowdown=true.\n" +
+            "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
+            "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
+            "The effective value will be set to the higher of the configured value here and " +
+            "lake_compaction_score_selector_min_score.\n" +
+            "A value of 0 represents no limit.")
+    public static long lake_compaction_score_upper_bound = 0;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
