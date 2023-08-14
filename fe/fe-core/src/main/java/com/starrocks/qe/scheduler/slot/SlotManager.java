@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -43,6 +44,41 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Manage all the slots in the leader FE. It queues, allocates or releases each slot requirement.
+ * <p> A query is related to a slot requirement. There are a total of {@link GlobalVariable#getQueryQueueConcurrencyLimit()} slots
+ * and {@link ResourceGroup#getConcurrencyLimit()} slots for a group. If there are not free slots
+ * or the resource usage (CPU and Memory) exceeds the limit, the coming query will be queued.
+ * <p> The allocated slot to a query will be released, if any following condition occurs:
+ * <ul>
+ *     <li> The query is finished or cancelled and send the release RPC to the slot manager.
+ *     <li> The slot manager finds that the query is timeout.
+ *     <li> The slot manager finds that the frontend where the query is started is dead.
+ * </ul>
+ * <p> The slot manager is only running in the leader FE. The following diagram indicates the control flow.
+ * <pre>{@code
+ *                         ┌─────────────────────────────────────┐
+ *                         │            SlotManager              │
+ *                         └──────▲─┬───────────────────▲────────┘
+ *  Leader FE                     │ │Notify requirement │
+ *                  Require slots │ │finished           │Release slot
+ *  ------------------------------│-│-------------------│---------------------
+ *                         ┌──────┴─▼───────────────────┴────────┐
+ *                         │            SlotProvider             │
+ *                         └──────▲─┬───────────────────▲────────┘
+ *                                │ │Notify requirement │
+ *  Follower FE     Require slots │ │finished           │Release slots
+ *                                │ │                   │
+ *                         ┌──────┴─▼───────────────────┴────────┐
+ *                         │            Coordinator              │
+ *                         └─────────────────────────────────────┘
+ *
+ *
+ * }</pre>
+ *
+ * @see SlotProvider
+ * @see ResourceUsageMonitor
+ */
 public class SlotManager {
     private static final Logger LOG = LogManager.getLogger(SlotManager.class);
 
@@ -87,6 +123,7 @@ public class SlotManager {
     }
 
     public void notifyResourceUsageAvailable() {
+        // The request does nothing but wake up the request worker to check whether resource usage becomes available.
         requests.add(() -> {
         });
     }

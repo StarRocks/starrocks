@@ -32,6 +32,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * The slot manager view in the follower FEs. It receives the slot operations from {@link com.starrocks.qe.scheduler.Coordinator}
+ * and sends it to {@link SlotManager} via RPC.
+ *
+ * @see SlotManager
+ */
 public class SlotProvider {
     private static final Logger LOG = LogManager.getLogger(SlotProvider.class);
 
