@@ -1624,14 +1624,12 @@ public class PartitionBasedMvRefreshProcessorTest {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableMaterializedViewSpill());
             Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
         }
 
         {
             // change global config
-            String sql = "set global enable_materialized_view_spill = false";
-            new StmtExecutor(connectContext, sql).execute();
+            Config.enable_materialized_view_spill = false;
 
             // insert again.
             new StmtExecutor(connectContext, insertSql).execute();
@@ -1640,11 +1638,9 @@ public class PartitionBasedMvRefreshProcessorTest {
                     taskRun.getProcessor();
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableMaterializedViewSpill());
             Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
 
-            sql = "set global enable_materialized_view_spill = true";
-            new StmtExecutor(connectContext, sql).execute();
+            Config.enable_materialized_view_spill = true;
         }
     }
 
@@ -1674,7 +1670,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                 taskRun.getProcessor();
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableMaterializedViewSpill());
         Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
     }
 

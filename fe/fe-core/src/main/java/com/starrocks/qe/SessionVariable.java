@@ -396,7 +396,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ANALYZE_FOR_MV = "analyze_mv";
     public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
-    public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_SPILL = "enable_materialized_view_spill";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -1118,9 +1117,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryIncludingMVNames = "";
-
-    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_SPILL)
-    private boolean enableMaterializedViewSpill = true;
 
     @VarAttr(name = ANALYZE_FOR_MV)
     private String analyzeTypeForMV = "sample";
@@ -2195,14 +2191,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getQueryIncludingMVNames() {
         return queryIncludingMVNames;
-    }
-
-    public boolean isEnableMaterializedViewSpill() {
-        return enableMaterializedViewSpill;
-    }
-
-    public void setEnableMaterializedViewSpill(boolean enableMaterializedViewSpill) {
-        this.enableMaterializedViewSpill = enableMaterializedViewSpill;
     }
 
     public void setQueryIncludingMVNames(String queryIncludingMVNames) {

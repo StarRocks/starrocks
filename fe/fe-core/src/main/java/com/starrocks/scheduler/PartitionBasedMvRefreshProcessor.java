@@ -52,6 +52,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -288,7 +289,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // enable spill by default for mv if spill is not set by default and
         // `session.enable_spill` session variable is not set.
-        if (mvSessionVariable.isEnableMaterializedViewSpill() &&
+        if (Config.enable_materialized_view_spill &&
                 !mvSessionVariable.getEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
             mvSessionVariable.setEnableSpill(true);
