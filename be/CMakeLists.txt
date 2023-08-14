@@ -796,7 +796,6 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
-    libdeflate
     ${WL_END_GROUP}
 )
 
@@ -814,6 +813,7 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         breakpad
+        libdeflate
     )
 endif()
 
