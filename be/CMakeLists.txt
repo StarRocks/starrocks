@@ -492,7 +492,6 @@ endif()
 # LLVM
 # TODO(yueyang): Add more libraries during the implementation of JIT.
 set (LLVM_LIBRARIES    
-    LLVMMCJIT                    
     LLVMOrcJIT            
 )
 foreach(lib IN ITEMS ${LLVM_LIBRARIES})
