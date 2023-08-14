@@ -685,6 +685,26 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
+            // check view schema
+            Map<String, Column> columns =
+                    node.getView().getColumns().stream().collect(Collectors.toMap(Column::getName, c -> c));
+
+            for (Field field : fields) {
+                if (!columns.containsKey(field.getName())) {
+                    throw new SemanticException(
+                            "Found undefined column[%s] from View[%s]'s query, " +
+                                    "please check the source table has been modified", field.getName(),
+                            node.getName().toSql());
+                }
+
+                Column column = columns.get(field.getName());
+                if (!column.getType().matchesType(field.getType())) {
+                    throw new SemanticException("The type of column[%s] on View[%s] is different with query, " +
+                            "please check the source table has been modified", column.getName(),
+                            node.getName().toSql());
+                }
+            }
+
             if (session.getDumpInfo() != null) {
                 String dbName = node.getName().getDb();
                 session.getDumpInfo().addView(dbName, view);
