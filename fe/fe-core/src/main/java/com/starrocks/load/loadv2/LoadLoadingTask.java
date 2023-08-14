@@ -142,8 +142,9 @@ public class LoadLoadingTask extends LoadTask {
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum);
+            loadPlanner.setPartialUpdateMode(partialUpdateMode);
             loadPlanner.plan();
         }
     }
