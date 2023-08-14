@@ -28,7 +28,7 @@ import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryQueueManager;
-import com.starrocks.qe.scheduler.slot.Slot;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -221,7 +221,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -250,7 +250,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> numPendingCoordinators == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        coords.forEach(coord -> Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState()));
+        coords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
 
         // 3. The coming queries exceed the query queue capacity.
         for (int i = 0; i < 10; i++) {
@@ -261,7 +261,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 4. Finish the first `concurrencyLimit` queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
-        runningCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+        runningCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
 
         // 5. Each loop dequeues `concurrencyLimit` queries, and cancel one pending queries.
         List<DefaultCoordinator> resetCoords = coords;
@@ -272,26 +272,26 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> numResetCoords - expectedAllocatedCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             List<DefaultCoordinator> allocatedCoords = coords.stream()
-                    .filter(coord -> coord.getSlot().getState() == Slot.State.ALLOCATED)
+                    .filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
             Assert.assertEquals(expectedAllocatedCoords, allocatedCoords.size());
 
             // 5.2 Cancel one pending query.
             resetCoords = resetCoords.stream()
-                    .filter(coord -> coord.getSlot().getState() != Slot.State.ALLOCATED)
+                    .filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
-            resetCoords.forEach(coord -> Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState()));
+            resetCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
 
             if (!resetCoords.isEmpty()) {
                 queryIdToShouldThrow.put(resetCoords.get(0).getQueryId(), new UserException("Cancelled"));
                 resetCoords.get(0).cancel();
-                Assert.assertEquals(Slot.State.CANCELLED, resetCoords.get(0).getSlot().getState());
+                Assert.assertEquals(LogicalSlot.State.CANCELLED, resetCoords.get(0).getSlot().getState());
                 resetCoords.remove(0);
             }
 
             // 4.3 Finish these new allocated queries.
             allocatedCoords.forEach(DefaultCoordinator::onFinished);
-            allocatedCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+            allocatedCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
         }
     }
 
@@ -311,7 +311,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         TWorkGroup group1 = new TWorkGroup().setId(1L).setConcurrency_limit(0);
         TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(concurrencyLimit);
         TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit + 1);
-        TWorkGroup nonGroup = new TWorkGroup().setId(Slot.ABSENT_GROUP_ID);
+        TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
         List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
 
         // 1. Run `concurrencyLimit` non-group queries first, and they shouldn't be queued.
@@ -321,7 +321,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -331,7 +331,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < numGroupPendingCoords; i++) {
             for (TWorkGroup group : groups) {
-                if (group.getId() == Slot.ABSENT_GROUP_ID) {
+                if (group.getId() == LogicalSlot.ABSENT_GROUP_ID) {
                     mockResourceGroup(null);
                 } else {
                     mockResourceGroup(group);
@@ -351,7 +351,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> numPendingCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        coords.forEach(coord -> Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState()));
+        coords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() ==
                         numPendingCoords + concurrencyLimit);
@@ -365,7 +365,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 4. Finish the first `concurrencyLimit` non-group queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
-        runningCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+        runningCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
 
         // 5. Each loop dequeues `concurrencyLimit` queries, and cancel one pending queries.
         List<DefaultCoordinator> resetCoords = coords;
@@ -376,17 +376,17 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> numResetCoords - expectedAllocatedCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
             List<DefaultCoordinator> allocatedCoords = coords.stream()
-                    .filter(coord -> coord.getSlot().getState() == Slot.State.ALLOCATED)
+                    .filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
             Assert.assertEquals(expectedAllocatedCoords, allocatedCoords.size());
 
             resetCoords = resetCoords.stream()
-                    .filter(coord -> coord.getSlot().getState() != Slot.State.ALLOCATED)
+                    .filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
 
             // 5.2 Finish these new allocated queries.
             allocatedCoords.forEach(DefaultCoordinator::onFinished);
-            allocatedCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+            allocatedCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
         }
     }
 
@@ -405,7 +405,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         TWorkGroup group1 = new TWorkGroup().setId(1L).setConcurrency_limit(0);
         TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(concurrencyLimit);
         TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit + 1);
-        TWorkGroup nonGroup = new TWorkGroup().setId(Slot.ABSENT_GROUP_ID);
+        TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
         List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
 
         Map<TWorkGroup, List<DefaultCoordinator>> groupToCoords = groups.stream().collect(Collectors.toMap(
@@ -415,7 +415,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < numGroupPendingCoords; i++) {
             for (TWorkGroup group : groups) {
-                if (group.getId() == Slot.ABSENT_GROUP_ID) {
+                if (group.getId() == LogicalSlot.ABSENT_GROUP_ID) {
                     mockResourceGroup(null);
                 } else {
                     mockResourceGroup(group);
@@ -440,7 +440,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 int limit = group.getConcurrency_limit();
                 if (limit <= 0) {
                     Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                            .until(() -> coords.stream().allMatch(coord -> coord.getSlot().getState() == Slot.State.ALLOCATED));
+                            .until(() -> coords.stream()
+                                    .allMatch(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED));
                     coords.forEach(DefaultCoordinator::onFinished);
                     groupToCoords.put(group, Collections.emptyList());
                     return;
@@ -449,15 +450,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 // In each loop, each group allocates `limit` slots.
                 int numAllocatedCoords = Math.min(limit, coords.size());
                 Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
-                        coords.stream().filter(coord -> coord.getSlot().getState() == Slot.State.ALLOCATED).count() ==
+                        coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED).count() ==
                                 numAllocatedCoords);
 
                 List<DefaultCoordinator> allocatedCoords =
-                        coords.stream().filter(coord -> coord.getSlot().getState() == Slot.State.ALLOCATED)
+                        coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
                                 .collect(Collectors.toList());
 
                 List<DefaultCoordinator> pendingCoords =
-                        coords.stream().filter(coord -> coord.getSlot().getState() != Slot.State.ALLOCATED)
+                        coords.stream().filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
                                 .collect(Collectors.toList());
                 groupToCoords.put(group, pendingCoords);
 
@@ -486,7 +487,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -521,7 +522,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 3. Finish the first `concurrencyLimit` non-group queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
-        runningCoords.forEach(coordinator -> Assert.assertEquals(Slot.State.RELEASED, coordinator.getSlot().getState()));
+        runningCoords.forEach(coordinator -> Assert.assertEquals(LogicalSlot.State.RELEASED, coordinator.getSlot().getState()));
 
         // SlotManager should clear this expired pending query.
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -541,7 +542,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -552,11 +553,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
         // 3. Finish this query.
         coord.onFinished();
-        Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState());
+        Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState());
     }
 
     @Test
@@ -588,7 +589,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -605,7 +606,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         thread.start();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState());
+        Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
         // 2. The leader is changed, so the query can get slot from the new leader.
         SlotManager oldSlotManager = GlobalStateMgr.getCurrentState().getSlotManager();
@@ -620,11 +621,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         mockNodeMgr(FE3, 8888, FE2, 8888);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
         // 3. Finish this query.
         coord.onFinished();
-        Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState());
+        Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState());
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -648,7 +649,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -661,7 +662,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to exception.
             mockFrontendService(new MockFrontendServiceClient() {
@@ -674,7 +675,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.CANCELLED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
         {
@@ -685,7 +686,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to error status without msg.
             mockFrontendService(new MockFrontendServiceClient() {
@@ -701,7 +702,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.CANCELLED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
         {
@@ -712,7 +713,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to error status with msg.
             mockFrontendService(new MockFrontendServiceClient() {
@@ -729,12 +730,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             mockFrontendService(new MockFrontendServiceClient());
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.CANCELLED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
         // 4. Finish the first `concurrencyLimit` queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
-        runningCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+        runningCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
 
         // 5. SlotManager sends the RPC `finishSlotRequirement` and failed due to the cancelled query,
         // so there shouldn't be any slot in SlotManager anymore.
@@ -755,7 +756,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
         }
@@ -775,7 +776,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
                     .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-            Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // The slot should be removed after failing to `finishSlotRequirement`.
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -790,13 +791,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             mockFrontendService(new MockFrontendServiceClient());
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
             runningCoords.add(coord);
         }
 
         // 4. Finish the first `concurrencyLimit` queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
-        runningCoords.forEach(coord -> Assert.assertEquals(Slot.State.RELEASED, coord.getSlot().getState()));
+        runningCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
     }
 
     @Test
@@ -811,7 +812,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
         }
 
         // 2. Then run `numPendingCoordinators` queries, and they should be queued.
@@ -826,7 +827,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> concurrencyLimit == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-        coords.forEach(coord -> Assert.assertEquals(Slot.State.REQUIRING, coord.getSlot().getState()));
+        coords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
 
         // 3. The frontend of the allocated and pending slots becomes dead, the slots should be released.
         GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(FE2);
@@ -838,7 +839,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         for (int i = 0; i < concurrencyLimit; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
-            Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
             coords2.add(coord);
         }
         coords2.forEach(DefaultCoordinator::onFinished);
@@ -865,7 +866,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 coords.add(coord);
                 manager.maybeWait(connectContext, coord);
                 Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
-                Assert.assertEquals(Slot.State.ALLOCATED, coord.getSlot().getState());
+                Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
             }
             coords.forEach(DefaultCoordinator::onFinished);
         }
@@ -914,12 +915,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after CPU usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 1);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -966,12 +967,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after mem usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 0);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1018,14 +1019,14 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, because the overloaded BE doesn't report in resourceUsageIntervalMs.
         GlobalVariable.setQueryQueueResourceUsageIntervalMs(1000);
         Thread.sleep(2000);
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 0, 0);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1072,13 +1073,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.REQUIRING == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, because the overloaded BE becomes dead.
         backends.get(0).setAlive(false);
         GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> coords.stream().allMatch(coord -> Slot.State.ALLOCATED == coord.getSlot().getState()));
+                .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1167,7 +1168,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             }
         };
 
-        if (group != null && group.getId() != Slot.ABSENT_GROUP_ID) {
+        if (group != null && group.getId() != LogicalSlot.ABSENT_GROUP_ID) {
             ResourceGroup resourceGroup = new ResourceGroup();
             resourceGroup.setId(group.getId());
             resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());

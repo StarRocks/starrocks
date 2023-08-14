@@ -20,16 +20,16 @@ import com.starrocks.thrift.TNetworkAddress;
 import java.util.concurrent.CompletableFuture;
 
 public class PendingSlotRequest {
-    private final Slot slot;
+    private final LogicalSlot slot;
     private final TNetworkAddress leaderEndpoint;
-    private final CompletableFuture<Slot> slotFuture = new CompletableFuture<>();
+    private final CompletableFuture<LogicalSlot> slotFuture = new CompletableFuture<>();
 
-    public PendingSlotRequest(Slot slot, TNetworkAddress leaderEndpoint) {
+    public PendingSlotRequest(LogicalSlot slot, TNetworkAddress leaderEndpoint) {
         this.slot = slot;
         this.leaderEndpoint = leaderEndpoint;
     }
 
-    Slot getSlot() {
+    LogicalSlot getSlot() {
         return slot;
     }
 
@@ -37,7 +37,7 @@ public class PendingSlotRequest {
         return leaderEndpoint;
     }
 
-    public CompletableFuture<Slot> getSlotFuture() {
+    public CompletableFuture<LogicalSlot> getSlotFuture() {
         return slotFuture;
     }
 

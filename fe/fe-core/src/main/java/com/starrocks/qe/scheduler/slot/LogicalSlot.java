@@ -14,12 +14,22 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceSlot;
 import com.starrocks.thrift.TUniqueId;
 
-public class Slot {
+/**
+ * A logical slot represents resources which is required by a query from the {@link SlotManager}.
+ * <p> It contains multiple physical slots. A physical slot represents a part of resource from the cluster. There are a total of
+ * {@link GlobalVariable#getQueryQueueConcurrencyLimit()} slots and {@link ResourceGroup#getConcurrencyLimit()} slots for a group.
+ * <p> When the query queue is enabled by {@link GlobalVariable#isEnableQueryQueueSelect()},
+ * {@link GlobalVariable#isEnableQueryQueueStatistic()}  or {@link GlobalVariable#isEnableQueryQueueLoad()}, a query must be
+ * required enough physical slots from the {@link SlotManager}.
+ */
+public class LogicalSlot {
     public static final long ABSENT_GROUP_ID = -1;
 
     private final TUniqueId slotId;
@@ -27,7 +37,7 @@ public class Slot {
 
     private final long groupId;
 
-    private final int numSlots;
+    private final int numPhysicalSlots;
 
     private final long expiredPendingTimeMs;
 
@@ -35,12 +45,12 @@ public class Slot {
 
     private State state = State.CREATED;
 
-    public Slot(TUniqueId slotId, TNetworkAddress requestEndpoint, long groupId, int numSlots,
-                long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
+    public LogicalSlot(TUniqueId slotId, TNetworkAddress requestEndpoint, long groupId, int numPhysicalSlots,
+                       long expiredPendingTimeMs, long expiredAllocatedTimeMs) {
         this.slotId = slotId;
         this.requestEndpoint = requestEndpoint;
         this.groupId = groupId;
-        this.numSlots = numSlots;
+        this.numPhysicalSlots = numPhysicalSlots;
         this.expiredPendingTimeMs = expiredPendingTimeMs;
         this.expiredAllocatedTimeMs = expiredAllocatedTimeMs;
     }
@@ -74,15 +84,15 @@ public class Slot {
         tslot.setSlot_id(slotId)
                 .setRequest_endpoint(requestEndpoint)
                 .setGroup_id(groupId)
-                .setNum_slots(numSlots)
+                .setNum_slots(numPhysicalSlots)
                 .setExpired_pending_time_ms(expiredPendingTimeMs)
                 .setExpired_allocated_time_ms(expiredAllocatedTimeMs);
 
         return tslot;
     }
 
-    public static Slot fromThrift(TResourceSlot tslot) {
-        return new Slot(tslot.getSlot_id(), tslot.getRequest_endpoint(), tslot.getGroup_id(), tslot.getNum_slots(),
+    public static LogicalSlot fromThrift(TResourceSlot tslot) {
+        return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_endpoint(), tslot.getGroup_id(), tslot.getNum_slots(),
                 tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms());
     }
 
@@ -98,8 +108,8 @@ public class Slot {
         return groupId;
     }
 
-    public int getNumSlots() {
-        return numSlots;
+    public int getNumPhysicalSlots() {
+        return numPhysicalSlots;
     }
 
     public long getExpiredPendingTimeMs() {
@@ -124,7 +134,7 @@ public class Slot {
                 "slotId=" + DebugUtil.printId(slotId) +
                 ", requestEndpoint=" + requestEndpoint +
                 ", groupId=" + groupId +
-                ", numSlots=" + numSlots +
+                ", numSlots=" + numPhysicalSlots +
                 ", expiredPendingTimeMs=" + expiredPendingTimeMs +
                 ", expiredAllocatedTimeMs=" + expiredAllocatedTimeMs +
                 ", state=" + state +

@@ -84,6 +84,11 @@ public class SlotManager {
 
     private static final int MAX_PENDING_REQUESTS = 1_000_000;
 
+    /**
+     * All the data members except {@code requests} and {@link #slots} are only accessed by the thread {@link #requestWorker}.
+     * Others outside can do nothing, but add a request to {@code requests} or retrieve a view of all the running and queued
+     * slots.
+     */
     private final BlockingQueue<Runnable> requests = Queues.newLinkedBlockingDeque(MAX_PENDING_REQUESTS);
     private final RequestWorker requestWorker = new RequestWorker();
     private final AtomicBoolean started = new AtomicBoolean();
@@ -92,7 +97,7 @@ public class SlotManager {
             Config.slot_manager_response_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("slot-mgr-res-%d").build());
 
-    private final ConcurrentMap<TUniqueId, Slot> slots = new ConcurrentHashMap<>();
+    private final ConcurrentMap<TUniqueId, LogicalSlot> slots = new ConcurrentHashMap<>();
     private final Map<String, Set<TUniqueId>> requestHostToSlotIds = new HashMap<>();
 
     private final SlotRequestQueue slotRequestQueue;
@@ -110,7 +115,7 @@ public class SlotManager {
         }
     }
 
-    public void requireSlotAsync(Slot slot) {
+    public void requireSlotAsync(LogicalSlot slot) {
         requests.add(() -> handleRequireSlotTask(slot));
     }
 
@@ -128,11 +133,11 @@ public class SlotManager {
         });
     }
 
-    public List<Slot> getSlots() {
+    public List<LogicalSlot> getSlots() {
         return new ArrayList<>(slots.values());
     }
 
-    private void handleRequireSlotTask(Slot slot) {
+    private void handleRequireSlotTask(LogicalSlot slot) {
         boolean ok = slotRequestQueue.addPendingSlot(slot);
         if (ok) {
             slot.onRequire();
@@ -151,7 +156,7 @@ public class SlotManager {
     }
 
     private void handleReleaseSlotTask(TUniqueId slotId) {
-        Slot slot = slotRequestQueue.removePendingSlot(slotId);
+        LogicalSlot slot = slotRequestQueue.removePendingSlot(slotId);
         if (slot == null) {
             slot = allocatedSlots.releaseSlot(slotId);
         }
@@ -176,7 +181,7 @@ public class SlotManager {
         copiedSlotIds.forEach(this::handleReleaseSlotTask);
     }
 
-    private void finishSlotRequirementToEndpoint(Slot slot, TStatus status) {
+    private void finishSlotRequirementToEndpoint(LogicalSlot slot, TStatus status) {
         responseExecutor.execute(() -> {
             TFinishSlotRequirementRequest request = new TFinishSlotRequirementRequest();
             request.setStatus(status);
@@ -209,7 +214,7 @@ public class SlotManager {
         }
 
         private boolean schedule() {
-            List<Slot> expiredSlots = allocatedSlots.peakExpiredSlots();
+            List<LogicalSlot> expiredSlots = allocatedSlots.peakExpiredSlots();
             if (!expiredSlots.isEmpty()) {
                 LOG.warn("[Slot] expired allocated slots [{}]", expiredSlots);
             }
@@ -225,12 +230,12 @@ public class SlotManager {
         }
 
         private boolean tryAllocateSlots() {
-            List<Slot> slotsToAllocate = slotRequestQueue.peakSlotsToAllocate(allocatedSlots);
+            List<LogicalSlot> slotsToAllocate = slotRequestQueue.peakSlotsToAllocate(allocatedSlots);
             slotsToAllocate.forEach(this::allocateSlot);
             return !slotsToAllocate.isEmpty();
         }
 
-        private void allocateSlot(Slot slot) {
+        private void allocateSlot(LogicalSlot slot) {
             slot.onAllocate();
             slotRequestQueue.removePendingSlot(slot.getSlotId());
             allocatedSlots.allocateSlot(slot);

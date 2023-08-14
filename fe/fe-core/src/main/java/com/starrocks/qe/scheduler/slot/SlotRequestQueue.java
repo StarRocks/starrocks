@@ -32,11 +32,11 @@ import java.util.TreeSet;
 import java.util.function.Supplier;
 
 public class SlotRequestQueue {
-    private final Map<TUniqueId, Slot> slots = new HashMap<>();
-    private final Set<Slot> slotsOrderByExpiredTime = new TreeSet<>(
-            Comparator.comparingLong(Slot::getExpiredPendingTimeMs).thenComparing(Slot::getSlotId));
+    private final Map<TUniqueId, LogicalSlot> slots = new HashMap<>();
+    private final Set<LogicalSlot> slotsOrderByExpiredTime = new TreeSet<>(
+            Comparator.comparingLong(LogicalSlot::getExpiredPendingTimeMs).thenComparing(LogicalSlot::getSlotId));
 
-    private final Map<Long, LinkedHashMap<TUniqueId, Slot>> groupIdToSubQueue = new LinkedHashMap<>();
+    private final Map<Long, LinkedHashMap<TUniqueId, LogicalSlot>> groupIdToSubQueue = new LinkedHashMap<>();
     private int nextGroupIndex = 0;
 
     private final Supplier<Boolean> isResourceOverloaded;
@@ -45,7 +45,7 @@ public class SlotRequestQueue {
         this.isResourceOverloaded = isResourceOverloaded;
     }
 
-    public boolean addPendingSlot(Slot slot) {
+    public boolean addPendingSlot(LogicalSlot slot) {
         if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
                 slots.size() >= GlobalVariable.getQueryQueueMaxQueuedQueries()) {
             return false;
@@ -58,24 +58,24 @@ public class SlotRequestQueue {
         return true;
     }
 
-    public Slot removePendingSlot(TUniqueId slotId) {
-        Slot slot = slots.remove(slotId);
+    public LogicalSlot removePendingSlot(TUniqueId slotId) {
+        LogicalSlot slot = slots.remove(slotId);
         if (slot == null) {
             return null;
         }
 
         slotsOrderByExpiredTime.remove(slot);
 
-        LinkedHashMap<TUniqueId, Slot> subQueue = groupIdToSubQueue.get(slot.getGroupId());
+        LinkedHashMap<TUniqueId, LogicalSlot> subQueue = groupIdToSubQueue.get(slot.getGroupId());
         subQueue.remove(slotId);
 
         return slot;
     }
 
-    public List<Slot> peakExpiredSlots() {
+    public List<LogicalSlot> peakExpiredSlots() {
         long nowMs = System.currentTimeMillis();
-        List<Slot> expiredSlots = new ArrayList<>();
-        for (Slot slot : slotsOrderByExpiredTime) {
+        List<LogicalSlot> expiredSlots = new ArrayList<>();
+        for (LogicalSlot slot : slotsOrderByExpiredTime) {
             if (!slot.isPendingExpired(nowMs)) {
                 break;
             }
@@ -84,8 +84,8 @@ public class SlotRequestQueue {
         return expiredSlots;
     }
 
-    public List<Slot> peakSlotsToAllocate(AllocatedSlots allocatedSlots) {
-        List<Slot> slotsToAllocate = Lists.newArrayList();
+    public List<LogicalSlot> peakSlotsToAllocate(AllocatedSlots allocatedSlots) {
+        List<LogicalSlot> slotsToAllocate = Lists.newArrayList();
 
         if (groupIdToSubQueue.isEmpty()) {
             return slotsToAllocate;
@@ -98,7 +98,7 @@ public class SlotRequestQueue {
 
         // Traverse groups round-robin from nextGroupIndex.
         int localNextGroupIndex = nextGroupIndex;
-        Iterator<Map.Entry<Long, LinkedHashMap<TUniqueId, Slot>>> groupIterator = groupIdToSubQueue.entrySet().iterator();
+        Iterator<Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>>> groupIterator = groupIdToSubQueue.entrySet().iterator();
         for (int i = 0; i < localNextGroupIndex && groupIterator.hasNext(); i++) {
             groupIterator.next();
         }
@@ -112,9 +112,9 @@ public class SlotRequestQueue {
             if (!groupIterator.hasNext()) {
                 groupIterator = groupIdToSubQueue.entrySet().iterator();
             }
-            Map.Entry<Long, LinkedHashMap<TUniqueId, Slot>> entry = groupIterator.next();
+            Map.Entry<Long, LinkedHashMap<TUniqueId, LogicalSlot>> entry = groupIterator.next();
             Long groupId = entry.getKey();
-            LinkedHashMap<TUniqueId, Slot> subQueue = entry.getValue();
+            LinkedHashMap<TUniqueId, LogicalSlot> subQueue = entry.getValue();
 
             ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
             int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
@@ -146,13 +146,13 @@ public class SlotRequestQueue {
         return numTotalSlots <= 0 || numAllocatedSlotsOfGroup < numTotalSlots;
     }
 
-    private int peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, Slot> subQueue,
+    private int peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, LogicalSlot> subQueue,
                                                 ResourceGroup group,
                                                 final int numAllocatedSlots,
                                                 final int numAllocatedSlotsOfGroup,
-                                                List<Slot> slotsToAllocate) {
+                                                List<LogicalSlot> slotsToAllocate) {
         int numSlotsToAllocate = 0;
-        for (Slot slot : subQueue.values()) {
+        for (LogicalSlot slot : subQueue.values()) {
             if (!isGlobalSlotAvailable(numAllocatedSlots + numSlotsToAllocate)) {
                 break;
             }
@@ -162,7 +162,7 @@ public class SlotRequestQueue {
             }
 
             slotsToAllocate.add(slot);
-            numSlotsToAllocate += slot.getNumSlots();
+            numSlotsToAllocate += slot.getNumPhysicalSlots();
         }
 
         return numSlotsToAllocate;

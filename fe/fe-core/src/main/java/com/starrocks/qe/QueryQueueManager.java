@@ -20,7 +20,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.scheduler.RecoverableException;
-import com.starrocks.qe.scheduler.slot.Slot;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TWorkGroup;
@@ -57,7 +57,7 @@ public class QueryQueueManager {
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
         try {
-            Slot slotRequirement = createSlot(coord);
+            LogicalSlot slotRequirement = createSlot(coord);
             coord.setSlot(slotRequirement);
 
             isPending = true;
@@ -66,7 +66,7 @@ public class QueryQueueManager {
             MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
 
             long timeoutMs = slotRequirement.getExpiredPendingTimeMs();
-            Slot allocatedSlot = null;
+            LogicalSlot allocatedSlot = null;
             while (allocatedSlot == null) {
                 // Check timeout.
                 long currentMs = System.currentTimeMillis();
@@ -79,7 +79,7 @@ public class QueryQueueManager {
                     throw new UserException(errMsg);
                 }
 
-                Future<Slot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
+                Future<LogicalSlot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
 
                 // Wait for slot allocated.
                 try {
@@ -125,12 +125,12 @@ public class QueryQueueManager {
         return !notNeed;
     }
 
-    private Slot createSlot(DefaultCoordinator coord) {
+    private LogicalSlot createSlot(DefaultCoordinator coord) {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         TNetworkAddress requestEndpoint = new TNetworkAddress(selfIpAndPort.first, selfIpAndPort.second);
 
         TWorkGroup group = coord.getJobSpec().getResourceGroup();
-        long groupId = group == null ? Slot.ABSENT_GROUP_ID : group.getId();
+        long groupId = group == null ? LogicalSlot.ABSENT_GROUP_ID : group.getId();
 
         long nowMs = System.currentTimeMillis();
         long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
@@ -138,7 +138,7 @@ public class QueryQueueManager {
                 nowMs + Math.min(GlobalVariable.getQueryQueuePendingTimeoutSecond(), queryTimeoutSecond) * 1000L;
         long expiredAllocatedTimeMs = nowMs + queryTimeoutSecond * 1000L;
 
-        return new Slot(coord.getQueryId(), requestEndpoint, groupId, 1, expiredPendingTimeMs,
+        return new LogicalSlot(coord.getQueryId(), requestEndpoint, groupId, 1, expiredPendingTimeMs,
                 expiredAllocatedTimeMs);
     }
 }

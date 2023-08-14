@@ -124,7 +124,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.Coordinator;
-import com.starrocks.qe.scheduler.slot.Slot;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -2119,11 +2119,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, request.getLabel(), true).stream()
+                                    dbId, request.getLabel(), true).stream()
                             .map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, null, false).stream().map(LoadJob::toThrift)
+                                    dbId, null, false).stream().map(LoadJob::toThrift)
                             .collect(Collectors.toList()));
                 }
             } else {
@@ -2318,7 +2318,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
-        Slot slot = Slot.fromThrift(request.getSlot());
+        LogicalSlot slot = LogicalSlot.fromThrift(request.getSlot());
         GlobalStateMgr.getCurrentState().getSlotManager().requireSlotAsync(slot);
 
         return new TRequireSlotResponse();

@@ -71,7 +71,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
-import com.starrocks.qe.scheduler.slot.Slot;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -171,7 +171,7 @@ public class DefaultCoordinator extends Coordinator {
     private Supplier<ExecPlan> execPlanSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
-    private Slot slot = null;
+    private LogicalSlot slot = null;
 
     public static class Factory implements Coordinator.Factory {
 
@@ -291,11 +291,11 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public Slot getSlot() {
+    public LogicalSlot getSlot() {
         return slot;
     }
 
-    public void setSlot(Slot slot) {
+    public void setSlot(LogicalSlot slot) {
         this.slot = slot;
     }
 

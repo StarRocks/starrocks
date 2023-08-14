@@ -27,9 +27,9 @@ import java.util.TreeSet;
 
 public class AllocatedSlots {
 
-    private final Map<TUniqueId, Slot> slots = new LinkedHashMap<>();
-    private final Set<Slot> slotsOrderByExpiredTime = new TreeSet<>(
-            Comparator.comparingLong(Slot::getExpiredAllocatedTimeMs).thenComparing(Slot::getSlotId));
+    private final Map<TUniqueId, LogicalSlot> slots = new LinkedHashMap<>();
+    private final Set<LogicalSlot> slotsOrderByExpiredTime = new TreeSet<>(
+            Comparator.comparingLong(LogicalSlot::getExpiredAllocatedTimeMs).thenComparing(LogicalSlot::getSlotId));
     private int totalSlotCount = 0;
     private final Map<Long, Integer> groupIdToSlotCount = new HashMap<>();
 
@@ -41,33 +41,33 @@ public class AllocatedSlots {
         return groupIdToSlotCount.getOrDefault(groupId, 0);
     }
 
-    public void allocateSlot(Slot slot) {
+    public void allocateSlot(LogicalSlot slot) {
         slots.put(slot.getSlotId(), slot);
         slotsOrderByExpiredTime.add(slot);
 
-        totalSlotCount += slot.getNumSlots();
+        totalSlotCount += slot.getNumPhysicalSlots();
         groupIdToSlotCount.compute(slot.getGroupId(),
-                (k, prevCount) -> prevCount == null ? slot.getNumSlots() : prevCount + slot.getNumSlots());
+                (k, prevCount) -> prevCount == null ? slot.getNumPhysicalSlots() : prevCount + slot.getNumPhysicalSlots());
     }
 
-    public Slot releaseSlot(TUniqueId slotId) {
-        Slot slot = slots.remove(slotId);
+    public LogicalSlot releaseSlot(TUniqueId slotId) {
+        LogicalSlot slot = slots.remove(slotId);
         if (slot == null) {
             return null;
         }
 
         slotsOrderByExpiredTime.remove(slot);
 
-        totalSlotCount -= slot.getNumSlots();
-        groupIdToSlotCount.computeIfPresent(slot.getGroupId(), (k, v) -> v - slot.getNumSlots());
+        totalSlotCount -= slot.getNumPhysicalSlots();
+        groupIdToSlotCount.computeIfPresent(slot.getGroupId(), (k, v) -> v - slot.getNumPhysicalSlots());
 
         return slot;
     }
 
-    public List<Slot> peakExpiredSlots() {
+    public List<LogicalSlot> peakExpiredSlots() {
         long nowMs = System.currentTimeMillis();
-        List<Slot> expiredSlots = new ArrayList<>();
-        for (Slot slot : slotsOrderByExpiredTime) {
+        List<LogicalSlot> expiredSlots = new ArrayList<>();
+        for (LogicalSlot slot : slotsOrderByExpiredTime) {
             if (!slot.isAllocatedExpired(nowMs)) {
                 break;
             }

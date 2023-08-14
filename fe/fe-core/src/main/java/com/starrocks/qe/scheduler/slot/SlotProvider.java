@@ -48,7 +48,7 @@ public class SlotProvider {
 
     private final ConcurrentMap<TUniqueId, PendingSlotRequest> pendingSlots = new ConcurrentHashMap<>();
 
-    public CompletableFuture<Slot> requireSlot(Slot slot) {
+    public CompletableFuture<LogicalSlot> requireSlot(LogicalSlot slot) {
         TNetworkAddress leaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
         PendingSlotRequest slotRequest = new PendingSlotRequest(slot, leaderEndpoint);
         slotRequest.onRequire();
@@ -92,7 +92,7 @@ public class SlotProvider {
         return new Status();
     }
 
-    public void cancelSlotRequirement(Slot slot) {
+    public void cancelSlotRequirement(LogicalSlot slot) {
         if (slot == null) {
             return;
         }
@@ -106,8 +106,8 @@ public class SlotProvider {
         releaseSlotToSlotManager(slot);
     }
 
-    public void releaseSlot(Slot slot) {
-        if (slot == null || slot.getState() != Slot.State.ALLOCATED) {
+    public void releaseSlot(LogicalSlot slot) {
+        if (slot == null || slot.getState() != LogicalSlot.State.ALLOCATED) {
             return;
         }
 
@@ -137,7 +137,7 @@ public class SlotProvider {
                 client -> client.requireSlotAsync(request));
     }
 
-    private void releaseSlotToSlotManager(Slot slot) {
+    private void releaseSlotToSlotManager(LogicalSlot slot) {
         TNetworkAddress leaderEndpoint = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint();
         TReleaseSlotRequest slotRequest = new TReleaseSlotRequest();
         slotRequest.setSlot_id(slot.getSlotId());
