@@ -173,6 +173,7 @@ Construct data in memory and load data into the StarRocks table.
         .mode("append")
         .save()
     ```
+
 For python, run the following codes in `pyspark`:
 
    ```python
