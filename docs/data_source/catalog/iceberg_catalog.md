@@ -15,7 +15,7 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   > **NOTE**
   >
   > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
-  > - If you use the Iceberg REST catalog feature, you must choose Tabular as metastore.
+  > - If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
 
 ## Usage notes
 
