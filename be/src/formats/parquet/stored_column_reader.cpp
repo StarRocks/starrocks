@@ -100,11 +100,7 @@ public:
     void reset_levels() override;
 
     Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
-        if (_need_parse_levels) {
-            return _read_records_and_levels(num_records, content_type, dst);
-        } else {
-            return _read_records_only(num_records, content_type, dst);
-        }
+        return _read_records_and_levels(num_records, content_type, dst);
     }
 
     // If need_levels is set, client will get all levels through get_levels function.
@@ -130,7 +126,6 @@ private:
     Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
 
     void _consume_levels(size_t num_values) { _reader->def_level_decoder().consume_levels(num_values); }
-    Status _read_records_only(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
@@ -360,83 +355,6 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
             SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
             RETURN_IF_ERROR(_reader->decode_values(records_to_read, &_is_nulls[0], content_type, dst));
         }
-        _num_values_left_in_cur_page -= records_to_read;
-        records_read += records_to_read;
-        update_read_context(records_to_read);
-    } while (records_read < *num_records);
-    *num_records = records_read;
-    return Status::OK();
-}
-
-Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, ColumnContentType content_type,
-                                                      Column* dst) {
-    SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
-    if (_eof) {
-        return Status::EndOfFile("");
-    }
-    size_t records_read = 0;
-    do {
-        if (_num_values_left_in_cur_page == 0) {
-            SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
-            size_t read_count = 0;
-            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
-            records_read += read_count;
-            if (!st.ok()) {
-                if (st.is_end_of_file()) {
-                    _eof = true;
-                    break;
-                } else {
-                    return st;
-                }
-            }
-        }
-
-        size_t records_to_read = std::min(*num_records - records_read, _num_values_left_in_cur_page);
-        if (records_to_read == 0) {
-            break;
-        }
-
-        size_t repeated_count = _reader->def_level_decoder().next_repeated_count();
-        if (repeated_count > 0) {
-            records_to_read = std::min(records_to_read, repeated_count);
-            level_t def_level = 0;
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-                def_level = _reader->def_level_decoder().get_repeated_value(records_to_read);
-            }
-            SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-            if (def_level >= _field->max_def_level()) {
-                RETURN_IF_ERROR(_reader->decode_values(records_to_read, content_type, dst));
-            } else {
-                dst->append_nulls(records_to_read);
-            }
-        } else {
-            level_t* def_levels = nullptr;
-            size_t num_parsed_levels = 0;
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-                RETURN_IF_ERROR(_decode_levels(&records_to_read, &num_parsed_levels, &def_levels));
-                DCHECK_EQ(records_to_read, num_parsed_levels);
-            }
-
-            SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-            size_t i = 0;
-            while (i < records_to_read) {
-                size_t j = i;
-                bool is_null = def_levels[j] < _field->max_def_level();
-                j++;
-                while (j < records_to_read && is_null == (def_levels[j] < _field->max_def_level())) {
-                    j++;
-                }
-                if (is_null) {
-                    dst->append_nulls(j - i);
-                } else {
-                    RETURN_IF_ERROR(_reader->decode_values(j - i, content_type, dst));
-                }
-                i = j;
-            }
-        }
-
         _num_values_left_in_cur_page -= records_to_read;
         records_read += records_to_read;
         update_read_context(records_to_read);
