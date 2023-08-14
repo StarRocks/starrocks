@@ -1021,6 +1021,12 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view = true;
 
     /**
+     * Control whether to enable spill for all materialized views in the refresh mv.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_materialized_view_spill = true;
+
+    /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
      * and he can ignore some metadata exceptions.

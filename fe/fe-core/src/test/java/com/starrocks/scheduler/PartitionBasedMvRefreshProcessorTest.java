@@ -1596,6 +1596,83 @@ public class PartitionBasedMvRefreshProcessorTest {
     }
 
     @Test
+    public void testRefreshMaterializedViewDefaultConfig1() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_config1\n" +
+                "partition by date_trunc('month',k1) \n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "properties(" +
+                "'replication_num' = '1',\n" +
+                "'storage_medium' = 'SSD'" +
+                ")\n" +
+                "as select k1, k2 from tbl1;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config1"));
+
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        // by default, enable spill
+        {
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+        }
+
+        {
+            // change global config
+            Config.enable_materialized_view_spill = false;
+
+            // insert again.
+            new StmtExecutor(connectContext, insertSql).execute();
+            taskRun.executeTaskRun();
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+
+            Config.enable_materialized_view_spill = true;
+        }
+    }
+
+    @Test
+    public void testRefreshMaterializedViewDefaultConfig2() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_config2\n" +
+                "partition by date_trunc('month',k1) \n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "properties(" +
+                "'replication_num' = '1',\n" +
+                "'session.enable_spill' = 'false'" +
+                ")\n" +
+                "as select k1, k2 from tbl1;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config2"));
+
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        taskRun.executeTaskRun();
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                taskRun.getProcessor();
+        MvTaskRunContext mvContext = processor.getMvContext();
+        ExecPlan execPlan = mvContext.getExecPlan();
+        Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().getEnableSpill());
+    }
+
+    @Test
     public void testSyncPartitionWithSsdStorage() throws Exception {
         starRocksAssert.useDatabase("test").withMaterializedView("create materialized view test.mv_with_ssd\n" +
                 "partition by date_trunc('month',k1) \n" +
