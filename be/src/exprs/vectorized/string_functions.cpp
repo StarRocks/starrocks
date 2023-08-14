@@ -3,6 +3,13 @@
 #include "exprs/vectorized/string_functions.h"
 
 #include <hs/hs.h>
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
+=======
+#ifdef __x86_64__
+#include <immintrin.h>
+#include <mmintrin.h>
+#endif
+>>>>>>> 39465a9903 ([BugFix] include immintrin.h only in X86_64 (#29120)):be/src/exprs/string_functions.cpp
 #include <re2/re2.h>
 
 #include <algorithm>
