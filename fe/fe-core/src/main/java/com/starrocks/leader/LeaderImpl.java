@@ -222,9 +222,7 @@ public class LeaderImpl {
                 errorMsgs.add(errMsg);
                 tStatus.setError_msgs(errorMsgs);
             }
-            if (taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
-                return result;
-            }
+            return result;
         } else {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
@@ -237,7 +235,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.DOWNLOAD && taskType != TTaskType.MOVE
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
-                        && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP) {
+                        && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
+                        && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -284,7 +283,7 @@ public class LeaderImpl {
                     finishClone(task, request);
                     break;
                 case STORAGE_MEDIUM_MIGRATE:
-                    finishStorageMigration(backendId, request);
+                    finishStorageMigration(task, request);
                     break;
                 case CHECK_CONSISTENCY:
                     finishConsistenctCheck(task, request);
@@ -722,43 +721,47 @@ public class LeaderImpl {
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CLONE, task.getSignature());
     }
 
-    private void finishStorageMigration(long backendId, TFinishTaskRequest request) {
-        // check if task success
-        if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
-            LOG.warn("tablet migrate failed. signature: {}, error msg: {}", request.getSignature(),
-                    request.getTask_status().error_msgs);
-            return;
-        }
-
-        // check tablet info is set
-        if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
-            LOG.warn("migration finish tablet infos not set. signature: {}", request.getSignature());
-            return;
-        }
-
-        TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
-        long tabletId = reportedTablet.getTablet_id();
-        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
-        if (tabletMeta == null) {
-            LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
-            return;
-        }
-
-        long dbId = tabletMeta.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db does not exist. db id: {}", dbId);
-            return;
-        }
-
-        db.writeLock();
+    private void finishStorageMigration(AgentTask task, TFinishTaskRequest request) {
         try {
-            // local migration just set path hash
-            Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-            Preconditions.checkArgument(reportedTablet.isSetPath_hash());
-            replica.setPathHash(reportedTablet.getPath_hash());
+            // check if task success
+            if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+                LOG.warn("tablet migrate failed. signature: {}, error msg: {}", request.getSignature(),
+                        request.getTask_status().error_msgs);
+                return;
+            }
+
+            // check tablet info is set
+            if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
+                LOG.warn("migration finish tablet infos not set. signature: {}", request.getSignature());
+                return;
+            }
+
+            TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
+            long tabletId = reportedTablet.getTablet_id();
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            if (tabletMeta == null) {
+                LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
+                return;
+            }
+
+            long dbId = tabletMeta.getDbId();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                LOG.warn("db does not exist. db id: {}", dbId);
+                return;
+            }
+
+            db.writeLock();
+            try {
+                // local migration just set path hash
+                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
+                Preconditions.checkArgument(reportedTablet.isSetPath_hash());
+                replica.setPathHash(reportedTablet.getPath_hash());
+            } finally {
+                db.writeUnlock();
+            }
         } finally {
-            db.writeUnlock();
+            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
         }
     }
 
