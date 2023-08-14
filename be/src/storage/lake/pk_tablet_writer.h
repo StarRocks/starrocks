@@ -29,7 +29,7 @@ namespace starrocks::lake {
 
 class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
-    explicit HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema);
+    explicit HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
 
     ~HorizontalPkTabletWriter() override;
 
@@ -56,7 +56,7 @@ private:
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
 public:
-    explicit VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema,
+    explicit VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                     uint32_t max_rows_per_segment);
 
     ~VerticalPkTabletWriter() override;

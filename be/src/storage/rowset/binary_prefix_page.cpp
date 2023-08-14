@@ -284,29 +284,29 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
 
 template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
-    SparseRange read_range;
+    SparseRange<> read_range;
     uint32_t begin = current_index();
-    read_range.add(Range(begin, begin + *n));
+    read_range.add(Range<>(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin + 1;
     return Status::OK();
 }
 
 template <LogicalType Type>
-Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
+Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
         return Status::OK();
     }
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
@@ -319,7 +319,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange& range, Colum
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
             DCHECK(ok);
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 (void)dst->append_strings({_current_value});

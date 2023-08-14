@@ -212,7 +212,7 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
-                "default_catalog", "testDb", "testTbl");
+                "default_catalog", "testDb", "testTbl", null);
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
@@ -247,6 +247,10 @@ public class ShowExecutorTest {
                 result = 10L;
 
                 mv.getComment();
+                minTimes = 0;
+                result = "TEST MATERIALIZED VIEW";
+
+                mv.getDisplayComment();
                 minTimes = 0;
                 result = "TEST MATERIALIZED VIEW";
 
@@ -816,6 +820,9 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowComputeNodes() throws AnalysisException, DdlException {
+        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
+        StarOSAgent starosAgent = new StarOSAgent();
+
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
 
@@ -834,6 +841,18 @@ public class ShowExecutorTest {
             }
         };
 
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return clusterInfo;
+            }
+
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
         new MockUp<BackendCoreStat>() {
             @Mock
             int getCoresOfBe(long beId) {
@@ -845,6 +864,13 @@ public class ShowExecutorTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            long getWorkerIdByBackendId(long backendId) {
+                return 5;
             }
         };
 
@@ -1019,7 +1045,7 @@ public class ShowExecutorTest {
     }
 
     private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
-        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (col1, col2)\n" +
+        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (`col1`, `col2`)\n" +
                 "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
                 "PARTITION BY (`col1`)\n" +
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
@@ -1038,9 +1064,10 @@ public class ShowExecutorTest {
         Assert.assertEquals("testMv", resultSet.getString(2));
         Assert.assertEquals("ASYNC", resultSet.getString(3));
         Assert.assertEquals("true", resultSet.getString(4));
-        Assert.assertEquals("RANGE", resultSet.getString(5));
+        Assert.assertEquals(null, resultSet.getString(5));
+        Assert.assertEquals("RANGE", resultSet.getString(6));
         for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
-            Assert.assertEquals("", resultSet.getString(6));
+            Assert.assertEquals("", resultSet.getString(7));
         }
         Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 2));
         Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 1));
@@ -1066,7 +1093,8 @@ public class ShowExecutorTest {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT);
+                Column columnId = new Column("id", Type.INT, true);
+                columnId.setComment("id");
                 Column columnName = new Column("name", Type.VARCHAR);
                 Column columnYear = new Column("year", Type.INT);
                 Column columnDt = new Column("dt", Type.INT);
@@ -1099,15 +1127,13 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
-                "  `id` int(11) DEFAULT NULL,\n" +
-                "  `name` varchar(1048576) DEFAULT NULL,\n" +
+                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                "  `name` varchar DEFAULT NULL,\n" +
                 "  `year` int(11) DEFAULT NULL,\n" +
                 "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +
-                "WITH (\n" +
-                " partitioned_by = ARRAY [ year, dt ]\n" +
-                ")\n" +
-                "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
+                "PARTITION BY ( year, dt )\n" +
+                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
     }
 
 
@@ -1124,6 +1150,11 @@ public class ShowExecutorTest {
                 List<String> tableNames = Lists.newArrayList();
                 tableNames.add("hive_test");
                 return tableNames;
+            }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return new Table(TableType.HIVE);
             }
         };
 
@@ -1202,6 +1233,7 @@ public class ShowExecutorTest {
                 properties.put("type", "hive");
                 properties.put("aws.s3.access_key", "iam_user_access_key");
                 properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                properties.put("password", "password");
                 return new Catalog(1, "test_hive", properties, "hive_test");
             }
         };

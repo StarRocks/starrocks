@@ -75,6 +75,12 @@ public:
 
     Status finish_batch() override { return Status::OK(); }
 
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override {
+        size_t rows = static_cast<size_t>(range.span_size());
+        return prepare_batch(&rows, content_type, dst);
+    }
+
     void set_need_parse_levels(bool need_parse_levels) override{};
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
@@ -365,7 +371,7 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<std::int64_t> need_skip_rowids;
+    std::set<int64_t> need_skip_rowids;
     auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
@@ -386,6 +392,13 @@ static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* 
     }
 }
 
+static void prepare_row_range(GroupReader* group_reader) {
+    group_reader->_range =
+            SparseRange<uint64_t>(group_reader->_row_group_first_row,
+                                  group_reader->_row_group_first_row + group_reader->_row_group_metadata->num_rows);
+    group_reader->_range_iter = group_reader->_range.new_iterator();
+}
+
 TEST_F(GroupReaderTest, TestGetNext) {
     // create file
     auto* file = _create_file();
@@ -400,7 +413,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    std::set<std::int64_t> need_skip_rowids;
+    std::set<int64_t> need_skip_rowids;
     auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
@@ -413,6 +426,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     group_reader->_read_chunk = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
+
+    prepare_row_range(group_reader);
     // get next
     size_t row_count = 8;
     status = group_reader->get_next(&chunk, &row_count);

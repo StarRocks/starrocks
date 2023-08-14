@@ -38,19 +38,25 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -62,8 +68,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -185,6 +193,21 @@ public class VariableMgr {
         return DEFAULT_SESSION_VARIABLE;
     }
 
+    public static boolean parseBooleanVariable(String value) {
+        if (value.equalsIgnoreCase("ON")
+                || value.equalsIgnoreCase("TRUE")
+                || value.equalsIgnoreCase("1")) {
+            return true;
+        }
+        if (value.equalsIgnoreCase("OFF")
+                || value.equalsIgnoreCase("FALSE")
+                || value.equalsIgnoreCase("0")) {
+            return false;
+        }
+        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, value);
+        return false;
+    }
+
     // Set value to a variable
     private static boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
@@ -268,6 +291,14 @@ public class VariableMgr {
         }
     }
 
+    public static void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
+        VarContext ctx = getVarContext(setVar.getVariable());
+        if (ctx == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
+                    findSimilarVarNames(setVar.getVariable()));
+        }
+    }
+
     // Entry of handling SetVarStmt
     // Input:
     //      sessionVariable: the variable of current session
@@ -277,17 +308,14 @@ public class VariableMgr {
         if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
             return;
         }
-
-        VarContext ctx = getVarContext(setVar.getVariable());
-        if (ctx == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
-        }
+        checkSystemVariableExist(setVar);
 
         if (setVar.getType() == SetType.VERBOSE) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, setVar.getVariable());
         }
 
         // Check variable attribute and setVar
+        VarContext ctx = getVarContext(setVar.getVariable());
         checkUpdate(setVar, ctx.getFlag());
 
         // To modify to default value.
@@ -341,6 +369,94 @@ public class VariableMgr {
         }
     }
 
+    public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<String, String> m = new HashMap<>();
+        Map<String, String> g = new HashMap<>();
+        try {
+            for (Field field : SessionVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null || (attr.flag() & SESSION_ONLY) == SESSION_ONLY) {
+                    continue;
+                }
+                switch (field.getType().getSimpleName()) {
+                    case "boolean":
+                    case "int":
+                    case "long":
+                    case "float":
+                    case "double":
+                    case "String":
+                        m.put(attr.name(), field.get(DEFAULT_SESSION_VARIABLE).toString());
+                        break;
+                    default:
+                        // Unsupported type variable.
+                        throw new IOException("invalid type: " + field.getType().getSimpleName());
+                }
+            }
+
+            for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null || (attr.flag() & GLOBAL) != GLOBAL) {
+                    continue;
+                }
+                switch (field.getType().getSimpleName()) {
+                    case "boolean":
+                    case "int":
+                    case "long":
+                    case "float":
+                    case "double":
+                    case "String":
+                        g.put(attr.name(), field.get(null).toString());
+                        break;
+                    default:
+                        // Unsupported type variable.
+                        throw new IOException("invalid type: " + field.getType().getSimpleName());
+                }
+            }
+
+        } catch (Exception e) {
+            throw new IOException("failed to write session variable: " + e.getMessage());
+        }
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
+
+        writer.writeJson(m.size());
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
+        }
+
+        writer.writeJson(g.size());
+        for (Map.Entry<String, String> e : g.entrySet()) {
+            writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
+        }
+        writer.close();
+    }
+
+    public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int sessionVarSize = reader.readInt();
+            for (int i = 0; i < sessionVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
+            }
+
+            int globalVarSize = reader.readInt();
+            for (int i = 0; i < globalVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                if (varContext != null) {
+                    setValue(varContext.getObj(), varContext.getField(), v.variable);
+                }
+            }
+        } catch (DdlException e) {
+            throw new IOException(e);
+        }
+    }
+
     @Deprecated
     public static void replayGlobalVariable(SessionVariable variable) throws DdlException {
         WLOCK.lock();
@@ -384,10 +500,11 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static void fillValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
+    public static void fillValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
+                    findSimilarVarNames(desc.getName()));
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
@@ -448,10 +565,11 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static String getValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
+    public static String getValue(SessionVariable var, VariableExpr desc) {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName(),
+                    findSimilarVarNames(desc.getName()));
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
@@ -497,7 +615,8 @@ public class VariableMgr {
     public static String getDefaultValue(String variable) {
         VarContext ctx = getVarContext(variable);
         if (ctx == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable,
+                    findSimilarVarNames(variable));
         }
 
         String value = ctx.getDefaultValue();
@@ -654,5 +773,27 @@ public class VariableMgr {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
         }
         return ctx;
+    }
+
+    public static String findSimilarVarNames(String inputName) {
+        JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
+        CTX_BY_VAR_NAME.keySet().stream()
+                .sorted(Comparator.comparingDouble(s ->
+                        jaroWinklerDistance.apply(StringUtils.upperCase(s), StringUtils.upperCase(inputName))))
+                .limit(3).map(e -> "'" + e + "'").forEach(joiner::add);
+        return joiner.toString();
+    }
+
+    private static class VariableInfo {
+        @SerializedName(value = "n")
+        private String name;
+        @SerializedName(value = "v")
+        private String variable;
+
+        public VariableInfo(String name, String variable) {
+            this.name = name;
+            this.variable = variable;
+        }
     }
 }

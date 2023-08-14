@@ -19,9 +19,11 @@ enum TCloudType {
     DEFAULT,
     AWS,
     AZURE,
-    GCP
+    GCP,
+    ALIYUN
 }
 
+// Deprecated
 struct TCloudProperty {
     1: required string key;
     2: required string value;
@@ -29,5 +31,6 @@ struct TCloudProperty {
 
 struct TCloudConfiguration {
     1: optional TCloudType cloud_type;
-    2: optional list<TCloudProperty> cloud_properties;
+    2: optional list<TCloudProperty> cloud_properties; // Deprecated
+    3: optional map<string, string> cloud_properties_v2;
 }

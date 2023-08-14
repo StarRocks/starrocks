@@ -57,6 +57,16 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
+    bool has_error() const {
+        std::lock_guard l(_mtx);
+        return !_status.ok();
+    }
+
+    void update_status(const Status& st) {
+        std::lock_guard l(_mtx);
+        _status.update(st);
+    }
+
 private:
     CompactionScheduler* _scheduler;
     mutable bthread::Mutex _mtx;
@@ -113,7 +123,7 @@ class CompactionScheduler {
     //    Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
-        constexpr const static int16_t kConcurrencyRestoreTimes = 10;
+        constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
         explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
 
@@ -150,6 +160,13 @@ public:
     void compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                  CompactResponse* response, ::google::protobuf::Closure* done);
 
+    // Finds all compaction tasks for the given |txn_id| and aborts them.
+    // Marks the tasks as aborted and returns immediately, without waiting
+    // for the tasks to exit.
+    // Returns Status::NotFound if no task with the given txn_id is found,
+    // otherwise returns Status::OK.
+    Status abort(int64_t txn_id);
+
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 
     int16_t concurrency() const { return _limiter.concurrency(); }
@@ -185,7 +202,7 @@ private:
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    bthread::Mutex _states_lock;
+    bthread::Mutex _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;
@@ -210,7 +227,7 @@ inline void CompactionScheduler::Limiter::no_memory_limit_exceeded() {
         --_reserved;
         ++_free;
         _success = 0;
-        VLOG(3) << "Increased maximum concurrency to " << (_total - _reserved);
+        LOG(INFO) << "Increased maximum compaction concurrency to " << (_total - _reserved);
     }
 }
 
@@ -219,7 +236,7 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
     _success = 0;
     if (_reserved + 1 < _total) { // Cannot reduce the concurrency to zero.
         _reserved++;
-        VLOG(3) << "Decreased maximum concurrency to " << (_total - _reserved);
+        LOG(INFO) << "Decreased maximum compaction concurrency to " << (_total - _reserved);
     } else {
         _free++;
     }

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -45,6 +46,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("name", ScalarType.createVarchar(50))
                     .column("refresh_type", ScalarType.createVarchar(10))
                     .column("is_active", ScalarType.createVarchar(10))
+                    .column("inactive_reason", ScalarType.createVarcharType(64))
                     .column("partition_type", ScalarType.createVarchar(16))
                     .column("task_id", ScalarType.createVarchar(20))
                     .column("task_name", ScalarType.createVarchar(50))
@@ -134,7 +136,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(
-                BinaryPredicate.Operator.EQ,
+                BinaryType.EQ,
                 new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
                 new StringLiteral(db));
         // old where + and + db where

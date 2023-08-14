@@ -32,7 +32,7 @@
 namespace starrocks {
 class RuntimeState;
 class SlotDescriptor;
-
+struct ConvertFuncTree;
 } // namespace starrocks
 namespace starrocks {
 
@@ -60,7 +60,7 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 // filter_data[i - column_start_idx] == DATUM_NULL, slot marked as 1 is filtered out
 typedef Status (*ConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                               size_t column_start_idx, uint8_t* null_data, Filter* chunk_filter,
-                              ArrowConvertContext* ctx, const TypeDescriptor* type_desc);
+                              ArrowConvertContext* ctx, ConvertFuncTree* conv_func);
 
 // invoked when a arrow type fail to convert to StarRocks type.
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name);
@@ -74,5 +74,13 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable
 // phase1: convert at->lt0 by converter determined by the triple [at, lt0, is_nullable]
 // phase2: convert lt0->lt by VectorCastExpr.
 LogicalType get_strict_type(ArrowTypeId at);
+
+struct ConvertFuncTree {
+    ConvertFuncTree(ConvertFunc f) : func(f){};
+    ConvertFuncTree() : func(nullptr){};
+    ConvertFunc func = nullptr;
+    std::vector<std::string> field_names; // used in struct
+    std::vector<std::unique_ptr<ConvertFuncTree>> children;
+};
 
 } // namespace starrocks

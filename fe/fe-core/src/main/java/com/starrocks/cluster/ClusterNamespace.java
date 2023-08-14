@@ -35,7 +35,7 @@
 package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.system.SystemInfoService;
 
@@ -73,7 +73,7 @@ public class ClusterNamespace {
         if (Strings.isNullOrEmpty(cluster) || Strings.isNullOrEmpty(name)) {
             return null;
         }
-        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationManager.ROOT_USER)
+        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)
                 || name.equalsIgnoreCase(Auth.ADMIN_USER)) {
             return name;
         }

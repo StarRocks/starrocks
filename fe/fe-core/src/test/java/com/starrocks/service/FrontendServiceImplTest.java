@@ -23,18 +23,27 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TDescribeTableParams;
+import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
@@ -52,6 +61,7 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class FrontendServiceImplTest {
 
@@ -307,9 +317,13 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
-        values.add("1990-04-24");
-        values.add("1989-11-02");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        partitionValues.add(values1);
+        values1.add("1990-04-24");
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1989-11-02");
+        partitionValues.add(values2);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -333,11 +347,19 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
-        values.add("1990-04-30");
-        values.add("1990-04-01");
-        values.add("1990-04-25");
-        values.add("1989-11-02");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        values1.add("1990-04-30");
+        partitionValues.add(values1);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1990-04-01");
+        partitionValues.add(values2);
+        List<String> values3 = Lists.newArrayList();
+        values3.add("1990-04-25");
+        partitionValues.add(values3);
+        List<String> values4 = Lists.newArrayList();
+        values4.add("1989-11-02");
+        partitionValues.add(values4);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -361,9 +383,13 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("NULL");
-        values.add("0000-01-01");
-        values.add("9999-12-31");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        values1.add("0000-01-01");
+        partitionValues.add(values1);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("9999-12-31");
+        partitionValues.add(values2);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -389,9 +415,10 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
-        values.add("1991-04-25");
         partitionValues.add(values);
-
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1991-04-25");
+        partitionValues.add(values2);
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
         request.setDb_id(db.getId());
@@ -404,9 +431,7 @@ public class FrontendServiceImplTest {
         Config.max_automatic_partition_number = 4096;
     }
 
-    @Test
-    public void testListTableStatus() throws TException {
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+    private TGetTablesParams buildListTableStatusParam() {
         TGetTablesParams request = new TGetTablesParams();
         request.setDb("test");
         TUserIdentity tUserIdentity = new TUserIdentity();
@@ -415,8 +440,41 @@ public class FrontendServiceImplTest {
         tUserIdentity.setIs_domain(false);
         request.setCurrent_user_ident(tUserIdentity);
         request.setType(TTableType.VIEW);
-        TListTableStatusResult result = impl.listTableStatus(request);
+
+        return request;
+    }
+
+    @Test
+    public void testListTableStatus() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
         Assert.assertEquals(7, result.tables.size());
+    }
+
+    @Test
+    public void testListViewStatusWithBaseTableDropped() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE site_access_empty_for_view (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+        starRocksAssert.withView("create view test.view11 as select * from test.site_access_empty_for_view");
+        // drop the base table referenced by test.view11
+        starRocksAssert.dropTable("test.site_access_empty_for_view");
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
+        System.out.println(result.tables.stream().map(TTableStatus::getName).collect(Collectors.toList()));
+        Assert.assertEquals(8, result.tables.size());
+        starRocksAssert.dropView("test.view11");
     }
 
     @Test
@@ -544,4 +602,99 @@ public class FrontendServiceImplTest {
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
     }
+
+    @Test
+    public void testGetTablesInfo() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `t1` (\n" +
+                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `v1` int(11) NULL COMMENT \"\",\n" +
+                        "  `v2` int(11) NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ")")
+                .withTable("CREATE TABLE `t2` (\n" +
+                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `v1` int(11) NULL COMMENT \"\",\n" +
+                        "  `v2` int(11) NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ")");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test1";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.t1 TO USER `test1`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test1");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setPattern("test_table");
+        request.setAuth_info(authInfo);
+        TGetTablesInfoResponse response = impl.getTablesInfo(request);
+        List<TTableInfo> tablesInfos = response.getTables_infos();
+        Assert.assertEquals(1, tablesInfos.size());
+        Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
+    }
+
+    @Test
+    public void testDefaultValueMeta() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `test_default_value` (\n" +
+                        "  `id` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT \"\",\n" +
+                        "  `value` int(11) NULL DEFAULT \"2\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`id`, `value`)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test2";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.test_default_value TO USER `test2`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test2");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        TDescribeTableResult response = impl.describeTable(request);
+        List<TColumnDef> columnDefList = response.getColumns();
+        List<TColumnDef> testDefaultValue = columnDefList.stream()
+                .filter(u -> u.getColumnDesc().getTableName().equalsIgnoreCase("test_default_value"))
+                .collect(Collectors.toList());
+        Assert.assertEquals(2, testDefaultValue.size());
+        Assert.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
+        Assert.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
+    }
+
 }

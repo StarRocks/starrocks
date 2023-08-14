@@ -21,7 +21,8 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.HashMap;
 import java.util.List;
@@ -70,7 +72,15 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
+    /** get ConnectorMetadata by catalog name
+     * if catalog is null or empty will return localMetastore
+     * @param catalogName catalog's name
+     * @return ConnectorMetadata
+     */
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
@@ -202,9 +212,14 @@ public class MetadataMgr {
                 metadata.dropTable(stmt);
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tableName);
+                throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
             }
         });
+    }
+
+    public Optional<Table> getTable(TableName tableName) {
+        return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {
@@ -217,11 +232,9 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Pair<Table, MaterializedIndex> materializedIndex =
-                connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
-        return materializedIndex;
+        return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
@@ -232,6 +245,32 @@ public class MetadataMgr {
                 connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(partitionNames.build());
+    }
+
+    /**
+     * List partition names by partition values, The partition values are in the same order as the partition columns,
+     * it used for get partial partition names from hms/glue
+     * <p>
+     * For example:
+     * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
+     * the partition columns are [dt,hh,mm]
+     * the partition values should be [empty,'12','30']
+     *
+     */
+    public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().listPartitionNamesByValue(dbName, tableName, partitionValues).
+                        forEach(partitionNames::add);
+            } catch (Exception e) {
+                LOG.error("Failed to listPartitionNamesByValue on [{}.{}]", catalogName, dbName, e);
                 throw e;
             }
         }
@@ -250,16 +289,17 @@ public class MetadataMgr {
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null);
+        return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null);
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate).forEach(files::add);
+                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames)
+                        .forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;

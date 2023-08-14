@@ -40,12 +40,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,6 +69,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -75,6 +78,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
+    private static final int NUM_BUCKETS = 4;
     private ConnectContext connectContext;
     private LakeTableSchemaChangeJob schemaChangeJob;
     private Database db;
@@ -92,7 +96,7 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
-                                           List<Long> matchShardIds)
+                                           List<Long> matchShardIds, Map<String, String> properties)
                     throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
@@ -101,7 +105,14 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        final int numBuckets = 4;
+        new MockUp<EditLog>() {
+            @Mock
+            public void logSaveNextId(long nextId) {
+
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         final long dbId = GlobalStateMgr.getCurrentState().getNextId();
         final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
         final long tableId = GlobalStateMgr.getCurrentState().getNextId();
@@ -116,7 +127,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
-        DistributionInfo dist = new HashDistributionInfo(numBuckets, Collections.singletonList(c0));
+        DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
         PartitionInfo partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
 
@@ -125,7 +136,7 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = new Partition(partitionId, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
-        for (int i = 0; i < numBuckets; i++) {
+        for (int i = 0; i < NUM_BUCKETS; i++) {
             Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
             index.addTablet(tablet, tabletMeta);
         }
@@ -151,11 +162,11 @@ public class LakeTableSchemaChangeJobTest {
         builder.setFullPath("s3://test-bucket/object-1");
         FilePathInfo pathInfo = builder.build();
 
-        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
-        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
-        partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
+        table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
+        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
+        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
 
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         ColumnDef c1 = new ColumnDef("c1", TypeDef.create(PrimitiveType.DOUBLE));
         AddColumnClause alter = new AddColumnClause(c1, null, null, null);
@@ -320,7 +331,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                              long timeoutSeconds) throws AlterCancelException {
-                // nothing to do.
+                Assert.assertEquals(NUM_BUCKETS, countDownLatch.getCount());
             }
 
             @Mock
@@ -498,7 +509,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -558,7 +569,7 @@ public class LakeTableSchemaChangeJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
 
         exception = Assert.assertThrows(AlterCancelException.class, () -> {
@@ -567,7 +578,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
@@ -796,7 +807,7 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Add table back to database
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
         // should not throw any exception.
@@ -816,7 +827,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<ShardDeleter>() {
+        new MockUp<StarMgrMetaSyncer>() {
             @Mock
             public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
                 // nothing to do

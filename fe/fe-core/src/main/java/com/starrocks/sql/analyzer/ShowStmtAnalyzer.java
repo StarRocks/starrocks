@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
@@ -29,7 +30,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -346,9 +346,9 @@ public class ShowStmtAnalyzer {
                     for (Table tb : db.getTables()) {
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
-                            for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                                if (olapTable.getIndexNameById(mvIdx.getId()).equalsIgnoreCase(node.getTableName())) {
-                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvIdx.getId());
+                            for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
+                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equalsIgnoreCase(node.getTableName())) {
+                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexId());
                                     for (Column column : columns) {
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
@@ -359,7 +359,7 @@ public class ShowStmtAnalyzer {
                                         String defaultStr = column.getMetaDefaultValue(extras);
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
-                                                column.getDisplayName(),
+                                                column.getName(),
                                                 // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                                 // If you do not follow this specification, it may cause the BI system,
                                                 // such as superset, to fail to recognize the column type.
@@ -438,7 +438,7 @@ public class ShowStmtAnalyzer {
                                 String extraStr = StringUtils.join(extras, ",");
                                 List<String> row = Arrays.asList("",
                                         "",
-                                        column.getDisplayName(),
+                                        column.getName(),
                                         // In Mysql, the Type column should lowercase, and the Null column should uppercase.
                                         // If you do not follow this specification, it may cause the BI system,
                                         // such as superset, to fail to recognize the column type.
@@ -614,7 +614,7 @@ public class ShowStmtAnalyzer {
 
         private void binaryPredicateHandler(Expr subExpr, String leftKey, boolean filter) {
             BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+            if (filter && binaryPredicate.getOp() != BinaryType.EQ) {
                 throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
             }
             if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {

@@ -38,18 +38,18 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.Alter;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
@@ -108,6 +108,7 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
@@ -115,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -140,7 +142,6 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -155,35 +156,40 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.compaction.CompactionManager;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
-import com.starrocks.load.InsertOverwriteJobManager;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
-import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.pipe.PipeListener;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.PipeScheduler;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -206,10 +212,16 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockLoader;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
-import com.starrocks.privilege.AuthorizationManager;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -219,7 +231,8 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -263,7 +276,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
@@ -291,6 +304,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -301,14 +315,16 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -329,10 +345,11 @@ public class GlobalStateMgr {
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
 
-    private String metaDir;
+    /**
+     * Meta and Image context
+     */
     private String imageDir;
-
-    private MetaContext metaContext;
+    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -341,18 +358,29 @@ public class GlobalStateMgr {
     // We use fair ReentrantLock to avoid starvation. Do not use this lock in critical code pass
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
-    private QueryableReentrantLock lock;
+    private final QueryableReentrantLock lock;
+
+    /**
+     * System Manager
+     */
+    private final NodeMgr nodeMgr;
+    private final HeartbeatMgr heartbeatMgr;
+
+    /**
+     * Alter Job Manager
+     */
+    private final AlterJobMgr alterJobMgr;
 
     private Load load;
-    private LoadManager loadManager;
-    private RoutineLoadManager routineLoadManager;
-    private StreamLoadManager streamLoadManager;
+    private LoadMgr loadMgr;
+    private RoutineLoadMgr routineLoadMgr;
+    private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
-    private Alter alter;
+
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteMgr;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
@@ -362,7 +390,6 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -422,8 +449,8 @@ public class GlobalStateMgr {
     // change to true in UT
     private AtomicBoolean usingNewPrivilege;
 
-    private AuthenticationManager authenticationManager;
-    private AuthorizationManager authorizationManager;
+    private AuthenticationMgr authenticationMgr;
+    private AuthorizationMgr authorizationMgr;
 
     private DomainResolver domainResolver;
 
@@ -462,7 +489,7 @@ public class GlobalStateMgr {
 
     private final SafeModeChecker safeModeChecker;
 
-    private AnalyzeManager analyzeManager;
+    private AnalyzeMgr analyzeMgr;
 
     private StatisticStorage statisticStorage;
 
@@ -476,7 +503,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -484,10 +511,9 @@ public class GlobalStateMgr {
     private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
     private TaskManager taskManager;
-    private InsertOverwriteJobManager insertOverwriteJobManager;
+    private InsertOverwriteJobMgr insertOverwriteJobMgr;
 
     private LocalMetastore localMetastore;
-    private NodeMgr nodeMgr;
     private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -500,13 +526,23 @@ public class GlobalStateMgr {
     private BinlogManager binlogManager;
 
     // For LakeTable
-    private CompactionManager compactionManager;
+    private CompactionMgr compactionMgr;
 
     private WarehouseManager warehouseMgr;
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
     private StorageVolumeMgr storageVolumeMgr;
+
+    private AutovacuumDaemon autovacuumDaemon;
+
+    private PipeManager pipeManager;
+    private PipeListener pipeListener;
+    private PipeScheduler pipeScheduler;
+
+    public NodeMgr getNodeMgr() {
+        return nodeMgr;
+    }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -551,7 +587,7 @@ public class GlobalStateMgr {
     }
 
     private HeartbeatMgr getHeartbeatMgr() {
-        return nodeMgr.getHeartbeatMgr();
+        return heartbeatMgr;
     }
 
     public TabletInvertedIndex getTabletInvertedIndex() {
@@ -588,8 +624,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public CompactionManager getCompactionManager() {
-        return compactionManager;
+    public CompactionMgr getCompactionMgr() {
+        return compactionMgr;
     }
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
@@ -614,16 +650,23 @@ public class GlobalStateMgr {
             this.starOSAgent = new StarOSAgent();
         }
 
+        // System Manager
+        this.nodeMgr = new NodeMgr();
+        this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+
+        // Alter Job Manager
+        this.alterJobMgr = new AlterJobMgr();
+
         this.load = new Load();
-        this.streamLoadManager = new StreamLoadManager();
-        this.routineLoadManager = new RoutineLoadManager();
+        this.streamLoadMgr = new StreamLoadMgr();
+        this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
-        this.alter = new Alter();
+
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.deleteHandler = new DeleteHandler();
+        this.deleteMgr = new DeleteMgr();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
@@ -652,10 +695,9 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         initAuth(USING_NEW_PRIVILEGE);
 
-        this.resourceGroupMgr = new ResourceGroupMgr(this);
+        this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
-        this.starRocksRepository = new StarRocksRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -663,26 +705,27 @@ public class GlobalStateMgr {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
+
         this.globalFunctionMgr = new GlobalFunctionMgr();
-        this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
-        this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
+        this.tabletScheduler = new TabletScheduler(stat);
+        this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
-                new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
                         Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
-                Config.async_load_task_pool_size,
+                Config.max_broker_load_job_concurrency,
                 Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
+
         this.loadJobScheduler = new LoadJobScheduler();
-        this.loadManager = new LoadManager(loadJobScheduler);
-        this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
-        this.loadEtlChecker = new LoadEtlChecker(loadManager);
-        this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
-        this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
-        this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        this.loadMgr = new LoadMgr(loadJobScheduler);
+        this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
+        this.loadEtlChecker = new LoadEtlChecker(loadMgr);
+        this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
+        this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
 
         this.smallFileMgr = new SmallFileMgr();
@@ -694,8 +737,8 @@ public class GlobalStateMgr {
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
-        this.analyzeManager = new AnalyzeManager();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.analyzeMgr = new AnalyzeMgr();
+        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
@@ -703,15 +746,23 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
-        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
-        this.compactionManager = new CompactionManager();
+        this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
+        this.pipeManager = new PipeManager();
+        this.pipeListener = new PipeListener(this.pipeManager);
+        this.pipeScheduler = new PipeScheduler(this.pipeManager);
 
-        this.storageVolumeMgr = new StorageVolumeMgr();
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
+            this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+            this.autovacuumDaemon = new AutovacuumDaemon();
+        } else {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+        }
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -725,6 +776,16 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
+
+        getConfigRefreshDaemon().registerListener(() -> {
+            try {
+                if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
+                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                }
+            } catch (Exception e) {
+                LOG.warn("check config failed", e);
+            }
+        });
     }
 
     public static void destroyCheckpoint() {
@@ -788,20 +849,20 @@ public class GlobalStateMgr {
         return pluginMgr;
     }
 
-    public AnalyzeManager getAnalyzeManager() {
-        return analyzeManager;
+    public AnalyzeMgr getAnalyzeMgr() {
+        return analyzeMgr;
     }
 
     public Auth getAuth() {
         return auth;
     }
 
-    public AuthenticationManager getAuthenticationManager() {
-        return authenticationManager;
+    public AuthenticationMgr getAuthenticationMgr() {
+        return authenticationMgr;
     }
 
-    public AuthorizationManager getAuthorizationManager() {
-        return authorizationManager;
+    public AuthorizationMgr getAuthorizationMgr() {
+        return authorizationMgr;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -867,8 +928,8 @@ public class GlobalStateMgr {
         return getCurrentState().getPluginMgr();
     }
 
-    public static AnalyzeManager getCurrentAnalyzeMgr() {
-        return getCurrentState().getAnalyzeManager();
+    public static AnalyzeMgr getCurrentAnalyzeMgr() {
+        return getCurrentState().getAnalyzeMgr();
     }
 
     public static StatisticStorage getCurrentStatisticStorage() {
@@ -926,16 +987,32 @@ public class GlobalStateMgr {
         return binlogManager;
     }
 
-    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
-        return insertOverwriteJobManager;
+    public InsertOverwriteJobMgr getInsertOverwriteJobMgr() {
+        return insertOverwriteJobMgr;
     }
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
     }
 
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        return nodeMgr.getWarehouseInfosFromOtherFEs();
+    }
+
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public PipeManager getPipeManager() {
+        return pipeManager;
+    }
+
+    public PipeScheduler getPipeScheduler() {
+        return pipeScheduler;
+    }
+
+    public PipeListener getPipeListener() {
+        return pipeListener;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -986,8 +1063,7 @@ public class GlobalStateMgr {
     }
 
     private void setMetaDir() {
-        this.metaDir = Config.meta_dir;
-        this.imageDir = this.metaDir + IMAGE_DIR;
+        this.imageDir = Config.meta_dir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
 
@@ -1045,14 +1121,14 @@ public class GlobalStateMgr {
         this.auth = new Auth();
         this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
         if (usingNewPrivilege) {
-            this.authenticationManager = new AuthenticationManager();
-            this.domainResolver = new DomainResolver(authenticationManager);
-            this.authorizationManager = new AuthorizationManager(this, null);
+            this.authenticationMgr = new AuthenticationMgr();
+            this.domainResolver = new DomainResolver(authenticationMgr);
+            this.authorizationMgr = new AuthorizationMgr(this, null);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
-            this.authenticationManager = null;
-            this.authorizationManager = null;
+            this.authenticationMgr = null;
+            this.authorizationMgr = null;
         }
     }
 
@@ -1066,7 +1142,7 @@ public class GlobalStateMgr {
     }
 
     private boolean needUpgradedToNewPrivilege() {
-        return !authorizationManager.isLoaded() || !authenticationManager.isLoaded();
+        return !authorizationMgr.isLoaded() || !authenticationMgr.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1076,9 +1152,6 @@ public class GlobalStateMgr {
         journalWriter = new JournalWriter(journal, journalQueue);
 
         editLog = new EditLog(journalQueue);
-        this.globalTransactionMgr.setEditLog(editLog);
-        this.idGenerator.setEditLog(editLog);
-        this.localMetastore.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -1183,10 +1256,10 @@ public class GlobalStateMgr {
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
-                    this.domainResolver.setAuthenticationManager(authenticationManager);
+                    this.domainResolver.setAuthenticationManager(authenticationMgr);
                 }
                 LOG.info("set usingNewPrivilege to true after transfer to leader");
                 usingNewPrivilege.set(true);
@@ -1197,8 +1270,8 @@ public class GlobalStateMgr {
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
-            insertOverwriteJobManager.cancelRunningJobs();
-            
+            insertOverwriteJobMgr.cancelRunningJobs();
+
             if (!isDefaultWarehouseCreated) {
                 initDefaultWarehouse();
             }
@@ -1232,6 +1305,8 @@ public class GlobalStateMgr {
             feType = oldType;
             throw t;
         }
+
+        createBuiltinStorageVolume();
     }
 
     // start all daemon threads only running on Master
@@ -1254,11 +1329,12 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        nodeMgr.startHearbeat(epoch);
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+        heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
         loadingLoadTaskScheduler.start();
-        loadManager.prepareJobs();
+        loadMgr.prepareJobs();
         loadJobScheduler.start();
         loadTimeoutChecker.start();
         loadEtlChecker.start();
@@ -1276,7 +1352,7 @@ public class GlobalStateMgr {
         // Start txn timeout checker
         txnTimeoutChecker.start();
         // Alter
-        getAlterInstance().start();
+        getAlterJobMgr().start();
         // Consistency checker
         getConsistencyChecker().start();
         // Backup handler
@@ -1298,13 +1374,16 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        pipeListener.start();
+        pipeScheduler.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
+            autovacuumDaemon.start();
         }
 
         if (Config.enable_safe_mode) {
@@ -1320,7 +1399,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1331,7 +1409,7 @@ public class GlobalStateMgr {
         // domain resolver
         domainResolver.start();
         if (RunMode.allowCreateLakeTable()) {
-            compactionManager.start();
+            compactionMgr.start();
         }
         configRefreshDaemon.start();
     }
@@ -1358,9 +1436,27 @@ public class GlobalStateMgr {
 
         startAllNodeTypeDaemonThreads();
 
+        if (!isDefaultWarehouseCreated) {
+            initDefaultWarehouse();
+        }
+
         MetricRepo.init();
 
         feType = newType;
+    }
+
+    void checkOpTypeValid() throws IOException {
+        try {
+            for (Field field : OperationType.class.getDeclaredFields()) {
+                short id = field.getShort(null);
+                if (id > OperationType.OP_TYPE_EOF) {
+                    throw new IOException("OperationType cannot use a value exceeding 20000, " +
+                            "and an error will be reported if it exceeds : " + field.getName() + " = " + id);
+                }
+            }
+        } catch (IllegalAccessException e) {
+            throw new IOException(e);
+        }
     }
 
     public void loadImage(String imageDir) throws IOException, DdlException {
@@ -1376,79 +1472,164 @@ public class GlobalStateMgr {
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+        DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
-            // ** NOTICE **: always add new code at the end
             checksum = loadVersion(dis, checksum);
-            checksum = loadHeader(dis, checksum);
-            checksum = nodeMgr.loadLeaderInfo(dis, checksum);
-            checksum = nodeMgr.loadFrontends(dis, checksum);
-            checksum = nodeMgr.loadBackends(dis, checksum);
-            checksum = localMetastore.loadDb(dis, checksum);
-            // ATTN: this should be done after load Db, and before loadAlterJob
-            localMetastore.recreateTabletInvertIndex();
-            // rebuild es state state
-            esRepository.loadTableFromCatalog();
-            starRocksRepository.loadTableFromCatalog();
+            checkOpTypeValid();
 
-            checksum = load.loadLoadJob(dis, checksum);
-            checksum = loadAlterJob(dis, checksum);
-            checksum = recycleBin.loadRecycleBin(dis, checksum);
-            checksum = VariableMgr.loadGlobalVariable(dis, checksum);
-            checksum = localMetastore.loadCluster(dis, checksum);
-            checksum = nodeMgr.loadBrokers(dis, checksum);
-            checksum = loadResources(dis, checksum);
-            checksum = exportMgr.loadExportJob(dis, checksum);
-            checksum = backupHandler.loadBackupHandler(dis, checksum, this);
-            checksum = auth.loadAuth(dis, checksum);
-            // global transaction must be replayed before load jobs v2
-            checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
-            checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-            checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
-            checksum = loadManager.loadLoadJobsV2(dis, checksum);
-            checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-            checksum = pluginMgr.loadPlugins(dis, checksum);
-            checksum = loadDeleteHandler(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = analyzeManager.loadAnalyze(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
-            checksum = auth.readAsGson(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = taskManager.loadTasks(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = catalogMgr.loadCatalogs(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = loadInsertOverwriteJobs(dis, checksum);
-            checksum = nodeMgr.loadComputeNodes(dis, checksum);
-            remoteChecksum = dis.readLong();
-            // ShardManager DEPRECATED, keep it for backward compatible
-            checksum = loadShardManager(dis, checksum);
-            remoteChecksum = dis.readLong();
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+                Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                        .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                        .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                        .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                        .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                        .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                        .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                        .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                        .put(SRMetaBlockID.AUTH, auth::load)
+                        .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                        .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                        .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                        .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                        .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                        .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                        .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                        .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                        .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                        .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                        .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                        .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                        .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                        .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                        .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                        .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                        .build();
+                try {
+                    loadHeaderV2(dis);
 
-            checksum = loadCompactionManager(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = loadStreamLoadManager(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = MVManager.getInstance().reload(dis, checksum);
-            remoteChecksum = dis.readLong();
-            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
-            loadRBACPrivilege(dis);
-            checksum = warehouseMgr.loadWarehouses(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = localMetastore.loadAutoIncrementId(dis, checksum);
-            remoteChecksum = dis.readLong();
-            // ** NOTICE **: always add new code at the end
+                    Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
+                    Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
+                    while (true) {
+                        SRMetaBlockID srMetaBlockID = entry.getKey();
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                        if (!reader.getHeader().getSrMetaBlockID().equals(srMetaBlockID)) {
+                            /*
+                              The expected read module does not match the module stored in the image,
+                              and the json chunk is skipped directly. This usually occurs in several situations.
+                              1. When the obsolete image code is deleted.
+                              2. When the new version rolls back to the old version,
+                                 the old version ignores the functions of the new version
+                             */
+                            LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                    "(expect %s actual %s)", srMetaBlockID, reader.getHeader().getSrMetaBlockID()));
+                            reader.close();
+                            continue;
+                        }
+
+                        try {
+                            SRMetaBlockLoader imageLoader = entry.getValue();
+                            imageLoader.apply(reader);
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
+                        } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                            /*
+                              The number of json expected to be read is more than the number of json actually stored
+                              in the image, which usually occurs when the module adds new functions.
+                             */
+                            LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                        } catch (SRMetaBlockException srMetaBlockException) {
+                            LOG.error("Load meta block failed ", srMetaBlockException);
+                            throw new IOException("Load meta block failed ", srMetaBlockException);
+                        } finally {
+                            reader.close();
+                        }
+                        if (iterator.hasNext()) {
+                            entry = iterator.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } catch (SRMetaBlockException e) {
+                    LOG.error("load meta block failed ", e);
+                    throw new IOException("load meta block failed ", e);
+                }
+            } else {
+                checksum = loadHeaderV1(dis, checksum);
+                checksum = nodeMgr.loadLeaderInfo(dis, checksum);
+                checksum = nodeMgr.loadFrontends(dis, checksum);
+                checksum = nodeMgr.loadBackends(dis, checksum);
+                checksum = localMetastore.loadDb(dis, checksum);
+                // ATTN: this should be done after load Db, and before loadAlterJob
+                localMetastore.recreateTabletInvertIndex();
+                // rebuild es state state
+                esRepository.loadTableFromCatalog();
+
+                checksum = load.loadLoadJob(dis, checksum);
+                checksum = loadAlterJob(dis, checksum);
+                checksum = recycleBin.loadRecycleBin(dis, checksum);
+                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
+                checksum = localMetastore.loadCluster(dis, checksum);
+                checksum = nodeMgr.loadBrokers(dis, checksum);
+                checksum = loadResources(dis, checksum);
+                checksum = exportMgr.loadExportJob(dis, checksum);
+                checksum = backupHandler.loadBackupHandler(dis, checksum, this);
+                checksum = auth.loadAuth(dis, checksum);
+                // global transaction must be replayed before load jobs v2
+                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
+                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
+                checksum = routineLoadMgr.loadRoutineLoadJobs(dis, checksum);
+                checksum = loadMgr.loadLoadJobsV2(dis, checksum);
+                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
+                checksum = pluginMgr.loadPlugins(dis, checksum);
+                checksum = loadDeleteHandler(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = analyzeMgr.loadAnalyze(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
+                checksum = auth.readAsGson(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = taskManager.loadTasks(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = catalogMgr.loadCatalogs(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadInsertOverwriteJobs(dis, checksum);
+                checksum = nodeMgr.loadComputeNodes(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ShardManager DEPRECATED, keep it for backward compatible
+                checksum = loadShardManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStreamLoadManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
+                remoteChecksum = dis.readLong();
+                globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+                loadRBACPrivilege(dis);
+                checksum = warehouseMgr.loadWarehouses(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStorageVolumes(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = pipeManager.getRepo().loadImage(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ** NOTICE **: always add new code at the end
+
+                Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
+            }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
             dis.close();
         }
-
-        Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
             LOG.warn(
@@ -1479,36 +1660,47 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                    Table table = baseTableInfo.getTable();
-                    if (table == null) {
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                        mv.setActive(false);
-                        continue;
-                    }
-                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                        MaterializedView baseMv = (MaterializedView) table;
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                        "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                                baseMv.getName(), baseMv.getId());
-                        mv.setActive(false);
-                        continue;
-                    }
-                    MvId mvId = new MvId(db.getId(), mv.getId());
-                    table.addRelatedMaterializedView(mvId);
-                    if (!table.isNativeTableOrMaterializedView()) {
-                        connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                        Sets.newHashSet(mvId)).build());
-                    }
-                }
+                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+    }
+
+    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table;
+            try {
+                table = baseTableInfo.getTable();
+            } catch (Exception e) {
+                LOG.warn("there is an exception during get table from mv base table. exception:", e);
+                continue;
+            }
+            if (table == null) {
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
+                mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableId());
+                continue;
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                MaterializedView baseMv = (MaterializedView) table;
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
+                        baseMv.getName(), baseMv.getId());
+                mv.setInactiveAndReason("base mv is not active: " + baseMv.getName());
+                continue;
+            }
+            MvId mvId = new MvId(dbId, mv.getId());
+            table.addRelatedMaterializedView(mvId);
+            if (!table.isNativeTableOrMaterializedView()) {
+                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build());
+            }
+        }
     }
 
     public long loadVersion(DataInputStream dis, long checksum) throws IOException {
@@ -1538,14 +1730,6 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadHeader(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
-            return loadHeaderV2(dis, checksum);
-        } else {
-            return loadHeaderV1(dis, checksum);
-        }
-    }
-
     public long loadHeaderV1(DataInputStream dis, long checksum) throws IOException {
         long replayedJournalId = dis.readLong();
         checksum ^= replayedJournalId;
@@ -1560,16 +1744,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadHeaderV2(DataInputStream dis, long checksum) throws IOException {
+    public void loadHeaderV2(DataInputStream dis) throws IOException {
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
-
-        checksum ^= header.getBatchEndId();
         idGenerator.setId(header.getBatchEndId());
-
         isDefaultClusterCreated = header.isDefaultClusterCreated();
-
         LOG.info("finished to replay header from image");
-        return checksum;
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
@@ -1583,9 +1762,9 @@ public class GlobalStateMgr {
 
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (USING_NEW_PRIVILEGE) {
-            this.authenticationManager = AuthenticationManager.load(dis);
-            this.authorizationManager = AuthorizationManager.load(dis, this, null);
-            this.domainResolver = new DomainResolver(authenticationManager);
+            this.authenticationMgr = AuthenticationMgr.load(dis);
+            this.authorizationMgr = AuthorizationMgr.load(dis, this, null);
+            this.domainResolver = new DomainResolver(authenticationMgr);
         }
     }
 
@@ -1634,14 +1813,14 @@ public class GlobalStateMgr {
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
-        this.deleteHandler = DeleteHandler.read(dis);
+        this.deleteMgr = DeleteMgr.read(dis);
         LOG.info("finished replay deleteHandler from image");
         return checksum;
     }
 
     public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
         try {
-            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+            this.insertOverwriteJobMgr = InsertOverwriteJobMgr.read(dis);
         } catch (EOFException e) {
             LOG.warn("no InsertOverwriteJobManager to replay.", e);
         }
@@ -1649,7 +1828,7 @@ public class GlobalStateMgr {
     }
 
     public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
-        getInsertOverwriteJobManager().write(dos);
+        getInsertOverwriteJobMgr().write(dos);
         return checksum;
     }
 
@@ -1670,14 +1849,19 @@ public class GlobalStateMgr {
     }
 
     public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
-        compactionManager = CompactionManager.loadCompactionManager(in);
-        checksum ^= compactionManager.getChecksum();
+        compactionMgr = CompactionMgr.loadCompactionManager(in);
+        checksum ^= compactionMgr.getChecksum();
         return checksum;
     }
 
     public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
-        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
-        checksum ^= streamLoadManager.getChecksum();
+        streamLoadMgr = StreamLoadMgr.loadStreamLoadManager(in);
+        checksum ^= streamLoadMgr.getChecksum();
+        return checksum;
+    }
+
+    public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
+        storageVolumeMgr.load(in);
         return checksum;
     }
 
@@ -1709,67 +1893,114 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+        try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
             // ** NOTICE **: always add new code at the end
-            checksum = saveVersion(dos, checksum);
-            checksum = saveHeader(dos, replayedJournalId, checksum);
-            checksum = nodeMgr.saveLeaderInfo(dos, checksum);
-            checksum = nodeMgr.saveFrontends(dos, checksum);
-            checksum = nodeMgr.saveBackends(dos, checksum);
-            checksum = localMetastore.saveDb(dos, checksum);
-            checksum = load.saveLoadJob(dos, checksum);
-            checksum = saveAlterJob(dos, checksum);
-            checksum = recycleBin.saveRecycleBin(dos, checksum);
-            checksum = VariableMgr.saveGlobalVariable(dos, checksum);
-            checksum = localMetastore.saveCluster(dos, checksum);
-            checksum = nodeMgr.saveBrokers(dos, checksum);
-            checksum = resourceMgr.saveResources(dos, checksum);
-            checksum = exportMgr.saveExportJob(dos, checksum);
-            checksum = backupHandler.saveBackupHandler(dos, checksum);
-            checksum = auth.saveAuth(dos, checksum);
-            checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
-            checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-            checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
-            checksum = loadManager.saveLoadJobsV2(dos, checksum);
-            checksum = smallFileMgr.saveSmallFiles(dos, checksum);
-            checksum = pluginMgr.savePlugins(dos, checksum);
-            checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = analyzeManager.saveAnalyze(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
-            checksum = auth.writeAsGson(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = taskManager.saveTasks(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = catalogMgr.saveCatalogs(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = saveInsertOverwriteJobs(dos, checksum);
-            checksum = nodeMgr.saveComputeNodes(dos, checksum);
-            dos.writeLong(checksum);
-            // ShardManager Deprecated, keep it for backward compatible
-            checksum = shardManager.saveShardManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = compactionManager.saveCompactionManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = MVManager.getInstance().store(dos, checksum);
-            dos.writeLong(checksum);
-            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
-            saveRBACPrivilege(dos);
-            checksum = warehouseMgr.saveWarehouses(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = localMetastore.saveAutoIncrementId(dos, checksum);
-            dos.writeLong(checksum);
-            // ** NOTICE **: always add new code at the end
-        }
+            if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+                try {
+                    saveVersionV2(dos);
+                    saveHeaderV2(dos);
+                    nodeMgr.save(dos);
+                    localMetastore.save(dos);
+                    alterJobMgr.save(dos);
+                    recycleBin.save(dos);
+                    VariableMgr.save(dos);
+                    resourceMgr.saveResourcesV2(dos);
+                    exportMgr.saveExportJobV2(dos);
+                    backupHandler.saveBackupHandlerV2(dos);
+                    auth.save(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
+                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                    loadMgr.saveLoadJobsV2JsonFormat(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
+                    pluginMgr.save(dos);
+                    deleteMgr.save(dos);
+                    analyzeMgr.save(dos);
+                    resourceGroupMgr.save(dos);
+                    authenticationMgr.saveV2(dos);
+                    authorizationMgr.saveV2(dos);
+                    taskManager.saveTasksV2(dos);
+                    catalogMgr.save(dos);
+                    insertOverwriteJobMgr.save(dos);
+                    compactionMgr.save(dos);
+                    streamLoadMgr.save(dos);
+                    MaterializedViewMgr.getInstance().save(dos);
+                    globalFunctionMgr.save(dos);
+                    storageVolumeMgr.save(dos);
+                } catch (SRMetaBlockException e) {
+                    LOG.error("Save meta block failed ", e);
+                    throw new IOException("Save meta block failed ", e);
+                }
 
-        long saveImageEndTime = System.currentTimeMillis();
-        LOG.info("finished save image {} in {} ms. checksum is {}",
-                curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
+                long saveImageEndTime = System.currentTimeMillis();
+                LOG.info("Finished save meta block {} in {} ms.",
+                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
+            } else {
+                long checksum = 0;
+                checksum = saveVersion(dos, checksum);
+                checksum = saveHeader(dos, replayedJournalId, checksum);
+                checksum = nodeMgr.saveLeaderInfo(dos, checksum);
+                checksum = nodeMgr.saveFrontends(dos, checksum);
+                checksum = nodeMgr.saveBackends(dos, checksum);
+                checksum = localMetastore.saveDb(dos, checksum);
+                checksum = load.saveLoadJob(dos, checksum);
+                checksum = saveAlterJob(dos, checksum);
+                checksum = recycleBin.saveRecycleBin(dos, checksum);
+                checksum = VariableMgr.saveGlobalVariable(dos, checksum);
+                checksum = localMetastore.saveCluster(dos, checksum);
+                checksum = nodeMgr.saveBrokers(dos, checksum);
+                checksum = resourceMgr.saveResources(dos, checksum);
+                checksum = exportMgr.saveExportJob(dos, checksum);
+                checksum = backupHandler.saveBackupHandler(dos, checksum);
+                checksum = auth.saveAuth(dos, checksum);
+                checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
+                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
+                checksum = routineLoadMgr.saveRoutineLoadJobs(dos, checksum);
+                checksum = loadMgr.saveLoadJobsV2(dos, checksum);
+                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+
+                checksum = pluginMgr.savePlugins(dos, checksum);
+                checksum = deleteMgr.saveDeleteHandler(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = analyzeMgr.saveAnalyze(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
+                checksum = auth.writeAsGson(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = taskManager.saveTasks(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = catalogMgr.saveCatalogs(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = saveInsertOverwriteJobs(dos, checksum);
+                checksum = nodeMgr.saveComputeNodes(dos, checksum);
+                dos.writeLong(checksum);
+                // ShardManager Deprecated, keep it for backward compatible
+                checksum = shardManager.saveShardManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = compactionMgr.saveCompactionManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = streamLoadMgr.saveStreamLoadManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = MaterializedViewMgr.getInstance().store(dos, checksum);
+                dos.writeLong(checksum);
+                globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+                saveRBACPrivilege(dos);
+                checksum = warehouseMgr.saveWarehouses(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = pipeManager.getRepo().saveImage(dos, checksum);
+                dos.writeLong(checksum);
+                // ** NOTICE **: always add new code at the end
+
+                long saveImageEndTime = System.currentTimeMillis();
+                LOG.info("finished save image {} in {} ms. checksum is {}",
+                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
+            }
+        }
     }
 
     public long saveVersion(DataOutputStream dos, long checksum) throws IOException {
@@ -1784,10 +2015,8 @@ public class GlobalStateMgr {
     }
 
     // TODO [meta-format-change]
-    public long saveVersionV2(DataOutputStream dos, long checksum) throws IOException {
-        checksum ^= FeConstants.STARROCKS_META_VERSION;
+    public void saveVersionV2(DataOutputStream dos) throws IOException {
         dos.writeInt(FeConstants.STARROCKS_META_VERSION);
-        return checksum;
     }
 
     public long saveHeader(DataOutputStream dos, long replayedJournalId, long checksum) throws IOException {
@@ -1806,17 +2035,12 @@ public class GlobalStateMgr {
     }
 
     // TODO [meta-format-change]
-    public long saveHeaderV2(DataOutputStream dos, long checksum) throws IOException {
+    public void saveHeaderV2(DataOutputStream dos) throws IOException {
         ImageHeader header = new ImageHeader();
-
         long id = idGenerator.getBatchEndId();
-        checksum ^= id;
         header.setBatchEndId(id);
-
         header.setDefaultClusterCreated(isDefaultClusterCreated);
-
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
-        return checksum;
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {
@@ -1828,8 +2052,8 @@ public class GlobalStateMgr {
 
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (USING_NEW_PRIVILEGE) {
-            this.authenticationManager.save(dos);
-            this.authorizationManager.save(dos);
+            this.authenticationMgr.save(dos);
+            this.authorizationMgr.save(dos);
         }
     }
 
@@ -1891,6 +2115,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2031,7 +2261,7 @@ public class GlobalStateMgr {
                     toJournalId, replayedJournalId.get()));
         }
 
-        streamLoadManager.cancelUnDurableTaskAfterRestart();
+        streamLoadMgr.cancelUnDurableTaskAfterRestart();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -2259,17 +2489,16 @@ public class GlobalStateMgr {
             List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
-                colSb.append(column.getName());
+                colSb.append("`" + column.getName() + "`");
                 if (!Strings.isNullOrEmpty(column.getComment())) {
-                    colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                    colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
                 }
                 colDef.add(colSb.toString());
             }
             sb.append(Joiner.on(", ").join(colDef));
             sb.append(")");
-            if (!Strings.isNullOrEmpty(view.getComment())) {
-                sb.append(" COMMENT \"").append(view.getComment()).append("\"");
-            }
+            addTableComment(sb, view);
+
             sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
@@ -2319,7 +2548,7 @@ public class GlobalStateMgr {
 
         sb.append("\n) ENGINE=");
         sb.append(table.getType() == TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
-        
+
         if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
@@ -2332,9 +2561,7 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -2404,23 +2631,43 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // enable storage cache && cache ttl
+            String partitionDuration =
+                    olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            if (partitionDuration != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
+                        .append("\" = \"")
+                        .append(partitionDuration).append("\"");
+            }
+
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
                         .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
                         .append("\" = \"");
-                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2480,6 +2727,15 @@ public class GlobalStateMgr {
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
                 }
 
+                String storageCoolDownTTL =
+                        olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+                if (storageCoolDownTTL != null) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+                            .append("\" = \"")
+                            .append(storageCoolDownTTL).append("\"");
+                }
+
                 // partition live number
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
@@ -2536,9 +2792,8 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
@@ -2550,9 +2805,8 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
@@ -2568,9 +2822,7 @@ public class GlobalStateMgr {
             }
         } else if (table.getType() == TableType.ELASTICSEARCH) {
             EsTable esTable = (EsTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = esTable.getPartitionInfo();
@@ -2605,9 +2857,7 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.HIVE) {
             HiveTable hiveTable = (HiveTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2623,17 +2873,14 @@ public class GlobalStateMgr {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
             CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2643,9 +2890,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.ICEBERG) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2655,9 +2900,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2721,12 +2964,14 @@ public class GlobalStateMgr {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
-        localMetastore.replayCreateTable(dbName, table);
+    private static void addTableComment(StringBuilder sb, Table table) {
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
+        }
     }
 
-    public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
-        localMetastore.replayCreateMaterializedView(dbName, materializedView);
+    public void replayCreateTable(CreateTableInfo info) {
+        localMetastore.replayCreateTable(info);
     }
 
     // Drop table
@@ -2788,6 +3033,18 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
+    }
+
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {
@@ -2861,36 +3118,32 @@ public class GlobalStateMgr {
         return this.consistencyChecker;
     }
 
-    public Alter getAlterInstance() {
-        return this.alter;
+    public AlterJobMgr getAlterJobMgr() {
+        return this.alterJobMgr;
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {
-        return (SchemaChangeHandler) this.alter.getSchemaChangeHandler();
+        return (SchemaChangeHandler) this.alterJobMgr.getSchemaChangeHandler();
     }
 
     public MaterializedViewHandler getRollupHandler() {
-        return (MaterializedViewHandler) this.alter.getMaterializedViewHandler();
-    }
-
-    public SystemHandler getClusterHandler() {
-        return (SystemHandler) this.alter.getClusterHandler();
+        return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
     }
 
     public BackupHandler getBackupHandler() {
         return this.backupHandler;
     }
 
-    public DeleteHandler getDeleteHandler() {
-        return this.deleteHandler;
+    public DeleteMgr getDeleteMgr() {
+        return this.deleteMgr;
     }
 
     public Load getLoadInstance() {
         return this.load;
     }
 
-    public LoadManager getLoadManager() {
-        return loadManager;
+    public LoadMgr getLoadMgr() {
+        return loadMgr;
     }
 
     public LeaderTaskExecutor getPendingLoadTaskScheduler() {
@@ -2901,12 +3154,12 @@ public class GlobalStateMgr {
         return loadingLoadTaskScheduler;
     }
 
-    public RoutineLoadManager getRoutineLoadManager() {
-        return routineLoadManager;
+    public RoutineLoadMgr getRoutineLoadMgr() {
+        return routineLoadMgr;
     }
 
-    public StreamLoadManager getStreamLoadManager() {
-        return streamLoadManager;
+    public StreamLoadMgr getStreamLoadMgr() {
+        return streamLoadMgr;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
@@ -2981,10 +3234,6 @@ public class GlobalStateMgr {
         return this.esRepository;
     }
 
-    public StarRocksRepository getStarRocksRepository() {
-        return this.starRocksRepository;
-    }
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -3011,7 +3260,6 @@ public class GlobalStateMgr {
 
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
-        localMetastore.setEditLog(editLog);
     }
 
     public void setJournal(Journal journal) {
@@ -3139,16 +3387,22 @@ public class GlobalStateMgr {
     }
 
     public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
-        this.alter.replayRenameMaterializedView(log);
+        this.alterJobMgr.replayRenameMaterializedView(log);
     }
 
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
-        this.alter.replayChangeMaterializedViewRefreshScheme(log);
+        this.alterJobMgr.replayChangeMaterializedViewRefreshScheme(log);
     }
 
     public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
-        this.alter.replayAlterMaterializedViewProperties(opCode, log);
+        this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
+
+
+    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
+        this.alterJobMgr.replayAlterMaterializedViewStatus(log);
+    }
+
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
@@ -3268,11 +3522,11 @@ public class GlobalStateMgr {
      * (for client is the ALTER CLUSTER command).
      */
     public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
-        return this.alter.processAlterCluster(stmt);
+        return this.alterJobMgr.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
-        this.alter.getClusterHandler().cancel(stmt);
+        this.alterJobMgr.getClusterHandler().cancel(stmt);
     }
 
     // Change current warehouse of this session.
@@ -3289,9 +3543,13 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                        ctx.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
         }
         ctx.setCurrentCatalog(newCatalogName);
         ctx.setDatabase("");
@@ -3316,9 +3574,13 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                            ctx.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                }
             }
             ctx.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
@@ -3331,16 +3593,12 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
-        } else {
-            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
+        try {
+            Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
         }
 
         ctx.setDatabase(dbName);
@@ -3646,8 +3904,8 @@ public class GlobalStateMgr {
             // in both cases, we need a definite upgrade, so we mark the managers of
             // new privilege framework as unloaded to trigger upgrade process.
             LOG.info("set authenticationManager and authorizationManager as unloaded because of old auth journal");
-            authenticationManager.setLoaded(false);
-            authorizationManager.setLoaded(false);
+            authenticationMgr.setLoaded(false);
+            authorizationMgr.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3712,17 +3970,17 @@ public class GlobalStateMgr {
         // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationManager = new AuthenticationManager();
-        this.authorizationManager = new AuthorizationManager(this, null);
+        this.authenticationMgr = new AuthenticationMgr();
+        this.authorizationMgr = new AuthorizationMgr(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationManager);
+        domainResolver.setAuthenticationManager(authenticationMgr);
     }
 
     // entry of checking tablets operation
@@ -3757,17 +4015,18 @@ public class GlobalStateMgr {
 
     public void clearExpiredJobs() {
         try {
-            loadManager.removeOldLoadJob();
+            loadMgr.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
         }
+
         try {
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {
             LOG.warn("export manager remove old export jobs failed", t);
         }
         try {
-            deleteHandler.removeOldDeleteInfo();
+            deleteMgr.removeOldDeleteInfo();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }
@@ -3777,7 +4036,7 @@ public class GlobalStateMgr {
             LOG.warn("transaction manager remove expired txns failed", t);
         }
         try {
-            routineLoadManager.cleanOldRoutineLoadJobs();
+            routineLoadMgr.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
         }
@@ -3787,7 +4046,7 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
-            streamLoadManager.cleanOldStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks(false);
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }
@@ -3822,5 +4081,21 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public void createBuiltinStorageVolume() {
+        try {
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
+            if (!builtinStorageVolumeId.isEmpty()) {
+                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
+            }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
+        } catch (DdlException | AlreadyExistsException e) {
+            LOG.warn("Failed to create or update builtin storage volume", e);
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
+        }
     }
 }

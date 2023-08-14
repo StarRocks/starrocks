@@ -87,14 +87,25 @@ public class UpdateAnalyzer {
             }
         }
 
-        if (updateStmt.getWherePredicate() == null) {
-            if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
-                // use partial update if:
-                // 1. Columns updated are less than 4
-                // 2. The proportion of columns updated is less than 30%
-                // 3. No where predicate in update stmt
-                updateStmt.setUsePartialUpdate();
-            } else {
+        if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+            // use partial update by column
+            updateStmt.setUsePartialUpdate();
+        } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
+            // decide by default rules
+            if (updateStmt.getWherePredicate() == null) {
+                if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
+                    // use partial update if:
+                    // 1. Columns updated are less than 4
+                    // 2. The proportion of columns updated is less than 30%
+                    // 3. No where predicate in update stmt
+                    updateStmt.setUsePartialUpdate();
+                } else {
+                    throw new SemanticException("must specify where clause to prevent full table update");
+                }
+            }
+        } else {
+            // when var `partial_update_mode` == row, use full columns update instead of partial update
+            if (updateStmt.getWherePredicate() == null) {
                 throw new SemanticException("must specify where clause to prevent full table update");
             }
         }
@@ -140,6 +151,7 @@ public class UpdateAnalyzer {
                 Expr expr = col.materializedColumnExpr();
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
+                selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (!updateStmt.usePartialUpdate() || col.isKey()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
@@ -165,6 +177,34 @@ public class UpdateAnalyzer {
 
             SelectListItem item = mcToItem.get(column);
             Expr orginExpr = item.getExpr();
+
+            ExpressionAnalyzer.analyzeExpression(orginExpr,
+                new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                    table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                        tableName, null)).collect(Collectors.toList()))), session);
+
+            // check if all the expression refers are sepecfied in
+            // partial update mode
+            if (updateStmt.usePartialUpdate()) {
+                List<SlotRef> checkSlots = Lists.newArrayList();
+                orginExpr.collect(SlotRef.class, checkSlots);
+                int matchCount = 0;
+                if (checkSlots.size() != 0) {
+                    for (SlotRef slot : checkSlots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        for (Column assignColumn : assignColumnList) {
+                            if (assignColumn.equals(refColumn)) {
+                                ++matchCount;
+                                break;
+                            }
+                        }
+                    }
+                }
+    
+                if (matchCount != checkSlots.size()) {
+                    throw new SemanticException("All ref Column must be sepecfied in partial update mode");
+                }
+            }
 
             List<Expr> outputExprs = Lists.newArrayList();
             for (Column col : table.getBaseSchema()) {

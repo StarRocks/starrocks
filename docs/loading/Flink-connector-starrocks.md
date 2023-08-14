@@ -2,6 +2,10 @@
 
 This topic describes how to load data from Apache Flink® to StarRocks.
 
+> **NOTICE**
+>
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Overview
 
 The flink-connector-jdbc tool provided by Apache Flink® may not meet your performance requirements in certain scenarios. Therefore we provide a new connector named flink-connector-starrocks, which can cache data and then load data at a time by using [Stream Load](./StreamLoad.md).
@@ -37,7 +41,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
             StarRocksSink.sink(
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")
@@ -75,7 +79,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .build(),
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")

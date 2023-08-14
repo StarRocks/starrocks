@@ -173,6 +173,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                     auto col = _context.tablet_schema->column(i);
                     if (col.is_auto_increment()) {
+                        /*
+                            The auto increment id set here is inconsistent with the id in
+                            full tablet schema. The id here is indicate the offset id of
+                            auto increment column in partial segment file.
+                        */
                         _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                         break;
                     }
@@ -188,6 +193,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                 auto col = _context.tablet_schema->column(i);
                 if (col.is_auto_increment()) {
+                    // same above
                     _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                     break;
                 }
@@ -470,10 +476,10 @@ std::string HorizontalRowsetWriter::_flush_state_to_string() {
 }
 
 std::string HorizontalRowsetWriter::_error_msg() {
-    std::string msg =
-            strings::Substitute("UNKNOWN flush chunk state:$0, tablet:$1 txn:$2 #seg:$3 #delfile:$4 #upsert:$5 #del:$6",
-                                _flush_state_to_string(), _context.tablet_id, _context.txn_id, _num_segment,
-                                _num_delfile, _num_rows_written, _num_rows_del);
+    std::string msg = strings::Substitute(
+            "UNKNOWN flush chunk state:$0, tablet:$1 txn:$2 #seg:$3 #delfile:$4 #uptfile:$5 #upsert:$6 #del:$7",
+            _flush_state_to_string(), _context.tablet_id, _context.txn_id, _num_segment, _num_delfile, _num_uptfile,
+            _num_rows_written, _num_rows_del);
     LOG(WARNING) << msg;
     return msg;
 }
@@ -586,7 +592,9 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
+                                          _context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());

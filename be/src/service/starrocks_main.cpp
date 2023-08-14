@@ -65,12 +65,13 @@
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
+#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
 #include "util/uid_util.h"
 
-#if !_GLIBCXX_USE_CXX11_ABI
+#if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
 #endif
 
@@ -99,10 +100,10 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     };
     std::string slevel = boost::algorithm::to_upper_copy(s);
     Aws::Utils::Logging::LogLevel level = Aws::Utils::Logging::LogLevel::Warn;
-    for (int idx = 0; idx < sizeof(levels) / sizeof(levels[0]); idx++) {
-        auto s = Aws::Utils::Logging::GetLogLevelName(levels[idx]);
+    for (auto& idx : levels) {
+        auto s = Aws::Utils::Logging::GetLogLevelName(idx);
         if (s == slevel) {
-            level = levels[idx];
+            level = idx;
             break;
         }
     }
@@ -128,16 +129,10 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
+    google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
-        exit(-1);
-    }
-
-    if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
-        fprintf(stderr,
-                "Environment variable TCMALLOC_HEAP_LIMIT_MB is not set,"
-                " maybe you forgot to replace bin directory\n");
         exit(-1);
     }
 
@@ -185,52 +180,17 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+#ifdef FIU_ENABLE
+    if (!starrocks::failpoint::init_failpoint_from_conf(std::string(getenv("STARROCKS_HOME")) +
+                                                        "/conf/failpoint.json")) {
+        fprintf(stderr, "fail to init failpoint from json file. ignore it...");
+    }
+#endif
+
 #if defined(ENABLE_STATUS_FAILED)
     // read range of source code for inject errors.
     starrocks::Status::access_directory_of_inject();
 #endif
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-    // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
-    // not backed by physical pages and do not contribute towards memory consumption.
-    //
-    //  2020-08-31: Disable aggressive decommit,  which will decrease the performance of
-    //  memory allocation and deallocation.
-    // MallocExtension::instance()->SetNumericProperty("tcmalloc.aggressive_memory_decommit", 1);
-
-    // Change the total TCMalloc thread cache size if necessary.
-    if (!MallocExtension::instance()->SetNumericProperty("tcmalloc.max_total_thread_cache_bytes",
-                                                         starrocks::config::tc_max_total_thread_cache_bytes)) {
-        fprintf(stderr, "Failed to change TCMalloc total thread cache size.\n");
-        return -1;
-    }
-#endif
-
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
-        starrocks::CacheOptions cache_options;
-        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-
-        std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
-        }
-        cache_options.meta_path = starrocks::config::block_cache_meta_path;
-        cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
-        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
-        cache_options.engine = starrocks::config::block_cache_engine;
-        EXIT_IF_ERROR(cache->init(cache_options));
-    }
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
@@ -238,6 +198,9 @@ int main(int argc, char** argv) {
         std::cerr << "enable aws sdk logging trace. log level = " << Aws::Utils::Logging::GetLogLevelName(level)
                   << "\n";
         aws_sdk_options.loggingOptions.logLevel = level;
+    }
+    if (starrocks::config::aws_sdk_enable_compliant_rfc3986_encoding) {
+        aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
 
@@ -283,89 +246,15 @@ int main(int argc, char** argv) {
     // Add logger for thrift internal.
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
-    std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
-
-    // init jdbc driver manager
-    EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
-                                                                    "/lib/jdbc_drivers"));
-
-    if (!starrocks::BackendOptions::init()) {
-        exit(-1);
-    }
-
-    auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init_mem_tracker());
-
-    // Init and open storage engine.
-    starrocks::EngineOptions options;
-    options.store_paths = paths;
-    options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
-    options.need_write_cluster_id = !as_cn;
-    starrocks::StorageEngine* engine = nullptr;
-
-    auto st = starrocks::StorageEngine::open(options, &engine);
-    if (!st.ok()) {
-        LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-        exit(-1);
-    }
-
-    // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
-
-    // Start all background threads of storage engine.
-    // SHOULD be called after exec env is initialized.
-    EXIT_IF_ERROR(engine->start_bg_threads());
-
-    // Begin to start Heartbeat services
-    starrocks::ThriftRpcHelper::setup(exec_env);
-    auto res = starrocks::create_heartbeat_server(exec_env, starrocks::config::heartbeat_service_port,
-                                                  starrocks::config::heartbeat_service_thread_count);
-    CHECK(res.ok()) << res.status();
-    auto heartbeat_thrift_server = std::move(res).value();
-
-    starrocks::Status status = heartbeat_thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
-        starrocks::shutdown_logging();
-        exit(1);
-    }
-
-#ifdef USE_STAROS
-    starrocks::init_staros_worker();
-#endif
-
     // cn need to support all ops for cloudnative table, so just start_be
-    start_be();
-
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache::instance()->shutdown();
-    }
+    starrocks::start_be(paths, as_cn);
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
         exit(0);
     }
 
-    daemon->stop();
-    daemon.reset();
-
-#ifdef USE_STAROS
-    starrocks::shutdown_staros_worker();
-#endif
-
     Aws::ShutdownAPI(aws_sdk_options);
-
-    heartbeat_thrift_server->stop();
-    heartbeat_thrift_server->join();
-
-    exec_env->agent_server()->stop();
-    engine->stop();
-    delete engine;
-    starrocks::ExecEnv::destroy(exec_env);
 
     return 0;
 }

@@ -24,7 +24,7 @@ netstat -tunlp | grep 9030
 netstat -tunlp | grep 9010
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy FE nodes. For detailed instructions, see [Deploy StarRocks - Start the FE service](../deployment/deploy_manually.md#step-1-start-the-fe-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy FE nodes. For detailed instructions, see [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node).
 
 ### BE ports
 
@@ -44,7 +44,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy BE nodes. For detailed instructions, see [Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#step-3-start-the-be-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy BE nodes. For detailed instructions, see [Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#step-2-start-the-be-service).
 
 ### CN ports
 
@@ -64,7 +64,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-4-optional-start-the-cn-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-3-optional-start-the-cn-service).
 
 ## Hostnames
 
@@ -353,6 +353,6 @@ If your StarRocks cluster has a high load concurrency, we recommend you set the 
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
-echo 60000 > /proc/sys/vm/max_map_count
+echo 262144 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
 ```

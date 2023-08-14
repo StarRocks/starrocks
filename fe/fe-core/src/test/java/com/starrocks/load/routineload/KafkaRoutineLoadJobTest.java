@@ -186,7 +186,7 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
-    public void testDivideRoutineLoadJob(@Injectable RoutineLoadManager routineLoadManager,
+    public void testDivideRoutineLoadJob(@Injectable RoutineLoadMgr routineLoadManager,
                                          @Mocked RoutineLoadDesc routineLoadDesc)
             throws UserException {
 
@@ -198,7 +198,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
             }
@@ -231,7 +231,7 @@ public class KafkaRoutineLoadJobTest {
 
     @Test
     public void testProcessTimeOutTasks(@Injectable GlobalTransactionMgr globalTransactionMgr,
-                                        @Injectable RoutineLoadManager routineLoadManager) {
+                                        @Injectable RoutineLoadMgr routineLoadManager) {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         RoutineLoadJob routineLoadJob =
@@ -240,7 +240,7 @@ public class KafkaRoutineLoadJobTest {
         long maxBatchIntervalS = 10;
         new Expectations() {
             {
-                globalStateMgr.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
             }
@@ -250,7 +250,8 @@ public class KafkaRoutineLoadJobTest {
         Map<Integer, Long> partitionIdsToOffset = Maps.newHashMap();
         partitionIdsToOffset.put(100, 0L);
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(new UUID(1, 1), 1L,
-                maxBatchIntervalS * 2 * 1000, System.currentTimeMillis(), partitionIdsToOffset);
+                maxBatchIntervalS * 2 * 1000, System.currentTimeMillis(), partitionIdsToOffset,
+                routineLoadJob.getTaskTimeoutSecond() * 1000);
         kafkaTaskInfo.setExecuteStartTimeMs(System.currentTimeMillis() - maxBatchIntervalS * 2 * 1000 - 1);
         routineLoadTaskInfoList.add(kafkaTaskInfo);
 

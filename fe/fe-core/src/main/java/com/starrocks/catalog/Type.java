@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
@@ -735,34 +736,69 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isArrayType();
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canJoinOn();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canJoinOn() && ((MapType) this).getValueType().canJoinOn();
+        }
+        if (isStructType()) {
+            for (StructField sf : ((StructType) this).getFields()) {
+                if (!sf.getType().canJoinOn()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canGroupBy() {
-        // TODO(mofei) support group by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canGroupBy();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canGroupBy() && ((MapType) this).getValueType().canGroupBy();
+        }
+        if (isStructType()) {
+            for (StructField sf : ((StructType) this).getFields()) {
+                if (!sf.getType().canGroupBy()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canOrderBy();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canPartitionBy();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
@@ -796,8 +832,17 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
-    public static final String ONLY_METRIC_TYPE_ERROR_MSG =
-            "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
+    public static final String NOT_SUPPORT_JOIN_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json not support join";
+
+    public static final String NOT_SUPPORT_GROUP_BY_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json not support group-by";
+
+    public static final String NOT_SUPPORT_AGG_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support this aggregation function";
+
+    public static final String NOT_SUPPORT_ORDER_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support order-by";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
@@ -985,6 +1030,7 @@ public abstract class Type implements Cloneable {
      * fully compatible means that all possible values of this type can be represented by the other type,
      * and no null values will be produced if we cast this as the other.
      * This is closely related to the implementation by BE.
+     *
      * @TODO: the currently implementation is conservative, we can add more rules later.
      */
     public abstract boolean isFullyCompatible(Type other);
@@ -1051,20 +1097,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static boolean canCastToAsFunctionParameter(Type from, Type to) {
-        if (from.isNull()) {
-            return true;
-        } else if (from.isScalarType() && to.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
-        } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else if (from.isMapType() && to.isMapType()) {
-            return canCastTo(from, to);
-        } else {
-            return false;
-        }
-    }
-
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
@@ -1095,6 +1127,10 @@ public abstract class Type implements Cloneable {
             return true;
         } else if (from.isJsonType() && to.isArrayScalar()) {
             // now we only support cast json to one dimensional array
+            return true;
+        } else if (from.isBoolean() && to.isComplexType()) {
+            // for mock nest type with NULL value, the cast must return NULL
+            // like cast(map{1: NULL} as MAP<int, int>)
             return true;
         } else {
             return false;
@@ -1425,12 +1461,16 @@ public abstract class Type implements Cloneable {
             return getAssignmentCompatibleType(t1, t2, false);
         }
 
-        if (t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
+        if (t1.getPrimitiveType() != PrimitiveType.INVALID_TYPE && t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
             return t1;
         }
 
         if (t1.isJsonType() || t2.isJsonType()) {
             return JSON;
+        }
+
+        if (t1.isComplexType() || t2.isComplexType()) {
+            return TypeManager.getCommonSuperType(t1, t2);
         }
 
         PrimitiveType t1ResultType = t1.getResultType().getPrimitiveType();
@@ -1649,7 +1689,7 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
-            // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
+                // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
             case LARGEINT:
             case JSON:
                 return CHARSET_UTF8;

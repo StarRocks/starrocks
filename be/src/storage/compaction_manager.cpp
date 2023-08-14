@@ -139,7 +139,6 @@ void CompactionManager::init_max_task_num(int32_t num) {
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
-    size_t erase_num = 0;
     {
         std::lock_guard lg(_candidates_mutex);
         // TODO(meegoo): This is very inefficient to implement, just to fix bug, it will refactor later
@@ -148,7 +147,6 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
                     iter = _compaction_candidates.erase(iter);
-                    erase_num++;
                     has_erase = true;
                     break;
                 }
@@ -302,7 +300,7 @@ void CompactionManager::_dispatch_worker() {
     }
 }
 
-void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
+void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet) {
     std::lock_guard lock(_dispatch_mutex);
     auto iter = _dispatch_map.find(tablet->tablet_id());
     if (iter != _dispatch_map.end()) {
@@ -316,7 +314,7 @@ void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
     }
 }
 
-void CompactionManager::update_tablet(TabletSharedPtr tablet) {
+void CompactionManager::update_tablet(const TabletSharedPtr& tablet) {
     if (tablet == nullptr) {
         return;
     }

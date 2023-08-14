@@ -19,15 +19,11 @@ package com.starrocks.transaction;
 
 public class TransactionNotFoundException extends TransactionException {
 
-    public TransactionNotFoundException(String msg) {
-        super(msg);
+    public TransactionNotFoundException(String label) {
+        super("transaction not found: " + label);
     }
 
-    public TransactionNotFoundException(String msg, Throwable e) {
-        super(msg, e);
-    }
-
-    public TransactionNotFoundException(String msg, long transactionId) {
-        super(msg, transactionId);
+    public TransactionNotFoundException(long transactionId) {
+        super("transaction not found: " + transactionId, transactionId);
     }
 }

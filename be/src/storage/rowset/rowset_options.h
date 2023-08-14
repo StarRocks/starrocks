@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/olap_runtime_range_pruner.h"
@@ -66,6 +67,7 @@ public:
     RuntimeState* runtime_state = nullptr;
     RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
@@ -74,6 +76,8 @@ public:
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
+
+    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 };
 
 } // namespace starrocks

@@ -80,7 +80,7 @@ public class View extends Table {
     // Corresponds to Hive's viewExpandedText, but is not identical to the SQL
     // Hive would produce in view creation.
     @SerializedName(value = "i")
-    private String inlineViewDef;
+    String inlineViewDef;
 
     // for persist
     @SerializedName(value = "m")

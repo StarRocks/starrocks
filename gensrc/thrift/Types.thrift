@@ -135,6 +135,9 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
+
+    // only used for structs; for output use
+    4: optional bool is_named
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -383,10 +386,12 @@ enum TTableType {
     ICEBERG_TABLE,
     HUDI_TABLE,
     JDBC_TABLE,
+    PAIMON_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,
-    DELTALAKE_TABLE
+    DELTALAKE_TABLE,
+    TABLE_FUNCTION_TABLE
 }
 
 enum TKeysType {
@@ -430,6 +435,7 @@ struct TTabletCommitInfo {
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
+    5: optional list<i64> valid_dict_collected_versions
 }
 
 struct TTabletFailInfo {
@@ -454,15 +460,17 @@ enum TOpType {
     DELETE,
 }
 
+struct TUserRoles {
+    1: optional list<i64> role_id_list
+}
+
 // represent a user identity
 struct TUserIdentity {
     1: optional string username
     2: optional string host
     3: optional bool is_domain
-}
-
-struct TUserRoles {
-    1: optional list<i64> role_id_list
+    4: optional bool is_ephemeral
+    5: optional TUserRoles current_role_ids
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
@@ -506,8 +514,15 @@ struct TBinlogOffset {
 enum TPartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
+    COLUMN_UPDATE_MODE = 4;
+}
+
+enum TRunMode {
+    SHARED_NOTHING = 0;
+    SHARED_DATA = 1;
+    HYBRID = 2;
 }
 
 struct TIcebergColumnStats {

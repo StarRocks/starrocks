@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
 # where to put generated binaries
@@ -39,6 +43,7 @@ add_library(Webserver STATIC
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+  action/memory_metrics_action.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp

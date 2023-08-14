@@ -60,6 +60,16 @@ ShortKeyIndexGroupIterator ShortKeyIndexDecoderGroup::back() const {
     return {this, num_blocks() - 1};
 }
 
+template <bool is_lower_bound>
+ShortKeyIndexGroupIterator ShortKeyIndexDecoderGroup::_seek(const Slice& key) const {
+    auto comparator = [](const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs) < 0; };
+    if constexpr (is_lower_bound) {
+        return std::lower_bound(begin(), end(), key, comparator);
+    } else {
+        return std::upper_bound(begin(), end(), key, comparator);
+    }
+}
+
 ShortKeyIndexGroupIterator ShortKeyIndexDecoderGroup::lower_bound(const Slice& key) const {
     return _seek<true>(key);
 }
@@ -74,16 +84,6 @@ Slice ShortKeyIndexDecoderGroup::key(ssize_t ordinal) const {
     _find_position(ordinal, &decoder_id, &block_id_in_decoder);
 
     return _sk_index_decoders[size_t(decoder_id)]->key(block_id_in_decoder);
-}
-
-template <bool lower_bound>
-ShortKeyIndexGroupIterator ShortKeyIndexDecoderGroup::_seek(const Slice& key) const {
-    auto comparator = [](const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs) < 0; };
-    if constexpr (lower_bound) {
-        return std::lower_bound(begin(), end(), key, comparator);
-    } else {
-        return std::upper_bound(begin(), end(), key, comparator);
-    }
 }
 
 void ShortKeyIndexDecoderGroup::_find_position(ssize_t ordinal, ssize_t* decoder_id,

@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
@@ -57,9 +58,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -71,6 +71,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.Arrays;
 import java.util.List;
@@ -90,6 +91,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_STORAGE_TYPE = "storage_type";
     public static final String PROPERTIES_STORAGE_MEDIUM = "storage_medium";
     public static final String PROPERTIES_STORAGE_COOLDOWN_TIME = "storage_cooldown_time";
+    public static final String PROPERTIES_STORAGE_COOLDOWN_TTL = "storage_cooldown_ttl";
     // for 1.x -> 2.x migration
     public static final String PROPERTIES_VERSION_INFO = "version_info";
     // for restore
@@ -118,6 +120,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
+
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
 
     public static final String PROPERTIES_BINLOG_ENABLE = "binlog_enable";
@@ -141,8 +145,6 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
-    public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
-    public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
@@ -150,6 +152,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+    public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
+    public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
@@ -158,24 +162,46 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+    public static final String PROPERTIES_DATACACHE_ENABLE = "datacache.enable";
+    public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
+    // Materialized View properties
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
+    // Randomized start interval
+    // 0(default value): automatically chosed between [0, min(300, INTERVAL/2))
+    // -1: disable randomize, use current time as start
+    // positive value: use [0, mv_randomize_start) as random interval
+    public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
+    public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    public static DataProperty analyzeDataProperty(Map<String, String> properties,
+                                                   DataProperty inferredDataProperty,
+                                                   boolean isDefault)
             throws AnalysisException {
+        String mediumKey = PROPERTIES_STORAGE_MEDIUM;
+        String coolDownTimeKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        String coolDownTTLKey = PROPERTIES_STORAGE_COOLDOWN_TTL;
+        if (isDefault) {
+            mediumKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_MEDIUM;
+            coolDownTimeKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+            coolDownTTLKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TTL;
+        }
+
         if (properties == null) {
-            return oldDataProperty;
+            return inferredDataProperty;
         }
 
         TStorageMedium storageMedium = null;
         long coolDownTimeStamp = DataProperty.MAX_COOLDOWN_TIME_MS;
 
         boolean hasMedium = false;
-        boolean hasCooldown = false;
+        boolean hasCooldownTime = false;
+        boolean hasCoolDownTTL = false;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (!hasMedium && key.equalsIgnoreCase(PROPERTIES_STORAGE_MEDIUM)) {
+            if (!hasMedium && key.equalsIgnoreCase(mediumKey)) {
                 hasMedium = true;
                 if (value.equalsIgnoreCase(TStorageMedium.SSD.name())) {
                     storageMedium = TStorageMedium.SSD;
@@ -184,42 +210,52 @@ public class PropertyAnalyzer {
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }
-            } else if (!hasCooldown && key.equalsIgnoreCase(PROPERTIES_STORAGE_COOLDOWN_TIME)) {
-                hasCooldown = true;
+            } else if (!hasCooldownTime && key.equalsIgnoreCase(coolDownTimeKey)) {
+                hasCooldownTime = true;
                 DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+            } else if (!hasCoolDownTTL && key.equalsIgnoreCase(coolDownTTLKey)) {
+                hasCoolDownTTL = true;
             }
         } // end for properties
 
-        if (!hasCooldown && !hasMedium) {
-            return oldDataProperty;
+        if (!hasCooldownTime && !hasMedium && !hasCoolDownTTL) {
+            return inferredDataProperty;
         }
 
-        properties.remove(PROPERTIES_STORAGE_MEDIUM);
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TIME);
-
-        if (hasCooldown && !hasMedium) {
-            throw new AnalysisException("Invalid data property. storage medium property is not found");
+        if (hasCooldownTime && hasCoolDownTTL) {
+            throw new AnalysisException("Invalid data property. "
+                    + coolDownTimeKey + " and " + coolDownTTLKey + " conflict. you can only use one of them. ");
         }
 
-        if (storageMedium == TStorageMedium.HDD && hasCooldown) {
-            throw new AnalysisException("Can not assign cooldown timestamp to HDD storage medium");
-        }
+        properties.remove(mediumKey);
+        properties.remove(coolDownTimeKey);
+        properties.remove(coolDownTTLKey);
 
-        long currentTimeMs = System.currentTimeMillis();
-        if (storageMedium == TStorageMedium.SSD && hasCooldown) {
+        if (hasCooldownTime) {
+            if (!hasMedium) {
+                throw new AnalysisException("Invalid data property. storage medium property is not found");
+            }
+            if (storageMedium == TStorageMedium.HDD) {
+                throw new AnalysisException("Can not assign cooldown timestamp to HDD storage medium");
+            }
+            long currentTimeMs = System.currentTimeMillis();
             if (coolDownTimeStamp <= currentTimeMs) {
-                throw new AnalysisException("Cooldown time should later than now");
+                throw new AnalysisException("Cooldown time should be later than now");
+            }
+
+        } else if (hasCoolDownTTL) {
+            if (!hasMedium) {
+                throw new AnalysisException("Invalid data property. storage medium property is not found");
+            }
+            if (storageMedium == TStorageMedium.HDD) {
+                throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
             }
         }
 
-        if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
+        if (storageMedium == TStorageMedium.SSD && !hasCooldownTime && !hasCoolDownTTL) {
             // set default cooldown time
-            coolDownTimeStamp = ((Config.tablet_sched_storage_cooldown_second <= 0) ||
-                    ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L <
-                            Config.tablet_sched_storage_cooldown_second)) ?
-                    DataProperty.MAX_COOLDOWN_TIME_MS :
-                    currentTimeMs + Config.tablet_sched_storage_cooldown_second * 1000L;
+            coolDownTimeStamp = DataProperty.getSsdCooldownTimeMs();
         }
 
         Preconditions.checkNotNull(storageMedium);
@@ -358,16 +394,6 @@ public class PropertyAnalyzer {
         return maxMVRewriteStaleness;
     }
 
-    public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
-        boolean forceExternalTableQueryRewrite = false;
-        if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-            forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
-                    get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
-            properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
-        }
-        return forceExternalTableQueryRewrite;
-    }
-
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
             throws AnalysisException {
         short replicationNum = oldReplicationNum;
@@ -385,7 +411,7 @@ public class PropertyAnalyzer {
 
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
-        String key = "default.";
+        String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         } else {
@@ -394,6 +420,15 @@ public class PropertyAnalyzer {
         short replicationNum = Short.parseShort(properties.get(key));
         checkReplicationNum(replicationNum);
         return replicationNum;
+    }
+
+    public static String analyzeResourceGroup(Map<String, String> properties) {
+        String resourceGroup = null;
+        if (properties != null && properties.containsKey(PROPERTIES_RESOURCE_GROUP)) {
+            resourceGroup = properties.get(PROPERTIES_RESOURCE_GROUP);
+            properties.remove(PROPERTIES_RESOURCE_GROUP);
+        }
+        return resourceGroup;
     }
 
     private static void checkReplicationNum(short replicationNum) throws AnalysisException {
@@ -410,9 +445,10 @@ public class PropertyAnalyzer {
             }
         } else {
             if (replicationNum > backendIds.size()) {
-                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
-                        ", You can change this default by setting the replication_num table properties.");
+                throw new AnalysisException("Table replication num should be less than " +
+                        "of equal to the number of available BE nodes. "
+                        + "You can change this default by setting the replication_num table properties. "
+                        + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
             }
         }
     }
@@ -575,7 +611,7 @@ public class PropertyAnalyzer {
         return bfFpp;
     }
 
-    public static String analyzeColocate(Map<String, String> properties) throws AnalysisException {
+    public static String analyzeColocate(Map<String, String> properties) {
         String colocateGroup = null;
         if (properties != null && properties.containsKey(PROPERTIES_COLOCATE_WITH)) {
             colocateGroup = properties.get(PROPERTIES_COLOCATE_WITH);
@@ -773,7 +809,7 @@ public class PropertyAnalyzer {
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
         } else {
-            tableInfo = new BaseTableInfo(catalogName, dbName, table.getTableIdentifier());
+            tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
 
         return Pair.create(tableInfo, table);
@@ -899,7 +935,7 @@ public class PropertyAnalyzer {
                 }
 
                 analyzeForeignKeyUniqueConstraint(parentTable, parentColumns, analyzedTable);
-                
+
                 List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
                         parentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
@@ -926,34 +962,34 @@ public class PropertyAnalyzer {
         return foreignKeyConstraints;
     }
 
-    // analyze enable storage cache and cache ttl, and whether allow async write back
-    public static StorageCacheInfo analyzeStorageCacheInfo(Map<String, String> properties) throws AnalysisException {
-        boolean enableStorageCache =
-                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
-
-        long storageCacheTtlS = 0;
-        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
-        if (isTtlSet) {
-            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-            if (storageCacheTtlS < -1) {
-                throw new AnalysisException("Storage cache ttl should not be less than -1");
-            }
-            if (!enableStorageCache && storageCacheTtlS != 0) {
-                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
-            }
-            if (enableStorageCache && storageCacheTtlS == 0) {
-                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
-            }
-        } else {
-            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
-        }
+    public static DataCacheInfo analyzeDataCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableDataCache = analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableStorageCache && enableAsyncWriteBack) {
+        if (!enableDataCache && enableAsyncWriteBack) {
             throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
         }
 
-        return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+        return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
+
+    public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+
 }

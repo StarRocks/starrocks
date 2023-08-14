@@ -28,8 +28,9 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.zip.CRC32;
 
@@ -280,39 +281,103 @@ public class DppUtilsTest {
         CRC32 hashValue = new CRC32();
         ByteBuffer bf = null;
 
-        bf = DppUtils.getHashValue(null, DataTypes.IntegerType);
+        EtlJobConfig.EtlColumn column = new EtlJobConfig.EtlColumn("k1", "INT", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(null, DataTypes.IntegerType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(558161692L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue(new Byte((byte) 1), DataTypes.ByteType);
+        column = new EtlJobConfig.EtlColumn("k1", "TINYINT", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(new Byte((byte) 1), DataTypes.ByteType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(2768625435L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue(new Short((short) 1), DataTypes.ShortType);
+        column = new EtlJobConfig.EtlColumn("k1", "SMALLINT", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(new Short((short) 1), DataTypes.ShortType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(1489118142L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue(new Integer(1), DataTypes.IntegerType);
+        column = new EtlJobConfig.EtlColumn("k1", "INT", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(new Integer(1), DataTypes.IntegerType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(2583214201L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue(new Long(1), DataTypes.LongType);
+        column = new EtlJobConfig.EtlColumn("k1", "BIGINT", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(new Long(1), DataTypes.LongType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(2844319735L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue("12345abcde", DataTypes.StringType);
+        column = new EtlJobConfig.EtlColumn("k1", "VARCHAR", true, true, "NONE", "0", 100, 0, 0);
+        bf = DppUtils.getHashValue("12345abcde", DataTypes.StringType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(603981213L, hashValue.getValue());
 
-        bf = DppUtils.getHashValue(new Boolean(true), DataTypes.BooleanType);
+        column = new EtlJobConfig.EtlColumn("k1", "BOOLEAN", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(new Boolean(true), DataTypes.BooleanType, column);
         hashValue.reset();
         hashValue.update(bf.array(), 0, bf.limit());
         Assert.assertEquals(2768625435L, hashValue.getValue());
+
+        // date
+        column = new EtlJobConfig.EtlColumn("k1", "DATE", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(Date.valueOf("2023-07-11"), DataTypes.DateType, column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(791129379L, hashValue.getValue());
+
+        // datetime
+        column = new EtlJobConfig.EtlColumn("k1", "DATETIME", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(Timestamp.valueOf("2023-07-11 12:12:12"), DataTypes.TimestampType, column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(541277948L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DATETIME", true, true, "NONE", "0", 0, 0, 0);
+        bf = DppUtils.getHashValue(Timestamp.valueOf("2023-07-11 12:12:12.123456"), DataTypes.TimestampType, column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(2559661226L, hashValue.getValue());
+
+        // decimal
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMALV2", true, true, "NONE", "0", 0, 27, 9);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(27, 9), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(3199857971L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMALV2", true, true, "NONE", "0", 0, 20, 3);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(20, 3), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(3199857971L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMAL32", true, true, "NONE", "0", 0, 9, 3);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(9, 3), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(2853177042L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMAL64", true, true, "NONE", "0", 0, 18, 6);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(18, 6), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(563521641L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMAL128", true, true, "NONE", "0", 0, 38, 9);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(38, 9), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(4291267310L, hashValue.getValue());
+
+        column = new EtlJobConfig.EtlColumn("k1", "DECIMAL128", true, true, "NONE", "0", 0, 27, 9);
+        bf = DppUtils.getHashValue(new BigDecimal("1.234"), DecimalType.apply(27, 9), column);
+        hashValue.reset();
+        hashValue.update(bf.array(), 0, bf.limit());
+        Assert.assertEquals(3199857971L, hashValue.getValue());
     }
 }

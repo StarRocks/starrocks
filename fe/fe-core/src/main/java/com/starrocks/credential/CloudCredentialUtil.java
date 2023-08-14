@@ -14,6 +14,7 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.catalog.JDBCResource;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.logging.log4j.LogManager;
@@ -44,11 +45,19 @@ public class CloudCredentialUtil {
 
         // Mask for gcs's credential
         doMask(properties, CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY);
+
+        // Mask for aliyun's credential
+        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY);
+        doMask(properties, CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
         properties.remove(AzureCloudConfigurationFactory.AZURE_PATH_KEY);
+        // Remove password of jdbc catalog
+        properties.remove(JDBCResource.PASSWORD);
+
+        // do mask
         properties.computeIfPresent(configKey, (key, value) -> {
             if (value.length() <= 4) {
                 return MASK_CLOUD_CREDENTIAL_WORDS;

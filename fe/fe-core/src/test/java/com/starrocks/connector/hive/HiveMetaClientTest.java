@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
@@ -158,8 +157,28 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
         Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
 
+        // Check blank delimiter
+        Map<String, String> blankParameters = new HashMap<>();
+        blankParameters.put("field.delim", "");
+        blankParameters.put("line.delim", "");
+        blankParameters.put("collection.delim", "");
+        blankParameters.put("mapkey.delim", "");
+        TextFileFormatDesc blankDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(blankParameters);
+        Assert.assertEquals("\001", blankDesc.getFieldDelim());
+        Assert.assertEquals("\n", blankDesc.getLineDelim());
+        Assert.assertEquals("\002", blankDesc.getCollectionDelim());
+        Assert.assertEquals("\003", blankDesc.getMapkeyDelim());
+
+        // Check is using OpenCSVSerde
+        Map<String, String> openCSVParameters = new HashMap<>();
+        openCSVParameters.put("separatorChar", ",");
+        TextFileFormatDesc openCSVDesc = HiveMetastoreApiConverter.toTextFileFormatDesc(openCSVParameters);
+        Assert.assertEquals(",", openCSVDesc.getFieldDelim());
+        Assert.assertEquals("\n", openCSVDesc.getLineDelim());
+        Assert.assertEquals("\002", openCSVDesc.getCollectionDelim());
+        Assert.assertEquals("\003", openCSVDesc.getMapkeyDelim());
+
         // Check is using custom delimiter
-        StorageDescriptor customSd = new StorageDescriptor();
         Map<String, String> parameters = new HashMap<>();
         parameters.put("field.delim", ",");
         parameters.put("line.delim", "\004");
@@ -170,6 +189,21 @@ public class HiveMetaClientTest {
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());
         Assert.assertEquals(":", customDesc.getMapkeyDelim());
+    }
+
+    @Test
+    public void testDropTable(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.dropTable("hive_db", "hive_table", anyBoolean, anyBoolean);
+                result = any;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        client.dropTable("hive_db", "hive_table");
     }
 }
 

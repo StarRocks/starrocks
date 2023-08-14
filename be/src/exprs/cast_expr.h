@@ -151,6 +151,22 @@ private:
     std::vector<std::unique_ptr<Expr>> _field_casts;
 };
 
+// cast NULL OR Boolean to ComplexType
+// For example.
+//  cast map{1: NULL} to map<int, ARRAY<int>>
+class MustNullExpr final : public Expr {
+public:
+    MustNullExpr(const TExprNode& node) : Expr(node) {}
+
+    MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
+
+    ~MustNullExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new MustNullExpr(*this)); }
+};
+
 /**
  * Cast other type to string without float, double, string
  */
@@ -176,5 +192,8 @@ struct CastToString {
 };
 
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column);
+
+// cast column[idx] to coresponding json type.
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);
 
 } // namespace starrocks

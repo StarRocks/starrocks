@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -68,7 +69,7 @@ public class HudiMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(

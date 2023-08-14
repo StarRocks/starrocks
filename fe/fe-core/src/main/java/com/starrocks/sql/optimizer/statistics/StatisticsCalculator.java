@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -47,7 +48,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -72,11 +72,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -105,6 +107,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -121,13 +124,10 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -202,10 +202,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Projection projection = node.getProjection();
         if (projection != null) {
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
-            for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
-                ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
-                statisticsBuilder.addColumnStatistic(columnRefOperator,
-                        ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                statisticsBuilder.addColumnStatistic(entry.getKey(),
+                        ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
             }
 
         }
@@ -232,6 +231,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitLogicalTableFunctionTableScan(LogicalTableFunctionTableScanOperator node, ExpressionContext context) {
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
     public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
@@ -242,9 +246,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
-        long tableRowCount = getTableRowCount(table, node);
+        long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         if (tableRowCount <= 1) {
             builder.setTableRowCountMayInaccurate(true);
         }
@@ -336,6 +340,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    @Override
+    public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = ((PaimonTable) table).getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate());
+            context.setStatistics(stats);
+        }
+
+        return visitOperator(node, context);
+    }
+
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {
         return computeHMSTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
@@ -389,39 +415,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
         }
     }
-
-    private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
-                .stream().map(Column::getName).collect(Collectors.toList());
-        List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
-        Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
-
-        Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
-
-        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
-            ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
-                columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
-            } else {
-                columnStatistic = columnStatisticList.get(i);
-            }
-            builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
-        }
-
-        return builder;
-    }
-
+    
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                     int outputRowCount) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         builder.setOutputRowCount(outputRowCount);
 
         context.setStatistics(builder.build());
@@ -455,7 +453,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalSchemaScan(LogicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -465,7 +464,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -474,7 +474,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -483,7 +484,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -517,7 +519,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
-            optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+
+            if (optimizerContext.getDumpInfo() != null) {
+                optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+            }
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo instanceof RangePartitionInfo) {
@@ -566,76 +571,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return null;
     }
 
-    private long getTableRowCount(Table table, Operator node) {
-        if (table.isNativeTableOrMaterializedView()) {
-            OlapTable olapTable = (OlapTable) table;
-            List<Partition> selectedPartitions;
-            if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
-                    node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
-                return 1;
-            } else if (node.isLogical()) {
-                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
-            } else {
-                PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
-            }
-            long rowCount = 0;
-
-            BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
-            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-
-                // The basicStatsMeta.getUpdateRows() interface can get the number of
-                // loaded rows in the table since the last statistics update. But this number is at the table level.
-                // So here we can count the number of partitions that have changed since the last statistics update,
-                // and then evenly distribute the number of updated rows at the table level to the partition boundaries
-                // The purpose of this is to make the statistics of the number of rows more accurate.
-                // For example, a large amount of data LOAD may cause the number of rows to change greatly.
-                // This leads to very inaccurate row counts.
-                int partitionCountModifiedAfterLastAnalyze = 0;
-                for (Partition partition : table.getPartitions()) {
-                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                        partitionCountModifiedAfterLastAnalyze++;
-                    }
-                }
-
-                for (Partition partition : selectedPartitions) {
-                    long partitionRowCount;
-                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
-                            .getTableStatistic(table.getId(), partition.getId());
-                    if (tableStatistic.equals(TableStatistic.unknown())) {
-                        partitionRowCount = partition.getRowCount();
-                    } else {
-                        partitionRowCount = tableStatistic.getRowCount();
-                    }
-                    if (partitionCountModifiedAfterLastAnalyze > 0) {
-                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                        if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
-                            partitionRowCount += basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
-                        }
-                    }
-                    rowCount += partitionRowCount;
-                    optimizerContext.getDumpInfo()
-                            .addPartitionRowCount(table, partition.getName(), partitionRowCount);
-                }
-            } else {
-                for (Partition partition : selectedPartitions) {
-                    rowCount += partition.getRowCount();
-                    optimizerContext.getDumpInfo()
-                            .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
-                }
-            }
-            // Currently, after FE just start, the row count of table is always 0.
-            // Explicitly set table row count to 1 to make our cost estimate work.
-            return Math.max(rowCount, 1);
-        }
-
-        return 1;
-    }
-
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
         return computeProjectNode(context, node.getColumnRefMap());
@@ -643,7 +578,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
         return computeProjectNode(context, node.getColumnRefMap());
     }
 
@@ -1368,14 +1302,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
-
-        // The statistics of producer and children are equal theoretically, but statistics of children
-        // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
-                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
-            Preconditions.checkState(false, "Impossible cte statistics");
-        }
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
@@ -1383,7 +1309,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Projection projection = node.getProjection();
             if (projection != null) {
                 Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
-                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -1395,7 +1320,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         // None children, may force CTE, use the statistics of producer
-        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+        Preconditions.checkState(produceStatisticsOp.isPresent(),
+                "cannot obtain cte statistics for %s", node);
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -25,6 +26,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -42,6 +44,9 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
+    protected boolean canUseAnyColumn;
+    protected boolean canUseMinMaxCountOpt;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -54,6 +59,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.columnAccessPaths = ImmutableList.of();
 
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
@@ -76,6 +82,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         }
     }
 
+    public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
+        this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
+                scanOperator.getPredicate(), scanOperator.getProjection());
+        this.canUseAnyColumn = scanOperator.getCanUseAnyColumn();
+        this.canUseMinMaxCountOpt = scanOperator.getCanUseMinMaxCountOpt();
+    }
+
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
     }
@@ -92,6 +105,22 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return colRefToColumnMetaMap;
     }
 
+    public boolean getCanUseAnyColumn() {
+        return canUseAnyColumn;
+    }
+
+    public void setCanUseAnyColumn(boolean canUseAnyColumn) {
+        this.canUseAnyColumn = canUseAnyColumn;
+    }
+
+    public boolean getCanUseMinMaxCountOpt() {
+        return canUseMinMaxCountOpt;
+    }
+
+    public void setCanUseMinMaxCountOpt(boolean canUseMinMaxCountOpt) {
+        this.canUseMinMaxCountOpt = canUseMinMaxCountOpt;
+    }
+
     public Table getTable() {
         return table;
     }
@@ -102,6 +131,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) throws AnalysisException {
         throw new AnalysisException("Operation setScanOperatorPredicates(...) is not supported by this ScanOperator.");
+    }
+
+    public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+        this.columnAccessPaths = ImmutableList.copyOf(columnAccessPaths);
+    }
+
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return columnAccessPaths;
     }
 
     @Override

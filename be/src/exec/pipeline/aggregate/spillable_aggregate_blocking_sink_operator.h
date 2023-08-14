@@ -28,7 +28,7 @@ public:
     template <class... Args>
     SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
             : AggregateBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
-                                            "spillable_aggregate_block_sink_operator") {}
+                                            "spillable_aggregate_blocking_sink") {}
 
     ~SpillableAggregateBlockingSinkOperator() override = default;
 
@@ -41,11 +41,24 @@ public:
     Status prepare(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void mark_need_spill() override {
-        Operator::mark_need_spill();
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
     }
+
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
+        if (chunk && !chunk->is_empty()) {
+            if (_aggregator->hash_map_variant().need_expand(chunk->num_rows())) {
+                return chunk->memory_usage() + _aggregator->hash_map_memory_usage();
+            }
+            return chunk->memory_usage();
+        }
+        return 0;
+    }
+
+private:
+    bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);

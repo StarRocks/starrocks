@@ -56,6 +56,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -266,9 +267,21 @@ public class ColumnDef implements ParseNode {
         return typeDef.getType();
     }
 
+    public void analyze(boolean isOlap, boolean isInternalCatalog, String engineName) throws AnalysisException {
+        if (isInternalCatalog) {
+            if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                // prevent not null for external table
+                throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                        "Column %s is not nullable, You can rebuild the external table and " +
+                        "We strongly recommend that you use catalog to access external data", name));
+            }
+        }
+        analyze(isOlap);
+    }
+
     public void analyze(boolean isOlap) throws AnalysisException {
         if (name == null || typeDef == null) {
-            throw new AnalysisException("No column name or column type in column definition.");
+            throw new AnalysisException("No column name or column type in column definition");
         }
         FeNameFormat.checkColumnName(name);
 

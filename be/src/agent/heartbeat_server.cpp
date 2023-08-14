@@ -77,8 +77,15 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE."
                           << "host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
-                          << ", counter:" << google::COUNTER;
+                          << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
+#ifndef USE_STAROS
+    if (master_info.run_mode == TRunMode::SHARED_DATA) {
+        // TODO: log fatal?
+        LOG_EVERY_N(ERROR, 12)
+                << "This program is not compiled with SHARED_DATA support, but FE is running in SHARED_DATA mode!";
+    }
+#endif
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
     res.status().to_thrift(&heartbeat_result.status);
@@ -117,6 +124,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
+        if (StorageEngine::instance()->get_store_num() != 0) {
+            heartbeat_result.backend_info.__set_is_set_storage_path(true);
+        } else {
+            heartbeat_result.backend_info.__set_is_set_storage_path(false);
+        }
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
@@ -205,9 +217,11 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
     // Check cluster id
     if (curr_master_info->cluster_id == -1) {
-        LOG(INFO) << "Received first heartbeat. updating cluster id";
         // write and update cluster id
-        RETURN_IF_ERROR(_olap_engine->set_cluster_id(master_info.cluster_id));
+        if (_olap_engine->get_need_write_cluster_id()) {
+            LOG(INFO) << "Received first heartbeat. updating cluster id";
+            RETURN_IF_ERROR(_olap_engine->set_cluster_id(master_info.cluster_id));
+        }
     }
 
     if (master_info.__isset.heartbeat_flags) {

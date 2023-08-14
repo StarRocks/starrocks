@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -62,13 +61,19 @@ public class PruneScanColumnRule extends TransformationRule {
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
-
+        boolean canUseAnyColumn = false;
         if (outputColumns.size() == 0) {
             outputColumns.add(Utils.findSmallestColumnRef(
                     new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
+            canUseAnyColumn = true;
+        }
+
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
+            scanOperator.setCanUseAnyColumn(canUseAnyColumn);
             return Collections.emptyList();
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
@@ -78,13 +83,14 @@ public class PruneScanColumnRule extends TransformationRule {
 
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
-                        .setColRefToColumnMetaMap(ImmutableMap.copyOf(newColumnRefMap)).build();
+                        .setColRefToColumnMetaMap(newColumnRefMap).build();
+                newScanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+                scanOperator.setCanUseAnyColumn(canUseAnyColumn);
                 Operator newScanOperator =
                         builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
-
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             }
         }

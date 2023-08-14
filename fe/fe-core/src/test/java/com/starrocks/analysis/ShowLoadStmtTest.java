@@ -92,7 +92,8 @@ public class ShowLoadStmtTest {
     @Test
     public void testInvalidWhere() {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
-        String fallMessage = "Where clause should looks like: LABEL = \"your_load_label\", or LABEL LIKE \"matcher\",  or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\",  or compound predicate with operator AND";
+        String fallMessage = "Where clause should looks like: LABEL = \"your_load_label\", or LABEL LIKE \"matcher\","
+            + "  or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\",  or compound predicate with operator AND";
         analyzeFail("SHOW LOAD WHERE STATE = 'RUNNING'", fallMessage);
         analyzeFail("SHOW LOAD WHERE STATE != 'LOADING'", fallMessage);
         analyzeFail("SHOW LOAD WHERE STATE LIKE 'LOADING'", fallMessage);

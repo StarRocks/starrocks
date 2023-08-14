@@ -40,9 +40,9 @@ The mapping between column values and return value types is as follows:
     (k0 BIGINT NOT NULL) ENGINE=OLAP
     DUPLICATE KEY(`k0`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`k0`) BUCKETS 1
+    DISTRIBUTED BY HASH(`k0`)
     PROPERTIES(
-        "replication_num" = "1",
+        "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
     ```

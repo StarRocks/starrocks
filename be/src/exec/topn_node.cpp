@@ -204,14 +204,14 @@ Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status TopNNode::close(RuntimeState* state) {
+void TopNNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     _chunks_sorter = nullptr;
 
     _sort_exec_exprs.close(state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
@@ -236,7 +236,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(runtime_profile(), runtime_state()->instance_mem_tracker());
+    _chunks_sorter->setup_runtime(state, runtime_profile(), runtime_state()->instance_mem_tracker());
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
@@ -290,12 +290,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     // spill components
     // TODO: avoid create spill channel when when disable spill
 
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
 
     // spill process operator
-    if (runtime_state()->enable_spill() && _limit < 0 && !is_partition_topn) {
+    if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0 && !is_partition_topn) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
@@ -380,7 +381,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                        LocalPartitionTopnSourceOperatorFactory>(context, is_partition_topn, need_merge,
                                                                                 enable_parallel_merge);
     } else {
-        if (runtime_state()->enable_spill() && _limit < 0) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
             if (enable_parallel_merge) {
                 operators_source_with_sort =
                         _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,

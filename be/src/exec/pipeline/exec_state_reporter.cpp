@@ -42,11 +42,11 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
+                                                                            RuntimeProfile* profile,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
-    auto* profile = runtime_state->runtime_profile();
     DCHECK(profile != nullptr);
     auto* exec_env = fragment_ctx->runtime_state()->exec_env();
     DCHECK(exec_env != nullptr);
@@ -66,7 +66,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             runtime_state->update_report_load_status(&params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->is_report_profile()) {
+        if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
         }
@@ -144,18 +144,25 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     TReportExecStatusResult res;
     Status rpc_status;
 
-    VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
     try {
         try {
             coord->reportExecStatus(res, params);
         } catch (TTransportException& e) {
-            LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen();
+            TTransportException::TTransportExceptionType type = e.getType();
+            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
+                // if not TIMED_OUT, retry
+                rpc_status = coord.reopen();
 
-            if (!rpc_status.ok()) {
-                return rpc_status;
+                if (!rpc_status.ok()) {
+                    return rpc_status;
+                }
+                coord->reportExecStatus(res, params);
+            } else {
+                std::stringstream msg;
+                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
+                LOG(WARNING) << msg.str();
+                rpc_status = Status::InternalError(msg.str());
             }
-            coord->reportExecStatus(res, params);
         }
 
         rpc_status = Status(res.status);
@@ -247,18 +254,25 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
     TMVReportEpochResponse res;
     Status rpc_status;
 
-    VLOG_ROW << "debug: report_epoch params is " << apache::thrift::ThriftDebugString(params).c_str();
     try {
         try {
             coord->mvReport(res, params);
         } catch (TTransportException& e) {
-            LOG(WARNING) << "Retrying mvReport: " << e.what();
-            rpc_status = coord.reopen();
+            TTransportException::TTransportExceptionType type = e.getType();
+            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
+                // if not TIMED_OUT, retry
+                rpc_status = coord.reopen();
 
-            if (!rpc_status.ok()) {
-                return rpc_status;
+                if (!rpc_status.ok()) {
+                    return rpc_status;
+                }
+                coord->mvReport(res, params);
+            } else {
+                std::stringstream msg;
+                msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
+                LOG(WARNING) << msg.str();
+                rpc_status = Status::InternalError(msg.str());
             }
-            coord->mvReport(res, params);
         }
 
         rpc_status = Status::OK();
@@ -284,7 +298,7 @@ ExecStateReporter::ExecStateReporter() {
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    _thread_pool->submit_func(std::move(report_task));
+    (void)_thread_pool->submit_func(std::move(report_task));
 }
 
 } // namespace starrocks::pipeline

@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -43,6 +44,7 @@ import java.io.IOException;
 
 public abstract class RoutineLoadProgress implements Writable {
 
+    @SerializedName("s")
     protected LoadDataSourceType loadDataSourceType;
     protected boolean isTypeRead = false;
 

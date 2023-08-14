@@ -22,7 +22,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
@@ -33,6 +32,11 @@ class RandomAccessFile;
 
 class ORCHdfsFileStream : public orc::InputStream {
 public:
+    struct StripeInformation {
+        uint64_t offset;
+        uint64_t length;
+    };
+
     // |file| must outlive ORCHdfsFileStream
     ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream);
 
@@ -67,15 +71,21 @@ public:
     bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
     void clearIORanges() override;
     void setIORanges(std::vector<IORange>& io_ranges) override;
+    void setStripes(std::vector<StripeInformation>&& stripes);
 
 private:
-    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
+    void doRead(void* buf, uint64_t length, uint64_t offset);
     bool canUseCacheBuffer(uint64_t offset, uint64_t length);
+    uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
 
     RandomAccessFile* _file;
     uint64_t _length;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
     io::SharedBufferedInputStream* _sb_stream;
+
+    bool _tiny_stripe_read = false;
+    uint64_t _last_stripe_index = 0;
+    std::vector<StripeInformation> _stripes;
 };
 } // namespace starrocks

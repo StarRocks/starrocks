@@ -59,3 +59,8 @@
     lhs = std::move(varname).value();
 
 #define ASSIGN_OR_ABORT(lhs, rhs) ASSIGN_OR_ABORT_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
+
+namespace starrocks {
+class Chunk;
+void assert_chunk_equals(const Chunk& chunk1, const Chunk& chunk2);
+} // namespace starrocks

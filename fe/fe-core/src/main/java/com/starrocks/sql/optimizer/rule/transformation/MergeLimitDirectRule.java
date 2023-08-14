@@ -19,17 +19,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule AGGREGATE = new MergeLimitDirectRule(OperatorType.LOGICAL_AGGR);
@@ -39,6 +35,7 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final MergeLimitDirectRule DELTALAKE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final MergeLimitDirectRule FILE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final MergeLimitDirectRule PAIMON_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
@@ -50,6 +47,8 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule FILTER = new MergeLimitDirectRule(OperatorType.LOGICAL_FILTER);
     public static final MergeLimitDirectRule TABLE_FUNCTION =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
+    public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)
@@ -59,19 +58,7 @@ public class MergeLimitDirectRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
-        Operator op = input.inputAt(0).getOp();
-        // Merging limit into AggregateOperator with multi distinct aggregations prohibits
-        // RewriteMultiDistinctByCTERule from transform such a AggregateOperator into MulticastSink+HashJoin or
-        // MulticastSink+NestLoopJoin Plan.
-        if (op instanceof LogicalAggregationOperator) {
-            LogicalAggregationOperator aggOp = op.cast();
-            List<CallOperator> distinctAggOperatorList = aggOp.getAggregations().values().stream()
-                    .filter(CallOperator::isDistinct).collect(Collectors.toList());
-            boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
-            return (!hasMultiColumns || distinctAggOperatorList.size() > 1) && limit.isLocal();
-        } else {
-            return limit.isLocal();
-        }
+        return limit.isLocal();
     }
 
     @Override

@@ -33,6 +33,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_O
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
@@ -58,6 +59,7 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
 
         // Try to build azure blob storage
         AzureBlobCloudCredential blob = new AzureBlobCloudCredential(
+                properties.getOrDefault(AZURE_BLOB_ENDPOINT, ""),
                 properties.getOrDefault(AZURE_BLOB_STORAGE_ACCOUNT, storageAccount),
                 properties.getOrDefault(AZURE_BLOB_SHARED_KEY, ""),
                 properties.getOrDefault(AZURE_BLOB_CONTAINER, container),

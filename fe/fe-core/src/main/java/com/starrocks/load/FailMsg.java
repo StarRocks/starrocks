@@ -19,6 +19,7 @@ package com.starrocks.load;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -38,7 +39,9 @@ public class FailMsg implements Writable {
         TXN_UNKNOWN // cancelled because txn status is unknown
     }
 
+    @SerializedName("c")
     private CancelType cancelType;
+    @SerializedName("m")
     private String msg = "";
 
     public FailMsg() {

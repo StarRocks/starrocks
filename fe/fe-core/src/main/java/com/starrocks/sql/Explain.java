@@ -63,6 +63,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -370,7 +372,7 @@ public class Explain {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
                 sb.append("- EXCHANGE(SHUFFLE) ");
-                sb.append(desc.getColumns());
+                sb.append(desc.getExplainInfo());
             } else {
                 sb.append("- EXCHANGE(").append(exchange.getDistributionSpec()).append(")");
             }
@@ -720,6 +722,22 @@ public class Explain {
 
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
         }
+
+        @Override
+        public OperatorStr visitPhysicalTableFunctionTableScan(OptExpression optExpr, ExplainContext context) {
+            PhysicalTableFunctionTableScanOperator scan = (PhysicalTableFunctionTableScanOperator) optExpr.getOp();
+            StringBuilder sb = new StringBuilder("- TableFunctionScan[")
+                    .append(scan.getTable().toString())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+            buildCostEstimate(sb, optExpr, context.step);
+            buildCommonProperty(sb, scan, context.step);
+
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
     }
 
     public static class ExpressionPrinter
@@ -802,6 +820,11 @@ public class Explain {
             sb.append("BETWEEN ");
             sb.append(predicate.getChild(1)).append(" AND ").append(predicate.getChild(2));
             return sb.toString();
+        }
+
+        @Override
+        public String visitCloneOperator(CloneOperator operator, Void context) {
+            return "CLONE(" + print(operator.getChild(0)) + ")";
         }
 
         @Override

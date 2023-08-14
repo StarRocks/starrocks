@@ -117,7 +117,12 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
-        return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) + _num_pages * sizeof(PagePointer);
+        if (_num_pages == 0) {
+            return sizeof(OrdinalIndexReader);
+        } else {
+            return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) +
+                   (_num_pages + 1) * sizeof(uint64_t);
+        }
     }
 
     Status _do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
@@ -127,8 +132,8 @@ private:
     int _num_pages = 0;
     // _ordinals[i] = first ordinal of the i-th data page,
     std::unique_ptr<ordinal_t[]> _ordinals;
-    // _pages[i] = page pointer to the i-th data page
-    std::unique_ptr<PagePointer[]> _pages;
+    // _pages[i] = page pointer to offset of the i-th data page
+    std::unique_ptr<uint64_t[]> _pages;
 };
 
 class OrdinalPageIndexIterator {
@@ -142,7 +147,10 @@ public:
         _cur_idx++;
     }
     int32_t page_index() const { return _cur_idx; };
-    const PagePointer& page() const { return _index->_pages[_cur_idx]; };
+    PagePointer page() const {
+        return {_index->_pages[_cur_idx],
+                static_cast<uint32_t>(_index->_pages[_cur_idx + 1] - _index->_pages[_cur_idx])};
+    };
     ordinal_t first_ordinal() const { return _index->get_first_ordinal(_cur_idx); }
     ordinal_t last_ordinal() const { return _index->get_last_ordinal(_cur_idx); }
 

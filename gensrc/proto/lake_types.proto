@@ -33,11 +33,16 @@ message DelvecCacheKeyPB {
     optional DelvecPagePB delvec_page = 2;
 }
 
+message FileMetaPB {
+    optional string name = 1;
+    optional int64 size = 2;
+}
+
 message DelvecMetadataPB {
-    // map from version to delete vector file name (in uuid format)
+    // map from version to delete vector file meta
     // so that we no need to keep file name (consume more memory) in each DelvecPagePB
     // instead we can lookup delete vector file name by version saved in DelvecPagePB
-    map<int64, string> version_to_delvec = 1;
+    map<int64, FileMetaPB> version_to_file = 1;
     // from segment id to delvec page
     map<uint32, DelvecPagePB> delvecs = 2;
 }
@@ -49,6 +54,14 @@ message RowsetMetadataPB {
     optional int64 num_rows = 4;
     optional int64 data_size = 5;
     optional DeletePredicatePB delete_predicate = 6;
+}
+
+
+// At present, the lake persistent index reuses the logic of the persistent index,
+// and writes the index to the local disk, which may be upgraded and written to the remote end in the future,
+// the type is is to make it upgradable for compatibility.
+enum PersistentIndexTypePB {
+    LOCAL = 0;
 }
 
 message TabletMetadataPB {
@@ -64,8 +77,13 @@ message TabletMetadataPB {
     // The data files in the compaction input rowsets would be deleted before
     // the metadata was deleted by the GC module.
     repeated RowsetMetadataPB compaction_inputs = 8;
-    // The version of the pervious metadata whose compaction_inputs is not empty.
-    optional int64 prev_compaction_version = 9;
+    // The previous metadata version containing garbage file records, i.e,  the
+    // pervious metadata version whose "compaction_inputs" or "orphan_files" is
+    // not empty.
+    optional int64 prev_garbage_version = 9;
+    repeated FileMetaPB orphan_files = 10;
+    optional bool enable_persistent_index = 11;
+    optional PersistentIndexTypePB persistent_index_type = 12;
 }
 
 message TxnLogPB {

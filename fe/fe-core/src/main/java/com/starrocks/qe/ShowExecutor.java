@@ -45,7 +45,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
@@ -54,11 +54,9 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -69,6 +67,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -88,38 +87,48 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
-import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeCollection;
+import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
+import com.starrocks.proto.FailPointTriggerModeType;
+import com.starrocks.proto.PFailPointInfo;
+import com.starrocks.proto.PFailPointTriggerMode;
+import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PListFailPointRequest;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -130,8 +139,9 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -166,6 +176,7 @@ import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFailPointStatement;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -177,6 +188,7 @@ import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
+import com.starrocks.sql.ast.ShowProfilelistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
@@ -199,16 +211,24 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -217,6 +237,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -224,6 +245,8 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -273,6 +296,8 @@ public class ShowExecutor {
             handleShowCreateDb();
         } else if (stmt instanceof ShowProcesslistStmt) {
             handleShowProcesslist();
+        } else if (stmt instanceof ShowProfilelistStmt) {
+            handleShowProfilelist();
         } else if (stmt instanceof ShowEnginesStmt) {
             handleShowEngines();
         } else if (stmt instanceof ShowFunctionsStmt) {
@@ -369,6 +394,12 @@ public class ShowExecutor {
             handleShowStorageVolumes();
         } else if (stmt instanceof DescStorageVolumeStmt) {
             handleDescStorageVolume();
+        } else if (stmt instanceof ShowPipeStmt) {
+            handleShowPipes();
+        } else if (stmt instanceof DescPipeStmt) {
+            handleDescPipe();
+        } else if (stmt instanceof ShowFailPointStatement) {
+            handleShowFailPoint();
         } else {
             handleEmpty();
         }
@@ -379,51 +410,34 @@ public class ShowExecutor {
 
     private void handleShowAuthentication() {
         final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
-        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
-            List<List<String>> userAuthInfos = Lists.newArrayList();
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        List<List<String>> userAuthInfos = Lists.newArrayList();
 
-            Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
-            if (showAuthenticationStmt.isAll()) {
-                authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
-            } else {
-                UserAuthenticationInfo userAuthenticationInfo;
-                if (showAuthenticationStmt.getUserIdent() == null) {
-                    userAuthenticationInfo = authenticationManager
-                            .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
-                } else {
-                    userAuthenticationInfo =
-                            authenticationManager.getUserAuthenticationInfoByUserIdentity(showAuthenticationStmt.getUserIdent());
-                }
-                authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
-            }
-            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
-                UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
-                userAuthInfos.add(Lists.newArrayList(
-                        entry.getKey().toString(),
-                        userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
-                        userAuthenticationInfo.getAuthPlugin(),
-                        userAuthenticationInfo.getTextForAuthPlugin()));
-            }
-
-            resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
+        Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
+        if (showAuthenticationStmt.isAll()) {
+            authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
         } else {
-            List<List<String>> rows;
-            if (showAuthenticationStmt.isAll()) {
-                rows = GlobalStateMgr.getCurrentState().getAuth()
-                        .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
+            UserAuthenticationInfo userAuthenticationInfo;
+            if (showAuthenticationStmt.getUserIdent() == null) {
+                userAuthenticationInfo = authenticationManager
+                        .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
             } else {
-                if (showAuthenticationStmt.getUserIdent() == null) {
-                    rows = GlobalStateMgr.getCurrentState().getAuth()
-                            .getAuthenticationInfo(connectContext.getCurrentUserIdentity());
-                } else {
-                    rows = GlobalStateMgr.getCurrentState().getAuth()
-                            .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
-                }
+                userAuthenticationInfo =
+                        authenticationManager.getUserAuthenticationInfoByUserIdentity(
+                                showAuthenticationStmt.getUserIdent());
             }
-
-            resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
+            authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
         }
+        for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
+            UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
+            userAuthInfos.add(Lists.newArrayList(
+                    entry.getKey().toString(),
+                    userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
+                    userAuthenticationInfo.getAuthPlugin(),
+                    userAuthenticationInfo.getTextForAuthPlugin()));
+        }
+
+        resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
     }
 
     private void handleShowComputeNodes() {
@@ -439,7 +453,7 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, dbName);
 
         List<MaterializedView> materializedViews = Lists.newArrayList();
-        List<Pair<OlapTable, MaterializedIndex>> singleTableMVs = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
         db.readLock();
         try {
             PatternMatcher matcher = null;
@@ -455,39 +469,45 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
-                        mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = baseTableInfo.getTable();
-                            // TODO: external table should check table action after AuthorizationManager support it.
-                            if (baseTable != null && baseTable.isNativeTableOrMaterializedView() && !PrivilegeActions.
-                                    checkTableAction(connectContext, baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableName(),
-                                            PrivilegeType.SELECT)) {
+                    AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                    mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
+                        Table baseTable = baseTableInfo.getTable();
+                        // TODO: external table should check table action after AuthorizationManager support it.
+                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView()) {
+                            try {
+                                Authorizer.checkTableAction(connectContext.getCurrentUserIdentity(),
+                                        connectContext.getCurrentRoleIds(), baseTableInfo.getDbName(),
+                                        baseTableInfo.getTableName(),
+                                        PrivilegeType.SELECT);
+                            } catch (AccessDeniedException e) {
                                 baseTableHasPrivilege.set(false);
                             }
-                        });
-                        if (!baseTableHasPrivilege.get()) {
-                            continue;
                         }
-                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
-                                mvTable.getName())) {
-                            continue;
-                        }
+                    });
+                    if (!baseTableHasPrivilege.get()) {
+                        continue;
                     }
+
+                    try {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), mvTable.getName()));
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
                     materializedViews.add(mvTable);
                 } else if (Table.TableType.OLAP == table.getType()) {
                     OlapTable olapTable = (OlapTable) table;
-                    List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
+                    List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                     long baseIdx = olapTable.getBaseIndexId();
-                    for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                        if (baseIdx == mvIdx.getId()) {
+                    for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                        if (baseIdx == mvMeta.getIndexId()) {
                             continue;
                         }
-                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
+                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
                             continue;
                         }
-                        singleTableMVs.add(Pair.create(olapTable, mvIdx));
+                        singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
                 }
             }
@@ -502,10 +522,34 @@ public class ShowExecutor {
         }
     }
 
+    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
+        StringBuilder originStmtBuilder = new StringBuilder(
+                "create materialized view " + mv +
+                        " as select ");
+        String groupByString = "";
+        for (Column column : mvMeta.getSchema()) {
+            if (column.isKey()) {
+                groupByString += column.getName() + ",";
+            }
+        }
+        originStmtBuilder.append(groupByString);
+        for (Column column : mvMeta.getSchema()) {
+            if (!column.isKey()) {
+                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                        .append(column.getName()).append(")").append(",");
+            }
+        }
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                .append(groupByString);
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        return originStmtBuilder.toString();
+    }
+
     public static List<List<String>> listMaterializedViewStatus(
             String dbName,
             List<MaterializedView> materializedViews,
-            List<Pair<OlapTable, MaterializedIndex>> singleTableMVs) {
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
         List<List<String>> rowSets = Lists.newArrayList();
 
         // Now there are two MV cases:
@@ -536,6 +580,7 @@ public class ShowExecutor {
             }
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
+            resultRow.add(Optional.ofNullable(mvTable.getInactiveReason()).map(String::valueOf).orElse(null));
             // partition info
             if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
                 resultRow.add(mvTable.getPartitionInfo().getType().toString());
@@ -549,19 +594,21 @@ public class ShowExecutor {
             rowSets.add(resultRow);
         }
 
-        for (Pair<OlapTable, MaterializedIndex> singleTableMV : singleTableMVs) {
+        for (Pair<OlapTable, MaterializedIndexMeta> singleTableMV : singleTableMVs) {
             OlapTable olapTable = singleTableMV.first;
-            MaterializedIndex mvIdx = singleTableMV.second;
+            MaterializedIndexMeta mvMeta = singleTableMV.second;
 
+            long mvId = mvMeta.getIndexId();
             ArrayList<String> resultRow = new ArrayList<>();
-            MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
-            resultRow.add(String.valueOf(mvIdx.getId()));
+            resultRow.add(String.valueOf(mvId));
             resultRow.add(dbName);
-            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
+            resultRow.add(olapTable.getIndexNameById(mvId));
             // refresh_type
             resultRow.add("ROLLUP");
             // is_active
             resultRow.add(String.valueOf(true));
+            // inactive reason
+            resultRow.add("");
             // partition type
             if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
                 resultRow.add(olapTable.getPartitionInfo().getType().toString());
@@ -571,29 +618,16 @@ public class ShowExecutor {
             // task run status
             setTaskRunStatus(resultRow, null);
             // rows
-            resultRow.add(String.valueOf(mvIdx.getRowCount()));
+            if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+                Partition partition = olapTable.getPartitions().iterator().next();
+                MaterializedIndex index = partition.getIndex(mvId);
+                resultRow.add(String.valueOf(index.getRowCount()));
+            } else {
+                resultRow.add(String.valueOf(0L));
+            }
             if (mvMeta.getOriginStmt() == null) {
-                StringBuilder originStmtBuilder = new StringBuilder(
-                        "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
-                                " as select ");
-                String groupByString = "";
-                for (Column column : mvMeta.getSchema()) {
-                    if (column.isKey()) {
-                        groupByString += column.getName() + ",";
-                    }
-                }
-                originStmtBuilder.append(groupByString);
-                for (Column column : mvMeta.getSchema()) {
-                    if (!column.isKey()) {
-                        originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                                .append(column.getName()).append(")").append(",");
-                    }
-                }
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                        .append(groupByString);
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                resultRow.add(originStmtBuilder.toString());
+                String mvName = olapTable.getIndexNameById(mvId);
+                resultRow.add(buildCreateMVSql(olapTable, mvName, mvMeta));
             } else {
                 resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
                         .replaceAll("[ ]+", " "));
@@ -661,6 +695,27 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
+    private void handleShowProfilelist() {
+        ShowProfilelistStmt showStmt = (ShowProfilelistStmt) stmt;
+        List<List<String>> rowSet = Lists.newArrayList();
+
+        List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
+        Collections.reverse(profileElements);
+        Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
+        int count = 0;
+        while (iterator.hasNext()) {
+            ProfileManager.ProfileElement element = iterator.next();
+            List<String> row = element.toRow();
+            rowSet.add(row);
+            count++;
+            if (showStmt.getLimit() >= 0 && count >= showStmt.getLimit()) {
+                break;
+            }
+        }
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
     // Handle show authors
     private void handleEmpty() {
         // Only success
@@ -710,14 +765,18 @@ public class ShowExecutor {
             // like predicate
             if (showStmt.getWild() == null || showStmt.like(function.functionName())) {
                 if (showStmt.getIsGlobal()) {
-                    if (!PrivilegeActions.checkAnyActionOnGlobalFunction(connectContext, function.getFunctionId())) {
+                    try {
+                        Authorizer.checkAnyActionOnGlobalFunction(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), function);
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 } else if (!showStmt.getIsBuiltin()) {
                     Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDbName());
-                    if (!PrivilegeActions.checkAnyActionOnFunction(
-                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                            db.getId(), function.getFunctionId())) {
+                    try {
+                        Authorizer.checkAnyActionOnFunction(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), db.getFullName(), function);
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
                 }
@@ -789,15 +848,13 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
-                    continue;
-                }
-            } else {
-                if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            try {
+                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), catalogName, dbName);
+            } catch (AccessDeniedException e) {
+                continue;
             }
+
             dbNameSet.add(dbName);
         }
 
@@ -835,28 +892,23 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
-                    // check tbl privs
-                    if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+
+                    try {
                         if (tbl.isView()) {
-                            if (!PrivilegeActions.checkAnyActionOnView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
+                            Authorizer.checkAnyActionOnView(
+                                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                    new TableName(db.getFullName(), tbl.getName()));
                         } else if (tbl.isMaterializedView()) {
-                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (!PrivilegeActions.checkAnyActionOnTable(
-                                connectContext, db.getFullName(), tbl.getName())) {
-                            continue;
+                            Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
+                        } else {
+                            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
                         }
-                    } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
-                            continue;
-                        }
+                    } catch (AccessDeniedException e) {
+                        continue;
                     }
+
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
             } finally {
@@ -864,14 +916,25 @@ public class ShowExecutor {
             }
         } else {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-            PatternMatcher finalMatcher = matcher;
-            final String finalCatalogName = catalogName;
-            tableNames = tableNames.stream()
-                    .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                    .filter(tblName -> PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            finalCatalogName, dbName, tblName))
-                    .collect(Collectors.toList());
-            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+
+            for (String tableName : tableNames) {
+                if (matcher != null && !matcher.match(tableName)) {
+                    continue;
+                }
+                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
+                    continue;
+                }
+                try {
+                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), new TableName(catalogName, dbName, tableName));
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                tableMap.put(tableName, table.getMysqlType());
+            }
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -889,6 +952,7 @@ public class ShowExecutor {
         ShowTableStatusStmt showStmt = (ShowTableStatusStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
         if (db != null) {
             db.readLock();
             try {
@@ -902,15 +966,18 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    // check tbl privs
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), table.getName(),
-                            PrivPredicate.SHOW)) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
+                    }
+
+                    TTableInfo info = new TTableInfo();
+                    if (table.isNativeTableOrMaterializedView() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                        InformationSchemaDataSource.genNormalTableInfo(table, info);
+                    } else {
+                        InformationSchemaDataSource.genDefaultConfigInfo(info);
                     }
 
                     List<String> row = Lists.newArrayList();
@@ -918,11 +985,39 @@ public class ShowExecutor {
                     row.add(table.getName());
                     // Engine
                     row.add(table.getEngine());
-                    // version, ra
-                    for (int i = 0; i < 15; ++i) {
-                        row.add(null);
-                    }
-                    row.add(table.getComment());
+                    // Version
+                    row.add(null);
+                    // Row_format
+                    row.add("");
+                    // Rows
+                    row.add(String.valueOf(info.getTable_rows()));
+                    // Avg_row_length
+                    row.add(String.valueOf(info.getAvg_row_length()));
+                    // Data_length
+                    row.add(String.valueOf(info.getData_length()));
+                    // Max_data_length
+                    row.add(null);
+                    // Index_length
+                    row.add(null);
+                    // Data_free
+                    row.add(null);
+                    // Auto_increment
+                    row.add(null);
+                    // Create_time
+                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    // Update_time
+                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    // Check_time
+                    row.add(null);
+                    // Collation
+                    row.add(InformationSchemaDataSource.UTF8_GENERAL_CI);
+                    // Checksum
+                    row.add(null);
+                    // Create_options
+                    row.add("");
+                    // Comment
+                    row.add(table.getDisplayComment());
+
                     rows.add(row);
                 }
             } finally {
@@ -963,6 +1058,11 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+        }
+        String storageVolumeId = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfDb(db.getId());
+        if (!Strings.isNullOrEmpty(storageVolumeId)) {
+            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
+            createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
@@ -1010,8 +1110,9 @@ public class ShowExecutor {
 
         // Partition column names
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
-            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+            createTableSql.append("\nPARTITION BY ( ")
+                    .append(String.join(", ", table.getPartitionColumnNames()))
+                    .append(" )");
         }
 
         // Location
@@ -1019,13 +1120,15 @@ public class ShowExecutor {
         if (table.isHiveTable() || table.isHudiTable()) {
             location = ((HiveMetaStoreTable) table).getTableLocation();
         } else if (table.isIcebergTable()) {
-            location = ((IcebergTable) table).getTableLocation();
+            location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {
-            location = ((DeltaLakeTable) table).getTableLocation();
+            location = table.getTableLocation();
+        } else if (table.isPaimonTable()) {
+            location = table.getTableLocation();
         }
 
         if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
         }
 
         List<List<String>> rows = Lists.newArrayList();
@@ -1036,42 +1139,13 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType()) {
-            case TINYINT:
-                sb.append("tinyint(4)");
-                break;
-            case SMALLINT:
-                sb.append("smallint(6)");
-                break;
-            case INT:
-                sb.append("int(11)");
-                break;
-            case BIGINT:
-                sb.append("bigint(20)");
-                break;
-            case FLOAT:
-                sb.append("float");
-                break;
-            case DOUBLE:
-                sb.append("double");
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMALV2:
-                sb.append("decimal");
-                break;
-            case DATE:
-            case DATETIME:
-                sb.append("datetime");
-                break;
-            case CHAR:
-            case VARCHAR:
-                sb.append("varchar(1048576)");
-                break;
-            default:
-                sb.append("binary(1048576)");
-        }
+        sb.append(column.getType().toSql());
         sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+        }
+
         return sb.toString();
     }
 
@@ -1083,7 +1157,35 @@ public class ShowExecutor {
         try {
             Table table = db.getTable(showStmt.getTable());
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                } else {
+                    // For Sync Materialized View, it is a mv index inside OLAP table,
+                    // so we can not get it from database.
+                    for (Table tbl : db.getTables()) {
+                        if (tbl.getType() == Table.TableType.OLAP) {
+                            OlapTable olapTable = (OlapTable) tbl;
+                            List<MaterializedIndexMeta> visibleMaterializedViews =
+                                    olapTable.getVisibleIndexMetas();
+                            for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
+                                    if (mvMeta.getOriginStmt() == null) {
+                                        String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                                mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                    } else {
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
+                                                "utf8", "utf8_general_ci"));
+                                    }
+                                    resultSet =
+                                            new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                }
             }
 
             List<String> createTableStmt = Lists.newArrayList();
@@ -1177,7 +1279,7 @@ public class ShowExecutor {
                             defaultValue,
                             aggType,
                             "",
-                            col.getComment()));
+                            col.getDisplayComment()));
                 } else {
                     // Field Type Null Key Default Extra
                     rows.add(Lists.newArrayList(columnName,
@@ -1300,7 +1402,7 @@ public class ShowExecutor {
                 .map(Enum::name)
                 .collect(Collectors.toSet());
         List<List<Comparable>> loadInfos =
-                globalStateMgr.getLoadManager().getLoadJobInfosByDb(dbId, showStmt.getLabelValue(),
+                globalStateMgr.getLoadMgr().getLoadJobInfosByDb(dbId, showStmt.getLabelValue(),
                         showStmt.isAccurateMatch(),
                         statesValue);
 
@@ -1348,7 +1450,7 @@ public class ShowExecutor {
         // if job exists
         List<RoutineLoadJob> routineLoadJobList;
         try {
-            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadManager()
+            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                     .getJob(showRoutineLoadStmt.getDbFullName(),
                             showRoutineLoadStmt.getName(),
                             showRoutineLoadStmt.isIncludeHistory());
@@ -1357,14 +1459,16 @@ public class ShowExecutor {
             throw new AnalysisException(e.getMessage());
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
-        if (routineLoadJobList != null && connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+        if (routineLoadJobList != null) {
             Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
             while (iterator.hasNext()) {
                 RoutineLoadJob routineLoadJob = iterator.next();
                 try {
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            routineLoadJob.getDbFullName(),
-                            routineLoadJob.getTableName())) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(routineLoadJob.getDbFullName(),
+                                        routineLoadJob.getTableName()));
+                    } catch (AccessDeniedException e) {
                         iterator.remove();
                     }
                 } catch (MetaNotFoundException e) {
@@ -1374,7 +1478,8 @@ public class ShowExecutor {
         }
 
         if (routineLoadJobList != null) {
-            RoutineLoadFunctionalExprProvider fProvider = showRoutineLoadStmt.getFunctionalExprProvider(this.connectContext);
+            RoutineLoadFunctionalExprProvider fProvider =
+                    showRoutineLoadStmt.getFunctionalExprProvider(this.connectContext);
             rows = routineLoadJobList.parallelStream()
                     .filter(fProvider.getPredicateChain())
                     .sorted(fProvider.getOrderComparator())
@@ -1389,7 +1494,8 @@ public class ShowExecutor {
             throw new AnalysisException("There is no running job named " + showRoutineLoadStmt.getName()
                     + " in db " + showRoutineLoadStmt.getDbFullName()
                     + ". Include history? " + showRoutineLoadStmt.isIncludeHistory()
-                    + ", you can try `show all routine load job for job_name` if you want to list stopped and cancelled jobs");
+                    +
+                    ", you can try `show all routine load job for job_name` if you want to list stopped and cancelled jobs");
         }
         resultSet = new ShowResultSet(showRoutineLoadStmt.getMetaData(), rows);
     }
@@ -1401,7 +1507,7 @@ public class ShowExecutor {
         RoutineLoadJob routineLoadJob;
         try {
             routineLoadJob =
-                    GlobalStateMgr.getCurrentState().getRoutineLoadManager()
+                    GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                             .getJob(showRoutineLoadTaskStmt.getDbFullName(),
                                     showRoutineLoadTaskStmt.getJobName());
         } catch (MetaNotFoundException e) {
@@ -1423,23 +1529,15 @@ public class ShowExecutor {
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
-        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
-                // if we have no privilege, return an empty result set
-                resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
-                return;
-            }
-        } else {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                    dbFullName,
-                    tableName,
-                    PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        tableName);
-            }
+        try {
+            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds(), new TableName(dbFullName, tableName));
+        } catch (AccessDeniedException e) {
+            // if we have no privilege, return an empty result set
+            resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
+            return;
         }
+
         // get routine load task info
         rows.addAll(routineLoadJob.getTasksShowInfo());
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
@@ -1451,7 +1549,7 @@ public class ShowExecutor {
         // if task exists
         List<StreamLoadTask> streamLoadTaskList;
         try {
-            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                     .getTask(showStreamLoadStmt.getDbFullName(),
                             showStreamLoadStmt.getName(),
                             showStreamLoadStmt.isIncludeHistory());
@@ -1461,7 +1559,8 @@ public class ShowExecutor {
         }
 
         if (streamLoadTaskList != null) {
-            StreamLoadFunctionalExprProvider fProvider = showStreamLoadStmt.getFunctionalExprProvider(this.connectContext);
+            StreamLoadFunctionalExprProvider fProvider =
+                    showStreamLoadStmt.getFunctionalExprProvider(this.connectContext);
             rows = streamLoadTaskList.parallelStream()
                     .filter(fProvider.getPredicateChain())
                     .sorted(fProvider.getOrderComparator())
@@ -1495,7 +1594,7 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         long dbId = db.getId();
 
-        DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+        DeleteMgr deleteHandler = globalStateMgr.getDeleteMgr();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(dbId);
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> deleteInfo : deleteInfos) {
@@ -1579,14 +1678,13 @@ public class ShowExecutor {
                 SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
 
                 for (Table table : tables) {
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            dbName, table.getName(), PrivPredicate.SHOW)) {
+                    try {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(dbName, table.getName()));
+                    } catch (AccessDeniedException e) {
                         continue;
                     }
+
                     sortedTables.add(table);
                 }
 
@@ -1635,15 +1733,10 @@ public class ShowExecutor {
                 List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
                 totalRows.add(leftRow);
             } else {
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, tableName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                                connectContext.getQualifiedUser(),
-                                connectContext.getRemoteIP(),
-                                tableName);
-                    }
-                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                        dbName, tableName, PrivPredicate.SHOW)) {
+                try {
+                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
+                } catch (AccessDeniedException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
                             connectContext.getQualifiedUser(),
                             connectContext.getRemoteIP(),
@@ -1868,7 +1961,7 @@ public class ShowExecutor {
                             continue;
                         }
                         if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, olapTable, index);
+                            LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
                             tabletInfos.addAll(procNode.fetchComparableResult());
                         } else {
                             LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
@@ -2008,21 +2101,21 @@ public class ShowExecutor {
 
             BackupJob backupJob = (BackupJob) jobI;
 
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                // check privilege
-                List<TableRef> tableRefs = backupJob.getTableRef();
-                AtomicBoolean privilegeDeny = new AtomicBoolean(false);
-                tableRefs.forEach(tableRef -> {
-                    TableName tableName = tableRef.getName();
-                    if (!PrivilegeActions.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
-                            PrivilegeType.EXPORT)) {
-                        privilegeDeny.set(true);
-                    }
-                });
-                if (privilegeDeny.get()) {
-                    resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
-                    return;
+            // check privilege
+            List<TableRef> tableRefs = backupJob.getTableRef();
+            AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                try {
+                    Authorizer.checkTableAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            tableName.getDb(), tableName.getTbl(), PrivilegeType.EXPORT);
+                } catch (AccessDeniedException e) {
+                    privilegeDeny.set(true);
                 }
+            });
+            if (privilegeDeny.get()) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                return;
             }
 
             List<String> info = backupJob.getInfo();
@@ -2073,7 +2166,7 @@ public class ShowExecutor {
         return catalogOptional.get().getName();
     }
 
-    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeCollection.PrivilegeEntry privilegeEntry)
+    private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
             throws MetaNotFoundException {
         if (objectType.equals(ObjectType.CATALOG)) {
             CatalogPEntryObject catalogPEntryObject =
@@ -2100,13 +2193,13 @@ public class ShowExecutor {
         }
     }
 
-    private List<List<String>> privilegeToRowString(AuthorizationManager authorizationManager, GrantRevokeClause userOrRoleName,
-                                                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
-                                                            typeToPrivilegeEntryList) throws PrivilegeException {
+    private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
+                                                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
+            throws PrivilegeException {
         List<List<String>> infos = new ArrayList<>();
-        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntry
+        for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
                 : typeToPrivilegeEntryList.entrySet()) {
-            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
+            for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
                 ObjectType objectType = typeToPrivilegeEntry.getKey();
                 String catalogName;
                 try {
@@ -2143,55 +2236,48 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-            try {
-                List<List<String>> infos = new ArrayList<>();
-                if (showStmt.getRole() != null) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(showStmt.getRole());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
 
-                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
-                } else {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            List<List<String>> infos = new ArrayList<>();
+            if (showStmt.getRole() != null) {
+                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(showStmt.getRole());
+                if (granteeRole != null) {
+                    infos.add(granteeRole);
                 }
-                resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-            } catch (PrivilegeException e) {
-                throw new SemanticException(e.getMessage());
+
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                        authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
+                infos.addAll(privilegeToRowString(authorizationManager,
+                        new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
+            } else {
+                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
+                if (granteeRole != null) {
+                    infos.add(granteeRole);
+                }
+
+                Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
+                        authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
+                infos.addAll(privilegeToRowString(authorizationManager,
+                        new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
             }
-        } else {
-            List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
             resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
         }
     }
 
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            List<List<String>> infos = new ArrayList<>();
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-            List<String> roles = authorizationManager.getAllRoles();
-            roles.forEach(e -> infos.add(Lists.newArrayList(e)));
+        List<List<String>> infos = new ArrayList<>();
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        List<String> roles = authorizationManager.getAllRoles();
+        roles.forEach(e -> infos.add(Lists.newArrayList(e,
+                authorizationManager.isBuiltinRole(e) ? "true" : "false",
+                authorizationManager.getRoleComment(e))));
 
-            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-        } else {
-            List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
-            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowUser() {
@@ -2199,7 +2285,7 @@ public class ShowExecutor {
 
         ShowUserStmt showUserStmt = (ShowUserStmt) stmt;
         if (showUserStmt.isAll()) {
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             List<String> users = authorizationManager.getAllUsers();
             users.forEach(u -> rowSet.add(Lists.newArrayList(u)));
         } else {
@@ -2281,19 +2367,14 @@ public class ShowExecutor {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
-                                db.getFullName(), olapTable.getName())) {
-                            continue;
-                        }
-                    } else {
-                        // check tbl privs
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                db.getFullName(), olapTable.getName(),
-                                PrivPredicate.SHOW)) {
-                            continue;
-                        }
+
+                    try {
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(), new TableName(db.getFullName(), olapTable.getName()));
+                    } catch (AccessDeniedException e) {
+                        continue;
                     }
+
                     DynamicPartitionProperty dynamicPartitionProperty =
                             olapTable.getTableProperty().getDynamicPartitionProperty();
                     String tableName = olapTable.getName();
@@ -2373,7 +2454,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeJob() {
-        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
+        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
@@ -2391,7 +2472,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeStatus() {
-        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getAnalyzeStatusMap().values());
         List<List<String>> rows = Lists.newArrayList();
         statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
@@ -2410,7 +2491,7 @@ public class ShowExecutor {
     }
 
     private void handleShowBasicStatsMeta() {
-        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getBasicStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (BasicStatsMeta meta : metas) {
@@ -2428,7 +2509,7 @@ public class ShowExecutor {
     }
 
     private void handleShowHistogramStatsMeta() {
-        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getHistogramStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (HistogramStatsMeta meta : metas) {
@@ -2459,11 +2540,17 @@ public class ShowExecutor {
         CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
         List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
                 .filter(row -> {
-                            if (globalStateMgr.isUsingNewPrivilege() &&
-                                    !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
-                                return PrivilegeActions.checkAnyActionOnOrInCatalog(
-                                        connectContext.getCurrentUserIdentity(),
-                                        connectContext.getCurrentRoleIds(), row.get(0));
+                            if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
+
+                                try {
+                                    Authorizer.checkAnyActionOnOrInCatalog(
+                                            connectContext.getCurrentUserIdentity(),
+                                            connectContext.getCurrentRoleIds(), row.get(0));
+                                } catch (AccessDeniedException e) {
+                                    return false;
+                                }
+
+                                return true;
                             }
                             return true;
                         }
@@ -2484,7 +2571,12 @@ public class ShowExecutor {
 
     // show cluster statement
     private void handleShowClusters() {
-
+        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
+        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
+        List<List<String>> rowSet = warehouse.getClusterInfo().stream()
+                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
     private List<List<String>> doPredicate(ShowStmt showStmt,
@@ -2535,7 +2627,7 @@ public class ShowExecutor {
         // Comment
         String comment = catalog.getComment();
         if (comment != null) {
-            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+            createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
         }
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
         CloudCredentialUtil.maskCloudCredential(clonedConfig);
@@ -2547,7 +2639,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowStorageVolumes() {
+    private void handleShowStorageVolumes() throws DdlException {
         ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) stmt;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
@@ -2560,17 +2652,173 @@ public class ShowExecutor {
         }
         PatternMatcher finalMatcher = matcher;
         storageVolumeNames = storageVolumeNames.stream()
-                .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                // TODO: check privilege
-                .collect(Collectors.toList());
+                .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
+                .filter(storageVolumeName -> {
+                                try {
+                                    Authorizer.checkAnyActionOnStorageVolume(connectContext.getCurrentUserIdentity(),
+                                            connectContext.getCurrentRoleIds(), storageVolumeName);
+                                } catch (AccessDeniedException e) {
+                                    return false;
+                                }
+                                return true;
+                            }
+                ).collect(Collectors.toList());
         for (String storageVolumeName : storageVolumeNames) {
             rows.add(Lists.newArrayList(storageVolumeName));
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleDescStorageVolume() {
+    private void handleDescStorageVolume() throws AnalysisException {
         DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
         resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
+    }
+
+    private void handleShowPipes() {
+        List<List<Comparable>> rows = Lists.newArrayList();
+        ShowPipeStmt showStmt = (ShowPipeStmt) stmt;
+        String dbName = ((ShowPipeStmt) stmt).getDbName();
+        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(dbName)
+                .map(Database::getId)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        for (Pipe pipe : pipeManager.getPipesUnlock().values()) {
+            // show pipes in current database
+            if (pipe.getPipeId().getDbId() != dbId) {
+                continue;
+            }
+            List<Comparable> row = Lists.newArrayList();
+            ShowPipeStmt.handleShow(row, pipe);
+            rows.add(row);
+        }
+
+        // order by
+        List<OrderByPair> orderByPairs = ((ShowPipeStmt) stmt).getOrderByPairs();
+        ListComparator<List<Comparable>> comparator = null;
+        if (orderByPairs != null) {
+            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
+            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
+        } else {
+            // sort by id asc
+            comparator = new ListComparator<>(0);
+        }
+        rows.sort(comparator);
+
+        // limit
+        long limit = showStmt.getLimit();
+        long offset = showStmt.getOffset() == -1L ? 0 : showStmt.getOffset();
+        if (offset >= rows.size()) {
+            rows = Lists.newArrayList();
+        } else if (limit != -1L) {
+            if ((limit + offset) < rows.size()) {
+                rows = rows.subList((int) offset, (int) (limit + offset));
+            } else {
+                rows = rows.subList((int) offset, rows.size());
+            }
+        }
+
+        List<List<String>> result = rows.stream().map(x -> x.stream().map(y -> (String) y)
+                        .collect(Collectors.toList()))
+                .collect(Collectors.toList());
+        resultSet = new ShowResultSet(stmt.getMetaData(), result);
+    }
+
+    private void handleDescPipe() {
+        List<List<String>> rows = Lists.newArrayList();
+        DescPipeStmt descStmt = ((DescPipeStmt) stmt);
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        Pipe pipe = pipeManager.mayGetPipe(descStmt.getName())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, descStmt.getName()));
+
+        List<String> row = Lists.newArrayList();
+        DescPipeStmt.handleDesc(row, pipe);
+        rows.add(row);
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowFailPoint() throws AnalysisException {
+        ShowFailPointStatement showStmt = ((ShowFailPointStatement) stmt);
+        // send request and build resultSet
+        PListFailPointRequest request = new PListFailPointRequest();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        PatternMatcher matcher = null;
+        if (showStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.VARIABLES.getCaseSensibility());
+        }
+        List<Backend> backends = new LinkedList<>();
+        if (showStmt.getBackends() == null) {
+            List<Long> backendIds = clusterInfoService.getBackendIds(true);
+            if (backendIds == null) {
+                throw new AnalysisException("No alive backends");
+            }
+            for (long backendId : backendIds) {
+                Backend backend = clusterInfoService.getBackend(backendId);
+                if (backend == null) {
+                    continue;
+                }
+                backends.add(backend);
+            }
+        } else {
+            for (String backendAddr : showStmt.getBackends()) {
+                String[] tmp = backendAddr.split(":");
+                if (tmp.length != 2) {
+                    throw new AnalysisException("invalid backend addr");
+                }
+                Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
+                if (backend == null) {
+                    throw new AnalysisException("cannot find backend with addr " + backendAddr);
+                }
+                backends.add(backend);
+            }
+        }
+        // send request
+        List<Pair<Backend, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
+        for (Backend backend : backends) {
+            try {
+                futures.add(Pair.create(backend,
+                        BackendServiceClient.getInstance().listFailPointAsync(backend.getBrpcAddress(), request)));
+            } catch (RpcException e) {
+                throw new AnalysisException("sending list failpoint request fails");
+            }
+        }
+        // handle response
+        List<List<String>> rows = Lists.newArrayList();
+        for (Pair<Backend, Future<PListFailPointResponse>> future : futures) {
+            try {
+                final Backend backend = future.first;
+                final PListFailPointResponse result = future.second.get(10, TimeUnit.SECONDS);
+                if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
+                    String errMsg = String.format("list failpoint status failed, backend: %s:%d, error: %s",
+                            backend.getHost(), backend.getBePort(), result.status.errorMsgs.get(0));
+                    LOG.warn(errMsg);
+                    throw new AnalysisException(errMsg);
+                }
+                for (PFailPointInfo failPointInfo : result.failPoints) {
+                    String name = failPointInfo.name;
+                    PFailPointTriggerMode triggerMode = failPointInfo.triggerMode;
+                    if (matcher != null && !matcher.match(name)) {
+                        continue;
+                    }
+                    List<String> row = Lists.newArrayList();
+                    row.add(failPointInfo.name);
+                    row.add(triggerMode.mode.toString());
+                    if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        row.add(Integer.toString(triggerMode.nTimes));
+                    } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
+                        row.add(Double.toString(triggerMode.probability));
+                    } else {
+                        row.add("");
+                    }
+                    row.add(String.format("%s:%d", backend.getHost(), backend.getBePort()));
+                    rows.add(row);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Throwable e) {
+                throw new AnalysisException(e.getMessage());
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

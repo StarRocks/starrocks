@@ -117,7 +117,7 @@ private:
 // - receive total RF and send it to RuntimeFilterPort
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
-class RuntimeFilterWorkerEvent;
+struct RuntimeFilterWorkerEvent;
 class RuntimeFilterWorker {
 public:
     RuntimeFilterWorker(ExecEnv* env);

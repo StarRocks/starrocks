@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.SubfieldExpr;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
@@ -32,13 +31,8 @@ import java.util.Objects;
 public class SubfieldOperator extends ScalarOperator {
 
     // Only one child
-    private final List<ScalarOperator> children = new ArrayList<>();
+    private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
-
-    // Build based on SubfieldExpr
-    public static SubfieldOperator build(ScalarOperator child, SubfieldExpr expr) {
-        return new SubfieldOperator(child, expr.getType(), expr.getFieldNames());
-    }
 
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
@@ -55,13 +49,13 @@ public class SubfieldOperator extends ScalarOperator {
         return new SubfieldOperator(child, tmpType, ImmutableList.copyOf(usedSubfieldNames));
     }
 
-    private SubfieldOperator(ScalarOperator child, Type type, ImmutableList<String> fieldNames) {
+    public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = ImmutableList.copyOf(fieldNames); 
     }
 
-    public ImmutableList<String> getFieldNames() {
+    public List<String> getFieldNames() {
         return fieldNames;
     }
 
@@ -85,6 +79,16 @@ public class SubfieldOperator extends ScalarOperator {
     public void setChild(int index, ScalarOperator child) {
         Preconditions.checkArgument(index == 0);
         children.set(0, child);
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        SubfieldOperator subfieldOperator = (SubfieldOperator) super.clone();
+        // Deep copy here
+        List<ScalarOperator> newChildren = Lists.newArrayList();
+        this.children.forEach(p -> newChildren.add(p.clone()));
+        subfieldOperator.children = newChildren;
+        return subfieldOperator;
     }
 
     @Override

@@ -99,7 +99,6 @@ public class FunctionAnalyzer {
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
         }
-
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -166,6 +165,14 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.SESSION_NUMBER)) {
+            if (!functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(
+                        "The delta parameter (parameter 2) of SESSION_NUMBER must be a constant: "
+                                + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
+            }
+        }
+
         if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function", functionCallExpr.getPos());
@@ -181,24 +188,6 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
             if (fnParams.isDistinct()) {
                 throw new SemanticException("array_agg does not support DISTINCT", functionCallExpr.getPos());
-            }
-        }
-
-        if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
-            if (functionCallExpr.getChildren().size() != 2) {
-                throw new SemanticException("arrays_overlap only support 2 parameters", functionCallExpr.getPos());
-            }
-        }
-
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_FILTER)) {
-            if (functionCallExpr.getChildren().size() != 2) {
-                throw new SemanticException("array_filter only support 2 parameters", functionCallExpr.getPos());
-            }
-        }
-
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
-            if (functionCallExpr.getChildren().size() != 2) {
-                throw new SemanticException("array_sortby only support 2 parameters", functionCallExpr.getPos());
             }
         }
 
@@ -258,7 +247,7 @@ public class FunctionAnalyzer {
 
             Type sortKeyType = functionCallExpr.getChild(1).getType();
             if (!sortKeyType.canApplyToNumeric()) {
-                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
             }
 
             return;
@@ -281,7 +270,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
-            throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+            throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
         if ((fnName.getFunction().equals(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {
@@ -312,6 +301,20 @@ public class FunctionAnalyzer {
                     throw new SemanticException("intersect_count function filter_values arg must be constant",
                             functionCallExpr.getChild(i).getPos());
                 }
+            }
+            return;
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_AGG)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
+            }
+            Type inputType = functionCallExpr.getChild(0).getType();
+            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()
+                    && !inputType.isStringType()) {
+                throw new SemanticException(
+                        fnName + " function's argument should be of int type or bool type or string type, but was "
+                                + inputType, functionCallExpr.getChild(0).getPos());
             }
             return;
         }
@@ -358,15 +361,9 @@ public class FunctionAnalyzer {
                         "percentile_approx requires the first parameter's type is numeric type");
             }
             if (!functionCallExpr.getChild(1).getType().isNumericType() ||
-                    !functionCallExpr.getChild(1).isLiteral()) {
+                    !functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
                         "percentile_approx requires the second parameter's type is numeric constant type");
-            }
-
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value must be between 0 and 1");
             }
 
             if (functionCallExpr.getChildren().size() == 3) {
@@ -399,6 +396,16 @@ public class FunctionAnalyzer {
             if (rate < 0 || rate > 1) {
                 throw new SemanticException(
                         fnName + " second parameter'value should be between 0 and 1");
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
+                fnName.getFunction().equals(FunctionSet.CORR)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
+            }
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(fnName + " function 's args must be column");
             }
         }
     }

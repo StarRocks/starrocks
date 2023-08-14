@@ -106,6 +106,18 @@ public class StatisticsCollectJobFactory {
         }
     }
 
+    public static StatisticsCollectJob buildExternalStatisticsCollectJob(String catalogName, Database db, Table table,
+                                                                         List<String> columns,
+                                                                         StatsConstants.AnalyzeType analyzeType,
+                                                                         StatsConstants.ScheduleType scheduleType,
+                                                                         Map<String, String> properties) {
+        if (columns == null || columns.isEmpty()) {
+            columns = StatisticUtils.getCollectibleColumns(table);
+        }
+        return new ExternalFullStatisticsCollectJob(catalogName, db, table, columns,
+                analyzeType, scheduleType, properties);
+    }
+
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
                                   Database db, Table table, List<String> columns) {
         if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
@@ -161,8 +173,7 @@ public class StatisticsCollectJobFactory {
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
 
-            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now()) &&
-                    sumDataSize > Config.statistic_auto_collect_small_table_size) {
+            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));

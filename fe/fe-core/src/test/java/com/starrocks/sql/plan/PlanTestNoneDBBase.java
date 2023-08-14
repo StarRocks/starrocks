@@ -91,6 +91,12 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    public static void assertContains(String text, List<String> patterns) {
+        for (String s : patterns) {
+            Assert.assertTrue(text, text.contains(s));
+        }
+    }
+
     public void assertCContains(String text, String... pattern) {
         try {
             for (String s : pattern) {
@@ -458,10 +464,10 @@ public class PlanTestNoneDBBase {
 
     private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
         expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", ""))
+                .map(str -> str.replaceAll("\\d+", "").trim())
                 .collect(Collectors.joining("\n"));
         actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", ""))
+                .map(str -> str.replaceAll("\\d+", "").trim())
                 .collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }

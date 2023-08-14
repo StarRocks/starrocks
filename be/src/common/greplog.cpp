@@ -105,7 +105,7 @@ static void parse_log(GrepLogEntry& entry, GrepLogContext* context) {
 
 static int scan_by_line_handler(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                                 void* ctx) {
-    GrepLogContext* context = (GrepLogContext*)ctx;
+    auto* context = (GrepLogContext*)ctx;
     auto& new_log = context->entries->emplace_back();
     new_log.log.assign(context->line_start, context->line_len);
     parse_log(new_log, context);
@@ -206,7 +206,7 @@ Status grep_log(int64_t start_ts, int64_t end_ts, char level, const std::string&
     hs_database_t* database = nullptr;
     if (!pattern.empty()) {
         hs_compile_error_t* compile_err;
-        if (hs_compile(pattern.c_str(), 0, HS_MODE_BLOCK, NULL, &database, &compile_err) != HS_SUCCESS) {
+        if (hs_compile(pattern.c_str(), 0, HS_MODE_BLOCK, nullptr, &database, &compile_err) != HS_SUCCESS) {
             hs_free_compile_error(compile_err);
             return Status::InternalError(
                     strings::Substitute("grep log failed compile pattern $0 failed $1", pattern, compile_err->message));

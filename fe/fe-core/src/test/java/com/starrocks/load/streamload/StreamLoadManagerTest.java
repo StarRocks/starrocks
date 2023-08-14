@@ -59,7 +59,6 @@ public class StreamLoadManagerTest {
     @Before
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
-        globalTransactionMgr.setEditLog(editLog);
         FeConstants.runningUnitTest = true;
     
         try {
@@ -110,13 +109,17 @@ public class StreamLoadManagerTest {
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = Lists.newArrayList();
+
+                GlobalStateMgr.getCurrentState().getNextId();
+                minTimes = 0;
+                result = 1001L;
             }
         };
     }
 
     @Test
     public void testBeginStreamLoadTask() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -145,7 +148,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testChannelIdEqualChannelNum() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -165,7 +168,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testGetTaskByName() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -184,5 +187,46 @@ public class StreamLoadManagerTest {
         Assert.assertEquals("test_db", tasks.get(0).getDBName());
         Assert.assertEquals(20000, tasks.get(0).getDBId());
         Assert.assertEquals("test_tbl", tasks.get(0).getTableName());
+    }
+
+    @Test
+    public void testGetTaskByIdWhenMatched() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label1";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        StreamLoadTask task = streamLoadManager.getTaskById(1001L);
+        Assert.assertNotNull(task);
+        Assert.assertEquals("label1", task.getLabel());
+        Assert.assertEquals(1001L, task.getId());
+        Assert.assertEquals("test_db", task.getDBName());
+        Assert.assertEquals(20000, task.getDBId());
+        Assert.assertEquals("test_tbl", task.getTableName());
+    }
+
+    @Test
+    public void testGetTaskByIdWhenNotMatched() throws UserException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName = "label1";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+
+        StreamLoadTask task = streamLoadManager.getTaskById(1002L);
+        Assert.assertNull(task);
     }
 }

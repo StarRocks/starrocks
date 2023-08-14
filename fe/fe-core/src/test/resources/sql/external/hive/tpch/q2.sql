@@ -270,7 +270,6 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 17: ps_partkey IS NOT NULL, 18: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
-numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (17: ps_partkey)
@@ -300,7 +299,6 @@ NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
 MIN/MAX PREDICATES: 53: p_size <= 12, 54: p_size >= 12
 partitions=1/1
 avgRowSize=62.0
-numNodes=0
 cardinality: 100000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
@@ -331,7 +329,7 @@ OutPut Exchange Id: 10
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -344,12 +342,12 @@ OutPut Exchange Id: 10
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
 |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 200000.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
 |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
 |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
-|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----7:EXCHANGE
 |       distribution type: BROADCAST
@@ -359,7 +357,6 @@ OutPut Exchange Id: 10
 TABLE: supplier
 partitions=1/1
 avgRowSize=197.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (13: s_nationkey)
@@ -410,7 +407,6 @@ TABLE: nation
 NON-PARTITION PREDICATES: 22: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
-numNodes=0
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (24: n_regionkey)
@@ -438,7 +434,6 @@ NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
 MIN/MAX PREDICATES: 51: r_name <= 'AMERICA', 52: r_name >= 'AMERICA'
 partitions=1/1
 avgRowSize=10.8
-numNodes=0
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE

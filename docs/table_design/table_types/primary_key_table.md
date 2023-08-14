@@ -1,10 +1,11 @@
 # Primary Key table
 
-When a table is created, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
+When you create a table, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
 
 > **NOTE**
 >
 > In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
+> Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. However, enabling the persistent index for a Primary Key table is not supported.
 
 ## Scenarios
 
@@ -66,10 +67,15 @@ PARTITION BY RANGE(`dt`) (
     ...
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
-) DISTRIBUTED BY HASH(order_id) BUCKETS 4
+) DISTRIBUTED BY HASH(order_id)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
+
+> **NOTICE**
+>
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#design-partitioning-and-bucketing-rules).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
 
 Example 2: Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
 
@@ -88,7 +94,7 @@ create table users (
     property3 tinyint NOT NULL,
     ....
 ) PRIMARY KEY (user_id)
-DISTRIBUTED BY HASH(user_id) BUCKETS 4
+DISTRIBUTED BY HASH(user_id)
 ORDER BY(`address`,`last_active`)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
@@ -123,6 +129,7 @@ PROPERTIES("replication_num" = "3",
   > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
+  > - StarRocks's shared-data mode does not support enabling the persistent index for a Primary Key table.
 
 - You can specify the sort key as the permutation and combination of any columns by using the `ORDER BY` keyword.
 
@@ -143,4 +150,6 @@ PROPERTIES("replication_num" = "3",
 
 ## What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key table. For more information, see [Overview of data loading](../../loading/Loading_intro.md).
+After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Overview of data loading](../../loading/Loading_intro.md).
+
+If you need to update data in the Primary Key table, you can [run a load job](../../loading/Load_to_Primary_Key_tables.md) or execute a DML statement ([UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) or [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)). Also, these update operations guarantee atomicity.

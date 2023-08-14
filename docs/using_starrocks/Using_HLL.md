@@ -68,15 +68,15 @@ CREATE TABLE test(
         id INT,
         uv HLL HLL_UNION
 )
-DISTRIBUTED BY HASH(ID) BUCKETS 32;
+DISTRIBUTED BY HASH(ID);
 ~~~
 
 > * Note: When the data volume is large, it is better to create a corresponding rollup table for high frequency HLL queries
 
-Load data using Stream Load:
+Load data using [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md):
 
 ~~~bash
-curl --location-trusted -u root: -H "label:label_1600997542287" \
+curl --location-trusted -u <username>:<password> -H "label:label_1600997542287" \
     -H "column_separator:," \
     -H "columns:dt,id,user_id, uv=hll_hash(user_id)" -T /root/test.csv http://starrocks_be0:8040/api/db0/test/_stream_load
 {

@@ -16,36 +16,18 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.Transaction;
-import org.apache.iceberg.catalog.Namespace;
-import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public interface IcebergCatalog {
 
     IcebergCatalogType getIcebergCatalogType();
-
-    Table loadTable(IcebergTable table) throws StarRocksConnectorException;
-
-    Table loadTable(TableIdentifier tableIdentifier) throws StarRocksConnectorException;
-
-    Table loadTable(TableIdentifier tableIdentifier, Optional<IcebergMetricsReporter> metricsReporter)
-            throws StarRocksConnectorException;
-
-    Table loadTable(TableIdentifier tableId,
-                    String tableLocation,
-                    Map<String, String> properties) throws StarRocksConnectorException;
 
     List<String> listAllDatabases();
 
@@ -55,27 +37,25 @@ public interface IcebergCatalog {
     default void dropDb(String dbName) throws MetaNotFoundException {
     }
 
-    Database getDB(String dbName) throws InterruptedException, TException;
+    Database getDB(String dbName);
 
-    List<TableIdentifier> listTables(Namespace of);
+    List<String> listTables(String dbName);
 
-    default Transaction newCreateTableTransaction(
-            String dbName,
-            String tableName,
-            Schema schema,
-            PartitionSpec partitionSpec,
-            String location,
-            Map<String, String> properties) {
-        throw new StarRocksConnectorException("This catalog doesn't support creating tables");
+    default boolean createTable(String dbName,
+                                String tableName,
+                                Schema schema,
+                                PartitionSpec partitionSpec,
+                                String location,
+                                Map<String, String> properties) {
+        return false;
     }
 
-    default boolean dropTable(TableIdentifier identifier, boolean purge) {
+    default boolean dropTable(String dbName, String tableName, boolean purge) {
         throw new StarRocksConnectorException("This catalog doesn't support dropping tables");
     }
 
-    default String defaultTableLocation(String dbName, String tblName) {
-        return "";
-    }
+    Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
+
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }

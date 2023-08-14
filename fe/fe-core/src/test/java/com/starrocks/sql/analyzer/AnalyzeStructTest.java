@@ -96,8 +96,8 @@ public class AnalyzeStructTest {
         analyzeFail("select b + 1 from struct_a;");
         analyzeFail("select * from struct_a order by b;");
         analyzeFail("select sum(b) from struct_a;");
-        analyzeFail("select * from struct_a a join struct_a b on a.b=b.b;");
-        analyzeFail("select sum(a) from struct_a group by b;");
+        analyzeSuccess("select * from struct_a a join struct_a b on a.b=b.b;");
+        analyzeSuccess("select sum(a) from struct_a group by b;");
     }
 
     @Test
@@ -115,8 +115,8 @@ public class AnalyzeStructTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         String res = resultSet.getResultRows().get(0).get(1);
-        Assert.assertTrue(res.contains("`b` STRUCT<b STRUCT<c STRUCT<d STRUCT<e int(11)>>>> NULL COMMENT \"\""));
+        Assert.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
         Assert.assertTrue(
-                res.contains("`struct_a` STRUCT<struct_a STRUCT<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
+                res.contains("`struct_a` struct<struct_a struct<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
     }
 }

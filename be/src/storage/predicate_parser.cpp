@@ -53,7 +53,8 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
     ColumnPredicate* pred = nullptr;
     if ((condition.condition_op == "*=" || condition.condition_op == "=") && condition.condition_values.size() == 1) {
         pred = new_column_eq_predicate(type_info, index, condition.condition_values[0]);
-    } else if (condition.condition_op == "!=" && condition.condition_values.size() == 1) {
+    } else if ((condition.condition_op == "!*=" || condition.condition_op == "!=") &&
+               condition.condition_values.size() == 1) {
         pred = new_column_ne_predicate(type_info, index, condition.condition_values[0]);
     } else if (condition.condition_op == "<<") {
         pred = new_column_lt_predicate(type_info, index, condition.condition_values[0]);

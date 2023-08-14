@@ -136,7 +136,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 throw new AnalysisException("Index[" + indexId + "] does not exist.");
             }
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                return new LakeTabletsProcNode(db, olapTable, materializedIndex);
+                return new LakeTabletsProcDir(db, olapTable, materializedIndex);
             } else {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }

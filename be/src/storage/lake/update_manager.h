@@ -36,6 +36,7 @@ class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
+struct AutoIncrementPartialUpdateState;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -62,18 +63,17 @@ public:
                                       Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
-    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                   const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
-                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
-    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                   const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>>* rss_rowids);
+    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+    Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
+                                   std::vector<std::vector<uint64_t>>* rss_rowids);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                              const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns,
+                             AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
                        DelVectorPtr* pdelvec);
@@ -109,6 +109,8 @@ public:
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
 
+    bool TEST_check_update_state_cache_noexist(uint32_t tablet_id, int64_t txn_id);
+
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
         int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
         int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
@@ -129,8 +131,7 @@ private:
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
-    Status _handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
-                            const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op);
+    Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

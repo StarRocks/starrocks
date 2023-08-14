@@ -161,8 +161,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     }
     // return tablet and its version which has already finished.
     int total_tablet_cnt = 0;
-    for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
-        const auto& partition_version = publish_version_req.partition_version_infos[i];
+    for (const auto& partition_version : publish_version_req.partition_version_infos) {
         std::vector<TabletInfo> tablet_infos;
         StorageEngine::instance()->tablet_manager()->get_tablets_by_partition(partition_version.partition_id,
                                                                               tablet_infos);

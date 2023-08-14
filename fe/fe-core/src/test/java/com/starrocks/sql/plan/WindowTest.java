@@ -287,6 +287,17 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testStatisticWindowFunction() throws Exception {
+        String sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b) from test_all_type";
+        starRocksAssert.query(sql)
+                .analysisError("order by not allowed with");
+        sql = "select CORR(t1e,t1f) over (partition by t1a " +
+                "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) from test_all_type";
+        starRocksAssert.query(sql)
+                .analysisError("Windowing clause not allowed with");
+    }
+
+    @Test
     public void testRankingWindowWithoutPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {
@@ -644,6 +655,304 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testCumeWindowFunctionCommon() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            // Windowing clause not allowed with CUME_DIST and PERCENT_RANK.
+            String sql = "select v1, v2, cume_dist() " +
+                    "over (partition by v1 order by v2 rows between 1 preceding and 1 following) as cd from t0";
+            starRocksAssert.query(sql).analysisError("Windowing clause not allowed");
+
+            sql = "select v1, v2, percent_rank() " +
+                    "over (partition by v1 order by v2 rows between 1 preceding and 1 following) as pr from t0";
+            starRocksAssert.query(sql).analysisError("Windowing clause not allowed");
+
+            // Normal case.
+            sql = "select v1, v2, cume_dist() over (partition by v1 order by v2) as cd from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, cume_dist(), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  order by: 2: v2 ASC\n" +
+                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+            sql = "select v1, v2, percent_rank() over (partition by v1 order by v2) as pr from t0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, percent_rank(), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  order by: 2: v2 ASC\n" +
+                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testCumeWindowWithoutPartitionPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            // Cannot be optimized, the result of cume_dist() and percent_rank() is double.
+            // They need partition_count and peer_group_count to calculate.
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where cd <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where pr <= 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+        }
+        {
+            // Cannot be optimized, Share the same sort group with rank().
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (order by v2) as cd, " +
+                    "        rank() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where cd <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (order by v2) as rk, " +
+                    "        cume_dist() over (order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where cd <= 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (order by v2) as pr, " +
+                    "        rank() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where pr <= 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (order by v2) as rk, " +
+                    "        percent_rank() over (order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where pr <= 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+        }
+        {
+            // Cannot be optimized and do not share the same sort group with row_number().
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (order by v3) as cd," +
+                    "        row_number() over (order by v2) as rk" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (order by v3) as pr," +
+                    "        row_number() over (order by v2) as rk" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testCumeWindowWithoutPartitionLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            // Cannot be optimized.
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by cd limit 5;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by pr limit 5;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Cannot be optimized and share the same sort group with rank().
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (order by v2) as cd, " +
+                    "        rank() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by cd limit 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (order by v2) as rk, " +
+                    "        cume_dist() over (order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by cd limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (order by v2) as pr, " +
+                    "        sum(v1) over (order by v2) as sm " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by pr limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v1) over (order by v2) as sm, " +
+                    "        percent_rank() over (order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by pr limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Cannot be optimized and two window function do not share the same sort group.
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v1) over (order by v3) as sm, " +
+                    "        cume_dist() over (order by v2) as cd" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by cd,sm limit 100,1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v1) over (order by v3) as sm, " +
+                    "        percent_rank() over (order by v2) as pr" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by pr,sm limit 100,1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testCumeWindowWithPartition() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // Predicate.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (partition by v3 order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where cd <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (partition by v3 order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where cd < 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (partition by v3 order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where pr <= 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (partition by v3 order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where pr < 4;";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        // Limit.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        cume_dist() over (partition by v3 order by v2) as cd " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by cd limit 5";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        percent_rank() over (partition by v3 order by v2) as pr " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by pr limit 5";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testRuntimeFilterPushWithoutPartition() throws Exception {
         String sql = "select * from " +
                 "(select v1, sum(v2) over (order by v2 desc) as sum1 from t0) a," +
@@ -788,7 +1097,6 @@ public class WindowTest extends PlanTestBase {
                     "  6:EXCHANGE");
         }
     }
-
 
     @Test
     public void testWindowWithHaving() throws Exception {

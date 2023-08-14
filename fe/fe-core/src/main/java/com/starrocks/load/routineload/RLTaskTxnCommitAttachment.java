@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
@@ -49,13 +50,20 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     private long jobId;
     private TUniqueId taskId;
+    @SerializedName("filteredRows")
     private long filteredRows;
+    @SerializedName("loadedRows")
     private long loadedRows;
+    @SerializedName("unselectedRows")
     private long unselectedRows;
+    @SerializedName("receivedBytes")
     private long receivedBytes;
+    @SerializedName("taskExecutionTimeMs")
     private long taskExecutionTimeMs;
+    @SerializedName("progress")
     private RoutineLoadProgress progress;
     private String errorLogUrl;
+    private long loadedBytes;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
@@ -69,6 +77,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = rlTaskTxnCommitAttachment.getLoadedRows();
         this.unselectedRows = rlTaskTxnCommitAttachment.getUnselectedRows();
         this.receivedBytes = rlTaskTxnCommitAttachment.getReceivedBytes();
+        this.loadedBytes = rlTaskTxnCommitAttachment.getLoadedBytes();
         this.taskExecutionTimeMs = rlTaskTxnCommitAttachment.getLoadCostMs();
 
         switch (rlTaskTxnCommitAttachment.getLoadSourceType()) {
@@ -113,6 +122,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public long getReceivedBytes() {
         return receivedBytes;
+    }
+
+    public long getLoadedBytes() {
+        return loadedBytes;
     }
 
     public long getTaskExecutionTimeMs() {

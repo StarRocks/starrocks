@@ -35,9 +35,7 @@
 package com.starrocks.clone;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.TabletScheduler.PathSlot;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 
@@ -60,13 +58,6 @@ public abstract class Rebalancer {
     // When Rebalancer init, the loadStatistic is usually empty. So it's no need to be an arg.
     // Only use updateLoadStatistic() to load stats.
     protected ClusterLoadStatistic loadStatistic;
-    protected TabletInvertedIndex invertedIndex;
-    protected SystemInfoService infoService;
-
-    public Rebalancer(SystemInfoService infoService, TabletInvertedIndex invertedIndex) {
-        this.infoService = infoService;
-        this.invertedIndex = invertedIndex;
-    }
 
     public List<TabletSchedCtx> selectAlternativeTablets() {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();

@@ -17,6 +17,7 @@ package com.starrocks.connector.analyzer;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -179,7 +180,7 @@ public class SimpleQueryAnalyzer {
                 TableName rightTableName = right.getResolveTableName();
 
                 // create predicate "<left>.colName = <right>.colName"
-                BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryPredicate.Operator.EQ,
+                BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryType.EQ,
                         new SlotRef(leftTableName, colName), new SlotRef(rightTableName, colName));
 
                 if (joinEqual == null) {
@@ -216,7 +217,7 @@ public class SimpleQueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState());
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                        throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                     }
                 }
             }
@@ -270,7 +271,7 @@ public class SimpleQueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState());
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                        throw new SemanticException(Type.NOT_SUPPORT_ORDER_ERROR_MSG);
                     }
                 }
             }

@@ -33,6 +33,8 @@ public class VariableVarConverters {
     static {
         SqlModeConverter sqlModeConverter = new SqlModeConverter();
         CONVERTERS.put(SessionVariable.SQL_MODE, sqlModeConverter);
+        PartialUpdateModeConverter partialUpdateModeConverter = new PartialUpdateModeConverter();
+        CONVERTERS.put(SessionVariable.PARTIAL_UPDATE_MODE, partialUpdateModeConverter);
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -49,6 +51,18 @@ public class VariableVarConverters {
         @Override
         public String convert(String value) throws DdlException {
             return SqlModeHelper.encode(value).toString();
+        }
+    }
+
+    // Converter to convert and check var `partial_update_mode`
+    public static class PartialUpdateModeConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            if (value.equals("auto") || value.equals("row") || value.equals("column")) {
+                return value;
+            } else {
+                throw new DdlException("partial_update_mode only support auto|row|column");
+            }
         }
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule;
 
 import com.google.common.collect.ImmutableList;
@@ -42,10 +41,12 @@ import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.PaimonScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.TableFunctionTableScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
@@ -143,6 +144,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.Aggr
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 
 import java.util.List;
 import java.util.Map;
@@ -157,11 +159,13 @@ public class RuleSet {
             new IcebergScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
+            new PaimonScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),
@@ -210,6 +214,7 @@ public class RuleSet {
                 MergeLimitDirectRule.HUDI_SCAN,
                 MergeLimitDirectRule.DELTALAKE_SCAN,
                 MergeLimitDirectRule.FILE_SCAN,
+                MergeLimitDirectRule.PAIMON_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -219,7 +224,8 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
-                MergeLimitDirectRule.TABLE_FUNCTION
+                MergeLimitDirectRule.TABLE_FUNCTION,
+                MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
@@ -230,7 +236,8 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.ICEBERG_SCAN,
                 ExternalScanPartitionPruneRule.DELTALAKE_SCAN,
                 ExternalScanPartitionPruneRule.FILE_SCAN,
-                ExternalScanPartitionPruneRule.ES_SCAN
+                ExternalScanPartitionPruneRule.ES_SCAN,
+                ExternalScanPartitionPruneRule.PAIMON_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
@@ -243,6 +250,8 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.DELTALAKE_SCAN,
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
+                PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
+                PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -271,10 +280,12 @@ public class RuleSet {
                 PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
+                PushDownPredicateScanRule.PAIMON_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
                 PushDownPredicateScanRule.BINLOG_SCAN,
+                PushDownPredicateScanRule.TABLE_FUNCTION_TABLE_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
@@ -388,11 +399,15 @@ public class RuleSet {
 
     public void addOuterJoinTransformationRules() {
         transformRules.add(JoinAssociativityRule.OUTER_JOIN_ASSOCIATIVITY_RULE);
-        transformRules.add(JoinLeftAsscomRule.getInstance());
+        transformRules.add(JoinLeftAsscomRule.OUTER_JOIN_LEFT_ASSCOM_RULE);
     }
 
-    public void addJoinCommutativityWithOutInnerRule() {
+    public void addJoinCommutativityWithoutInnerRule() {
         transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
+    }
+
+    public void addCboTablePruneRule() {
+        transformRules.add(CboTablePruneRule.getInstance());
     }
 
     public void addMultiTableMvRewriteRule() {

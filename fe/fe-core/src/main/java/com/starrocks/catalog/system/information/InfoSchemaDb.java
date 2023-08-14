@@ -15,7 +15,6 @@
 package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 
@@ -30,55 +29,48 @@ public class InfoSchemaDb extends Database {
     public InfoSchemaDb() {
         super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
 
-        super.createTable(TablesSystemTable.create());
-        super.createTable(PartitionsSystemTableSystemTable.create());
-        super.createTable(TablePrivilegesSystemTable.create());
-        super.createTable(ColumnPrivilegesSystemTable.create());
-        super.createTable(ReferentialConstraintsSystemTable.create());
-        super.createTable(KeyColumnUsageSystemTable.create());
-        super.createTable(RoutinesSystemTable.create());
-        super.createTable(SchemataSystemTable.create());
-        super.createTable(SessionVariablesSystemTable.create());
-        super.createTable(GlobalVariablesSystemTable.create());
-        super.createTable(VerboseSessionVariablesSystemTable.create());
-        super.createTable(ColumnsSystemTable.create());
-        super.createTable(CharacterSetsSystemTable.create());
-        super.createTable(CollationsSystemTable.create());
-        super.createTable(TableConstraintsSystemTable.create());
-        super.createTable(EnginesSystemTable.create());
-        super.createTable(UserPrivilegesSystemTable.create());
-        super.createTable(SchemaPrivilegesSystemTable.create());
-        super.createTable(StatisticsSystemTable.create());
-        super.createTable(TriggersSystemTable.create());
-        super.createTable(EventsSystemTable.create());
-        super.createTable(ViewsSystemTable.create());
-        super.createTable(TasksSystemTable.create());
-        super.createTable(TaskRunsSystemTable.create());
-        super.createTable(MaterializedViewsSystemTable.create());
-        super.createTable(LoadsSystemTable.create());
-        super.createTable(LoadTrackingLogsSystemTable.create());
-        super.createTable(TablesConfigSystemTable.create());
-        super.createTable(BeCompactionsSystemTable.create());
-        super.createTable(BeTabletsSystemTable.create());
-        super.createTable(BeMetricsSystemTable.create());
-        super.createTable(BeTxnsSystemTable.create());
-        super.createTable(BeConfigsSystemTable.create());
-        super.createTable(FeTabletSchedulesSystemTable.create());
-        super.createTable(BeThreadsSystemTable.create());
-        super.createTable(BeLogsSystemTable.create());
-        super.createTable(BeBvarsSystemTable.create());
-        super.createTable(BeCloudNativeCompactionsSystemTable.create());
-    }
-
-    @Override
-    public boolean createTableWithLock(Table table, boolean isReplay) {
-        return false;
-    }
-
-    @Override
-    public boolean createTable(Table table) {
-        // Do nothing.
-        return false;
+        super.registerTableUnlocked(TablesSystemTable.create());
+        super.registerTableUnlocked(PartitionsSystemTableSystemTable.create());
+        super.registerTableUnlocked(TablePrivilegesSystemTable.create());
+        super.registerTableUnlocked(ColumnPrivilegesSystemTable.create());
+        super.registerTableUnlocked(ReferentialConstraintsSystemTable.create());
+        super.registerTableUnlocked(KeyColumnUsageSystemTable.create());
+        super.registerTableUnlocked(RoutinesSystemTable.create());
+        super.registerTableUnlocked(SchemataSystemTable.create());
+        super.registerTableUnlocked(SessionVariablesSystemTable.create());
+        super.registerTableUnlocked(GlobalVariablesSystemTable.create());
+        super.registerTableUnlocked(VerboseSessionVariablesSystemTable.create());
+        super.registerTableUnlocked(ColumnsSystemTable.create());
+        super.registerTableUnlocked(CharacterSetsSystemTable.create());
+        super.registerTableUnlocked(CollationsSystemTable.create());
+        super.registerTableUnlocked(TableConstraintsSystemTable.create());
+        super.registerTableUnlocked(EnginesSystemTable.create());
+        super.registerTableUnlocked(UserPrivilegesSystemTable.create());
+        super.registerTableUnlocked(SchemaPrivilegesSystemTable.create());
+        super.registerTableUnlocked(StatisticsSystemTable.create());
+        super.registerTableUnlocked(TriggersSystemTable.create());
+        super.registerTableUnlocked(EventsSystemTable.create());
+        super.registerTableUnlocked(ViewsSystemTable.create());
+        super.registerTableUnlocked(TasksSystemTable.create());
+        super.registerTableUnlocked(TaskRunsSystemTable.create());
+        super.registerTableUnlocked(MaterializedViewsSystemTable.create());
+        super.registerTableUnlocked(LoadsSystemTable.create());
+        super.registerTableUnlocked(LoadTrackingLogsSystemTable.create());
+        super.registerTableUnlocked(RoutineLoadJobsSystemTable.create());
+        super.registerTableUnlocked(StreamLoadsSystemTable.create());
+        super.registerTableUnlocked(TablesConfigSystemTable.create());
+        super.registerTableUnlocked(BeCompactionsSystemTable.create());
+        super.registerTableUnlocked(BeTabletsSystemTable.create());
+        super.registerTableUnlocked(BeMetricsSystemTable.create());
+        super.registerTableUnlocked(BeTxnsSystemTable.create());
+        super.registerTableUnlocked(BeConfigsSystemTable.create());
+        super.registerTableUnlocked(FeTabletSchedulesSystemTable.create());
+        super.registerTableUnlocked(BeThreadsSystemTable.create());
+        super.registerTableUnlocked(BeLogsSystemTable.create());
+        super.registerTableUnlocked(BeBvarsSystemTable.create());
+        super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
+        super.registerTableUnlocked(PipeFileSystemTable.create());
+        super.registerTableUnlocked(PipesSystemTable.create());
     }
 
     @Override
@@ -89,11 +81,6 @@ public class InfoSchemaDb extends Database {
     @Override
     public void dropTable(String name) {
         // Do nothing.
-    }
-
-    @Override
-    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
-        return false;
     }
 
     @Override

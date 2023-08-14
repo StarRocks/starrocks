@@ -21,7 +21,7 @@ import org.junit.Test;
 public class RolePrivilegeCollectionTest {
     @Test
     public void testFlags() throws Exception {
-        RolePrivilegeCollection collection = new RolePrivilegeCollection("nolabel");
+        RolePrivilegeCollectionV2 collection = new RolePrivilegeCollectionV2("nolabel");
         Assert.assertFalse(collection.isRemovable());
         try {
             collection.addParentRole(-1);
@@ -30,10 +30,10 @@ public class RolePrivilegeCollectionTest {
             Assert.assertTrue(e.getMessage().contains("is not mutable"));
         }
 
-        collection = new RolePrivilegeCollection(
+        collection = new RolePrivilegeCollectionV2(
                 "public",
-                RolePrivilegeCollection.RoleFlags.MUTABLE,
-                RolePrivilegeCollection.RoleFlags.REMOVABLE);
+                RolePrivilegeCollectionV2.RoleFlags.MUTABLE,
+                RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
         Assert.assertTrue(collection.isRemovable());
         collection.addSubRole(-1);
         collection.disableMutable();
@@ -45,9 +45,9 @@ public class RolePrivilegeCollectionTest {
         }
 
 
-        collection = new RolePrivilegeCollection(
+        collection = new RolePrivilegeCollectionV2(
                 "admin",
-                RolePrivilegeCollection.RoleFlags.REMOVABLE);
+                RolePrivilegeCollectionV2.RoleFlags.REMOVABLE);
         Assert.assertTrue(collection.isRemovable());
         try {
             collection.addParentRole(-1);

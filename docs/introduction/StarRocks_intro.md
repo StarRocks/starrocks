@@ -12,6 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks.md)
 - [Architecture](../introduction/Architecture.md)
+- [Shared-data StarRocks cluster](../deployment/deploy_shared_data.md)
 - [Features](../introduction/Features.md)
 
 </NavBoxPartItem>
@@ -21,7 +22,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Deploy with Docker](../quick_start/deploy_with_docker.md)
-- [Create a table](../quick_start/create_table.md)
+- [Create a table](../quick_start/Create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
 </NavBoxPartItem>
@@ -45,9 +46,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Overview of data loading](../loading/Loading_intro.md)
 - [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md)
-- [Load data from HDFS or cloud storage](../loading/BrokerLoad.md)
+- [Load data from HDFS](../loading/hdfs_load.md)
+- [Load data from cloud storage](../loading/cloud_storage_load.md)
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
-- [Bulk load using Apache Spark™](../loading/SparkLoad.md)
+- [Load data using Apache Spark™](../loading/Spark-connector-starrocks.md)
 - [Load data using INSERT](../loading/InsertInto.md)
 - [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
 - [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
@@ -84,7 +86,16 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Delta Lake](../data_source/catalog/deltalake_catalog.md)
 - [MySQL](../data_source/External_table.md#mysql-external-table)
 - [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
-- [JDBC-compatible database](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database)
+- [JDBC-compatible database](../data_source/catalog/jdbc_catalog.md)
+
+</NavBoxPartItem>
+<NavBoxPartItem title="Integration​">
+
+- [AWS](../integrations/authenticate_to_aws_resources.md)
+- [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md)
+- [Google Cloud Storage](../integrations/authenticate_to_gcs.md)
+- [BI tools](../integrations/BI_integrations/Hex.md)
+- [IDE tools](../integrations/IDE_integrations/DataGrip.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -96,7 +107,8 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
-- [Resource group](../administration/resource_group.md)
+- [Resource group](../administration/monitor_manage_big_queries.md)
+- [Privileges](../administration/privilege_overview.md)
 - [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
 
@@ -108,6 +120,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
+- [Data type](../sql-reference/sql-statements/data-types/TINYINT.md)
 
 </NavBoxPartItem>
 </NavBoxPart>

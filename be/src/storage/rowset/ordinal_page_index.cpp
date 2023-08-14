@@ -76,11 +76,11 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
 }
 
 OrdinalIndexReader::OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
 }
 
 OrdinalIndexReader::~OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
 }
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
@@ -88,7 +88,7 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                      _mem_usage() - sizeof(OrdinalIndexReader))
         } else {
             _reset();
@@ -101,23 +101,22 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
+
         _ordinals = std::make_unique<ordinal_t[]>(2);
         _ordinals[0] = 0;
         _ordinals[1] = num_values;
-        _pages = std::make_unique<PagePointer[]>(1);
-        _pages[0] = meta.root_page().root_page();
+
+        _pages = std::make_unique<uint64_t[]>(2);
+        _pages[0] = meta.root_page().root_page().offset();
+        _pages[1] = meta.root_page().root_page().offset() + meta.root_page().root_page().size();
         return Status::OK();
     }
-    // need to read index page
-    RandomAccessFileOptions file_opts{.skip_fill_local_cache = opts.skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, opts.fs->new_random_access_file(file_opts, opts.file_name));
 
     PageReadOptions page_opts;
-    page_opts.read_file = read_file.get();
+    page_opts.read_file = opts.read_file;
     page_opts.page_pointer = PagePointer(meta.root_page().root_page());
     page_opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
-    OlapReaderStatistics tmp_stats;
-    page_opts.stats = &tmp_stats;
+    page_opts.stats = opts.stats;
     page_opts.use_page_cache = opts.use_page_cache;
     page_opts.kept_in_memory = opts.kept_in_memory;
 
@@ -133,7 +132,7 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 
     _num_pages = reader.count();
     _ordinals = std::make_unique<ordinal_t[]>(_num_pages + 1);
-    _pages = std::make_unique<PagePointer[]>(_num_pages);
+    _pages = std::make_unique<uint64_t[]>(_num_pages + 1);
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
@@ -141,9 +140,10 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
                                                                                (uint8_t*)&ordinal, nullptr));
 
         _ordinals[i] = ordinal;
-        _pages[i] = reader.get_value(i);
+        _pages[i] = reader.get_value(i).offset;
     }
     _ordinals[_num_pages] = num_values;
+    _pages[_num_pages] = reader.get_value(_num_pages - 1).offset + reader.get_value(_num_pages - 1).size;
     return Status::OK();
 }
 

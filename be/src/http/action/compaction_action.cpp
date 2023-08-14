@@ -115,7 +115,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
-    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
     if (tablet->updates() != nullptr) {
         if (rowset_ids_string.empty()) {
             RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker));

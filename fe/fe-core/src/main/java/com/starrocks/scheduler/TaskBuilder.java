@@ -21,8 +21,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -37,6 +37,17 @@ import java.util.concurrent.TimeUnit;
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
+
+    public static Task buildPipeTask(PipeTaskDesc desc) {
+        Task task = new Task(desc.getUniqueTaskName());
+        task.setSource(Constants.TaskSource.PIPE);
+        task.setCreateTime(System.currentTimeMillis());
+        task.setDbName(desc.getDbName());
+        task.setDefinition(desc.getSqlTask());
+        task.setProperties(desc.getProperties());
+        task.setType(Constants.TaskType.EVENT_TRIGGERED);
+        return task;
+    }
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
         String taskName = submitTaskStmt.getTaskName();
@@ -86,9 +97,8 @@ public class TaskBuilder {
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+        taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
-        taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
@@ -104,7 +114,7 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
-        previousTaskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+        previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         task.setProperties(previousTaskProperties);
         task.setDefinition(

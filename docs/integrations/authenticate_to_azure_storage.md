@@ -1,6 +1,6 @@
 # Authenticate to Microsoft Azure Storage
 
-StarRocks can integrate with Microsoft Azure Storage (Azure Blob Storage or Azure Data Lake Storage) in the following scenarios:
+From v3.0 onwards, StarRocks can integrate with Microsoft Azure Storage (Azure Blob Storage or Azure Data Lake Storage) in the following scenarios:
 
 - Batch load data from Azure Storage.
 - Back up data from and restore data to Azure Storage.
@@ -13,7 +13,7 @@ StarRocks supports the following types of Azure Storage accounts:
 - Azure Data Lake Storage Gen1
 - Azure Data Lake Storagee Gen2
 
-In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../loading/BrokerLoad.md).
+In this topic, Hive catalog, file external table, and Broker Load are used as examples to show how StarRocks integrates with Azure Storage by using these types of Azure Storage accounts. For information about the parameters in the examples, see [Hive catalog](../data_source/catalog/hive_catalog.md), [File external table](../data_source/file_external_table.md), and [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ## Blob Storage
 
@@ -215,8 +215,8 @@ Configure `azure.adls1.oauth2_client_id`, `azure.adls1.oauth2_credential`, and `
 CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
-    "type"="hive", 
-    "hive.metastore.uris"="thrift://10.1.0.18:9083",
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
     "azure.adls1.oauth2_client_id" = "<application_client_id>",
     "azure.adls1.oauth2_credential" = "<application_client_credential>",
     "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"

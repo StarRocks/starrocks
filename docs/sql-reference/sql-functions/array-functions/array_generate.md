@@ -4,7 +4,7 @@
 
 Returns an array of distinct values within the range specified by `start` and `end`, with an increment of `step`.
 
-This function is supported from v3.0.
+This function is supported from v3.1.
 
 ## Syntax
 
@@ -82,7 +82,7 @@ CREATE TABLE `array_generate`
 )
 ENGINE = OLAP
 DUPLICATE KEY(`c1`)
-DISTRIBUTED BY HASH(`c1`) BUCKETS 1;
+DISTRIBUTED BY HASH(`c1`);
 
 INSERT INTO `array_generate` VALUES
 (1, 6, 3),

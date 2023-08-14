@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <string>
 
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -157,6 +158,14 @@ public:
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 
+    // When calculating window functions such as CUME_DIST and PERCENT_RANK,
+    // it's necessary to specify the size of the partition.
+    bool should_set_partition_size() const { return _should_set_partition_size; }
+    void set_partition_size_for_function();
+    bool require_partition_size(const std::string& function_name) {
+        return function_name == "cume_dist" || function_name == "percent_rank";
+    }
+
     void remove_unused_buffer_values(RuntimeState* state);
 
     bool need_partition_materializing() const { return _need_partition_materializing; }
@@ -202,6 +211,11 @@ private:
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
+
+    // When calculating window functions such as CUME_DIST and PERCENT_RANK,
+    // it's necessary to specify the size of the partition.
+    bool _should_set_partition_size = false;
+    std::vector<int64_t> _partition_size_required_function_index;
 
     Columns _result_window_columns;
     std::vector<ChunkPtr> _input_chunks;
@@ -280,6 +294,7 @@ private:
     bool _support_cumulative_algo = false;
 
 private:
+    // if src_column is const, but dst is not, unpack src_column then append. Otherwise just append
     void _append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column);
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);

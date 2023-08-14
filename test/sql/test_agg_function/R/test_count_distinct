@@ -1,0 +1,62 @@
+-- name: test_count_distinct
+CREATE TABLE `test_cc` (
+  `v1` varchar(65533) NULL COMMENT "",
+  `v2` varchar(65533) NULL COMMENT "",
+  `v3` datetime NULL COMMENT "",
+  `v4` int null
+) ENGINE=OLAP
+DUPLICATE KEY(v1, v2, v3)
+PARTITION BY RANGE(`v3`)
+(PARTITION p20220418 VALUES [("2022-04-18 00:00:00"), ("2022-04-19 00:00:00")),
+PARTITION p20220419 VALUES [("2022-04-19 00:00:00"), ("2022-04-20 00:00:00")),
+PARTITION p20220420 VALUES [("2022-04-20 00:00:00"), ("2022-04-21 00:00:00")),
+PARTITION p20220421 VALUES [("2022-04-21 00:00:00"), ("2022-04-22 00:00:00")))
+DISTRIBUTED BY HASH(`v1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into test_cc values('a','a', '2022-04-18 01:01:00', 1);
+-- result:
+-- !result
+insert into test_cc values('a','b', '2022-04-18 02:01:00', 2);
+-- result:
+-- !result
+insert into test_cc values('a','a', '2022-04-18 02:05:00', 1);
+-- result:
+-- !result
+insert into test_cc values('a','b', '2022-04-18 02:15:00', 3);
+-- result:
+-- !result
+insert into test_cc values('a','b', '2022-04-18 03:15:00', 1);
+-- result:
+-- !result
+insert into test_cc values('c','a', '2022-04-18 03:45:00', 1);
+-- result:
+-- !result
+insert into test_cc values('c','a', '2022-04-18 03:25:00', 2);
+-- result:
+-- !result
+insert into test_cc values('c','a', '2022-04-18 03:27:00', 3);
+-- result:
+-- !result
+select v2, count(1), count(distinct v1) from test_cc group by v2;
+-- result:
+a	5	2
+b	3	1
+-- !result
+select v2, bitmap_union_count(to_bitmap(v4)), count(distinct v1) from test_cc group by v2;
+-- result:
+a	3	2
+b	3	1
+-- !result
+select v2, hll_union_agg(hll_hash(v4)), count(distinct v1) from test_cc group by v2;
+-- result:
+a	3	2
+b	3	1
+-- !result

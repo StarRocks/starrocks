@@ -15,11 +15,9 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -33,7 +31,9 @@ import mockit.Mocked;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -42,6 +42,17 @@ import java.util.Map;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
+
+    @Before
+    public void setUp() {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void teardown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     /**
      * [
@@ -64,7 +75,6 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testDropTable() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // create db1
@@ -149,7 +159,13 @@ public class ColocateTableIndexTest {
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
+
         Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("table2_1", table2To1.getId()), map.get("group2").get(3));
+
+
         LOG.info("after drop db1.table1_2: {}", infos);
 
         // drop db2
@@ -186,13 +202,17 @@ public class ColocateTableIndexTest {
         LOG.info("after create & drop db2: {}", infos);
         Assert.assertEquals(3, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals("[deleted], [deleted]", map.get("group1").get(3));
         Assert.assertEquals(String.format("%d*", table2To1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
         Assert.assertEquals(String.format("%d*", table2To3.getId()), map.get("group3").get(2));
+        Assert.assertEquals(String.format("[deleted], [deleted]", table1To1.getId(), table1To2.getId()),
+                map.get("group1").get(3));
     }
 
     @Test
     public void testCleanUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
@@ -249,6 +269,8 @@ public class ColocateTableIndexTest {
             }
         };
 
+        long dbId = 100;
+        long dbId2 = 101;
         long tableId = 200;
         new MockUp<OlapTable>() {
             @Mock
@@ -275,13 +297,50 @@ public class ColocateTableIndexTest {
         };
 
         colocateTableIndex.addTableToGroup(
-                100, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(100, 10000), false /* isReplay */);
+                dbId, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId, 10000), false /* isReplay */);
+        Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
+        colocateTableIndex.addTableToGroup(
+                dbId2, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId2, 10000), false /* isReplay */);
         Assert.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
 
-        Assert.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10000)));
-        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(100, 10001)));
+        Assert.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10000)));
+        Assert.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10001)));
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
         Assert.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
+    }
+
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // create goodDb
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils
+                .parseStmtWithNewParser("create database db_image;", connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getDb("db_image");
+        // create goodtable
+        String sql = "CREATE TABLE " +
+                "db_image.tbl1 (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        OlapTable table = (OlapTable) db.getTable("tbl1");
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        colocateTableIndex.saveColocateTableIndexV2(image.getDataOutputStream());
+
+        ColocateTableIndex followerIndex = new ColocateTableIndex();
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        followerIndex.loadColocateTableIndexV2(reader);
+        reader.close();
+        Assert.assertEquals(colocateTableIndex.getAllGroupIds(), followerIndex.getAllGroupIds());
+        Assert.assertEquals(colocateTableIndex.getGroup(table.getId()), followerIndex.getGroup(table.getId()));
+
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

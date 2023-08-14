@@ -142,6 +142,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalPaimonScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalSchemaScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
@@ -263,6 +267,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

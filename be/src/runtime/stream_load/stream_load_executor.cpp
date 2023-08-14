@@ -95,7 +95,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
+                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
                         StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {
@@ -342,6 +342,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_filteredRows(ctx->number_filtered_rows);
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
+        manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

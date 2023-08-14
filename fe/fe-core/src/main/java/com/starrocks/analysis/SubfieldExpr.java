@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
@@ -25,35 +24,37 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
+import java.util.List;
+
 public class SubfieldExpr extends Expr {
 
     // We use fieldNames to extract subfield column from children[0],
     // children[0] must be an StructType.
-    private final ImmutableList<String> fieldNames;
+    private List<String> fieldNames;
 
     // Only used in parser, in parser, we can't determine column's type
-    public SubfieldExpr(Expr child, ImmutableList<String> fieldNames) {
+    public SubfieldExpr(Expr child, List<String> fieldNames) {
         this(child, null, fieldNames);
     }
 
-    public SubfieldExpr(Expr child, ImmutableList<String> fieldNames, NodePosition pos) {
+    public SubfieldExpr(Expr child, List<String> fieldNames, NodePosition pos) {
         this(child, null, fieldNames, pos);
     }
 
     // In this constructor, we can determine column's type
     // child must be an StructType
-    public SubfieldExpr(Expr child, Type type, ImmutableList<String> fieldNames) {
+    public SubfieldExpr(Expr child, Type type, List<String> fieldNames) {
         this(child, type, fieldNames, NodePosition.ZERO);
     }
 
-    public SubfieldExpr(Expr child, Type type, ImmutableList<String> fieldNames, NodePosition pos) {
+    public SubfieldExpr(Expr child, Type type, List<String> fieldNames, NodePosition pos) {
         super(pos);
         if (type != null) {
             Preconditions.checkArgument(child.getType().isStructType());
         }
         children.add(child);
         this.type = type;
-        this.fieldNames = fieldNames.stream().map(String::toLowerCase).collect(ImmutableList.toImmutableList());
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
     }
 
     public SubfieldExpr(SubfieldExpr other) {
@@ -61,7 +62,11 @@ public class SubfieldExpr extends Expr {
         fieldNames = other.fieldNames;
     }
 
-    public ImmutableList<String> getFieldNames() {
+    public void setFieldNames(List<String> fieldNames) {
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
+    }
+
+    public List<String> getFieldNames() {
         return fieldNames;
     }
 
@@ -88,5 +93,10 @@ public class SubfieldExpr extends Expr {
     @Override
     public Expr clone() {
         return new SubfieldExpr(this);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return children.get(0).isSelfMonotonic();
     }
 }

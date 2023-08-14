@@ -198,7 +198,7 @@ public class ColumnType {
         }
 
         if (typeValue == null) {
-            throw new RuntimeException("Unknown type: " + t);
+            throw new RuntimeException("Unsupported type: " + t);
         }
     }
 

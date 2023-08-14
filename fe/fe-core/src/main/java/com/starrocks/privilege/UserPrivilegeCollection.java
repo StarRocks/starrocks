@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
@@ -20,6 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Deprecated class, can be removed in version 3.2
+ */
+@Deprecated
 public class UserPrivilegeCollection extends PrivilegeCollection {
     @SerializedName(value = "r")
     private Set<Long> roleIds;

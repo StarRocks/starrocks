@@ -65,6 +65,7 @@ private:
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
+    Status _init_column_access_paths(Schema* schema);
 
 private:
     TabletReaderParams _params{};
@@ -98,6 +99,8 @@ private:
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
 
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
+
     // The following are profile meatures
     int64_t _num_rows_read = 0;
 
@@ -119,6 +122,11 @@ private:
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+    RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
@@ -137,6 +145,7 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

@@ -257,6 +257,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess(sql);
     }
 
+    @Test
     public void testRandomDistribution() {
         analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) distributed by random");
         analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) " +
@@ -268,6 +269,23 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap distributed by hash(col1) buckets 10");
         analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap " +
                 "distributed by random buckets 10");
+    }
+
+    @Test
+    public void testRandomDistributionForAggKeyDefault() {
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1)");
+    }
+
+    @Test
+    public void testRandomDistributionForAggKey() {
+        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+                "distributed by random");
+        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+                "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint replace) engine=olap aggregate key(col1) " +
+                "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint REPLACE_IF_NOT_NULL) " +
+                "engine=olap aggregate key(col1) distributed by random buckets 10");
     }
 
     @Test
@@ -360,10 +378,25 @@ public class AnalyzeCreateTableTest {
             }
         };
 
-        analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) partition by (k2)");
         analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) engine=iceberg partition by (k2)");
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
+    }
+
+    @Test
+    public void testGeneratedColumnWithExternalTable() throws Exception {
+        analyzeFail("create external table ex_hive_tbl0 (col_tinyint tinyint null comment \"column tinyint\"," + 
+                    "col_varchar varchar(5), col_boolean boolean null comment \"column boolean\", col_new int" + 
+                    "as col_tinyint+1) ENGINE=hive properties (\"resource\" = \"hive_resource\"," +
+                    "\"table\" = \"hive_hdfs_orc_nocompress\"," +
+                    "\"database\" = \"hive_extbl_test\");");
+    }
+
+    @Test
+    public void testGeneratedColumnOnAGGTable() throws Exception {
+        analyzeFail("CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, v1 BIGINT SUM as id)" +
+                    "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
     }
 }

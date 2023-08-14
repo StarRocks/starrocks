@@ -34,7 +34,8 @@ public class TableRelation extends Relation {
     public enum TableHint {
         _META_,
         _BINLOG_,
-        _SYNC_MV_
+        _SYNC_MV_,
+        _USE_PK_INDEX_,
     }
 
     private final TableName name;
@@ -43,6 +44,7 @@ public class TableRelation extends Relation {
     // Support temporary partition
     private PartitionNames partitionNames;
     private final List<Long> tabletIds;
+    private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
@@ -56,17 +58,20 @@ public class TableRelation extends Relation {
         this.name = name;
         this.partitionNames = null;
         this.tabletIds = Lists.newArrayList();
+        this.replicaIds = Lists.newArrayList();
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds) {
-        this(name, partitionNames, tabletIds, NodePosition.ZERO);
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
+        this(name, partitionNames, tabletIds, replicaIds, NodePosition.ZERO);
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, NodePosition pos) {
+    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds,
+                         NodePosition pos) {
         super(pos);
         this.name = name;
         this.partitionNames = partitionNames;
         this.tabletIds = tabletIds;
+        this.replicaIds = replicaIds;
     }
 
     public TableName getName() {
@@ -91,11 +96,16 @@ public class TableRelation extends Relation {
 
     // Check whether the table has some table hints, some rules should not be applied.
     public boolean hasTableHints() {
-        return partitionNames != null || isSyncMVQuery() ||  (tabletIds != null && !tabletIds.isEmpty());
+        return partitionNames != null || isSyncMVQuery() || (tabletIds != null && !tabletIds.isEmpty()) ||
+                (replicaIds != null && !replicaIds.isEmpty());
     }
 
     public List<Long> getTabletIds() {
         return tabletIds;
+    }
+
+    public List<Long> getReplicaIds() {
+        return replicaIds;
     }
 
     public Column getColumn(Field field) {
@@ -158,8 +168,13 @@ public class TableRelation extends Relation {
     public boolean isBinlogQuery() {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
     }
+
     public boolean isSyncMVQuery() {
         return tableHints.contains(TableHint._SYNC_MV_);
+    }
+
+    public boolean isUsePkIndex() {
+        return tableHints.contains(TableHint._USE_PK_INDEX_);
     }
 
     @Override

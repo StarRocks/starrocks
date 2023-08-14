@@ -470,6 +470,72 @@ TEST_F(AvroScannerTest, test_union_type_null) {
     EXPECT_TRUE(chunk->get(0)[3].is_null());
 }
 
+TEST_F(AvroScannerTest, test_union_type_null_without_jsonpath) {
+    std::string schema_path = "./be/test/exec/test_data/avro_scanner/avro_union_schema.json";
+    AvroHelper avro_helper;
+    init_avro_value(schema_path, avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t boolean_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "booleantype", &boolean_value, NULL) == 0) {
+        avro_value_set_boolean(&boolean_value, true);
+    }
+
+    avro_value_t long_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "longtype", &long_value, NULL) == 0) {
+        avro_value_set_long(&long_value, 4294967296);
+    }
+
+    avro_value_t double_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "doubletype", &double_value, NULL) == 0) {
+        avro_value_set_double(&double_value, 1.234567);
+    }
+
+    avro_value_t union_value;
+    if (avro_value_get_by_name(&avro_helper.avro_val, "uniontype", &union_value, NULL) == 0) {
+        avro_value_t null_value;
+        avro_value_set_branch(&union_value, 0, &null_value);
+        avro_value_set_null(&null_value);
+    }
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_union_data.json";
+    write_avro_data(avro_helper, data_path);
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_BOOLEAN);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.strip_outer_array = false;
+    range.__isset.json_root = false;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"booleantype", "longtype", "doubletype", "uniontype"},
+                                       avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+    EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+    EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+    EXPECT_TRUE(chunk->get(0)[3].is_null());
+}
+
 TEST_F(AvroScannerTest, test_union_type_basic) {
     std::string schema_path = "./be/test/exec/test_data/avro_scanner/avro_union_schema.json";
     AvroHelper avro_helper;

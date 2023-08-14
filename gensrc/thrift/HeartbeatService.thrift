@@ -29,7 +29,8 @@ struct TMasterInfo {
     6: optional Types.TPort http_port
     7: optional i64 heartbeat_flags
     8: optional i64 backend_id
-    9: optional i64 min_active_txn_id = 0
+    // 9: optional i64 min_active_txn_id = 0
+    10: optional Types.TRunMode run_mode
 }
 
 struct TBackendInfo {
@@ -41,6 +42,7 @@ struct TBackendInfo {
     6: optional i32 num_hardware_cores
     7: optional Types.TPort starlet_port
     8: optional i64 reboot_time
+    9: optional bool is_set_storage_path
 }
 
 struct THeartbeatResult {

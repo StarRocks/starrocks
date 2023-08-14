@@ -1,0 +1,303 @@
+-- name: test_time_slice
+set disable_function_fold_constants=off;
+-- result:
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 month, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 day, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 quarter, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 week, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 hour, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 minute, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 second, ceil);
+-- result:
+None
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 year);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 month);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 day);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 quarter);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 week);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 hour);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 minute);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 second);
+-- result:
+1974-06-25 21:49:23
+-- !result
+select time_slice('0000-01-01',interval 5 year);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 month);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 day);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 quarter);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 week);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('9999-12-31',interval 5 year, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 month, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 day, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 quarter, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 week, ceil);
+-- result:
+None
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 year);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 month);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 day);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 quarter);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 week);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 year);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 57. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 month);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 day);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 56. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 quarter);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 60. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 week);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 57. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval -3.2 week);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+set disable_function_fold_constants=on;
+-- result:
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 month, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 day, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 quarter, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 week, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 hour, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 minute, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31 23:59:59',interval 5 second, ceil);
+-- result:
+None
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 year);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 month);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 day);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 quarter);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 week);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 hour);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 minute);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 second);
+-- result:
+1974-06-25 21:49:23
+-- !result
+select time_slice('0000-01-01',interval 5 year);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 month);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 day);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 quarter);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('0000-01-01',interval 5 week);
+-- result:
+E: (1064, "time used with time_slice can't before 0001-01-01 00:00:00")
+-- !result
+select time_slice('9999-12-31',interval 5 year, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 month, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 day, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 quarter, ceil);
+-- result:
+None
+-- !result
+select time_slice('9999-12-31',interval 5 week, ceil);
+-- result:
+None
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 year);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 month);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 day);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 quarter);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select time_slice('2023-12-31 03:12:04',interval 2147483647 week);
+-- result:
+0001-01-01 00:00:00
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 year);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 57. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 month);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 day);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 56. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 quarter);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 60. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval 3.2 week);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 57. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result
+select date_slice('2023-12-31 03:12:04',interval -3.2 week);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
+-- !result

@@ -35,7 +35,7 @@ class CacheKey;
 
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
-Status to_status(absl::Status absl_status);
+Status to_status(const absl::Status& absl_status);
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
@@ -78,11 +78,20 @@ private:
 
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
+    static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
+
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
+
+    static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
+
+    static bool need_enable_cache(const ShardInfo& info);
+
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
                                                                                  const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
                                                                       const Configuration& conf);
+    absl::Status invalidate_fs(const ShardInfo& shard);
 
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;

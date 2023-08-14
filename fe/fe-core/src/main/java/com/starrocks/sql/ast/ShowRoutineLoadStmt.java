@@ -82,6 +82,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("Progress")
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
+                    .add("TrackingSQL")
                     .add("OtherMsg")
                     .build();
 

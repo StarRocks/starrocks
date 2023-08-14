@@ -1,6 +1,6 @@
 -- name: test00
 SELECT * FROM TABLE(generate_series(-5, 0));
--- name: test01
+-- name: test_generate_series_test01
 SELECT * FROM TABLE(generate_series(65530, 65536));
 -- name: test02
 SELECT * FROM TABLE(generate_series(40000000, 40000005));
@@ -122,4 +122,7 @@ SELECT * FROM TABLE(generate_series(-32768, -32768, -1));
 CREATE TABLE t2(c0 INT) duplicate key(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 INSERT INTO t2 SELECT * FROM TABLE(generate_series(100, 120, 3));
 SELECT * FROM t2;
-
+-- name: test57
+CREATE TABLE t_numbers (start int, end int) DUPLICATE KEY(`start`) DISTRIBUTED BY HASH(start) BUCKETS 1;
+INSERT INTO t_numbers VALUES(1, 3),(5,2),(NULL,10),(4, 7),(9, 6);
+SELECT * FROM t_numbers, generate_series(start, end, -1);

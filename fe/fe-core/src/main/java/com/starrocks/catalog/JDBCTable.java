@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
@@ -41,8 +42,11 @@ public class JDBCTable extends Table {
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
 
-    private String resourceName;
+    @SerializedName(value = "tn")
     private String jdbcTable;
+    @SerializedName(value = "rn")
+    private String resourceName;
+
     private Map<String, String> properties;
     private String dbName;
     private String catalogName;

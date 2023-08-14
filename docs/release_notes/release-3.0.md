@@ -1,5 +1,104 @@
 # StarRocks version 3.0
 
+## 3.0.4
+
+Release date: July 18, 2023
+
+### New Feature
+
+Queries can be rewritten even when the queries contain a different type of join than the materialized view. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### Improvements
+
+- If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten to benefit from the materialized view. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- [When the SQL dialect (`sql_dialect`) is set to `trino`](../reference/System_variable.md), table aliases are not case-sensitive. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- Added a new field `table_id` to the table `Information_schema.tables_config`. You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a query that contains the sum aggregate function is rewritten to directly obtain query results from a single-table materialized view, the values in sum() field may be incorrect due to type inference issues. [#25512](https://github.com/StarRocks/starrocks/pull/25512)
+- An error occurs when SHOW PROC is used to view information about tablets in a StarRocks shared-data cluster.
+- The INSERT operation hangs when the length of CHAR data in a STRUCT to be inserted exceeds the maximum length. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- Some data rows queried fail to be returned for INSERT INTO SELECT with FULL JOIN. [#26603](https://github.com/StarRocks/starrocks/pull/26603)
+- An error `ERROR xxx: Unknown table property xxx` occurs when the ALTER TABLE statement is used to modify the table's property `default.storage_medium`. [#25870](https://github.com/StarRocks/starrocks/issues/25870)
+- An error occurs when Broker Load is used to load empty files. [#26212](https://github.com/StarRocks/starrocks/pull/26212)
+- Decommissioning a BE sometimes hangs. [#26509](https://github.com/StarRocks/starrocks/pull/26509)
+
+## 3.0.3
+
+Release date: June 28, 2023
+
+### Improvements
+
+- Metadata synchronization of StarRocks external tables has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](../table_design/automatic_partitioning.md). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The min/max filter gets the wrong Parquet field when the Parquet file contains complex data types. [#23976](https://github.com/StarRocks/starrocks/pull/23976)
+- Load tasks are still queuing even when the related database or table has been dropped. [#24801](https://github.com/StarRocks/starrocks/pull/24801)
+- There is a low probability that an FE restart may cause BEs to crash. [#25037](https://github.com/StarRocks/starrocks/pull/25037)
+- Load and query jobs occasionally freeze when the variable `enable_profile` is set to `true`. [#25060](https://github.com/StarRocks/starrocks/pull/25060)
+- Inaccurate error message is displayed when INSERT OVERWRITE is executed on a cluster with less than three alive BEs. [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
+## 3.0.2
+
+Release date: June 13, 2023
+
+### Improvements
+
+- Predicates in a UNION query can be pushed down after the query is rewritten by an asynchronous materialized view. [#23312](https://github.com/StarRocks/starrocks/pull/23312)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Removed the dependency of NetworkTime on system clocks, which fixes incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- Queries encounter an error when the session variable `pipeline_profile_level` is set to `0`. [#23873](https://github.com/StarRocks/starrocks/pull/23873)
+- CREATE TABLE encounters an error when `cloud_native_storage_type` is set to `S3`.
+- LDAP authentication succeeds even when no password is used. [#24862](https://github.com/StarRocks/starrocks/pull/24862)
+- CANCEL LOAD fails if the table involved in the load job does not exist. [#24922](https://github.com/StarRocks/starrocks/pull/24922)
+
+### Upgrade Notes
+
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
+
+## 3.0.1
+
+Release date: June 1, 2023
+
+### New Features
+
+- [Preview] Supports spilling intermediate computation results of large operators to disks to reduce the memory consumption of large operators. For more information, see [Spill to disk](../administration/spill_to_disk.md).
+- [Routine Load](../loading/RoutineLoad.md#load-avro-format-data) supports loading Avro data.
+- Supports [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md) (including Azure Blob Storage and Azure Data Lake Storage).
+
+### Improvements
+
+- Shared-data clusters support using StarRocks external tables to synchronize data with another StarRocks cluster.
+- Added `load_tracking_logs` to [Information Schema](../administration/information_schema.md#loadtrackinglogs) to record recent loading errors.
+- Ignores special characters in CREATE TABLE statements. [#23885](https://github.com/StarRocks/starrocks/pull/23885)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Information returned by SHOW CREATE TABLE is incorrect for Primary Key tables. [#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- BEs may crash during a Routine Load job. [#20677](https://github.com/StarRocks/starrocks/issues/20677)
+- Null pointer exception (NPE) occurs if you specify unsupported properties when creating a partitioned table. [#21374](https://github.com/StarRocks/starrocks/issues/21374)
+- Information returned by SHOW TABLE STATUS is incomplete. [#24279](https://github.com/StarRocks/starrocks/issues/24279)
+
+### Upgrade Notes
+
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
+
 ## 3.0.0
 
 Release date: April 28, 2023
@@ -8,7 +107,7 @@ Release date: April 28, 2023
 
 #### System architecture
 
-- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local cache is hit. For more information, see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md).
+- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local disk cache is hit. For more information, see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md).
 
 #### Storage engine and data ingestion
 
@@ -38,7 +137,7 @@ Release date: April 28, 2023
 #### SQL reference
 
 - Added the following privilege-related SQL statements: [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md), [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md), [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md), and [SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md).
-- Added the following semi-structured data analysis functions: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md), [map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md), [map_filter](../sql-reference/sql-functions/map-functions/map_filter.md), [transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md), and [transform_values](../sql-reference/sql-functions/map-functions/transform_values.md).
+- Added the following semi-structured data analysis functions: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md), [map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md).
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports ORDER BY.
 - Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#lag) support IGNORE NULLS.
 - Added string functions [replace](../sql-reference/sql-functions/string-functions/replace.md), [hex_decode_binary](../sql-reference/sql-functions/string-functions/hex_decode_binary.md), and [hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md).

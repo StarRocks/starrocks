@@ -31,7 +31,7 @@ PROPERTIES("replicated_storage" = "true");
 
 ### Assign values for `AUTO_INCREMENT` column
 
-**Assign values implicitly**
+#### Assign values implicitly
 
 When you load data into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
@@ -97,7 +97,7 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 6 rows in set (0.01 sec)
 ```
 
-**Specify values explicitly**
+#### Specify values explicitly
 
 You can also explicitly specify the values for the `AUTO_INCREMENT` column and insert them into the table.
 
@@ -279,10 +279,10 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     1,1,99
     ```
 
-3. Run a Stream Load job and use the CSV file to update table `test_tbl4`.
+3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) job and use the CSV file to update table `test_tbl4`.
 
     ```Bash
-    curl --location-trusted -u root: -H "label:1" \
+    curl --location-trusted -u <username>:<password> -H "label:1" \
         -H "column_separator:," \
         -H "partial_update:true" \
         -H "columns:id,name,job2" \
@@ -350,10 +350,10 @@ This feature can be used to build a dictionary table for quickly computing disti
     2,2,99
     ```
 
-3. Run a Stream Load job to load data from the CSV file into table `test_tbl5`.
+3. Run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) job to load data from the CSV file into table `test_tbl5`.
 
     ```Bash
-    curl --location-trusted -u root: -H "label:2" \
+    curl --location-trusted -u <username>:<password> -H "label:2" \
         -H "column_separator:," \
         -H "partial_update:true" \
         -H "columns: id,name,job2" \
@@ -387,7 +387,7 @@ This feature can be used to build a dictionary table for quickly computing disti
   - There is a load job for partial updates, which includes multiple UPSERT and DELETE operations on the same data row. If a certain UPSERT operation is executed after the DELETE operation, the UPSERT operation may not take effect.
 
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
-- Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
+- Since version 3.1, StarRocks's shared-data mode supports the `AUTO_INCREMENT` attribute.
 - StarRocks does not support specifying the starting value and step size for the `AUTO_INCREMENT` column.
 
 ## Keywords

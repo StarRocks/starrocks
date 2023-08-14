@@ -560,7 +560,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c2 = BinaryColumn::create();
     c2->append_datum("pq");
     c2->append_datum("rstu");
-    ASSERT_TRUE(c1->update_rows(*c2.get(), replace_idxes.data()).ok());
+    c1->update_rows(*c2.get(), replace_idxes.data());
 
     auto slices = c1->get_data();
     EXPECT_EQ(5, c1->size());
@@ -573,7 +573,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     auto c3 = BinaryColumn::create();
     c3->append_datum("ab");
     c3->append_datum("cdef");
-    ASSERT_TRUE(c1->update_rows(*c3.get(), replace_idxes.data()).ok());
+    c1->update_rows(*c3.get(), replace_idxes.data());
 
     slices = c1->get_data();
     EXPECT_EQ(5, c1->size());
@@ -587,7 +587,7 @@ PARALLEL_TEST(BinaryColumnTest, test_update_rows) {
     std::vector<uint32_t> new_replace_idxes = {0, 1};
     c4->append_datum("ab");
     c4->append_datum("cdef");
-    ASSERT_TRUE(c1->update_rows(*c4.get(), new_replace_idxes.data()).ok());
+    c1->update_rows(*c4.get(), new_replace_idxes.data());
 
     slices = c1->get_data();
     EXPECT_EQ(5, c1->size());

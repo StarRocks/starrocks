@@ -180,7 +180,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {
-        parent = _exec_env->query_pool_mem_tracker();
+        parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
     }
 
     _query_mem_tracker =
@@ -334,6 +334,7 @@ Status RuntimeState::create_rejected_record_file() {
         LOG(WARNING) << error_msg.str();
         return Status::InternalError(error_msg.str());
     }
+    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
     _rejected_record_file_path = rejected_record_absolute_path;
     return Status::OK();
 }
@@ -431,14 +432,15 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
 }
 
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_query_global_dicts);
+    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_load_global_dicts);
+    return _build_global_dict(global_dict_list, &_load_global_dicts, &_load_dict_versions);
 }
 
-Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result) {
+Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                                        phmap::flat_hash_map<uint32_t, int64_t>* column_id_to_version) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
         GlobalDictMap dict_map;
@@ -454,26 +456,23 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
             rdict_map.emplace(global_dict.ids[i], slice);
         }
         result->emplace(uint32_t(global_dict.columnId), std::make_pair(std::move(dict_map), std::move(rdict_map)));
+        if (column_id_to_version != nullptr) {
+            column_id_to_version->emplace(uint32_t(global_dict.columnId), global_dict.version);
+        }
     }
     return Status::OK();
 }
 
-bool RuntimeState::enable_query_statistic() const {
-    return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
-}
-
 std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    if (!enable_query_statistic()) {
-        return nullptr;
-    }
     return _query_ctx->intermediate_query_statistic();
 }
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
-    if (!enable_query_statistic()) {
-        return nullptr;
-    }
     return _query_ctx->maintained_query_recv();
+}
+
+std::atomic_int64_t* RuntimeState::mutable_total_spill_bytes() {
+    return _query_ctx->mutable_total_spill_bytes();
 }
 
 Status RuntimeState::reset_epoch() {

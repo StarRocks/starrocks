@@ -365,7 +365,6 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select distinct cast(2.0 as decimal) * v1 from t0_not_null";
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  group by: [4: expr, DECIMAL128(28,0), true]");
     }
@@ -506,7 +505,6 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select intersect_count(b1, v1, 999999) from test_object;";
         String plan = getThriftPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "int_literal:TIntLiteral(value:999999), " +
                 "output_scale:-1, " +
                 "has_nullable_child:false, is_nullable:false, is_monotonic:true)])], " +
@@ -699,15 +697,15 @@ public class AggregateTest extends PlanTestBase {
     public void testMultiCountDistinct() throws Exception {
         String queryStr = "select count(distinct k1, k2) from baseall group by k3";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
+        Assert.assertTrue(explainString, explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
 
         queryStr = "select count(distinct k1) from baseall";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("multi_distinct_count(1: k1)"));
+        Assert.assertTrue(explainString, explainString.contains("multi_distinct_count(1: k1)"));
 
         queryStr = "select count(distinct k1, k2),  count(distinct k4) from baseall group by k3";
         explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
+        Assert.assertTrue(explainString, explainString.contains("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
@@ -782,7 +780,6 @@ public class AggregateTest extends PlanTestBase {
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "RESULT SINK\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
@@ -886,7 +883,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv group by 1,2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -903,7 +900,7 @@ public class AggregateTest extends PlanTestBase {
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(41: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(40: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -922,7 +919,7 @@ public class AggregateTest extends PlanTestBase {
                 "by date_trunc('year',lo_orderdate)," +
                 "left(c_name,1) ) t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        assertContains(plan, "window_funnel(42: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1039,7 +1036,6 @@ public class AggregateTest extends PlanTestBase {
     public void testAggWithSubquery() throws Exception {
         String sql = "select sum(case when v4 = (select v1 from t0) then v4 end) from t1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(if(1: v4 = 4: v1, 1: v4, NULL))\n" +
@@ -1102,8 +1098,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, sum(v2) from t0";
         plan = getFragmentPlan(sql);
@@ -1125,8 +1120,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1152,8 +1146,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1, max(v2) from t0 having v1 = 1";
         plan = getFragmentPlan(sql);
@@ -1176,8 +1169,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=2.0\n"));
 
         sql = "select v1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1220,8 +1212,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1266,8 +1257,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
 
         sql = "select lead(v2) over(partition by v1) from t0 group by v1";
         plan = getFragmentPlan(sql);
@@ -1315,9 +1305,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
-                ""));
+                "     avgRowSize=3.0\n"));
 
         connectContext.getSessionVariable().setSqlMode(sqlmode);
     }
@@ -1643,7 +1631,6 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         String sql = "select distinct t0.v1  from t0 full outer join[shuffle] t1 on t0.v1 = t1.v4;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v1\n" +
                 "  |  \n" +
@@ -1944,15 +1931,14 @@ public class AggregateTest extends PlanTestBase {
         sql = "select sum(id_decimal + 1 + 2) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  <slot 12> : 16: sum + CAST(17: count AS DECIMAL128(18,0)) * 1 + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  output: count(10: id_decimal), count(CAST(10: id_decimal AS DECIMAL64(12,2)) + 1), sum(10: id_decimal)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 13> : " +
-                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
+                "  |  <slot 10> : 10: id_decimal\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         // 1.2 not null
@@ -2281,5 +2267,161 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "11:Project\n" +
                 "  |  <slot 10> : 61\n" +
                 "  |  limit: 1");
+    }
+
+    @Test
+    public void testPercentileFunctionConst() throws Exception {
+        // For compatibility
+        String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+
+        sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_approx second parameter'value must be between 0 and 1.");
+        getCostExplain(sql);
+        plan = getCostExplain(sql);
+
+
+        sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_cont 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+
+
+        sql = "select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_disc 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+    }
+
+    @Test
+    public void testSplitTheTopGlobalAgg() throws Exception {
+        String sql = "select count(distinct v2), count(v3) from t0 join t1 group by v3";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "9:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2), count(8: count)\n" +
+                "  |  group by: 3: v3\n" +
+                "  |  \n" +
+                "  8:AGGREGATE (merge serialize)\n" +
+                "  |  output: count(8: count)\n" +
+                "  |  group by: 2: v2, 3: v3");
+
+        // no need to split the top global agg for the below cases
+        sql = "select count(distinct v2), count(v3) from t0 join t1";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 07\n" +
+                        "    HASH_PARTITIONED: 2: v2",
+                "9:AGGREGATE (update serialize)\n" +
+                        "  |  output: count(2: v2), count(8: count)\n" +
+                        "  |  group by: ");
+
+
+        sql = "select count(distinct v2), count(v3) from t0 join t1 group by 'a'";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 07\n" +
+                        "    HASH_PARTITIONED: 2: v2",
+                "10:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: count(2: v2), count(9: count)\n" +
+                        "  |  group by: 7: expr");
+    }
+
+    @Test
+    public void testStreamingAgg() throws Exception {
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(*) from t0 join t1 group by v3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), sum(v4) from t0 join t1 group by v3";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(4: v4)\n" +
+                "  |  group by: 2: v2, 3: v3",
+                "7:AGGREGATE (update finalize)\n" +
+                        "  |  output: count(2: v2), sum(8: sum)\n" +
+                        "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by 'a'";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "6:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: array_agg(1: v1)\n" +
+                        "  |  group by: 2: v2",
+                "8:AGGREGATE (merge serialize)\n" +
+                        "  |  output: array_agg(9: array_agg)\n" +
+                        "  |  group by: 2: v2");
+
+        sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "7:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  \n" +
+                "  6:AGGREGATE (merge serialize)\n" +
+                "  |  output: array_agg(8: array_agg)\n" +
+                "  |  group by: 2: v2, 4: v4");
+
+        sql = "select /*+ SET_VAR (new_planner_agg_stage = 4) */ " +
+                "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 08\n" +
+                "    HASH_PARTITIONED: 4: v4\n" +
+                "\n" +
+                "  7:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
+                "  |  group by: 4: v4",
+                "9:AGGREGATE (merge finalize)\n" +
+                        "  |  output: count(7: count), array_agg(8: array_agg)\n" +
+                        "  |  group by: 4: v4\n" +
+                        "  |  \n" +
+                        "  8:EXCHANGE");
+
+    }
+
+    @Test
+    public void testCountDistinctWithLimit() throws Exception {
+        String sql = "select count(distinct v1), count(distinct v2) from t0 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(1: v1), multi_distinct_count(2: v2)");
+
+        sql = "select count(distinct v1), count(distinct v2) from t0 group by v3 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(1: v1), multi_distinct_count(2: v2)\n" +
+                "  |  group by: 3: v3");
+
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+                "limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  limit: 10");
+
+        sql = "select /*+ SET_VAR (prefer_cte_rewrite = true) */ count(distinct v1), count(distinct v2) from t0 " +
+                "group by v3 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v3 <=> 9: v3\n" +
+                "  |  limit: 10");
     }
 }

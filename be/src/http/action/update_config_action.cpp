@@ -52,9 +52,11 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -74,16 +76,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() {
-            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
-            cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+            int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+            cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() {
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
-                cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+                int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+                cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
@@ -103,6 +105,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
         });
+        _config_callback.emplace("pindex_major_compaction_num_threads", [&]() {
+            PersistentIndexCompactionManager* mgr =
+                    StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
+            if (mgr != nullptr) {
+                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+            }
+        });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
             StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
@@ -112,12 +121,34 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            thread_pool->update_max_threads(
+            (void)thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("alter_tablet_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
+        });
+        _config_callback.emplace("lake_metadata_cache_limit", [&]() {
+            auto tablet_mgr = _exec_env->lake_tablet_manager();
+            if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+        });
+        _config_callback.emplace("transaction_apply_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::transaction_apply_worker_count > 0) {
+                max_thread_cnt = config::transaction_apply_worker_count;
+            }
+            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("get_pindex_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::get_pindex_worker_count > 0) {
+                max_thread_cnt = config::get_pindex_worker_count;
+            }
+            (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+                    max_thread_cnt);
         });
     });
 

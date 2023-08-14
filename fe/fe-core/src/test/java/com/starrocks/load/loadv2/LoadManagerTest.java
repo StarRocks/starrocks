@@ -39,7 +39,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -57,12 +59,12 @@ import java.util.List;
 import java.util.Map;
 
 public class LoadManagerTest {
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
     private final String fieldName = "idToLoadJob";
 
     @Before
     public void setUp() throws Exception {
-
+        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @After
@@ -91,13 +93,13 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
         File file = serializeToFile(loadManager);
 
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
 
         Map<Long, LoadJob> loadJobs = Deencapsulation.getField(loadManager, fieldName);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
@@ -123,7 +125,7 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
@@ -133,7 +135,7 @@ public class LoadManagerTest {
 
         File file = serializeToFile(loadManager);
 
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
 
         Assert.assertEquals(0, newLoadJobs.size());
@@ -161,13 +163,13 @@ public class LoadManagerTest {
         Config.label_keep_max_second = 10;
 
         // 1. serialize 1 job to file
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
         File file = serializeToFile(loadManager);
 
         // 2. read it directly, expect 1 job
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
         Assert.assertEquals(1, newLoadJobs.size());
 
@@ -180,7 +182,7 @@ public class LoadManagerTest {
         Assert.assertEquals(0, newLoadJobs.size());
     }
 
-    private File serializeToFile(LoadManager loadManager) throws Exception {
+    private File serializeToFile(LoadMgr loadManager) throws Exception {
         File file = new File("./loadManagerTest");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
@@ -190,9 +192,9 @@ public class LoadManagerTest {
         return file;
     }
 
-    private LoadManager deserializeFromFile(File file) throws Exception {
+    private LoadMgr deserializeFromFile(File file) throws Exception {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        LoadManager loadManager = new LoadManager(new LoadJobScheduler());
+        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         loadManager.readFields(dis);
         return loadManager;
     }
@@ -207,7 +209,7 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         int origLabelKeepMaxSecond = Config.label_keep_max_second;
         int origLabelKeepMaxNum = Config.label_keep_max_num;
         Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager, "idToLoadJob");
@@ -309,5 +311,42 @@ public class LoadManagerTest {
         // recover config
         Config.label_keep_max_second = origLabelKeepMaxSecond;
         Config.label_keep_max_num = origLabelKeepMaxNum;
+    }
+
+    @Test
+    public void testLoadJsonImage(@Mocked GlobalStateMgr globalStateMgr,
+                                  @Injectable Database db) throws Exception {
+        new Expectations() {
+            {
+                globalStateMgr.getDb(anyLong);
+                result = db;
+            }
+        };
+
+        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
+        LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "");
+        loadJob1.id = 1L;
+        loadManager.replayCreateLoadJob(loadJob1);
+
+        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", null, null, null);
+        loadJob2.id = 2L;
+        loadManager.replayCreateLoadJob(loadJob2);
+
+        LoadJob loadJob3 = new SparkLoadJob(2L, "job3", null, null);
+        loadJob3.id = 3L;
+        loadManager.replayCreateLoadJob(loadJob3);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+
+        loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
+
+        LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+        loadManager2.loadLoadJobsV2JsonFormat(reader);
+        reader.close();
+
+        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager2, "idToLoadJob");
+
+        Assert.assertEquals(3, idToLoadJob.size());
     }
 }

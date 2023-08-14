@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -136,7 +137,7 @@ public class HistogramStatisticsTest {
 
     void check(ColumnRefOperator columnRefOperator, String type, int constant, Statistics statistics, int rowCount) {
         BinaryPredicateOperator binaryPredicateOperator
-                = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.valueOf(type),
+                = new BinaryPredicateOperator(BinaryType.valueOf(type),
                 columnRefOperator, ConstantOperator.createBigint(constant));
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assert.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
@@ -145,12 +146,12 @@ public class HistogramStatisticsTest {
     void between(ColumnRefOperator columnRefOperator, String greaterType, int min, String lessType,
                  int max, Statistics statistics, int rowCount) {
         BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.valueOf(greaterType),
+                BinaryType.valueOf(greaterType),
                 columnRefOperator,
                 ConstantOperator.createBigint(min));
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
 
-        binaryPredicateOperator = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.valueOf(lessType),
+        binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.valueOf(lessType),
                 columnRefOperator,
                 ConstantOperator.createBigint(max));
         estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, estimated);

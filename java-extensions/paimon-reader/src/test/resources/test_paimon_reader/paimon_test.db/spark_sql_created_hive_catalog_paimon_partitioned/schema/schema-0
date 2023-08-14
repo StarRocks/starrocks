@@ -1,0 +1,22 @@
+{
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "uuid",
+    "type" : "INT NOT NULL"
+  }, {
+    "id" : 1,
+    "name" : "name",
+    "type" : "STRING NOT NULL"
+  }, {
+    "id" : 2,
+    "name" : "price",
+    "type" : "DOUBLE"
+  } ],
+  "highestFieldId" : 2,
+  "partitionKeys" : [ "name" ],
+  "primaryKeys" : [ "uuid", "name" ],
+  "options" : {
+    "owner" : "root"
+  }
+}

@@ -36,10 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.HdfsURI;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
@@ -60,8 +61,11 @@ import static com.starrocks.common.io.IOUtils.writeOptionString;
 public class ScalarFunction extends Function {
     // The name inside the binary at location_ that contains this particular
     // function. e.g. org.example.MyUdf.class.
+    @SerializedName(value = "symbolName")
     private String symbolName;
+    @SerializedName(value = "prepareFnSymbol")
     private String prepareFnSymbol;
+    @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
 
     // Only used for serialization

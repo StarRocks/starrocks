@@ -14,9 +14,11 @@
 
 package com.starrocks.credential.aws;
 
+import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.BasicSessionCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
@@ -34,34 +36,34 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
-import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
 
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * Authenticating process (It's a pseudocode code):
  * Credentials credentials = null;
  * if (useAWSSDKDefaultBehavior) {
- *     return new DefaultAWSCredentialsProviderChain();
+ *   return new DefaultAWSCredentialsProviderChain();
  * } else if (useInstanceProfile) {
- *      credentials = GetInstanceProfileCredentials();
- *     if (useIamRoleArn) {
- *        credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
- *     }
- *     return credentials;
+ *   credentials = GetInstanceProfileCredentials();
+ *   if (useIamRoleArn) {
+ *     credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
+ *   }
+ *   return credentials;
  * } else if (exist(accessKey) && exist(secretKey)) {
- *     credentials = GetAKSKCredentials(accessKey, secretKey);
- *     if (useIamRoleArn) {
- *         credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
- *     }
- *     return credentials;
+ *   // sessionToken is optional, if you use sessionToken, GetAKSKCredentials() will return a temporary credential
+ *   credentials = GetAKSKCredentials(accessKey, secretKey, [sessionToken]);
+ *   if (useIamRoleArn) {
+ *     credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
+ *   }
+ *   return credentials;
  * } else {
- *     // Unreachable!!!!
- *     // We don't allowed to create anonymous credentials, we will check it in validate() method.
- *     // If user want to use anonymous credentials, they just don't set cloud credential directly.
+ *   // Unreachable!!!!
+ *   // We don't allowed to create anonymous credentials, we will check it in validate() method.
+ *   // If user want to use anonymous credentials, they just don't set cloud credential directly.
  * }
  */
 public class AWSCloudCredential implements CloudCredential {
@@ -74,6 +76,8 @@ public class AWSCloudCredential implements CloudCredential {
 
     private final String secretKey;
 
+    private final String sessionToken;
+
     private final String iamRoleArn;
 
     private final String externalId;
@@ -83,9 +87,11 @@ public class AWSCloudCredential implements CloudCredential {
     private final String endpoint;
 
     protected AWSCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, String accessKey,
-                              String secretKey, String iamRoleArn, String externalId, String region, String endpoint) {
+                                 String secretKey, String sessionToken, String iamRoleArn, String externalId, String region,
+                                 String endpoint) {
         Preconditions.checkNotNull(accessKey);
         Preconditions.checkNotNull(secretKey);
+        Preconditions.checkNotNull(sessionToken);
         Preconditions.checkNotNull(iamRoleArn);
         Preconditions.checkNotNull(externalId);
         Preconditions.checkNotNull(region);
@@ -94,6 +100,7 @@ public class AWSCloudCredential implements CloudCredential {
         this.useInstanceProfile = useInstanceProfile;
         this.accessKey = accessKey;
         this.secretKey = secretKey;
+        this.sessionToken = sessionToken;
         this.iamRoleArn = iamRoleArn;
         this.externalId = externalId;
         this.region = region;
@@ -106,6 +113,14 @@ public class AWSCloudCredential implements CloudCredential {
 
     public String getEndpoint() {
         return endpoint;
+    }
+
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
     }
 
     public AWSCredentialsProvider generateAWSCredentialsProvider() {
@@ -135,7 +150,13 @@ public class AWSCloudCredential implements CloudCredential {
         if (useInstanceProfile) {
             return new InstanceProfileCredentialsProvider(true);
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
-            return new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
+            if (!sessionToken.isEmpty()) {
+                // Build temporary aws credentials with session token
+                AWSCredentials awsCredentials = new BasicSessionCredentials(accessKey, secretKey, sessionToken);
+                return new AWSStaticCredentialsProvider(awsCredentials);
+            } else {
+                return new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
+            }
         } else {
             Preconditions.checkArgument(false, "Unreachable");
             return new AnonymousAWSCredentialsProvider();
@@ -174,8 +195,14 @@ public class AWSCloudCredential implements CloudCredential {
                 configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
                 configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
             } else {
-                configuration.set("fs.s3a.aws.credentials.provider",
-                        "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
+                if (!sessionToken.isEmpty()) {
+                    configuration.set("fs.s3a.session.token", sessionToken);
+                    configuration.set("fs.s3a.aws.credentials.provider",
+                            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider");
+                } else {
+                    configuration.set("fs.s3a.aws.credentials.provider",
+                            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider");
+                }
             }
         } else {
             Preconditions.checkArgument(false, "Unreachable");
@@ -205,17 +232,18 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public void toThrift(List<TCloudProperty> properties) {
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
-                String.valueOf(useAWSSDKDefaultBehavior)));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
-                String.valueOf(useInstanceProfile)));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, iamRoleArn));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_REGION, region));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint));
+    public void toThrift(Map<String, String> properties) {
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                String.valueOf(useAWSSDKDefaultBehavior));
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                String.valueOf(useInstanceProfile));
+        properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+        properties.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, iamRoleArn);
+        properties.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId);
+        properties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+        properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
     }
 
     @Override
@@ -225,6 +253,7 @@ public class AWSCloudCredential implements CloudCredential {
                 ", useInstanceProfile=" + useInstanceProfile +
                 ", accessKey='" + accessKey + '\'' +
                 ", secretKey='" + secretKey + '\'' +
+                ", sessionToken='" + sessionToken + '\'' +
                 ", iamRoleArn='" + iamRoleArn + '\'' +
                 ", externalId='" + externalId + '\'' +
                 ", region='" + region + '\'' +
@@ -237,6 +266,7 @@ public class AWSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.S3);
         S3FileStoreInfo.Builder s3FileStoreInfo = S3FileStoreInfo.newBuilder();
+        s3FileStoreInfo.setRegion(region).setEndpoint(endpoint);
         AwsCredentialInfo.Builder awsCredentialInfo = AwsCredentialInfo.newBuilder();
         if (useAWSSDKDefaultBehavior) {
             AwsDefaultCredentialInfo.Builder defaultCredentialInfo = AwsDefaultCredentialInfo.newBuilder();
@@ -253,6 +283,7 @@ public class AWSCloudCredential implements CloudCredential {
             }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             // TODO: Support assumeRole with AK/SK
+            // TODO: Support sessionToken with AK/SK
             AwsSimpleCredentialInfo.Builder simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder();
             simpleCredentialInfo.setAccessKey(accessKey);
             simpleCredentialInfo.setAccessKeySecret(secretKey);

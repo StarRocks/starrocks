@@ -96,13 +96,11 @@ OutPut Exchange Id: 26
 |  output columns: 23, 24, 42
 |  cardinality: 16391888
 |  column statistics:
-|  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
-|  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * o_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * n_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 |----22:EXCHANGE
@@ -162,7 +160,6 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
-numNodes=0
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -189,7 +186,6 @@ NON-PARTITION PREDICATES: 13: o_orderdate >= '1995-01-01', 13: o_orderdate < '19
 MIN/MAX PREDICATES: 52: o_orderdate >= '1995-01-01', 53: o_orderdate < '1996-01-01'
 partitions=1/1
 avgRowSize=20.0
-numNodes=0
 cardinality: 22765073
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.2765072765072763E7] ESTIMATE
@@ -211,7 +207,7 @@ OutPut Exchange Id: 14
 |  42 <-> [42: n_name, VARCHAR, true]
 |  cardinality: 120007580
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.2000758039999999E8] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.200075804E8] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
@@ -225,12 +221,11 @@ OutPut Exchange Id: 14
 |  output columns: 18, 23, 24, 37, 42
 |  cardinality: 120007580
 |  column statistics:
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.2000758039999999E8] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.200075804E8] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
 |  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----11:EXCHANGE
@@ -242,7 +237,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
-numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (20: l_suppkey)
@@ -292,7 +286,6 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 34: s_suppkey IS NOT NULL, 37: s_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
-numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (37: s_nationkey)
@@ -337,7 +330,6 @@ TABLE: nation
 NON-PARTITION PREDICATES: 41: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
-numNodes=0
 cardinality: 25
 probe runtime filters:
 - filter_id = 0, probe_expr = (43: n_regionkey)
@@ -365,7 +357,6 @@ NON-PARTITION PREDICATES: 46: r_name = 'AFRICA'
 MIN/MAX PREDICATES: 50: r_name <= 'AFRICA', 51: r_name >= 'AFRICA'
 partitions=1/1
 avgRowSize=10.8
-numNodes=0
 cardinality: 1
 column statistics:
 * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE

@@ -40,21 +40,31 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.HeartbeatMgr.BrokerHeartbeatHandler;
 import com.starrocks.system.HeartbeatMgr.FrontendHeartbeatHandler;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
+import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TBrokerOperationStatus;
 import com.starrocks.thrift.TBrokerOperationStatusCode;
 import com.starrocks.thrift.TBrokerPingBrokerRequest;
 import com.starrocks.thrift.TFileBrokerService;
+import com.starrocks.thrift.THeartbeatResult;
+import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRunMode;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Collections;
 
 public class HeartbeatMgrTest {
 
@@ -78,7 +88,6 @@ public class HeartbeatMgrTest {
                 result = globalStateMgr;
             }
         };
-
     }
 
     @Test
@@ -162,4 +171,68 @@ public class HeartbeatMgrTest {
         Assert.assertEquals(HbStatus.OK, hbResponse.getStatus());
     }
 
+    @Test
+    public void testBackendHandler(@Mocked HeartbeatService.Client client) throws Exception {
+        TStatus status = new TStatus(TStatusCode.ABORTED);
+        status.setError_msgs(Collections.singletonList("error_msg"));
+        THeartbeatResult res = new THeartbeatResult();
+        res.setStatus(status);
+
+        new MockUp<GenericPool<HeartbeatService.Client>>() {
+            @Mock
+            public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
+                return client;
+            }
+
+            @Mock
+            public void returnObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+
+            @Mock
+            public void invalidateObject(TNetworkAddress address, HeartbeatService.Client object) {
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<HeartbeatMgr>() {
+            @Mock
+            public long computeMinActiveTxnId() {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                client.heartbeat((TMasterInfo) any);
+                minTimes = 1;
+                result = res;
+            }
+        };
+
+        // call setLeader() to init the MASTER_INFO
+        new HeartbeatMgr(false).setLeader(1, "123", 1);
+
+        ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
+        HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn);
+        HeartbeatResponse response = handler.call();
+        Assert.assertTrue(response instanceof BackendHbResponse);
+        BackendHbResponse hbResponse = (BackendHbResponse) response;
+        Assert.assertEquals(HbStatus.BAD, hbResponse.getStatus());
+
+        new Verifications() {
+            {
+                TMasterInfo masterInfo;
+                client.heartbeat(masterInfo = withCapture());
+                // verify the runMode is set in the masterInfo request
+                Assert.assertNotNull(masterInfo);
+                Assert.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
+            }
+        };
+    }
 }

@@ -149,8 +149,8 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
         DCHECK_EQ(field_names.size(), children.size());
-        for (size_t i = 0; i < field_names.size(); i++) {
-            node->add_struct_fields()->set_name(field_names[i]);
+        for (const auto& field_name : field_names) {
+            node->add_struct_fields()->set_name(field_name);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -261,18 +261,26 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 bool TypeDescriptor::support_orderby() const {
+    if (type == TYPE_ARRAY) {
+        return children[0].support_orderby();
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT;
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+        return std::all_of(children.begin(), children.end(),
+                           [](const TypeDescriptor& t) { return t.support_groupby(); });
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {

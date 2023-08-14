@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
@@ -71,16 +72,28 @@ struct GroupReaderParam {
     FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
+
+    // used to identify io coalesce
+    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
 };
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                 int64_t row_group_first_row);
     ~GroupReader() = default;
 
+    // init used to init column reader, init dict_filter_ctx and devide active/lazy
     Status init();
-    Status get_next(ChunkPtr* chunk, size_t* row_count);
+    // we need load dict for dict_filter, so prepare should be after collec_io_range
+    Status prepare();
+    Status get_next(ChunkPtr* chunk, size_t* row_count) {
+        if (config::parquet_late_materialization_v2_enable) {
+            return _do_get_next_new(chunk, row_count);
+        } else {
+            return _do_get_next(chunk, row_count);
+        }
+    }
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
@@ -131,16 +144,24 @@ private:
     static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
+    Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
+    Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
+    Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
+                       ChunkPtr* chunk);
+
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                 int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const TIcebergSchemaField* iceberg_schema_field, bool active,
+                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
-    std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
-    std::int64_t _row_group_first_row = 0;
-    const std::set<std::int64_t>* _need_skip_rowids;
-    std::int64_t _raw_rows_read = 0;
+    const tparquet::RowGroup* _row_group_metadata = nullptr;
+    int64_t _row_group_first_row = 0;
+    const std::set<int64_t>* _need_skip_rowids;
+    int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
@@ -152,6 +173,8 @@ private:
     std::vector<int> _active_column_indices;
     // lazy conlumns that hold read_col index
     std::vector<int> _lazy_column_indices;
+    // load lazy column or not
+    bool _lazy_column_needed = false;
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
@@ -168,6 +191,9 @@ private:
     int64_t _end_offset = 0;
 
     DictFilterContext _dict_filter_ctx;
+
+    SparseRange<uint64_t> _range;
+    SparseRangeIterator<uint64_t> _range_iter;
 };
 
 } // namespace starrocks::parquet

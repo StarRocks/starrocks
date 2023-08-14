@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -49,6 +50,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -723,6 +725,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
 
+    /**
+     * `toSqlWithoutTbl` will return sql without table name for column name, so it can be easier to compare two expr.
+     */
+    public String toSqlWithoutTbl() {
+        return new AstToSQLBuilder.AST2SQLBuilderVisitor(false, true).visit(this);
+    }
+
     public String explain() {
         return (printSqlInParens) ? "(" + explainImpl() + ")" : explainImpl();
     }
@@ -770,6 +779,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     // Append a flattened version of this expr, including all children, to 'container'.
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
+        if (type.isNull()) {
+            Preconditions.checkState(this instanceof NullLiteral || this instanceof SlotRef);
+            NullLiteral.create(ScalarType.BOOLEAN).treeToThriftHelper(container, visitor);
+            return;
+        }
+
         TExprNode msg = new TExprNode();
 
         Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");

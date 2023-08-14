@@ -20,6 +20,7 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::pipeline {
+
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -34,7 +35,7 @@ public:
 
     bool has_output() const override { return false; }
     bool need_input() const override {
-        return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+        return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     Status set_finishing(RuntimeState* state) override;
@@ -45,8 +46,8 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
-
-    void mark_need_spill() override;
+    bool releaseable() const override { return true; }
+    void set_execute_mode(int performance_level) override;
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
@@ -60,6 +61,9 @@ private:
 
     Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
 
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
+    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -70,6 +74,7 @@ private:
     bool _is_finished = false;
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
+    LimitedMemAggState _limited_mem_state;
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {

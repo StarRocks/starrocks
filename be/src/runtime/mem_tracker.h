@@ -36,6 +36,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -91,7 +92,18 @@ public:
         int64_t peak_consumption = 0;
     };
 
-    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK, RESOURCE_GROUP };
+    enum Type {
+        NO_SET,
+        PROCESS,
+        QUERY_POOL,
+        QUERY,
+        LOAD,
+        CONSISTENCY,
+        COMPACTION,
+        SCHEMA_CHANGE_TASK,
+        RESOURCE_GROUP,
+        RESOURCE_GROUP_BIG_QUERY
+    };
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
@@ -193,6 +205,36 @@ public:
             if (limit < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
+                if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                    continue;
+                } else {
+                    // Failed for this mem tracker. Roll back the ones that succeeded.
+                    for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
+                        _all_trackers[j]->_consumption->add(-bytes);
+                    }
+                    return tracker;
+                }
+            }
+        }
+        // Everyone succeeded, return.
+        DCHECK_EQ(i, -1);
+        return nullptr;
+    }
+
+    WARN_UNUSED_RESULT
+    MemTracker* try_consume_with_limited(int64_t bytes, MemTracker* limited_tracker, int64_t high_limit) {
+        if (UNLIKELY(bytes <= 0)) return nullptr;
+        int64_t i;
+        // Walk the tracker tree top-down.
+        for (i = _all_trackers.size() - 1; i >= 0; --i) {
+            MemTracker* tracker = _all_trackers[i];
+            if (tracker->limit() < 0) {
+                tracker->_consumption->add(bytes); // No limit at this tracker.
+            } else {
+                int64_t limit = tracker->limit();
+                if (tracker == limited_tracker) {
+                    limit = high_limit;
+                }
                 if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
                     continue;
                 } else {
@@ -311,6 +353,10 @@ public:
 
     Type type() const { return _type; }
 
+    std::list<MemTracker*> _child_trackers;
+
+    std::list<MemTracker*> getChild() { return _child_trackers; }
+
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
@@ -354,7 +400,6 @@ private:
     // All the child trackers of this tracker. Used for error reporting only.
     // i.e., Updating a parent tracker does not update the children.
     mutable std::mutex _child_trackers_lock;
-    std::list<MemTracker*> _child_trackers;
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;

@@ -106,6 +106,10 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        } else if (AnalyticExpr.isCumeFn(callExpr.getFn())) {
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for "
+                    + callExpr.getFn().getFunctionName() + "()");
+            windowFrame = AnalyticWindow.DEFAULT_WINDOW;
         } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
@@ -115,7 +119,6 @@ public class WindowTransformer {
                 if (callExpr.getChild(0) instanceof NullLiteral) {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
-
 
                 if (callExpr.getChildren().size() == 1) {
                     callExpr.addChild(new IntLiteral("1", Type.BIGINT));
@@ -183,6 +186,12 @@ public class WindowTransformer {
         // Set the default window.
         if (!orderByElements.isEmpty() && windowFrame == null) {
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
+        }
+
+        // Check if range window has order by clause
+        if (windowFrame != null
+                && AnalyticWindow.Type.RANGE.equals(windowFrame.getType())) {
+            Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
         // Change first_value/last_value RANGE windows to ROWS

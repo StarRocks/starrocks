@@ -27,9 +27,9 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
+#include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
-#include "parquet_test_util/util.h"
 
 namespace starrocks::parquet {
 
@@ -70,6 +70,8 @@ protected:
 
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->stats = &g_hdfs_scan_stats;
         return ctx;
     }

@@ -42,7 +42,7 @@ import com.starrocks.sql.optimizer.validate.ValidateException;
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
 
-    private static String reportCommon(String pattern, ErrorCode errorCode, Object... objs) {
+    public static String reportCommon(String pattern, ErrorCode errorCode, Object... objs) {
         String errMsg;
         if (pattern == null) {
             errMsg = errorCode.formatErrorMsg(objs);
@@ -69,6 +69,10 @@ public class ErrorReport {
 
     public static void reportSemanticException(ErrorCode errorCode, Object... objs) {
         reportSemanticException(null, errorCode, objs);
+    }
+
+    public static SemanticException buildSemanticException(ErrorCode errorCode, Object... objs) {
+        return new SemanticException(reportCommon(null, errorCode, objs));
     }
 
     public static void reportSemanticException(String pattern, ErrorCode errorCode, Object... objs) {

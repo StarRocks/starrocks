@@ -152,6 +152,7 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
+    int64_t total_segment_data_size();
 
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
@@ -181,7 +182,8 @@ public:
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
     StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators2(const Schema& schema, KVStore* meta, int64_t version,
-                                                                   OlapReaderStatistics* stats);
+                                                                   OlapReaderStatistics* stats,
+                                                                   KVStore* dcg_meta = nullptr);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -224,6 +226,8 @@ public:
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();
 
+    Status remove_delta_column_group(KVStore* kvstore);
+
     Status remove_delta_column_group();
 
     // close to clear the resource owned by rowset
@@ -257,17 +261,18 @@ public:
     }
 
     // hard link all files in this rowset to `dir` to form a new rowset with id `new_rowset_id`.
-    Status link_files_to(const std::string& dir, RowsetId new_rowset_id);
+    // `version` is used for link col files, default using INT64_MAX means link all col files
+    Status link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
     // copy all files to `dir`
-    Status copy_files_to(const std::string& dir);
+    Status copy_files_to(KVStore* kvstore, const std::string& dir);
 
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_del_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_upt_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string delta_column_group_path(const std::string& dir, const RowsetId& rowset_id, int segment_id,
-                                               int64_t version);
+                                               int64_t version, int idx);
     // return an unique identifier string for this rowset
     std::string unique_id() const { return _rowset_path + "/" + rowset_id().to_string(); }
 
@@ -337,6 +342,11 @@ public:
 
     bool is_column_mode_partial_update() const { return _rowset_meta->is_column_mode_partial_update(); }
 
+    // only used in unit test
+    Status get_segment_sk_index(std::vector<std::string>* sk_index_values);
+
+    Status verify();
+
 protected:
     friend class RowsetFactory;
 
@@ -366,11 +376,15 @@ protected:
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 
-    Status _remove_delta_column_group_files(std::shared_ptr<FileSystem> fs);
+    Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore);
 
-    Status _link_delta_column_group_files(const std::string& dir);
+    Status _link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
+
+    Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
     std::vector<SegmentSharedPtr> _segments;
+
+    KeysType _keys_type;
 };
 
 class RowsetReleaseGuard {

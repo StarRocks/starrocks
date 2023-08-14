@@ -86,6 +86,12 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(databaseName, tableName, partitionValues);
+    }
+
+    @Override
     public Database getDb(String dbName) {
         Database database;
         try {
@@ -113,7 +119,7 @@ public class HudiMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -164,8 +170,10 @@ public class HudiMetadata implements ConnectorMetadata {
         }
 
         Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columnRefOperators) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columnRefOperators) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
         }
 
         return statistics;

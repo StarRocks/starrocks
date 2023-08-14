@@ -16,6 +16,7 @@
 
 #include "column/schema.h"
 #include "fs/fs.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -42,6 +43,26 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 
 Status Tablet::delete_metadata(int64_t version) {
     return _mgr->delete_tablet_metadata(_id, version);
+}
+
+bool Tablet::get_enable_persistent_index(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return false;
+    }
+    return (*tablet_metadata)->enable_persistent_index();
+}
+
+StatusOr<PersistentIndexTypePB> Tablet::get_persistent_index_type(int64_t version) {
+    auto tablet_metadata = _mgr->get_tablet_metadata(_id, version);
+    if (!tablet_metadata.ok()) {
+        LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << _id << ", version: " << version
+                     << ", error: " << tablet_metadata.status();
+        return Status::InternalError("get tablet metadata failed");
+    }
+    return (*tablet_metadata)->persistent_index_type();
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {
@@ -76,21 +97,22 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
     return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
 }
 
-StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, uint32_t max_rows_per_segment) {
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
+                                                           uint32_t max_rows_per_segment) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema);
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema);
+            return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+            return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
         }
     }
 }
@@ -100,7 +122,7 @@ StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Sche
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id);
+    return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -127,7 +149,7 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
 }
 
 StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                          bool fill_cache) {
+                                          bool fill_data_cache, bool fill_metadata_cache) {
     auto location = segment_location(segment_name);
     auto segment = _mgr->lookup_segment(location);
     if (segment != nullptr) {
@@ -136,8 +158,8 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
     ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint, nullptr,
-                                            !fill_cache));
-    if (fill_cache) {
+                                            !fill_data_cache));
+    if (fill_metadata_cache) {
         _mgr->cache_segment(location, segment);
     }
     return segment;

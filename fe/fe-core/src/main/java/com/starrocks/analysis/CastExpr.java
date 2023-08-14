@@ -124,13 +124,10 @@ public class CastExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        if (isImplicit) {
-            return getChild(0).toSql();
-        }
-        if (isAnalyzed) {
+        if (targetTypeDef == null) {
             return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
         } else {
-            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef.toString() + ")";
+            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef + ")";
         }
     }
 

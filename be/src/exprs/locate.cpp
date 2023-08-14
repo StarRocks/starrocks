@@ -30,11 +30,11 @@ struct LocateCaseSensitiveUTF8 {
 
     static SearcherInBigHaystack createSearcherInBigHaystack(const char* needle_data, size_t needle_size,
                                                              size_t haystack_size_hint) {
-        return SearcherInBigHaystack(needle_data, needle_size, haystack_size_hint);
+        return {needle_data, needle_size, haystack_size_hint};
     }
 
     static SearcherInSmallHaystack createSearcherInSmallHaystack(const char* needle_data, size_t needle_size) {
-        return SearcherInSmallHaystack(needle_data, needle_size);
+        return {needle_data, needle_size};
     }
 };
 

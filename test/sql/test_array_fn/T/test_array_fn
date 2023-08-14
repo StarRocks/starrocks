@@ -225,6 +225,14 @@ select array_contains(NULL, -10) from array_test order by pk;
 select array_contains([1.0,2.1,3.2,4.3], 1) from array_test order by pk;
 select array_contains(['a', 'b', 'c'], -10) from array_test order by pk;
 select array_contains([[1,2,3], [2,3,4]], 100) from array_test order by pk;
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+select array_contains([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}')]);
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}')]);
+select array_contains_all([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                          [parse_json('{"addr": 1}'), parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
 select array_remove(s_1, 1) from array_test order by pk;
 select array_remove(i_1, -10) from array_test order by pk;
 select array_remove(f_1, -10) from array_test order by pk;
@@ -241,6 +249,9 @@ select array_remove([1.0,2.1,3.2,4.3], 1) from array_test order by pk;
 select array_remove(['a', 'b', 'c'], 'a') from array_test order by pk;
 select array_remove(['a', 'b', 'c'], -10) from array_test order by pk;
 select array_remove([[1,2,3], [2,3,4]], 1) from array_test order by pk;
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 1}'));
+select array_remove([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], parse_json('{"addr": 3}'));
+
 select array_position(s_1, 1) from array_test order by pk;
 select array_position(d_6, -1) from array_test order by pk;
 select array_position(d_6, -10) from array_test order by pk;
@@ -361,6 +372,10 @@ select arrays_overlap(NULL, aad_1) from array_test order by pk;
 select arrays_overlap(NULL, ['a', 'c', 'd']) from array_test order by pk;
 select arrays_overlap(NULL, [4, 5, 2, null, 1]) from array_test order by pk;
 select arrays_overlap(NULL, NULL) from array_test order by pk;
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                        [parse_json('{"addr": 2}'), parse_json('{"addr": 3}')]);
+select arrays_overlap([parse_json('{"addr": 1}'), parse_json('{"addr": 2}')], 
+                        [parse_json('{"addr": 3}'), parse_json('{"addr": 4}')]);
 
 select array_slice(s_1, 1) from array_test order by pk;
 select array_slice(s_1, 2) from array_test order by pk;
@@ -663,5 +678,136 @@ select array_intersect([[1,2,3], [2,3,4]], [1.0,2.1,3.2,4.3]) from array_test or
 select array_intersect([[1,2,3], [2,3,4]], ['a', 'b', 'c']) from array_test order by pk;
 select array_intersect([[1,2,3], [2,3,4]], [[1,2,3], [2,3,4]]) from array_test order by pk;
 
+select all_match((x,y) -> x < y, null, [4,5,6]);
+select all_match((x,y) -> x < y, [], []);
+select all_match((x,y) -> x < y, null, []);
+select all_match((x,y) -> x < y, null, null);
+select any_match((x,y) -> x < y, null, [4,5,6]);
+select any_match((x,y) -> x < y, [], []);
+select any_match((x,y) -> x < y, null, []);
+select any_match((x,y) -> x < y, null, null);
+select all_match([0],x->1);
+select any_match([0],x->1);
+select any_match([],x->1);
+select any_match(null);
+select any_match([]);
+select all_match([]);
+select any_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+select any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+select any_match((x,y) -> x < y, [11,12,null], [4,5,6]);
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]);
+
+select all_match(s_1, x->x is null) from array_test order by pk;
+select s_1, any_match(s_1, x->x is null) from array_test order by pk;
+select d_6, d_5, all_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
+select d_6, d_5, any_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
+
+select all_match((x,y) -> x < y, []);
+select all_match((x,y) -> x < y, [],{});
+select all_match([],null);
+select all_match({});
+select all_match();
+select all_match(null,[]);
+select all_match(null,null);
+select any_match((x,y) -> x < y, []);
+select any_match((x,y) -> x < y, [],{});
+select any_match([],null);
+select any_match({});
+select any_match();
+select any_match(null,[]);
+select any_match(null,null);
+select all_match([[]]);
+
+
 select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
 
+select array_contains( cast ('[40360,40361]' as array<int>), 40360);
+select array_contains_all( cast ('[40360,40361]' as array<int>), 40360);
+select array_append( cast ('[40360,40361]' as array<int>), 40360);
+select array_avg( cast ('[40360,40361]' as array<int>), 40360);
+select array_concat( cast ('[40360,40361]' as array<int>), [40360]);
+select array_cum_sum( cast ('[40360,40361]' as array<int>));
+select array_difference( cast ('[40360,40361]' as array<int>));
+select ARRAY_DISTINCT( cast ('[40360,40361]' as array<int>));
+select array_filter(cast ('[40360,40361]' as array<int>),[0,1]);
+select array_intersect( cast ('[40360,40361]' as array<int>), [40360]);
+select array_join( cast ('[40360,40361]' as array<int>), '-');
+select array_length( cast ('[40360,40361]' as array<int>));
+select array_map(x->x+1, cast ('[40360,40361]' as array<int>));
+select array_max( cast ('[40360,40361]' as array<int>));
+select array_min( cast ('[40360,40361]' as array<int>));
+select arrays_overlap( cast ('[40360,40361]' as array<int>), [40360]);
+select array_position( cast ('[40360,40361]' as array<int>), 40360);
+select array_remove( cast ('[40360,40361]' as array<int>), 40360);
+select array_slice( cast ('[40360,40361]' as array<int>), 1,1);
+select ARRAY_SORT( cast ('[40360,40361]' as array<int>));
+select array_sortby( cast ('[40360,40361]' as array<int>), [40360,1]);
+select array_sortby([40360,1], cast ('[40360,40361]' as array<int>));
+select array_sum( cast ('[40360,40361]' as array<int>));
+select array_to_bitmap( cast ('[40360,40361]' as array<int>));
+select bitmap_to_array(array_to_bitmap(cast ('[40360,40361]' as array<int>)));
+select REVERSE( cast ('[40360,40361]' as array<int>));
+
+
+select array_contains( cast ('null' as array<int>), 40360);
+select array_contains_all( cast ('null' as array<int>), 40360);
+select array_append( cast ('null' as array<int>), 40360);
+select array_avg( cast ('null' as array<int>), 40360);
+select array_concat( cast ('null' as array<int>), [40360]);
+select array_cum_sum( cast ('null' as array<int>));
+select array_difference( cast ('null' as array<int>));
+select ARRAY_DISTINCT( cast ('null' as array<int>));
+select array_filter(cast ('null' as array<int>),[0,1]);
+select array_intersect( cast ('null' as array<int>), [40360]);
+select array_join( cast ('null' as array<int>), '-');
+select array_length( cast ('null' as array<int>));
+select array_map(x->x+1, cast ('null' as array<int>));
+select array_max( cast ('null' as array<int>));
+select array_min( cast ('null' as array<int>));
+select arrays_overlap( cast ('null' as array<int>), [40360]);
+select array_position( cast ('null' as array<int>), 40360);
+select array_remove( cast ('null' as array<int>), 40360);
+select array_slice( cast ('null' as array<int>), 1,1);
+select ARRAY_SORT( cast ('null' as array<int>));
+select array_sortby( cast ('null' as array<int>), [40360,1]);
+select array_sortby([40360,1], cast ('null' as array<int>));
+select array_sum( cast ('null' as array<int>));
+select array_to_bitmap( cast ('null' as array<int>));
+select bitmap_to_array(array_to_bitmap(cast ('null' as array<int>)));
+select REVERSE( cast ('null' as array<int>));
+
+
+select array_length([map{1:2, 2:3, 3:4}]);
+select array_append([map{1:2, 2:3, 3:4}], map{3: null, 4:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 5:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:null}], map{3:4, 4:null});
+select array_remove([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_position([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_distinct([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+select reverse([map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+select array_slice([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], 2, 3);
+select array_concat([map{1:2, 2:3, 3:4}], [map{null:3, 4:null}]);
+select arrays_overlap([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+select array_intersect([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+select array_contains_all([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+select array_filter([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [1,0,0,0]);
+select cardinality([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+select array_length([row(1,2,3), row(3,4,5)]);
+select array_append([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_contains([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_contains([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_contains([row(1,2,3), row(3,4,null)], row(3,4,null));
+select array_remove([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_remove([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_remove([row(1,2,3), row(3,4,null)], row(3,4,null));
+select array_position([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_distinct([row(1,2,3), row(3,4,5), row(3,4,5)]);
+select reverse([row(1,2,3), row(3,4,5)]);
+select array_slice([row(1,2,3), row(3,4,5),row(4,5,6)] ,1,2);
+select array_concat([row(1,2,3), row(3,4,5)], [row(4,5,6), row(5,6,7)]);
+select arrays_overlap([row(1,2,3), row(3,4,5), row(4,5,6)], [row(3,4,5)]);
+select array_intersect([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+select array_contains_all([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+select array_filter([row(1,2,3), row(3,4,5), row(4,5,6)], [0,1,0]);
+select cardinality([row(1,2,3), row(3,4,5)]);

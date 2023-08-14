@@ -23,6 +23,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -68,7 +69,7 @@ class ParserTest {
             fail("sql should fail to parse.");
         } catch (Exception e) {
             assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
-                    "Detail message: Input 'tbl' is not valid at this position.");
+                    "Detail message: Unexpected input 'tbl', the most similar input is {<EOF>, ';'}.");
         }
     }
 
@@ -279,7 +280,34 @@ class ParserTest {
         }
     }
 
-    
+    @ParameterizedTest
+    @MethodSource("unexpectedTokenSqls")
+    void testUnexpectedTokenSqls(String sql, String expecting) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("sql should fail.");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            assertContains(e.getMessage(), expecting);
+        }
+    }
+
+    @Test
+    void testWrongVariableName() {
+        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+
+        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+
+        res = VariableMgr.findSimilarVarNames("pipeline");
+        assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
+
+        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        assertContains(res, "{'disable_join_reorder', 'disable_colocate_join', 'enable_predicate_reorder'}");
+    }
+
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select current_role()");
@@ -335,6 +363,41 @@ class ParserTest {
         sqls.add(Pair.create("select abs(distinct v1) from t1", false));
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
+
+
+    private static Stream<Arguments> unexpectedTokenSqls() {
+        List<Arguments> arguments = Lists.newArrayList();
+
+        arguments.add(Arguments.of("selct * from tbl", "SELECT"));
+        arguments.add(Arguments.of("select , from tbl", "a legal identifier"));
+        arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
+                "  `v1` int(11) NOT NULL,\n" +
+                "  `v2` int(11) NOT NULL,\n" +
+                "  `v3` int(11) NOT NULL\n" +
+                " ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");", ")"));
+        arguments.add(Arguments.of("analyze table tt abc", "';'"));
+        arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
+        arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
+        arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
+        arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
+                "  `v1` int(11) NOT NULL,\n" +
+                "  `v2` int(11) NOT NULL,\n" +
+                "  `v3` int(11) NOT NULL\n" +
+                ")ENGINE=OLAPDUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                " \"replication_num\" = \"1\"\n" +
+                ");", "the most similar input is {<EOF>, ';'}"));
+        arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
+                "the most similar input is {a legal identifier}."));
+        return arguments.stream();
+    }
+
 }
 
 

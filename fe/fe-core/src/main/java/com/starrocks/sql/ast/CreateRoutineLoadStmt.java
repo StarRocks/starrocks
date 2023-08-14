@@ -100,7 +100,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String MAX_BATCH_INTERVAL_SEC_PROPERTY = "max_batch_interval";
     public static final String MAX_BATCH_ROWS_PROPERTY = "max_batch_rows";
     public static final String MAX_BATCH_SIZE_PROPERTY = "max_batch_size";  // deprecated
-
+    public static final String TASK_CONSUME_SECOND = "task_consume_second";
+    public static final String TASK_TIMEOUT_SECOND = "task_timeout_second";
+    public static final int TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO = 4;
     public static final String LOG_REJECTED_RECORD_NUM_PROPERTY = "log_rejected_record_num";
 
     // the value is csv or json, default is csv
@@ -155,6 +157,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(ENCLOSE)
             .add(ESCAPE)
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
+            .add(TASK_CONSUME_SECOND)
+            .add(TASK_TIMEOUT_SECOND)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -191,6 +195,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private double maxFilterRatio = 1;
     private long maxBatchIntervalS = -1;
     private long maxBatchRows = -1;
+    private long taskConsumeSecond;
+    private long taskTimeoutSecond;
     private long logRejectedRecordNum = 0;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
@@ -265,6 +271,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public long getTaskConsumeSecond() {
+        return taskConsumeSecond;
+    }
+
+    public long getTaskTimeoutSecond() {
+        return taskTimeoutSecond;
     }
 
     public boolean isTrimspace() {
@@ -487,6 +501,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of where predicate");
                 }
                 importWhereStmt = (ImportWhereStmt) parseNode;
+                if (importWhereStmt.isContainSubquery()) {
+                    throw new AnalysisException("the predicate cannot contain subqueries");
+                }
             } else if (parseNode instanceof PartitionNames) {
                 // check partition names
                 if (partitionNames != null) {
@@ -588,6 +605,46 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             } else {
                 escape = 0;
             }
+        }
+
+        if (jobProperties.containsKey(TASK_CONSUME_SECOND) && jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+            String taskConsumeSecondStr = jobProperties.get(TASK_CONSUME_SECOND);
+            try {
+                taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
+            } catch (NumberFormatException e) {
+                throw new UserException(e.getMessage());
+            }
+            String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
+            try {
+                taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
+            } catch (NumberFormatException e) {
+                throw new UserException(e.getMessage());
+            }
+            if (taskConsumeSecond >= taskTimeoutSecond) {
+                throw new UserException("task_timeout_second must be larger than task_consume_second");
+            }
+        } else if (jobProperties.containsKey(TASK_CONSUME_SECOND) || jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+            if (jobProperties.containsKey(TASK_CONSUME_SECOND)) {
+                String taskConsumeSecondStr = jobProperties.get(TASK_CONSUME_SECOND);
+                try {
+                    taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
+                } catch (NumberFormatException e) {
+                    throw new UserException(e.getMessage());
+                }
+                taskTimeoutSecond = taskConsumeSecond * TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            }
+            if (jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
+                String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
+                try {
+                    taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
+                } catch (NumberFormatException e) {
+                    throw new UserException(e.getMessage());
+                }
+                taskConsumeSecond = taskTimeoutSecond / TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            }
+        } else {
+            taskConsumeSecond = Config.routine_load_task_consume_second;
+            taskTimeoutSecond = Config.routine_load_task_timeout_second;
         }
     }
 

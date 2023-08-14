@@ -34,29 +34,29 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.thrift.TStorageMedium;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class TabletMeta {
-    private static final Logger LOG = LogManager.getLogger(TabletMeta.class);
-
     private final long dbId;
     private final long tableId;
     private final long partitionId;
     private final long indexId;
 
-    private int oldSchemaHash;
-    private int newSchemaHash;
+    private final int oldSchemaHash;
+    private final int newSchemaHash;
 
     private TStorageMedium storageMedium;
 
-    private boolean isLakeTablet = false;
+    private final boolean isLakeTablet;
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     * If currentTimeMs is ahead of `toBeCleanedTimeMs`, the tablet meta will be cleaned from TabletInvertedIndex.
+     */
+    private Long toBeCleanedTimeMs = null;
+
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
                       TStorageMedium storageMedium, boolean isLakeTablet) {
@@ -111,40 +111,6 @@ public class TabletMeta {
         }
     }
 
-    public void setNewSchemaHash(int newSchemaHash) {
-        lock.writeLock().lock();
-        try {
-            Preconditions.checkState(this.newSchemaHash == -1);
-            this.newSchemaHash = newSchemaHash;
-            LOG.debug("setNewSchemaHash: {}", toString());
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
-    public void updateToNewSchemaHash() {
-        lock.writeLock().lock();
-        try {
-            Preconditions.checkState(this.newSchemaHash != -1);
-            int tmp = this.oldSchemaHash;
-            this.oldSchemaHash = this.newSchemaHash;
-            this.newSchemaHash = tmp;
-            LOG.debug("updateToNewSchemaHash: " + toString());
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
-    public void deleteNewSchemaHash() {
-        lock.writeLock().lock();
-        try {
-            LOG.debug("deleteNewSchemaHash: " + toString());
-            this.newSchemaHash = -1;
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
     public int getOldSchemaHash() {
         lock.readLock().lock();
         try {
@@ -152,6 +118,18 @@ public class TabletMeta {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    public Long getToBeCleanedTime() {
+        return toBeCleanedTimeMs;
+    }
+
+    public void setToBeCleanedTime(Long time) {
+        toBeCleanedTimeMs = time;
+    }
+
+    public void resetToBeCleanedTime() {
+        toBeCleanedTimeMs = null;
     }
 
     public boolean containsSchemaHash(int schemaHash) {

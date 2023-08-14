@@ -32,6 +32,13 @@ else()
     message(FATAL_ERROR "STARROCKS_GCC_HOME environment variable is not set")
 endif()
 
+# disable pkgconfig searching libraries, all libraries are static imported
+set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON)
+# Workaround error of `Unknown CMake command "pkg_check_modules".'`
+# refer to: https://gitlab.kitware.com/cmake/cmake/-/issues/17043
+macro( pkg_check_modules )
+endmacro()
+
 project(starrocks CXX C)
 
 # set CMAKE_BUILD_TYPE
@@ -75,6 +82,8 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
+option(WITH_STARCACHE "Build binary with starcache library" OFF)
+
 option(WITH_BENCH "Build binary with bench" OFF)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
@@ -95,7 +104,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
     else()
         #   -Werror: compile warnings should be errors when using the toolchain compiler.
-#        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
+        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
     endif()
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif (NOT APPLE)
@@ -161,10 +170,10 @@ set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
 
-add_library(gflags STATIC IMPORTED)
+add_library(gflags STATIC IMPORTED GLOBAL)
 set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
 
-add_library(glog STATIC IMPORTED)
+add_library(glog STATIC IMPORTED GLOBAL)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
 add_library(re2 STATIC IMPORTED GLOBAL)
@@ -193,8 +202,10 @@ set_target_properties(gmock PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/l
 add_library(snappy STATIC IMPORTED)
 set_target_properties(snappy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsnappy.a)
 
-add_library(curl STATIC IMPORTED)
-set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcurl.a)
+set(CURL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "curl include path")
+set(CURL_LIBRARY "${THIRDPARTY_DIR}/lib/libcurl.a" CACHE FILEPATH "curl static library")
+add_library(curl STATIC IMPORTED GLOBAL)
+set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${CURL_LIBRARY})
 
 add_library(lz4 STATIC IMPORTED)
 set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
@@ -208,15 +219,19 @@ set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(mysql STATIC IMPORTED)
 set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
-add_library(hdfs STATIC IMPORTED)
+add_library(hdfs STATIC IMPORTED GLOBAL)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
+
+add_library(fiu STATIC IMPORTED)
+set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
 
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
-add_library(crypto STATIC IMPORTED)
+add_library(crypto STATIC IMPORTED GLOBAL)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
+add_library(AWS::crypto ALIAS crypto)
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
@@ -232,7 +247,7 @@ set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 add_library(openssl STATIC IMPORTED)
 set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
 
-add_library(leveldb STATIC IMPORTED)
+add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
@@ -259,7 +274,7 @@ set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64
 add_library(parquet STATIC IMPORTED)
 set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
 
-add_library(brpc STATIC IMPORTED)
+add_library(brpc STATIC IMPORTED GLOBAL)
 set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
 
 add_library(rocksdb STATIC IMPORTED)
@@ -342,6 +357,12 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+# Disable libdefalte on aarch64
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    add_library(libdeflate STATIC IMPORTED GLOBAL)
+    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
+endif()
+
 # cachelib
 set(CACHELIB_DEPENDENCIES
     cachelib_common
@@ -382,45 +403,94 @@ if (${WITH_CACHELIB} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
+    if (DEFINED ENV{STARLET_INSTALL_DIR})
+        set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
+    else()
+        set(STARLET_INSTALL_DIR "${THIRDPARTY_DIR}/starlet")
+    endif()
+    if (NOT EXISTS ${STARLET_INSTALL_DIR})
+        message(FATAL_ERROR "Starlet thirdparty directory ${STARLET_INSTALL_DIR} not exist!")
+    else()
+        message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
+    endif()
+
     # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
     add_library(ZLIB::ZLIB STATIC IMPORTED)
     set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
+
+    # Tell cmake that PROTOBUF library is already found
+    set(PROTOBUF_FOUND TRUE)
     # starrocks project has its imported libprotobuf.a and libre2.a
     # add following ALIAS so grpc can find the correct dependent libraries
     add_library(protobuf::libprotobuf ALIAS protobuf)
     add_library(re2::re2 ALIAS re2)
+    add_library(glog::glog ALIAS glog)
+    add_library(gflags::gflags_static ALIAS gflags)
+    add_library(hdfs::hdfs ALIAS hdfs)
+    add_library(brpc::brpc ALIAS brpc)
+    add_library(leveldb::leveldb ALIAS leveldb)
+    add_library(CURL::libcurl ALIAS curl)
 
+    set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
+    find_package(absl CONFIG REQUIRED)
+
+    # required by azure-*
+    set(LIBXML2_INCLUDE_DIR "${STARLET_INSTALL_DIR}/third_party/include/libxml2" CACHE PATH "libxml2 include path")
+    set(LIBXML2_LIBRARY "${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a" CACHE FILEPATH "libxml2 static library")
+    add_library(libxml2 STATIC IMPORTED GLOBAL)
+    set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${LIBXML2_LIBRARY})
+
+    set(gRPC_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc" CACHE PATH "grpc search path")
     find_package(gRPC CONFIG REQUIRED)
     message(STATUS "Using gRPC ${gRPC_VERSION}")
     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-    find_package(starlet CONFIG REQUIRED)
-    message(STATUS "Using starlet ${starlet_VERSION}")
-    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-    add_library(starlet STATIC IMPORTED)
-    set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
-
+    set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
     find_package (prometheus-cpp CONFIG REQUIRED)
     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
     message(STATUS "Using prometheus-cpp")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-    add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
-    set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+    set(azure-core-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp" CACHE PATH "azure core cpp search path")
+    find_package(azure-core-cpp CONFIG REQUIRED)
+    set(azure-identity-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-identity-cpp" CACHE PATH "azure identity cpp search path")
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    set(azure-storage-common-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-common-cpp" CACHE PATH "azure storage common search path")
+    find_package(azure-storage-common-cpp CONFIG REQUIRED)
+    set(azure-storage-blobs-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/share/azure-storage-blobs-cpp" CACHE PATH "azure storage blobs search path")
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
+
+    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
+    find_package(starcache CONFIG REQUIRED)
+    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starcachelib ALIAS starcache::starcache)
+
+    set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
+    find_package(starlet CONFIG REQUIRED)
+    message(STATUS "Using starlet ${starlet_VERSION}")
+    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
+
+    set_target_properties(starlet::starlet_fslib_all PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starlet_fslib_all ALIAS starlet::starlet_fslib_all)
+    set_target_properties(starlet::starlet PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_library(starlet ALIAS starlet::starlet)
 
     set(STARROCKS_DEPENDENCIES
        ${STARROCKS_DEPENDENCIES}
        starlet
-       gRPC::grpc++_reflection
-       gRPC::grpc++
        starlet_fslib_all
-       prometheus-cpp::core
+       starcachelib
+       ${AZURE_SDK_LIB}
        )
 endif()
+
+# Check Clang-Tidy
+include(cmake_modules/FindClangTidy.cmake)
 
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
@@ -450,16 +520,20 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++17 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+# disable link delete(void*, long)
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
+    endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical -Wno-inconsistent-missing-override -Wno-ambiguous-reversed-operator")
     endif()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
@@ -475,6 +549,9 @@ if (${USE_STAROS} STREQUAL "ON")
 endif()
 if (${WITH_CACHELIB} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_CACHELIB")
+endif()
+if (${WITH_STARCACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -526,6 +603,11 @@ endif()
 if (ENABLE_QUERY_DEBUG_TRACE)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
     message(STATUS "enable query debug trace")
+endif()
+
+if (ENABLE_FAULT_INJECTION)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
+    message(STATUS "enable fault injection")
 endif()
 
 # For CMAKE_BUILD_TYPE=Debug
@@ -623,7 +705,6 @@ set(STARROCKS_LINK_LIBS
     Runtime
     Service
     ServiceBE
-    ServiceCN
     Types
     Udf
     Util
@@ -634,7 +715,6 @@ set(STARROCKS_LINK_LIBS
     Tools
     Geo
     BlockCache
-    starcache
     ${WL_END_GROUP}
 )
 
@@ -715,6 +795,8 @@ set(STARROCKS_DEPENDENCIES
     jansson
     avro
     serdes
+    fiu
+    libdeflate
     ${WL_END_GROUP}
 )
 
@@ -743,16 +825,10 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-# Add sanitize static link flags or tcmalloc
+# Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
@@ -762,14 +838,8 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
 else()
@@ -803,6 +873,7 @@ endif ()
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
+    add_definitions(-DFIU_ENABLE)
 else()
     # output *.a, *.so, *.dylib to output/tmp
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
@@ -871,7 +942,6 @@ add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/block_cache)
-add_subdirectory(${SRC_DIR}/thirdparty/starcache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
@@ -911,7 +981,7 @@ install(FILES
     ${BASE_DIR}/../conf/be_test.conf
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
-    ${BASE_DIR}/../conf/log4j.properties
+    ${BASE_DIR}/../conf/log4j2.properties
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

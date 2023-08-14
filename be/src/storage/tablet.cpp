@@ -64,6 +64,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
 #include "util/time.h"
 
@@ -82,15 +83,15 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::Tablet() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::~Tablet() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Tablet::_init_once_action() {
@@ -777,6 +778,7 @@ void Tablet::list_versions(vector<Version>* versions) const {
 }
 
 Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vector<RowsetSharedPtr>* rowsets) const {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     if (_updates != nullptr && spec_version.first == 0 && spec_version.second >= spec_version.first) {
         return _updates->get_applied_rowsets(spec_version.second, rowsets);
     } else if (_updates != nullptr) {
@@ -1085,12 +1087,12 @@ Status Tablet::_contains_version(const Version& version) {
     return Status::OK();
 }
 
-Status Tablet::set_partition_id(int64_t partition_id) {
-    return _tablet_meta->set_partition_id(partition_id);
+void Tablet::set_partition_id(int64_t partition_id) {
+    _tablet_meta->set_partition_id(partition_id);
 }
 
 TabletInfo Tablet::get_tablet_info() const {
-    return TabletInfo(tablet_id(), schema_hash(), tablet_uid());
+    return {tablet_id(), schema_hash(), tablet_uid()};
 }
 
 void Tablet::pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets) {
@@ -1400,7 +1402,6 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_partition_id(_tablet_meta->partition_id());
     tablet_info->__set_storage_medium(_data_dir->storage_medium());
     tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_is_in_memory(_tablet_meta->tablet_schema().is_in_memory());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
@@ -1605,6 +1606,25 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+Status Tablet::verify() {
+    int64_t version = max_continuous_version();
+    std::vector<RowsetSharedPtr> rowsets;
+    {
+        std::shared_lock l(get_header_lock());
+        RETURN_IF_ERROR(capture_consistent_rowsets(Version(0, version), &rowsets));
+        Rowset::acquire_readers(rowsets);
+    }
+    DeferOp defer([&rowsets]() { Rowset::release_readers(rowsets); });
+    for (auto& rowset : rowsets) {
+        auto st = rowset->verify();
+        if (!st.ok()) {
+            return st.clone_and_append(strings::Substitute("tablet:$0 version:$1 rowset:$2", tablet_id(), version,
+                                                           rowset->rowset_id().to_string()));
+        }
+    }
+    return Status::OK();
+}
+
 std::string Tablet::schema_debug_string() const {
     return _tablet_meta->tablet_schema().debug_string();
 }
@@ -1614,7 +1634,7 @@ std::string Tablet::debug_string() const {
         return _updates->debug_string();
     }
     // TODO: add more debug info
-    return string();
+    return {};
 }
 
 } // namespace starrocks

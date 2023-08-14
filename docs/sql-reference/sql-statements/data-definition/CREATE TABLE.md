@@ -4,6 +4,10 @@
 
 Creates a new table in StarRocks.
 
+> **NOTE**
+>
+> This operation requires the CREATE TABLE privilege on the destination database.
+
 ## Syntax
 
 ```Plain%20Text
@@ -14,7 +18,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"]
 [partition_desc]
-distribution_desc
+[distribution_desc]
 [rollup_index]
 [ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
@@ -28,7 +32,7 @@ distribution_desc
 Syntax:
 
 ```SQL
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT]
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
 **col_name**: Column name.
@@ -81,7 +85,9 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
-- **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md).
+**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+
+**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 ### index_definition
 
@@ -183,7 +189,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax: 
+Syntax:
 
 ```SQL
 key_type(k1[,k2 ...])
@@ -199,20 +205,32 @@ Data is sequenced in specified key columns and has different attributes for diff
 >
 > Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
 
+### COMMENT
+
+You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
+
+From v3.1 onwards, you can modify the table comment suing `ALTER TABLE <table_name> COMMENT = "new table comment"`.
+
 ### partition_desc
 
-Partition description can be used in the following three ways:
+Partition description can be used in the following ways:
 
-#### LESS THAN
+#### Create partitions dynamically
+
+[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+
+#### Create partitions one by one
+
+**Specify only the upper bound for a partition**
 
 Syntax:
 
-```Plain%20Text
-PARTITION BY RANGE (k1, k2, ...)
-(
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
+```sql
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  [ ,
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  , ... ] 
 )
 ```
 
@@ -221,26 +239,36 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - Partition name only supports [A-z0-9_]
-- Columns in Range partition only support the following types: TINYINT, SAMLLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p1 VALUES LESS THAN ("20210102"),
+    PARTITION p2 VALUES LESS THAN ("20210103"),
+    PARTITION p3 VALUES LESS THAN MAXVALUE
+  )
+  ```
 
 Please note:
 
 - Partitions are often used for managing data related to time.
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
 
-#### Fixed Range
+**Specify both the lower and upper bounds for a partition**
 
 Syntax:
 
 ```SQL
-PARTITION BY RANGE (k1, k2, k3, ...)
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 (
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-    "k3-upper1-2", ...
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1?" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    [,
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    , ...]
 )
 ```
 
@@ -248,52 +276,93 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
 
-#### Create partitions in bulk
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p202101 VALUES [("20210101"), ("20210201")),
+    PARTITION p202102 VALUES [("20210201"), ("20210301")),
+    PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+  )
+  ```
+
+#### Create multiple partitions in a batch
 
 Syntax
 
-```Plain%20Text
-PARTITION BY RANGE (datekey) (
-    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
-)
-```
+- If the partitioning column is of a date type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+    )
+    ```
+
+- If the partitioning column is of an integer type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+    )
+    ```
 
 Description
 
-You can specify the value for `START` and `END` and the expression in `EVERY` to create partitions in bulk .
+You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
-- If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
+- The partitioning column can be of a date or integer type.
+- If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
 ### distribution_desc
 
-Syntax:
+StarRocks supports hash bucketing and random bucketing. If you do not configure bucketing, StarRocks uses random bucketing and automatically sets the number of buckets by default.
 
-```SQL
-DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
-```
+- Random bucketing (since v3.1)
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
 
-- High cardinality column such as ID
-- Column that is often used as a filter in queries
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <num>
+  ```
+  
+  However, note that the query performance provided by random bucketing may not be ideal when you query massive amounts of data and frequently use certain columns as conditional columns. In this scenario, it is recommended to use hash bucketing. Because only a small number of buckets need to be scanned and computed, significantly improving query performance.
 
-If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+  **Precautions**
+  - You can only use random bucketing to create Duplicate Key tables.
+  - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
-- If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
-- If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+- Hash bucketing
 
-**Precautions**:
+  Syntax:
 
-- **When a table is created, you must specify the bucketing columns**.
-- The values of bucketing columns cannot be updated.
-- Bucketing columns cannot be modified after they are specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that meets the following two requirements as the bucketing column.
+
+  - High cardinality column such as ID
+  - Column that is often used as a filter in queries
+
+  If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+
+  - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+  - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+
+  **Precautions**:
+
+  - **When you create a table, you must specify its bucketing columns**.
+  - The values of bucketing columns cannot be updated.
+  - Bucketing columns cannot be modified after they are specified.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -442,12 +511,13 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
-#### Define Foreign Key constraints for View Delta Join query rewrite
+#### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
 
 ```SQL
 PROPERTIES (
+    "unique_constraints" = "<unique_key>[, ...]",
     "foreign_key_constraints" = "
     (<child_column>[, ...]) 
     REFERENCES 
@@ -465,8 +535,43 @@ PROPERTIES (
 
 > **CAUTION**
 >
+> - The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+> - The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
+> - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
 > - The data types of the `child_column` and the corresponding `parent_column` must match.
+
+#### Create cloud-native tables for StarRocks Shared-data cluster
+
+To [use your StarRocks Shared-data cluster](../../../deployment/deploy_shared_data.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+
+```SQL
+PROPERTIES (
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
+    "enable_async_write_back" = "{ true | false }"
+)
+```
+
+- `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
+
+  - When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
+  - When this property is set to `false`, the data is loaded only into the object storage.
+
+  > **NOTE**
+  >
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
+
+- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+
+  > **NOTE**
+  >
+  > This property is available only when `datacache.enable` is set to `true`.
+
+- `enable_async_write_back`: Whether to allow data to be written into object storage asynchronously. Default: `false`.
+
+  - When this property is set to `true`, the load task returns success as soon as the data is written into the local disk cache, and the data is written into the object storage asynchronously. This allows better loading performance, but it also risks data reliability under potential system failures.
+  - When this property is set to `false`, the load task returns success only after the data is written into both object storage and the local disk cache. This guarantees higher availability but leads to lower loading performance.
 
 ## Examples
 
@@ -483,7 +588,7 @@ CREATE TABLE example_db.table_hash
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -499,7 +604,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE=olap
 UNIQUE KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type"="column",
     "storage_medium" = "SSD",
@@ -519,7 +624,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE=olap
 PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type"="column",
     "storage_medium" = "SSD",
@@ -548,7 +653,7 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD", 
     "storage_cooldown_time" = "2015-06-04 00:00:00"
@@ -585,7 +690,7 @@ PARTITION BY RANGE (k1, k2, k3)
     PARTITION p1 VALUES [("2014-01-01", "10", "200"), ("2014-01-01", "20", "300")),
     PARTITION p2 VALUES [("2014-06-01", "100", "200"), ("2014-07-01", "100", "300"))
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD"
 );
@@ -626,7 +731,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -644,7 +749,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -658,7 +763,7 @@ CREATE TABLE `t1`
 ) 
 ENGINE=OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES 
 (
     "colocate_with" = "t1"
@@ -671,7 +776,7 @@ CREATE TABLE `t2`
 ) 
 ENGINE=OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES 
 (
     "colocate_with" = "t1"
@@ -692,7 +797,7 @@ CREATE TABLE example_db.table_hash
 ENGINE=olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -726,7 +831,7 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD",
     "dynamic_partition.enable" = "true",
@@ -737,6 +842,29 @@ PROPERTIES(
     "dynamic_partition.buckets" = "10"
 );
 ```
+
+### Create a table where multiple partitions are created in a batch, and an integer type column is specified as partitioning column
+
+  In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
+  > **NOTE**
+  >
+  > The partitioning column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
+
+  ```SQL
+  CREATE TABLE site_access (
+      datekey INT,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES ("replication_num" = "3");
+  ```
 
 ### Create a Hive external table
 
@@ -777,10 +905,18 @@ create table users (
     property3 tinyint NOT NULL
 ) 
 PRIMARY KEY (`user_id`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+DISTRIBUTED BY HASH(`user_id`)
 ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
 );
 ```
+
+## References
+
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [USE](USE.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [DROP TABLE](DROP%20TABLE.md)

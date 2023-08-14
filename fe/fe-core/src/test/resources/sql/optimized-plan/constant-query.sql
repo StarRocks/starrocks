@@ -27,7 +27,7 @@ RESULT SINK
 [sql]
 select * from t0 where v1 in (1.1, 2, null)
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as decimal128(20, 1)) IN (1.1, 2, null)])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as decimal128(20, 1)) IN (1.1, 2.0, null)])
 [end]
 
 [sql]
@@ -69,7 +69,6 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=9.0
-numNodes=0
 [end]
 
 [sql]

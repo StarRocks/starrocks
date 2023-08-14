@@ -24,9 +24,9 @@ import static java.lang.String.format;
 
 public class SemanticException extends StarRocksPlannerException {
 
-    private final String detailMsg;
+    protected final String detailMsg;
 
-    private final NodePosition pos;
+    protected final NodePosition pos;
 
 
     public SemanticException(String formatString) {
@@ -66,6 +66,10 @@ public class SemanticException extends StarRocksPlannerException {
             builder.append(".");
         }
         return builder.toString();
+    }
+
+    public String getDetailMsg() {
+        return detailMsg;
     }
 
 }

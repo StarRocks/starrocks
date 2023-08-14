@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <random>
+#include <set>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -73,10 +75,15 @@ protected:
     HdfsScannerContext* _create_file_map_base_context();
     HdfsScannerContext* _create_file_map_partial_materialize_context();
 
+    HdfsScannerContext* _create_file_random_read_context(const std::string& file_path);
+
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
     void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                       std::vector<ExprContext*>* conjunct_ctxs);
+
+    void _create_in_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, std::set<int32_t>& values,
+                                            std::vector<ExprContext*>* conjunct_ctxs);
 
     static ChunkPtr _create_chunk();
     static ChunkPtr _create_multi_page_chunk();
@@ -216,6 +223,8 @@ std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string
 
 HdfsScannerContext* FileReaderTest::_create_scan_context() {
     auto* ctx = _pool.add(new HdfsScannerContext());
+    auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
     return ctx;
@@ -553,6 +562,27 @@ HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context
     return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_file_random_read_context(const std::string& file_path) {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    // tuple desc
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+            {"c3", type_array},
+            {""},
+    };
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+
+    return ctx;
+}
+
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
@@ -587,6 +617,55 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     node2.__set_int_literal(int_literal);
     node2.is_nullable = false;
     nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
+    Expr::prepare(*conjunct_ctxs, _runtime_state);
+    Expr::open(*conjunct_ctxs, _runtime_state);
+}
+
+void FileReaderTest::_create_in_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
+                                                        std::set<int32_t>& values,
+                                                        std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::IN_PRED;
+    node0.opcode = opcode;
+    node0.child_type = TPrimitiveType::INT;
+    node0.num_children = values.size() + 1;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    for (int32_t value : values) {
+        TExprNode node;
+        node.node_type = TExprNodeType::INT_LITERAL;
+        node.type = gen_type_desc(TPrimitiveType::INT);
+        node.num_children = 0;
+        TIntLiteral int_literal;
+        int_literal.value = value;
+        node.__set_int_literal(int_literal);
+        node.is_nullable = false;
+        nodes.emplace_back(node);
+    }
 
     TExpr t_expr;
     t_expr.nodes = nodes;
@@ -741,12 +820,11 @@ TEST_F(FileReaderTest, TestGetNext) {
 }
 
 TEST_F(FileReaderTest, TestGetNextWithSkipID) {
-    int64_t ids[]= {1};
-    std::set<std::int64_t> need_skip_rowids(ids, ids + 1);
+    int64_t ids[] = {1};
+    std::set<int64_t> need_skip_rowids(ids, ids + 1);
     auto file = _create_file(_file1_path);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file1_path),
-                                                    nullptr, &need_skip_rowids);
+    auto file_reader = std::make_shared<FileReader>(
+            config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path), nullptr, &need_skip_rowids);
     // init
     auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);
@@ -945,7 +1023,8 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     }
 
     status = file_reader->get_next(&chunk);
-    ASSERT_FALSE(status.is_end_of_file());
+    // for both group_reader.cpp _do_get_next && _do_get_next_new
+    ASSERT_TRUE(status.is_end_of_file() || status.ok());
 }
 
 TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
@@ -1103,7 +1182,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     //init
     auto* ctx = _create_file_map_char_key_context();
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
@@ -1130,11 +1209,8 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     chunk->append_column(c_map1, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
     EXPECT_EQ(chunk->num_rows(), 1);
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
     EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
 
@@ -1247,6 +1323,12 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f2, c2.f3, c3, c4.e1, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 8);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1323,6 +1405,12 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f3, c3, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 6);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1616,8 +1704,8 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
-    // c1, c2.key, c2.value, c3.key, c3.value.key, c3.value.value, c4.key. c4.value
-    EXPECT_EQ(ranges.size(), 8);
+    // c1, c2.key, c3.value.key, c4.value
+    EXPECT_EQ(ranges.size(), 4);
 
     EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
     TypeDescriptor type_map(LogicalType::TYPE_MAP);
@@ -1820,6 +1908,7 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
 }
 
+// Illegal parquet files, not support it anymore
 TEST_F(FileReaderTest, TestReadArrayMap) {
     // optional group col_array_map (LIST) {
     //     repeated group array (MAP) {
@@ -1858,20 +1947,23 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    // Illegal parquet files, not support it anymore
+    ASSERT_FALSE(status.ok());
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-    ASSERT_EQ(2, chunk->num_rows());
-
-    EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
-    EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
+    //  ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //  ASSERT_EQ(2, chunk->num_rows());
+    //
+    //  EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
+    //  EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
 }
 
 TEST_F(FileReaderTest, TestStructArrayNull) {
@@ -2128,6 +2220,7 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
+// Illegal parquet files, not support it anymore
 TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // format:
     // b: varchar
@@ -2160,36 +2253,39 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
 
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    // Illegal parquet files, not support it anymore
+    ASSERT_FALSE(status.ok()) << status.get_error_msg();
+    // ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-
-    chunk->check_or_die();
-
-    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
-    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
-    EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
-
-    size_t total_row_nums = 0;
-    total_row_nums += chunk->num_rows();
-
-    {
-        while (!status.is_end_of_file()) {
-            chunk->reset();
-            status = file_reader->get_next(&chunk);
-            chunk->check_or_die();
-            total_row_nums += chunk->num_rows();
-        }
-    }
-
-    EXPECT_EQ(3, total_row_nums);
+    //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    //
+    //  auto chunk = std::make_shared<Chunk>();
+    //  chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    //  chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
+    //
+    //  status = file_reader->get_next(&chunk);
+    //  ASSERT_TRUE(status.ok());
+    //
+    //  chunk->check_or_die();
+    //
+    //  EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    //  EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
+    //  EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
+    //
+    //  size_t total_row_nums = 0;
+    //  total_row_nums += chunk->num_rows();
+    //
+    //  {
+    //      while (!status.is_end_of_file()) {
+    //          chunk->reset();
+    //          status = file_reader->get_next(&chunk);
+    //          chunk->check_or_die();
+    //          total_row_nums += chunk->num_rows();
+    //      }
+    //  }
+    //
+    //  EXPECT_EQ(3, total_row_nums);
 }
 
 TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
@@ -2348,6 +2444,380 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     }
 
     EXPECT_EQ(1, total_row_nums);
+}
+
+TEST_F(FileReaderTest, CheckDictOutofBouds) {
+    const std::string filepath = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_vin = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_log_domain = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_file_name = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_is_collection = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_is_center = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_is_cloud = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_collection_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_center_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_cloud_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_collection_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_center_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_cloud_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_collection_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_center_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_error_cloud_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_original_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+    TypeDescriptor type_is_original = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    Utils::SlotDesc slot_descs[] = {
+            {"vin", type_vin},
+            {"type_log_domain", type_log_domain},
+            {"file_name", type_file_name},
+            {"is_collection", type_is_collection},
+            {"is_center", type_is_center},
+            {"is_cloud", type_is_cloud},
+            {"collection_time", type_collection_time},
+            {"center_time", type_center_time},
+            {"cloud_time", type_cloud_time},
+            {"error_collection_tips", type_error_collection_tips},
+            {"error_center_tips", type_error_center_tips},
+            {"error_cloud_tips", type_error_cloud_tips},
+            {"error_collection_time", type_error_collection_time},
+            {"error_center_time", type_error_center_time},
+            {"error_cloud_time", type_error_cloud_time},
+            {"original_time", type_original_time},
+            {"is_original", type_is_original},
+            {""},
+    };
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_vin, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_log_domain, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_file_name, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_is_collection, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_is_center, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_is_cloud, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_collection_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_center_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_cloud_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_collection_tips, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_center_tips, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_cloud_tips, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_collection_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_center_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_error_cloud_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_original_time, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_is_original, true), chunk->num_columns());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok()) {
+            break;
+        }
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(0, total_row_nums);
+}
+
+TEST_F(FileReaderTest, CheckLargeParquetHeader) {
+    const std::string filepath = "./be/test/formats/parquet/test_data/large_page_header.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_string = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+
+    Utils::SlotDesc slot_descs[] = {
+            {"myString", type_string},
+            {"myInteger", type_int},
+            {""},
+    };
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok()) {
+            std::cout << status.get_error_msg() << std::endl;
+            break;
+        }
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(5, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
+    // Schema:
+    // message table {
+    //  required binary data (STRING) = 1;
+    //  required group struct = 2 {
+    //    optional binary x (STRING) = 4;
+    //    optional binary y (STRING) = 5;
+    //  }
+    //  required int32 int = 3;
+    // }
+    const std::string filepath =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/iceberg_string_map_string.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_data{};
+    field_data.__set_field_id(1);
+    field_data.__set_name("data");
+
+    TIcebergSchemaField field_struct{};
+    field_struct.__set_field_id(2);
+    field_struct.__set_name("struct");
+
+    TIcebergSchemaField field_struct_a{};
+    field_struct_a.__set_field_id(4);
+    field_struct_a.__set_name("x");
+
+    TIcebergSchemaField field_struct_b{};
+    field_struct_b.__set_field_id(5);
+    field_struct_b.__set_name("y");
+
+    std::vector<TIcebergSchemaField> subfields{field_struct_a, field_struct_b};
+    field_struct.__set_children(subfields);
+
+    TIcebergSchemaField field_int{};
+    field_int.__set_field_id(3);
+    field_int.__set_name("int");
+
+    std::vector<TIcebergSchemaField> fields{field_data, field_struct, field_int};
+    schema.__set_fields(fields);
+    ctx->iceberg_schema = &schema;
+
+    TypeDescriptor type_data = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("x");
+    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("y");
+
+    TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    Utils::SlotDesc slot_descs[] = {
+            {"data", type_data},
+            {"struct", type_struct},
+            {"int", type_int},
+            {""},
+    };
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    Utils::SlotDesc min_max_slots[] = {
+            {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {""},
+    };
+    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 5, &ctx->min_max_conjunct_ctxs);
+    _create_int_conjunct_ctxs(TExprOpcode::LE, 0, 5, &ctx->min_max_conjunct_ctxs);
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_data, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 1) {
+            EXPECT_EQ("['hello', {x:'world',y:'danny'}, 5]", chunk->debug_row(0));
+        }
+    }
+
+    EXPECT_EQ(1, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestRandomReadWith2PageSize) {
+    std::random_device rd;
+    std::mt19937 rng(rd());
+
+    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(
+            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
+            chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
+
+    // c0 = np.arange(1, 20001)
+    // c1 = np.arange(20000, 0, -1)
+    // data = {
+    //     'c0': c0,
+    //     'c1': c1
+    // }
+    // df = pd.DataFrame(data)
+    // df_with_dict = pd.DataFrame({
+    //     "c0": df["c0"],
+    //     "c1": df["c1"],
+    //     "c2": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else str(x["c0"] % 100), axis = 1),
+    //     "c3": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else [x["c0"] % 1000, pd.NA, x["c1"] % 1000], axis = 1)
+    // })
+    const std::string small_page_file = "./be/test/formats/parquet/test_data/read_range_test.parquet";
+
+    // c0 = np.arange(1, 100001)
+    // c1 = np.arange(100000, 0, -1)
+    // data = {
+    //     'c0': c0,
+    //     'c1': c1
+    // }
+    // df = pd.DataFrame(data)
+    // df_with_dict = pd.DataFrame({
+    //     "c0": df["c0"],
+    //     "c1": df["c1"],
+    //     "c2": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else str(x["c0"] % 100), axis = 1),
+    //     "c3": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else [x["c0"] % 1000, pd.NA, x["c1"] % 1000], axis = 1)
+    // })
+    const std::string big_page_file = "./be/test/formats/parquet/test_data/read_range_big_page_test.parquet";
+
+    // for small page 1000 values / page
+    // for big page 10000 values / page
+    for (size_t index = 0; index < 2; index++) {
+        const std::string& file_path = index == 0 ? small_page_file : big_page_file;
+        std::cout << "file_path: " << file_path << std::endl;
+
+        std::uniform_int_distribution<int> dist_small(1, 20000);
+        std::uniform_int_distribution<int> dist_big(1, 100000);
+
+        std::set<int32_t> in_oprands;
+        auto _print_in_predicate = [&]() {
+            std::stringstream ss;
+            ss << "predicate: in ( ";
+            for (int32_t op : in_oprands) {
+                ss << op << " ";
+            }
+            ss << ")";
+            return ss.str();
+        };
+        std::vector<int32_t> in_oprand_sizes{5, 50};
+        for (int32_t in_oprand_size : in_oprand_sizes) {
+            // use 20 to save ci's time, change bigger to test more case
+            for (int32_t i = 0; i < 20; i++) {
+                in_oprands.clear();
+                for (int32_t j = 0; j < in_oprand_size; j++) {
+                    int32_t num = index == 0 ? dist_small(rng) : dist_big(rng);
+                    in_oprands.emplace(num);
+                }
+                auto ctx = _create_file_random_read_context(file_path);
+                auto file = _create_file(file_path);
+                ctx->conjunct_ctxs_by_slot[0].clear();
+                _create_in_predicate_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands,
+                                                   &ctx->conjunct_ctxs_by_slot[0]);
+                auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                                std::filesystem::file_size(file_path));
+
+                Status status = file_reader->init(ctx);
+                ASSERT_TRUE(status.ok());
+                size_t total_row_nums = 0;
+                while (!status.is_end_of_file()) {
+                    chunk->reset();
+                    status = file_reader->get_next(&chunk);
+                    chunk->check_or_die();
+                    total_row_nums += chunk->num_rows();
+                    if (!status.ok() && !status.is_end_of_file()) {
+                        std::cout << status.get_error_msg() << std::endl;
+                        DCHECK(false) << "file path: " << file_path << ", " << _print_in_predicate();
+                    }
+                    // check row value
+                    if (chunk->num_rows() > 0) {
+                        ColumnPtr c0 = chunk->get_column_by_index(0);
+                        ColumnPtr c1 = chunk->get_column_by_index(1);
+                        ColumnPtr c2 = chunk->get_column_by_index(2);
+                        ColumnPtr c3 = chunk->get_column_by_index(3);
+                        for (size_t row_index = 0; row_index < chunk->num_rows(); row_index++) {
+                            int32_t c0_value = c0->get(row_index).get_int32();
+                            bool flag = (in_oprands.find(c0_value) != in_oprands.end());
+                            int32_t c1_value = c1->get(row_index).get_int32();
+                            flag &= index == 0 ? c0_value + c1_value == 20001 : c0_value + c1_value == 100001;
+                            if (c0_value % 10 == 0) {
+                                flag &= c2->is_null(row_index);
+                                flag &= c3->is_null(row_index);
+                            } else {
+                                flag &= (!c2->is_null(row_index));
+                                flag &= (!c3->is_null(row_index));
+                                if (!flag) {
+                                    std::cout << "file path: " << file_path << ", " << _print_in_predicate();
+                                }
+                                EXPECT_TRUE(flag);
+                                std::string expected_string = std::to_string(c0_value % 100);
+                                Slice expected_value = Slice(expected_string);
+                                Slice c2_value = c2->get(row_index).get_slice();
+                                flag &= (c2_value == expected_value);
+                                DatumArray c3_value = c3->get(row_index).get_array();
+                                flag &= (c3_value.size() == 3) && (!c3_value[0].is_null()) &&
+                                        (c3_value[0].get_int32() == (c0_value % 1000)) && (c3_value[1].is_null()) &&
+                                        (!c3_value[2].is_null()) && (c3_value[2].get_int32() == (c1_value % 1000));
+                            }
+                            if (!flag) {
+                                std::cout << "file path: " << file_path << ", " << _print_in_predicate();
+                            }
+                            EXPECT_TRUE(flag);
+                        }
+                    }
+                }
+                EXPECT_EQ(total_row_nums, in_oprands.size());
+            }
+        }
+    }
 }
 
 } // namespace starrocks::parquet

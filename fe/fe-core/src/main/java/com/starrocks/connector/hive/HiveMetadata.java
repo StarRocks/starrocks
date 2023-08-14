@@ -24,7 +24,9 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -32,6 +34,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -74,13 +77,20 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
-        return hmsOps.getAllTableNames(dbName);
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+        hmsOps.createDb(dbName, properties);
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName) {
-        return hmsOps.getPartitionKeys(dbName, tblName);
+    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(dbName).size() != 0) {
+            throw new StarRocksConnectorException("Database %s not empty", dbName);
+        }
+
+        hmsOps.dropDb(dbName, isForceDrop);
     }
 
     @Override
@@ -97,6 +107,15 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listTableNames(String dbName) {
+        return hmsOps.getAllTableNames(dbName);
+    }
+
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return hmsOps.createTable(stmt);
+    }
+
+    @Override
     public Table getTable(String dbName, String tblName) {
         Table table;
         try {
@@ -110,8 +129,19 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listPartitionNames(String dbName, String tblName) {
+        return hmsOps.getPartitionKeys(dbName, tblName);
+    }
+
+    @Override
+    public List<String> listPartitionNamesByValue(String dbName, String tblName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
+    }
+
+    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate) {
+                                                   long snapshotId, ScalarOperator predicate, List<String> fieldNames) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -181,13 +211,15 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         Preconditions.checkState(columnRefOperators.size() == statistics.getColumnStatistics().size());
-        for (ColumnRefOperator column : columnRefOperators) {
-            session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
-        }
+        if (session.getDumpInfo() != null) {
+            for (ColumnRefOperator column : columnRefOperators) {
+                session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
+            }
 
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
-                .setScanRowCount(statistics.getOutputRowCount());
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+            session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
+                    .setScanRowCount(statistics.getOutputRowCount());
+        }
 
         return statistics;
     }
@@ -210,6 +242,13 @@ public class HiveMetadata implements ConnectorMetadata {
                     .getMetadata().getTable(dbName, tableName);
             cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
                     hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+        } else {
+            if (!stmt.isForceDrop()) {
+                throw new DdlException(String.format("Table location will be cleared." +
+                        " 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
+            }
+            hmsOps.dropTable(dbName, tableName);
         }
     }
 

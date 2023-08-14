@@ -35,7 +35,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
@@ -60,7 +59,7 @@ public class DeleteStmtTest {
 
     @Test
     public void getMethodTest() {
-        BinaryPredicate wherePredicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        BinaryPredicate wherePredicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new StringLiteral("abc"));
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("testDb", "testTbl"),
                 new PartitionNames(false, Lists.newArrayList("partition")), wherePredicate);

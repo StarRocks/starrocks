@@ -92,7 +92,7 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
 
     if (props.find(KEY_TERMINATE_AFTER) != props.end()) {
         _exactly_once = true;
-        // just send a normal search  against the elasticsearch with additional terminate_after param to achieve terminate early effect when limit take effect
+        // just send a normal search against the elasticsearch with additional terminate_after param to achieve terminate early effect when limit take effect
         if (_type.empty()) {
             _search_url = fmt::format("{}/{}/_search?terminate_after={}&preference=_shards:{}&{}", _target, _index,
                                       props.at(KEY_TERMINATE_AFTER), _shards, filter_path);

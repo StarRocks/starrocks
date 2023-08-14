@@ -1,0 +1,48 @@
+-- name: test_partial_update_session_var
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into tab1 values (100, "100", 100, "100", "100");
+insert into tab1 values (200, "100", 100, "100", "100");
+insert into tab1 values (300, "100", 100, "100", "100");
+insert into tab1 values (400, "100", 100, "100", "100");
+insert into tab1 values (500, "100", 100, "100", "100");
+select * from tab1;
+
+set partial_update_mode = "auto";
+update tab1 set v1 = 1000;
+update tab1 set v1 = 2000, v2 = 2000;
+update tab1 set v1 = 2000, v2 = 2000 where k1 = 200;
+
+select * from tab1;
+
+set partial_update_mode = "column";
+update tab1 set v1 = 10000;
+update tab1 set v1 = 20000, v2 = 20000;
+update tab1 set v1 = 20000, v2 = 20000 where k1 = 200;
+
+select * from tab1;
+
+set partial_update_mode = "row";
+update tab1 set v1 = 100000;
+update tab1 set v1 = 200000, v2 = 200000;
+update tab1 set v1 = 200000, v2 = 200000 where k1 = 200;
+
+select * from tab1;
+
+set partial_update_mode = "row111";
+set partial_update_mode = "ros";
+set partial_update_mode = "columns";
+set partial_update_mode = "auto11";

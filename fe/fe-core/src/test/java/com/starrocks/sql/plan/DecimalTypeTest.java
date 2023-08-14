@@ -86,8 +86,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0";
+                "     avgRowSize=3.0\n";
         assertContains(explain, snippet);
     }
 
@@ -193,10 +192,10 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg[([16: array_agg, STRUCT<col0 ARRAY<decimal128(26, 2)>>, true]); " +
+            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<decimal128(26, 2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
-                    "args: DECIMAL128; result: STRUCT<col0 ARRAY<decimal128(26, 2)>>;");
+                    "args: DECIMAL128; result: struct<col1 array<decimal128(26, 2)>>;");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }

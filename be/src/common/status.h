@@ -149,12 +149,15 @@ public:
 
     static Status EAgain(const Slice& msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
 
+    static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
     bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
     bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
     bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
+    bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
     bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
@@ -446,4 +449,13 @@ struct StatusInstance {
         if (UNLIKELY(cond)) {         \
             return ret;               \
         }                             \
+    } while (0)
+
+#define RETURN_IF_EXCEPTION(stmt)                   \
+    do {                                            \
+        try {                                       \
+            { stmt; }                               \
+        } catch (const std::exception& e) {         \
+            return Status::InternalError(e.what()); \
+        }                                           \
     } while (0)

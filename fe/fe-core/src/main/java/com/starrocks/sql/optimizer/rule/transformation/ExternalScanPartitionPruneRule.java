@@ -39,12 +39,12 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final ExternalScanPartitionPruneRule DELTALAKE_SCAN =
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
-
     public static final ExternalScanPartitionPruneRule FILE_SCAN =
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_FILE_SCAN);
-
     public static final ExternalScanPartitionPruneRule ES_SCAN =
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final ExternalScanPartitionPruneRule PAIMON_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_PAIMON_SCAN);
 
     public ExternalScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));

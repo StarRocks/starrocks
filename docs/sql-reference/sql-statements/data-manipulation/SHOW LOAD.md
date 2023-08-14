@@ -2,7 +2,7 @@
 
 ## Description
 
-Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using [Broker Load](../data-manipulation/BROKER%20LOAD.md), [Spark Load](../data-manipulation/SPARK%20LOAD.md), or [INSERT](../data-manipulation/insert.md). You can also view information of load jobs via the `curl` command. For more information, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md), [Bulk load using Apache Spark™](../../../loading/SparkLoad.md), and [Load data using INSERT](../../../loading/InsertInto.md).
+Displays information of all load jobs or given load jobs in a database. This statement can only display load jobs that are created by using [Broker Load](../data-manipulation/BROKER%20LOAD.md), [Spark Load](../data-manipulation/SPARK%20LOAD.md), or [INSERT](../data-manipulation/insert.md). You can also view information of load jobs via the `curl` command. For more information, see [Load data from HDFS](../../../loading/hdfs_load.md), [Load data from cloud storage](../../../loading/cloud_storage_load.md), [Bulk load using Apache Spark™](../../../loading/SparkLoad.md), and [Load data using INSERT](../../../loading/InsertInto.md).
 
 In addition to the preceding loading methods, StarRocks supports using Stream Load and Routine Load to load data. Stream Load is a synchronous operation and will directly return information of Stream Load jobs. Routine Load is an asynchronous operation where you can use the [SHOW ROUTINE LOAD](../data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement to display information of Routine Load jobs.
 
@@ -13,7 +13,6 @@ SHOW LOAD [ FROM db_name ]
 [
    WHERE [ LABEL { = "label_name" | LIKE "label_matcher" } ]
          [ [AND] STATE = { "PENDING" | "ETL" | "LOADING" | "FINISHED" | "CANCELLED" } ]
-         [ [AND] TYPE = { "BROKER" | "SPARK" | "INSERT" } ]
 ]
 [ ORDER BY field_name [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -32,7 +31,6 @@ SHOW LOAD [ FROM db_name ]
 | LABEL LIKE "label_matcher"        | No           | If this parameter is specified, the information of load jobs whose labels contain `label_matcher` is returned. |
 | AND                               | No           | <ul><li>If you specify only one filter condition in the WHERE clause, do not specify this keyword. Example: `WHERE STATE = "PENDING"`.</li><li>If you specify two or three filter conditions in the WHERE clause, you must specify this keyword. Example: `WHERE LABEL = "label_name" AND STATE = "PENDING"`. </li></ul>|
 | STATE                             | No           | The states of load jobs. The states vary based on loading methods.<ul><li>Broker Load<ul><li>`PENDING`: The load job is created.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul></li><li>Spark Load<ul><li>`PENDING`: Your StarRocks cluster is preparing configurations related to ETL and then submits an ETL job to your Apache Spark™ cluster.</li><li>`ETL`: Your Spark cluster is executing the ETL job and then writes the data into the corresponding HDFS cluster.</li><li>`LOADING`: The data in the HDFS cluster is being loaded to your StarRocks cluster, which means the load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul></li><li>INSERT<ul><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul></li></ul>If the `STATE` parameter is not specified, the information of load jobs in all states is returned by default. If the `STATE` parameter is specified, only the information of load jobs in the given state is returned. For example, `STATE = "PENDING"` returns the information of load jobs in the `PENDING` state. |
-| TYPE                              | No           | The loading methods of load jobs.<ul><li>`BROKER`: indicates Broker Load.</li><li>`SPARK`: indicates Spark Load.</li><li>`INSERT`: indicates INSERT.</li></ul> |
 | ORDER BY field_name [ASC \| DESC] | No           | If this parameter is specified, the output is sorted in ascending or descending order based on a field. The following fields are supported: `JobId`, `Label`, `State`, `Progress`, `Type`, `EtlInfo`, `TaskInfo`, `ErrorMsg`, `CreateTime`, `EtlStartTime`, `EtlFinishTime`, `LoadStartTime`, `LoadFinishTime`, `URL`, and `JobDetails`.<ul><li>To sort the output in ascending order, specify `ORDER BY field_name ASC`.</li><li>To sort the output in descending order, specify `ORDER BY field_name DESC`.</li></ul>If you do not specify the field and the sort order, the output is sorted in ascending order of `JobId` by default. |
 | LIMIT limit                       | No           | The number of load jobs that are allowed to display. If this parameter is not specified, the information of all load jobs that match the filter conditions are displayed. If this parameter is specified, for example, `LIMIT 10`, only the information of 10 load jobs that match filter conditions are returned. |
 | OFFSET offset                     | No           | The `offset` parameter defines the number of load jobs to be skipped. For example, `OFFSET 5` skips the first five load jobs and returns the rest. The value of the `offset` parameter defaults to `0`. |
@@ -82,7 +80,7 @@ The output of this statement varies based on loading methods.
 
 Example 1: Vertically display all load jobs in your current database.
 
-```undefined
+```plaintext
 SHOW LOAD\G;
 *************************** 1. row ***************************
          JobId: 976331
@@ -105,7 +103,7 @@ LoadFinishTime: 2022-10-17 19:35:06
 
 Example 2: Display two load jobs whose labels contain the string `null` in your current database.
 
-```undefined
+```plaintext
 SHOW LOAD 
 WHERE LABEL LIKE "null" 
 LIMIT 2;
@@ -120,7 +118,7 @@ LIMIT 2;
 
 Example 3: Display the load jobs whose labels contain the string `table` in `example_db`. In addition, the load jobs returned are displayed in descending order of the `LoadStartTime` field.
 
-```undefined
+```plaintext
 SHOW LOAD FROM example_db 
 WHERE LABEL Like "table" 
 ORDER BY LoadStartTime DESC;
@@ -135,7 +133,7 @@ ORDER BY LoadStartTime DESC;
 
 Example 4: Display the load job whose label is `duplicate_table_with_null` and state is `FINISHED` in `example_db`.
 
-```undefined
+```plaintext
 SHOW LOAD FROM example_db 
 WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
@@ -148,7 +146,7 @@ WHERE LABEL = "duplicate_table_with_null" AND STATE = "FINISHED";
 
 Example 5: Skip the first load job and display the next two load jobs. In addition, these two load jobs are sorted in ascending order.
 
-```undefined
+```plaintext
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 2 OFFSET 1;
@@ -156,7 +154,7 @@ LIMIT 2 OFFSET 1;
 
 Or
 
-```undefined
+```plaintext
 SHOW LOAD FROM example_db 
 ORDER BY CreateTime ASC 
 LIMIT 1,2;
@@ -164,7 +162,7 @@ LIMIT 1,2;
 
 The output of the preceding statements is as follows.
 
-```undefined
+```plaintext
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | JobId | Label                                       | State    | Progress            | Type   | EtlInfo                                                 | TaskInfo                                                                                                | ErrorMsg | CreateTime          | EtlStartTime        | EtlFinishTime       | LoadStartTime       | LoadFinishTime      | URL                                                                            | JobDetails                                                                                                                                                                                            |
 +-------+---------------------------------------------+----------+---------------------+--------+---------------------------------------------------------+---------------------------------------------------------------------------------------------------------+----------+---------------------+---------------------+---------------------+---------------------+---------------------+--------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+

@@ -39,13 +39,17 @@ public:
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
-    static Status show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
+    static Status show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
                                  TShowVariableResult* var_result);
 
     static std::string extract_db_name(const std::string& full_name);
@@ -65,6 +69,15 @@ public:
     static Status get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
                             TGetLoadsResult* var_result, int timeout_ms);
 
+    static Status get_tracking_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                     TGetTrackingLoadsResult* var_result, int timeout_ms);
+
+    static Status get_routine_load_jobs(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                        TGetRoutineLoadJobsResult* var_result, int timeout_ms);
+
+    static Status get_stream_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                                   TGetStreamLoadsResult* var_result, int timeout_ms);
+
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 
@@ -79,7 +92,7 @@ public:
 
     static Status get_grants_to(const std::string& ip, const int32_t port,
                                 const TGetGrantsToRolesOrUserRequest& request,
-                                TGetGrantsToRolesOrUserResponse* response);
+                                TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
 };
 
 template <LogicalType SlotType>

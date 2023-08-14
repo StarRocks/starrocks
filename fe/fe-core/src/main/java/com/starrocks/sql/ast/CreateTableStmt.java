@@ -278,8 +278,20 @@ public class CreateTableStmt extends DdlStmt {
         this.properties = properties;
     }
 
+    public void updateProperties(Map<String, String> properties) {
+        if (this.properties == null) {
+            this.properties = properties;
+        } else {
+            this.properties.putAll(properties);
+        }
+    }
+
     public void setDistributionDesc(DistributionDesc distributionDesc) {
         this.distributionDesc = distributionDesc;
+    }
+
+    public void setPartitionDesc(PartitionDesc partitionDesc) {
+        this.partitionDesc = partitionDesc;
     }
 
     public static CreateTableStmt read(DataInput in) throws IOException {

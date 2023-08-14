@@ -1,0 +1,164 @@
+-- name: test_insert_overwrite
+CREATE TABLE site_access (
+event_day date NOT NULL COMMENT "",
+site_id int(11) NULL DEFAULT "10" COMMENT "",
+city_code varchar(100) NULL COMMENT "",
+user_name varchar(32) NULL DEFAULT "" COMMENT "",
+pv bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-01	10	SomeCity	UserName	0
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity1' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-01	10	SomeCity1	UserName	0
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+[REGEX]Insert has filtered data in strict mode
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-02') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+[REGEX]Insert has filtered data in strict mode
+-- !result
+INSERT overwrite site_access select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-02	10	SomeCity	UserName	0
+-- !result
+drop table site_access;
+-- result:
+-- !result
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)
+(
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+)
+DISTRIBUTED BY HASH(site_id) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No partition specified in partition lists.')
+-- !result
+CREATE TABLE `duplicate_table_with_null1` ( `k1`  date, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY date_trunc('day', k2) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null2` ( `k1`  date, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY date_trunc('month', k2) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+INSERT INTO `duplicate_table_with_null1` (`k1`, `k2`, `k3`, `k4`, `k5`)
+VALUES
+('2020-08-01', '2020-08-01 00:00:00', 'char1', 'varchar1', true),
+('2020-08-02', '2020-08-02 00:00:00', 'char2', 'varchar2', false),
+('2020-08-03', '2020-08-03 00:00:00', 'char3', 'varchar3', true),
+('2020-08-04', '2020-08-04 00:00:00', 'char4', 'varchar4', false);
+-- result:
+-- !result
+INSERT INTO `duplicate_table_with_null1` (`k1`, `k2`, `k3`, `k4`, `k5`)
+VALUES
+('2020-07-01', '2020-07-01 00:00:00', 'char1', 'varchar1', true),
+('2020-08-01', '2020-08-01 00:00:00', 'char2', 'varchar2', false)
+insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
+-- result:
+E: (1064, "Getting syntax error at line 5, column 0. Detail message: Unexpected input 'insert', the most similar input is {<EOF>, ';'}.")
+-- !result
+select * from duplicate_table_with_null1;
+-- result:
+2020-08-02	2020-08-02 00:00:00	char2	varchar2	0
+2020-08-03	2020-08-03 00:00:00	char3	varchar3	1
+2020-08-01	2020-08-01 00:00:00	char1	varchar1	1
+2020-08-04	2020-08-04 00:00:00	char4	varchar4	0
+-- !result
+CREATE TABLE t_recharge_detail (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2),
+    province varchar(20) not null,
+    dt varchar(20) not null
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY (dt,province)
+DISTRIBUTED BY HASH(`id`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 2 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+2	2	2.00	beijing	2022-04-02
+-- !result
+insert overwrite t_recharge_detail PARTITION(dt='2022-04-02', province='beijing')
+select 3 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as dt from dual;
+-- result:
+-- !result
+select * from t_recharge_detail;
+-- result:
+3	2	2.00	beijing	2022-04-02
+-- !result
+drop table if exists duplicate_table_with_null1;
+-- result:
+-- !result
+drop table if exists duplicate_table_with_null2;
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null1` ( `k1`  date not null, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY (k1) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+CREATE TABLE `duplicate_table_with_null2` ( `k1`  date not null, `k2`  datetime,`k3`  char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY (k1) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) PROPERTIES (  "replication_num" = "1", "storage_format" = "v2");
+-- result:
+-- !result
+insert into duplicate_table_with_null1 values('2020-01-01', '2020-01-01 12:30:30', 'asfgrgte', 'wergergqer', 'stringaaa', 0, 11, 111, 1111, 11111, 111111, 11.11, 1), ('2020-01-02', '0000-01-01 00:00:00', 'asfgrgtf', 'wergergqes', 'stringbbb',1, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, 22.22, 2), ('2020-01-03', '9999-12-31 23:59:59', 'asfgrgtf', 'wergergqes', 'stringbbb',1, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 22.22, 2);
+-- result:
+-- !result
+insert into duplicate_table_with_null2 values('2021-01-01', '2020-01-01 12:30:30', 'asfgrgte', 'wergergqer', 'stringaaa', 0, 11, 111, 1111, 11111, 111111, 11.11, 1), ('2021-01-02', '0000-01-01 00:00:00', 'asfgrgtf', 'wergergqes', 'stringbbb',1, -128, -32768, -2147483648, -9223372036854775808, -170141183460469231731687303715884105728, 22.22, 2), ('2021-01-03', '9999-12-31 23:59:59', 'asfgrgtf', 'wergergqes', 'stringbbb',1, 127, 32767, 2147483647, 9223372036854775807, 170141183460469231731687303715884105727, 22.22, 2);
+-- result:
+-- !result
+insert overwrite duplicate_table_with_null1 select * from duplicate_table_with_null2;
+-- result:
+-- !result
+select count(1) from duplicate_table_with_null1;
+-- result:
+3
+-- !result

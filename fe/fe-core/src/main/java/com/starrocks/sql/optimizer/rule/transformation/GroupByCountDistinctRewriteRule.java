@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -73,6 +74,9 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                     .put(FunctionSet.MAX, Pair.create(FunctionSet.MAX, FunctionSet.MAX))
                     .put(FunctionSet.MIN, Pair.create(FunctionSet.MIN, FunctionSet.MIN))
                     .put(FunctionSet.SUM, Pair.create(FunctionSet.SUM, FunctionSet.SUM))
+                    .put(FunctionSet.HLL_UNION_AGG, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION_AGG))
+                    .put(FunctionSet.BITMAP_UNION_COUNT,
+                            Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION_COUNT))
                     .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
                     .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))
                     .put(FunctionSet.PERCENTILE_UNION,
@@ -129,7 +133,10 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         List<Integer> groupBy = aggregate.getGroupingKeys().stream().map(ColumnRefOperator::getId)
                 .collect(Collectors.toList());
 
-        if (groupBy.isEmpty() || groupBy.containsAll(((HashDistributionSpec) scan.getDistributionSpec()).getShuffleColumns())) {
+        List<Integer> distributionCols = ((HashDistributionSpec) scan.getDistributionSpec()).getShuffleColumns().stream().map(
+                DistributionCol::getColId).collect(Collectors.toList());
+
+        if (groupBy.isEmpty() || groupBy.containsAll(distributionCols)) {
             return false;
         }
 
@@ -139,7 +146,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         }
 
         groupBy.add(distinctColumns.get(0).getId());
-        return groupBy.containsAll(((HashDistributionSpec) scan.getDistributionSpec()).getShuffleColumns());
+        return groupBy.containsAll(distributionCols);
     }
 
     @Override
@@ -206,7 +213,13 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         } else {
             String secondFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).second;
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = origin.getFunction().updateArgType(argTypes);
+            Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Preconditions.checkNotNull(newFunc);
+            newFunc = newFunc.copy();
+            // for decimal
+            newFunc = newFunc.updateArgType(argTypes);
+            newFunc.setRetType(origin.getFunction().getReturnType());
             return new CallOperator(secondFuncName, newFunc.getReturnType(), args, newFunc);
         }
     }

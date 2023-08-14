@@ -13,9 +13,11 @@
 // limitations under the License.
 
 #pragma once
+
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
+#include "storage/range.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -37,8 +39,8 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
-    io::SharedBufferedInputStream* sb_stream = nullptr;
-    tparquet::RowGroup* row_group_meta = nullptr;
+    const tparquet::RowGroup* row_group_meta = nullptr;
+    uint64_t first_row_index = 0;
     ColumnReaderContext* context = nullptr;
 };
 
@@ -53,6 +55,16 @@ public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output);
 
+    // for struct type without schema change
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
+
+    // for schema changed
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
+                                                  std::vector<int32_t>& pos,
+                                                  std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
+
     virtual ~ColumnReader() = default;
 
     virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) = 0;
@@ -63,18 +75,18 @@ public:
         return finish_batch();
     }
 
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                              Column* dst) = 0;
+
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
     virtual void set_need_parse_levels(bool need_parse_levels) = 0;
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
-    }
-
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
-        return Status::NotSupported("get_dict_codes is not supported");
     }
 
     std::unique_ptr<ColumnConverter> converter;

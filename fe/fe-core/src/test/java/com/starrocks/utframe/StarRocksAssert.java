@@ -38,8 +38,15 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -53,8 +60,15 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -72,21 +86,31 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.PartitionRangeDesc;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
+    private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
 
     private ConnectContext ctx;
 
@@ -129,7 +153,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getAuthorizationManager().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuthorizationMgr().createRole(createRoleStmt);
         return this;
     }
 
@@ -137,7 +161,7 @@ public class StarRocksAssert {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                         "create user " + user + " identified by '';", ctx);
-        GlobalStateMgr.getCurrentState().getAuthenticationManager().createUser(createUserStmt);
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
         return this;
     }
 
@@ -182,13 +206,13 @@ public class StarRocksAssert {
     // };
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getRoutineLoadManager().createRoutineLoadJob(createRoutineLoadStmt);
+        GlobalStateMgr.getCurrentState().getRoutineLoadMgr().createRoutineLoadJob(createRoutineLoadStmt);
         return this;
     }
 
     public StarRocksAssert withLoad(String sql) throws Exception {
         LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLoadManager().createLoadJobFromStmt(loadStmt, ctx);
+        GlobalStateMgr.getCurrentState().getLoadMgr().createLoadJobFromStmt(loadStmt, ctx);
         return this;
     }
 
@@ -213,9 +237,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (statementBase instanceof  CreateTableStmt) {
+        if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
@@ -253,6 +281,21 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert alterMvProperties(String sql) throws Exception {
+        AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
+        return this;
+    }
+
+    public StarRocksAssert alterTableProperties(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
@@ -272,6 +315,18 @@ public class StarRocksAssert {
         return withMaterializedView(sql, false);
     }
 
+    public void assertMVWithoutComplexExpression(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(tableName);
+        if (!(table instanceof OlapTable)) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        for (MaterializedIndexMeta indexMeta : olapTable.getIndexIdToMeta().values()) {
+            Assert.assertFalse(MVUtils.containComplexExpresses(indexMeta));
+        }
+    }
+
     public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof CreateMaterializedViewStmt) {
@@ -280,6 +335,7 @@ public class StarRocksAssert {
                 createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+            checkAlterJob();
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement =
@@ -289,8 +345,62 @@ public class StarRocksAssert {
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         }
-        checkAlterJob();
         return this;
+    }
+
+    public StarRocksAssert refreshMvPartition(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof RefreshMaterializedViewStatement) {
+            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+
+            TableName mvName = refreshMaterializedViewStatement.getMvName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
+            Table table = db.getTable(mvName.getTbl());
+            Assert.assertNotNull(table);
+            Assert.assertTrue(table instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) table;
+
+            HashMap<String, String> taskRunProperties = new HashMap<>();
+            PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
+            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+            taskRunProperties.put(TaskRun.FORCE, "true");
+
+            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+            taskRun.executeTaskRun();
+            waitingTaskFinish(taskRun);
+        }
+        return this;
+    }
+
+    private void waitingTaskFinish(TaskRun taskRun) {
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
+    }
+
+    public void updateTablePartitionVersion(String dbName, String tableName, long version) {
+        Table table = GlobalStateMgr.getCurrentState().getDb(dbName).getTable(tableName);
+        for (Partition partition : table.getPartitions()) {
+            partition.setVisibleVersion(version, System.currentTimeMillis());
+            MaterializedIndex baseIndex = partition.getBaseIndex();
+            List<Tablet> tablets = baseIndex.getTablets();
+            for (Tablet tablet : tablets) {
+                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                for (Replica replica : replicas) {
+                    replica.updateVersionInfo(version, -1, version);
+                }
+            }
+        }
     }
     
     // Add rollup
@@ -329,6 +439,14 @@ public class StarRocksAssert {
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
         return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
+    }
+
+    public List<List<String>> show(String sql) throws Exception {
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof ShowStmt);
+        Analyzer.analyze(stmt, ctx);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        return showExecutor.execute().getResultRows();
     }
 
     private void checkAlterJob() throws InterruptedException {

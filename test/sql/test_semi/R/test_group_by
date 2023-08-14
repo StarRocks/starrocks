@@ -1,0 +1,410 @@
+-- name: test_group_by @system
+CREATE TABLE `sc2` (
+  `v1` bigint(20) NULL COMMENT "",
+  `s2` string NULL,
+  `array1` ARRAY<INT> NULL,
+  `array2` ARRAY<MAP<INT, INT>> NULL,
+  `array3` ARRAY<STRUCT<a INT, b INT>> NULL,
+  `map1` MAP<INT, INT> NULL,
+  `map2` MAP<INT, ARRAY<INT>> NULL,
+  `map3` MAP<INT, STRUCT<c INT, b INT>> NULL,
+  `st1` STRUCT<s1 int, s2 ARRAY<INT>, s3 MAP<INT, INT>, s4 Struct<e INT, f INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into sc2 values (0, "abc", [1,2,3], [map{2:20, 1:10, 3:30}], [row(1, 2)], map{2:20, 1:10, 4:40}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (1, "abc", [2,1,3], [map{2:20, 1:10, 3:30}], [row(1, 3)], map{2:20, 1:10, 4:40}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (2, "abc", [1,3,2], [map{2:20, 1:10, 3:30}], [row(1, 2)], map{2:20, 1:10, 3:30}, map{2:[2,3,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{2:2, 1:1}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (3, "abc", [1,2,3], [map{2:20, 1:10}],       [row(1, 2)], map{2:20, 1:10, 3:30}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (4, "abc", [1,2,3], [map{2:20, 1:10}],       [row(1, 3)], map{2:20, 1:10, 3:30}, map{2:[3,2,4], 1:[1,2,3]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,3], map{1:1, 2:2}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (5, "abd", [1,2,3], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 3:30}, map{1:[1,2,3], 2:[2,3,4]}, map{1:row(1,3), 2:row(2,3)}, row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)));
+-- result:
+-- !result
+insert into sc2 values (6, "abd", [1,3,2], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 4:40}, map{1:[2,1,3], 2:[2,3,4]}, map{1:row(2,3), 2:row(2,3)}, row(1, [1,2,3], map{2:2, 1:1, 3:3}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (7, "abd", [2,1,3], [map{1:10, 3:30, 2:20}], [row(2, 1)], map{1:10, 2:20, 4:40}, map{1:[2,1,3], 2:[2,4,3]}, map{1:row(2,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 1:1, 3:3}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (8, "abd", [2,1,3], [map{1:10, 3:30, 2:20}], [row(2, 1)], map{2:20, 1:10, 3:30}, map{1:[1,2,3], 2:[2,4,3]}, map{1:row(2,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 3:3, 1:1}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (9, "abd", [1,2,3], [map{1:10, 3:30, 2:20}], [row(1, 2)], map{1:10, 2:20, 3:30}, map{1:[1,2,3], 2:[2,4,3]}, map{1:row(1,3), 2:row(2,4)}, row(1, [1,2,3], map{2:2, 3:3, 1:1}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (0, "abc", [1,2,null], [map{2:20, 1:10, null:30}], [row(1, 2)], map{2:20, 1:10, 4:40}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (1, "abc", [2,1,null], [map{2:20, 1:10, null:30}], [row(1, null)], map{2:20, 1:10, 4:40}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (2, "abc", [1,null,2], [map{2:20, 1:10, null:30}], [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[2,null,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{2:2, 1:1}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (3, "abc", [1,2,null], [map{2:20, 1:10}],       [row(1, 2)], map{2:20, 1:10, null:30}, map{2:[null,2,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{1:1, 2:2}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (4, "abc", [1,2,null], [map{2:20, 1:10}],       [row(1, null)], map{2:20, 1:10, null:30}, map{2:[null,2,4], 1:[1,2,null]}, map{2:row(2,4), 1:row(1,2)}, row(1, [2,1,null], map{1:1, 2:2}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (5, "abd", [1,2,null], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, null:30}, map{1:[1,2,null], 2:[2,null,4]}, map{1:row(1,null), 2:row(2,null)}, row(1, [2,1,null], map{1:1, 2:2}, row(null, 2)));
+-- result:
+-- !result
+insert into sc2 values (6, "abd", [1,null,2], [map{1:10, 2:20}],       [row(1, 2)], map{1:10, 2:20, 4:40}, map{1:[2,1,null], 2:[2,null,4]}, map{1:row(2,null), 2:row(2,null)}, row(1, [1,2,null], map{2:2, 1:1, null:null}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (7, "abd", [2,1,null], [map{1:10, null:30, 2:20}], [row(2, 1)], map{1:10, 2:20, 4:40}, map{1:[2,1,null], 2:[2,4,null]}, map{1:row(2,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, 1:1, null:null}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (8, "abd", [2,1,null], [map{1:10, null:30, 2:20}], [row(2, 1)], map{2:20, 1:10, null:30}, map{1:[1,2,null], 2:[2,4,null]}, map{1:row(2,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, null:null, 1:1}, row(1, 2)));
+-- result:
+-- !result
+insert into sc2 values (9, "abd", [1,2,null], [map{1:10, null:30, 2:20}], [row(1, 2)], map{1:10, 2:20, null:30}, map{1:[1,2,null], 2:[2,4,null]}, map{1:row(1,null), 2:row(2,4)}, row(1, [1,2,null], map{2:2, null:null, 1:1}, row(1, 2)));
+-- result:
+-- !result
+select array1, count(distinct s2) from sc2 group by array1;
+-- result:
+[1,3,2]	2
+[2,1,null]	2
+[1,null,2]	2
+[1,2,3]	2
+[1,2,null]	2
+[2,1,3]	2
+-- !result
+select array2, count(distinct s2) from sc2 group by array2;
+-- result:
+[{null:30,1:10,2:20}]	2
+[{1:10,2:20}]	2
+[{1:10,2:20,3:30}]	2
+-- !result
+select array3, count(distinct s2) from sc2 group by array3;
+-- result:
+[{"a":1,"b":null}]	1
+[{"a":1,"b":3}]	1
+[{"a":1,"b":2}]	2
+[{"a":2,"b":1}]	1
+-- !result
+select map1, count(distinct s2) from sc2 group by map1;
+-- result:
+{1:10,2:20,3:30}	2
+{1:10,2:20,4:40}	2
+{null:30,1:10,2:20}	2
+-- !result
+select map2, count(distinct s2) from sc2 group by map2;
+-- result:
+{1:[2,1,null],2:[2,null,4]}	1
+{1:[1,2,3],2:[2,3,4]}	2
+{1:[2,1,3],2:[2,3,4]}	1
+{1:[1,2,null],2:[2,null,4]}	2
+{1:[2,1,3],2:[2,4,3]}	1
+{1:[2,1,null],2:[2,4,null]}	1
+{1:[1,2,3],2:[2,4,3]}	1
+{1:[1,2,null],2:[2,4,null]}	1
+{1:[1,2,null],2:[null,2,4]}	1
+{1:[1,2,3],2:[3,2,4]}	1
+-- !result
+select map3, count(distinct s2) from sc2 group by map3;
+-- result:
+{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+{1:{"c":2,"b":3},2:{"c":2,"b":3}}	1
+{1:{"c":1,"b":3},2:{"c":2,"b":3}}	1
+{1:{"c":1,"b":null},2:{"c":2,"b":null}}	1
+{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{1:{"c":1,"b":null},2:{"c":2,"b":4}}	1
+{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+{1:{"c":1,"b":3},2:{"c":2,"b":4}}	1
+{1:{"c":2,"b":null},2:{"c":2,"b":null}}	1
+-- !result
+select st1, count(distinct s2) from sc2 group by st1;
+-- result:
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	2
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	2
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+-- !result
+select s2, s2, count(distinct s2) from sc2 group by s2, s2;
+-- result:
+abd	abd	1
+abc	abc	1
+-- !result
+select s2, array1, count(distinct s2) from sc2 group by s2, array1;
+-- result:
+abd	[1,null,2]	1
+abd	[2,1,null]	1
+abd	[1,2,null]	1
+abc	[1,null,2]	1
+abc	[2,1,null]	1
+abc	[2,1,3]	1
+abd	[2,1,3]	1
+abc	[1,2,null]	1
+abc	[1,3,2]	1
+abc	[1,2,3]	1
+abd	[1,3,2]	1
+abd	[1,2,3]	1
+-- !result
+select s2, array2, count(distinct s2) from sc2 group by s2, array2;
+-- result:
+abd	[{null:30,1:10,2:20}]	1
+abc	[{null:30,1:10,2:20}]	1
+abd	[{1:10,2:20}]	1
+abc	[{1:10,2:20}]	1
+abc	[{1:10,2:20,3:30}]	1
+abd	[{1:10,2:20,3:30}]	1
+-- !result
+select s2, array3, count(distinct s2) from sc2 group by s2, array3;
+-- result:
+abc	[{"a":1,"b":null}]	1
+abc	[{"a":1,"b":3}]	1
+abc	[{"a":1,"b":2}]	1
+abd	[{"a":2,"b":1}]	1
+abd	[{"a":1,"b":2}]	1
+-- !result
+select s2, map1, count(distinct s2) from sc2 group by s2, map1;
+-- result:
+abc	{1:10,2:20,3:30}	1
+abc	{1:10,2:20,4:40}	1
+abc	{null:30,1:10,2:20}	1
+abd	{null:30,1:10,2:20}	1
+abd	{1:10,2:20,4:40}	1
+abd	{1:10,2:20,3:30}	1
+-- !result
+select s2, map2, count(distinct s2) from sc2 group by s2, map2;
+-- result:
+abd	{1:[2,1,null],2:[2,null,4]}	1
+abc	{1:[1,2,3],2:[2,3,4]}	1
+abd	{1:[2,1,3],2:[2,3,4]}	1
+abc	{1:[1,2,null],2:[2,null,4]}	1
+abd	{1:[1,2,null],2:[2,null,4]}	1
+abd	{1:[2,1,3],2:[2,4,3]}	1
+abd	{1:[2,1,null],2:[2,4,null]}	1
+abd	{1:[1,2,3],2:[2,4,3]}	1
+abd	{1:[1,2,null],2:[2,4,null]}	1
+abc	{1:[1,2,null],2:[null,2,4]}	1
+abd	{1:[1,2,3],2:[2,3,4]}	1
+abc	{1:[1,2,3],2:[3,2,4]}	1
+-- !result
+select s2, map3, count(distinct s2) from sc2 group by s2, map3;
+-- result:
+abd	{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+abd	{1:{"c":2,"b":3},2:{"c":2,"b":3}}	1
+abd	{1:{"c":1,"b":3},2:{"c":2,"b":3}}	1
+abd	{1:{"c":1,"b":null},2:{"c":2,"b":null}}	1
+abc	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+abd	{1:{"c":1,"b":null},2:{"c":2,"b":4}}	1
+abd	{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+abd	{1:{"c":1,"b":3},2:{"c":2,"b":4}}	1
+abd	{1:{"c":2,"b":null},2:{"c":2,"b":null}}	1
+-- !result
+select s2, st1, count(distinct s2) from sc2 group by s2, st1;
+-- result:
+abd	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+abc	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+abc	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+abc	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	1
+abd	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	1
+abd	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	1
+abd	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+abc	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	1
+-- !result
+select array1, array1, count(distinct s2) from sc2 group by array1, array1;
+-- result:
+[1,null,2]	[1,null,2]	2
+[2,1,null]	[2,1,null]	2
+[1,2,null]	[1,2,null]	2
+[2,1,3]	[2,1,3]	2
+[1,3,2]	[1,3,2]	2
+[1,2,3]	[1,2,3]	2
+-- !result
+select array1, map3, count(distinct s2) from sc2 group by array1, map3;
+-- result:
+[1,2,3]	{1:{"c":1,"b":3},2:{"c":2,"b":3}}	1
+[1,2,null]	{1:{"c":1,"b":null},2:{"c":2,"b":4}}	1
+[1,2,3]	{1:{"c":1,"b":3},2:{"c":2,"b":4}}	1
+[2,1,null]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[2,1,null]	{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+[1,3,2]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[1,null,2]	{1:{"c":2,"b":null},2:{"c":2,"b":null}}	1
+[2,1,3]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[1,null,2]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[2,1,3]	{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+[1,2,3]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[1,3,2]	{1:{"c":2,"b":3},2:{"c":2,"b":3}}	1
+[1,2,null]	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+[1,2,null]	{1:{"c":1,"b":null},2:{"c":2,"b":null}}	1
+-- !result
+select array1, st1, count(distinct s2) from sc2 group by array1, st1;
+-- result:
+[2,1,null]	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	1
+[1,null,2]	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	1
+[1,2,null]	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+[1,2,3]	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	2
+[1,2,3]	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+[2,1,null]	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+[1,2,null]	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	2
+[1,2,null]	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+[2,1,3]	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+[1,2,3]	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+[1,3,2]	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	1
+[1,3,2]	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+[1,null,2]	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+[2,1,3]	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	1
+-- !result
+select array2, s2, count(distinct s2) from sc2 group by array2, s2;
+-- result:
+[{null:30,1:10,2:20}]	abd	1
+[{null:30,1:10,2:20}]	abc	1
+[{1:10,2:20}]	abd	1
+[{1:10,2:20}]	abc	1
+[{1:10,2:20,3:30}]	abc	1
+[{1:10,2:20,3:30}]	abd	1
+-- !result
+select map1, s2, count(distinct s2) from sc2 group by map1, s2;
+-- result:
+{1:10,2:20,3:30}	abc	1
+{1:10,2:20,4:40}	abc	1
+{null:30,1:10,2:20}	abc	1
+{null:30,1:10,2:20}	abd	1
+{1:10,2:20,4:40}	abd	1
+{1:10,2:20,3:30}	abd	1
+-- !result
+select map1, map3, count(distinct s2) from sc2 group by map1, map3;
+-- result:
+{null:30,1:10,2:20}	{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+{1:10,2:20,4:40}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{null:30,1:10,2:20}	{1:{"c":1,"b":null},2:{"c":2,"b":4}}	1
+{1:10,2:20,3:30}	{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+{1:10,2:20,4:40}	{1:{"c":2,"b":null},2:{"c":2,"b":null}}	1
+{null:30,1:10,2:20}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{null:30,1:10,2:20}	{1:{"c":1,"b":null},2:{"c":2,"b":null}}	1
+{1:10,2:20,3:30}	{1:{"c":1,"b":3},2:{"c":2,"b":3}}	1
+{1:10,2:20,4:40}	{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+{1:10,2:20,4:40}	{1:{"c":2,"b":3},2:{"c":2,"b":3}}	1
+{1:10,2:20,4:40}	{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+{1:10,2:20,3:30}	{1:{"c":1,"b":3},2:{"c":2,"b":4}}	1
+{1:10,2:20,3:30}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+-- !result
+select map1, st1, count(distinct s2) from sc2 group by map1, st1;
+-- result:
+{1:10,2:20,3:30}	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{null:30,1:10,2:20}	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	2
+{1:10,2:20,4:40}	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	1
+{1:10,2:20,3:30}	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+{null:30,1:10,2:20}	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+{1:10,2:20,3:30}	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	2
+{1:10,2:20,4:40}	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	1
+{1:10,2:20,4:40}	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+{null:30,1:10,2:20}	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{1:10,2:20,4:40}	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+-- !result
+select map2, s2, count(distinct s2) from sc2 group by map2, s2;
+-- result:
+{1:[2,1,null],2:[2,null,4]}	abd	1
+{1:[1,2,3],2:[2,3,4]}	abc	1
+{1:[2,1,3],2:[2,3,4]}	abd	1
+{1:[1,2,null],2:[2,null,4]}	abc	1
+{1:[1,2,null],2:[2,null,4]}	abd	1
+{1:[2,1,3],2:[2,4,3]}	abd	1
+{1:[2,1,null],2:[2,4,null]}	abd	1
+{1:[1,2,3],2:[2,4,3]}	abd	1
+{1:[1,2,null],2:[2,4,null]}	abd	1
+{1:[1,2,null],2:[null,2,4]}	abc	1
+{1:[1,2,3],2:[2,3,4]}	abd	1
+{1:[1,2,3],2:[3,2,4]}	abc	1
+-- !result
+select map2, map1, count(distinct s2) from sc2 group by map2, map1;
+-- result:
+{1:[2,1,null],2:[2,4,null]}	{1:10,2:20,4:40}	1
+{1:[1,2,null],2:[2,null,4]}	{null:30,1:10,2:20}	2
+{1:[2,1,3],2:[2,3,4]}	{1:10,2:20,4:40}	1
+{1:[1,2,3],2:[2,3,4]}	{1:10,2:20,3:30}	2
+{1:[1,2,null],2:[null,2,4]}	{null:30,1:10,2:20}	1
+{1:[2,1,3],2:[2,4,3]}	{1:10,2:20,4:40}	1
+{1:[1,2,null],2:[2,null,4]}	{1:10,2:20,4:40}	1
+{1:[1,2,3],2:[3,2,4]}	{1:10,2:20,3:30}	1
+{1:[1,2,3],2:[2,4,3]}	{1:10,2:20,3:30}	1
+{1:[2,1,null],2:[2,null,4]}	{1:10,2:20,4:40}	1
+{1:[1,2,3],2:[2,3,4]}	{1:10,2:20,4:40}	1
+{1:[1,2,null],2:[2,4,null]}	{null:30,1:10,2:20}	1
+-- !result
+select map3, s2, count(distinct s2) from sc2 group by map3, s2;
+-- result:
+{1:{"c":2,"b":null},2:{"c":2,"b":4}}	abd	1
+{1:{"c":2,"b":3},2:{"c":2,"b":3}}	abd	1
+{1:{"c":1,"b":3},2:{"c":2,"b":3}}	abd	1
+{1:{"c":1,"b":null},2:{"c":2,"b":null}}	abd	1
+{1:{"c":1,"b":2},2:{"c":2,"b":4}}	abc	1
+{1:{"c":1,"b":null},2:{"c":2,"b":4}}	abd	1
+{1:{"c":2,"b":3},2:{"c":2,"b":4}}	abd	1
+{1:{"c":1,"b":3},2:{"c":2,"b":4}}	abd	1
+{1:{"c":2,"b":null},2:{"c":2,"b":null}}	abd	1
+-- !result
+select st1, s2, count(distinct s2) from sc2 group by st1, s2;
+-- result:
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	abd	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	abc	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	abc	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	abc	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	abd	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	abd	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	abd	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	abc	1
+-- !result
+select st1, array2, count(distinct s2) from sc2 group by st1, array2;
+-- result:
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	[{1:10,2:20}]	2
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	[{1:10,2:20}]	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	[{1:10,2:20}]	2
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	[{1:10,2:20,3:30}]	1
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	[{1:10,2:20,3:30}]	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	[{null:30,1:10,2:20}]	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	[{null:30,1:10,2:20}]	1
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	[{1:10,2:20}]	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	[{1:10,2:20}]	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	[{1:10,2:20}]	1
+-- !result
+select st1, map3, count(distinct s2) from sc2 group by st1, map3;
+-- result:
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	{1:{"c":2,"b":3},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	{1:{"c":2,"b":null},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	{1:{"c":1,"b":3},2:{"c":2,"b":3}}	1
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	{1:{"c":1,"b":3},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	{1:{"c":2,"b":3},2:{"c":2,"b":3}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	{1:{"c":1,"b":null},2:{"c":2,"b":null}}	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	{1:{"c":2,"b":null},2:{"c":2,"b":null}}	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	{1:{"c":1,"b":2},2:{"c":2,"b":4}}	1
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	{1:{"c":1,"b":null},2:{"c":2,"b":4}}	1
+-- !result
+select st1, st1, count(distinct s2) from sc2 group by st1, st1;
+-- result:
+{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	{"s1":1,"s2":[1,2,3],"s3":{1:1,2:2,3:3},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":1,"f":2}}	1
+{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	{"s1":1,"s2":[2,1,null],"s3":{1:1,2:2},"s4":{"e":null,"f":2}}	2
+{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	{"s1":1,"s2":[2,1,3],"s3":{1:1,2:2},"s4":{"e":3,"f":2}}	2
+{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	{"s1":1,"s2":[1,2,null],"s3":{null:null,1:1,2:2},"s4":{"e":1,"f":2}}	1
+-- !result

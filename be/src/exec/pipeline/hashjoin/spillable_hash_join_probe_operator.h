@@ -1,3 +1,17 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <atomic>
@@ -34,6 +48,8 @@ private:
 struct SpillableHashJoinProbeMetrics {
     RuntimeProfile::Counter* hash_partitions = nullptr;
     RuntimeProfile::Counter* probe_shuffle_timer = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* prober_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* build_partition_peak_memory_usage = nullptr;
 };
 
 class SpillableHashJoinProbeOperator final : public HashJoinProbeOperator {
@@ -63,8 +79,7 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
-    void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
-    spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
+    bool spilled() const { return _join_builder->spiller()->spilled(); }
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 

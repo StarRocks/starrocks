@@ -41,7 +41,7 @@ public:
 	static const size_t EXPLICIT_INITIAL_INDEX_SIZE = ConcurrentQueue::EXPLICIT_INITIAL_INDEX_SIZE;
 	static const size_t IMPLICIT_INITIAL_INDEX_SIZE = ConcurrentQueue::IMPLICIT_INITIAL_INDEX_SIZE;
 	static const size_t INITIAL_IMPLICIT_PRODUCER_HASH_SIZE = ConcurrentQueue::INITIAL_IMPLICIT_PRODUCER_HASH_SIZE;
-	static const std::uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = ConcurrentQueue::EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE;
+	static const uint32_t EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE = ConcurrentQueue::EXPLICIT_CONSUMER_CONSUMPTION_QUOTA_BEFORE_ROTATE;
 	static const size_t MAX_SUBQUEUE_SIZE = ConcurrentQueue::MAX_SUBQUEUE_SIZE;
 	
 public:
@@ -374,7 +374,7 @@ public:
 	// and is thus functionally equivalent to calling wait_dequeue.
 	// Never allocates. Thread-safe.
 	template<typename U>
-	inline bool wait_dequeue_timed(U& item, std::int64_t timeout_usecs)
+	inline bool wait_dequeue_timed(U& item, int64_t timeout_usecs)
 	{
 		if (!sema->wait(timeout_usecs)) {
 			return false;
@@ -417,7 +417,7 @@ public:
 	// and is thus functionally equivalent to calling wait_dequeue.
 	// Never allocates. Thread-safe.
 	template<typename U>
-	inline bool wait_dequeue_timed(consumer_token_t& token, U& item, std::int64_t timeout_usecs)
+	inline bool wait_dequeue_timed(consumer_token_t& token, U& item, int64_t timeout_usecs)
 	{
 		if (!sema->wait(timeout_usecs)) {
 			return false;
@@ -462,7 +462,7 @@ public:
 	// and is thus functionally equivalent to calling wait_dequeue_bulk.
 	// Never allocates. Thread-safe.
 	template<typename It>
-	inline size_t wait_dequeue_bulk_timed(It itemFirst, size_t max, std::int64_t timeout_usecs)
+	inline size_t wait_dequeue_bulk_timed(It itemFirst, size_t max, int64_t timeout_usecs)
 	{
 		size_t count = 0;
 		max = (size_t)sema->waitMany((LightweightSemaphore::ssize_t)(ssize_t)max, timeout_usecs);
@@ -507,7 +507,7 @@ public:
 	// and is thus functionally equivalent to calling wait_dequeue_bulk.
 	// Never allocates. Thread-safe.
 	template<typename It>
-	inline size_t wait_dequeue_bulk_timed(consumer_token_t& token, It itemFirst, size_t max, std::int64_t timeout_usecs)
+	inline size_t wait_dequeue_bulk_timed(consumer_token_t& token, It itemFirst, size_t max, int64_t timeout_usecs)
 	{
 		size_t count = 0;
 		max = (size_t)sema->waitMany((LightweightSemaphore::ssize_t)(ssize_t)max, timeout_usecs);

@@ -37,6 +37,7 @@ public class LabelAlreadyUsedException extends DdlException {
         switch (txnStatus) {
             case UNKNOWN:
             case PREPARE:
+            case PREPARED:
                 jobStatus = "RUNNING";
                 break;
             case COMMITTED:

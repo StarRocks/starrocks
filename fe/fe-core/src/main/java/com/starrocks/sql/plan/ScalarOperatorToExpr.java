@@ -108,7 +108,6 @@ public class ScalarOperatorToExpr {
     public static class FormatterContext {
         private final Map<ColumnRefOperator, Expr> colRefToExpr;
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
-        private boolean implicitCast = false;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
             this.colRefToExpr = variableToSlotRef;
@@ -121,9 +120,6 @@ public class ScalarOperatorToExpr {
             this.projectOperatorMap = projectOperatorMap;
         }
 
-        public void setImplicitCast(boolean isImplicit) {
-            this.implicitCast = isImplicit;
-        }
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
@@ -287,47 +283,9 @@ public class ScalarOperatorToExpr {
         }
 
         public Expr visitBinaryPredicate(BinaryPredicateOperator predicate, FormatterContext context) {
-            BinaryPredicate call;
-            switch (predicate.getBinaryType()) {
-                case EQ:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.EQ,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case NE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.NE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case GE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.GE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case GT:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.GT,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case LE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.LE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case LT:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.LT,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case EQ_FOR_NULL:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.EQ_FOR_NULL,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                default:
-                    return null;
-            }
-
+            BinaryPredicate call = new BinaryPredicate(predicate.getBinaryType(),
+                    buildExpr.build(predicate.getChildren().get(0), context),
+                    buildExpr.build(predicate.getChildren().get(1), context));
             call.setType(Type.BOOLEAN);
             return call;
         }
@@ -533,7 +491,7 @@ public class ScalarOperatorToExpr {
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
             CastExpr expr =
                     new CastExpr(operator.getType(), buildExpr.build(operator.getChild(0), context));
-            expr.setImplicit(context.implicitCast);
+            expr.setImplicit(operator.isImplicit());
             hackTypeNull(expr);
             return expr;
         }

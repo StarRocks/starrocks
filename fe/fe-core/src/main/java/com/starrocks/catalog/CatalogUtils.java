@@ -21,10 +21,14 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +45,10 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 public class CatalogUtils {
 
     private static final Logger LOG = LogManager.getLogger(CatalogUtils.class);
+
+    public static String normalizeTableName(String dbName, String tableName) {
+        return dbName + "." + tableName;
+    }
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
@@ -60,7 +68,7 @@ public class CatalogUtils {
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + tableName + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
 
@@ -113,21 +121,25 @@ public class CatalogUtils {
         for (Partition partition : partitionList) {
             if (!listMap.isEmpty()) {
                 List<LiteralExpr> currentPartitionValueList = listMap.get(partition.getId());
-                simpleSet.addAll(currentPartitionValueList);
-                for (LiteralExpr literalExpr : currentPartitionValueList) {
-                    simpleValueSet.add(literalExpr.getRealObjectValue());
+                if (currentPartitionValueList != null) {
+                    simpleSet.addAll(currentPartitionValueList);
+                    for (LiteralExpr literalExpr : currentPartitionValueList) {
+                        simpleValueSet.add(literalExpr.getRealObjectValue());
+                    }
+                    continue;
                 }
-                continue;
             }
             if (!multiListMap.isEmpty()) {
                 List<List<LiteralExpr>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
-                multiSet.addAll(currentMultiplePartitionValueList);
-                for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
-                    List<Object> valueList = new ArrayList<>();
-                    for (LiteralExpr literalExpr : list) {
-                        valueList.add(literalExpr.getRealObjectValue());
+                if (currentMultiplePartitionValueList != null) {
+                    multiSet.addAll(currentMultiplePartitionValueList);
+                    for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
+                        List<Object> valueList = new ArrayList<>();
+                        for (LiteralExpr literalExpr : list) {
+                            valueList.add(literalExpr.getRealObjectValue());
+                        }
+                        multiValueSet.add(valueList);
                     }
-                    multiValueSet.add(valueList);
                 }
             }
         }
@@ -296,6 +308,11 @@ public class CatalogUtils {
 
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;
@@ -309,6 +326,64 @@ public class CatalogUtils {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
-
     }
+
+    public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                        boolean enableAutoTabletDistribution) {
+        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
+        //    Or the Config.enable_auto_tablet_distribution is disabled
+        int bucketNum = 0;
+        if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            return bucketNum;
+        }
+
+        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
+        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
+        boolean dataImported = true;
+        for (Partition partition : partitions) {
+            if (partition.getVisibleVersion() == 1) {
+                dataImported = false;
+                break;
+            }
+        }
+
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        if (!dataImported) {
+            return bucketNum;
+        }
+
+        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
+        long maxDataSize = 0;
+        for (Partition partition : partitions) {
+            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
+        }
+        // A tablet will be regarded using the 1GB size
+        // And also the number will not be larger than the calBucketNumAccordingToBackends()
+        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
+        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        if (bucketNum == 0) {
+            bucketNum = 1;
+        }
+        return bucketNum;
+    }
+
+    public static String addEscapeCharacter(String comment) {
+        if (StringUtils.isEmpty(comment)) {
+            return comment;
+        }
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < comment.length(); i++) {
+            char c = comment.charAt(i);
+
+            if (c == '\\' || c == '"') {
+                output.append('\\');
+                output.append(c);
+            } else {
+                output.append(c);
+            }
+        }
+        return output.toString();
+    }
+
 }

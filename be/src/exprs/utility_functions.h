@@ -59,6 +59,8 @@ public:
      * return the host name
      */
     DEFINE_VECTORIZED_FN(host_name);
+
+    DEFINE_VECTORIZED_FN(get_query_profile);
 };
 
 } // namespace starrocks

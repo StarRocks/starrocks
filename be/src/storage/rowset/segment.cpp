@@ -40,6 +40,7 @@
 
 #include <memory>
 
+#include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
@@ -185,7 +186,7 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
 Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
         : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
 Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
@@ -194,12 +195,12 @@ Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::strin
           _fname(std::move(path)),
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
 Segment::~Segment() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
@@ -217,15 +218,24 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 }
 
 bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
-    if (!read_options.is_primary_keys || read_options.dcg_loader == nullptr) {
+    if (read_options.dcg_loader == nullptr) {
         return true;
     }
     SCOPED_RAW_TIMER(&read_options.stats->get_delta_column_group_ns);
+    Status st;
     DeltaColumnGroupList dcgs;
-    TabletSegmentId tsid;
-    tsid.tablet_id = read_options.tablet_id;
-    tsid.segment_id = read_options.rowset_id + _segment_id;
-    auto st = read_options.dcg_loader->load(tsid, read_options.version, &dcgs);
+    if (read_options.is_primary_keys) {
+        TabletSegmentId tsid;
+        tsid.tablet_id = read_options.tablet_id;
+        tsid.segment_id = read_options.rowset_id + _segment_id;
+        st = read_options.dcg_loader->load(tsid, read_options.version, &dcgs);
+    } else {
+        int64_t tablet_id = read_options.tablet_id;
+        RowsetId rowsetid = read_options.rowsetid;
+        uint32_t segment_id = _segment_id;
+        st = read_options.dcg_loader->load(tablet_id, rowsetid, segment_id, INT64_MAX, &dcgs);
+    }
+
     return st.ok() && dcgs.size() == 0;
 }
 
@@ -279,7 +289,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 
         Status st = _load_index(skip_fill_local_cache);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->short_key_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
         } else {
             _reset();
@@ -369,7 +379,7 @@ void Segment::_prepare_adapter_info() {
     }
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid, ColumnAccessPath* path) {
     if (_column_readers[cid] == nullptr) {
         const TabletColumn& tablet_column = _tablet_schema->column(cid);
         if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
@@ -384,19 +394,27 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t 
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
-    return _column_readers[cid]->new_iterator();
+    return _column_readers[cid]->new_iterator(path);
 }
 
-Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache) {
+Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter) {
     if (_column_readers[cid] != nullptr && _column_readers[cid]->has_bitmap_index()) {
-        return _column_readers[cid]->new_bitmap_index_iterator(iter, skip_fill_local_cache);
+        return _column_readers[cid]->new_bitmap_index_iterator(options, iter);
     }
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
-    return Segment::open(_fs, dcg.column_file(parent_name(_fname)), 0,
-                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
+    return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
+                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()[idx]), nullptr);
+}
+
+Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load_index(false));
+    for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
+        sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

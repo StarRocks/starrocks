@@ -51,14 +51,16 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 /**
  * Internal representation of partition-related metadata.
  */
-public class Partition extends MetaObject implements Writable {
+public class Partition extends MetaObject implements PhysicalPartition, Writable {
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -77,6 +79,16 @@ public class Partition extends MetaObject implements Writable {
     private String name;
     @SerializedName(value = "state")
     private PartitionState state;
+    @SerializedName(value = "idToSubPartition")
+    private Map<Long, PhysicalPartition> idToSubPartition = Maps.newHashMap();
+
+    @SerializedName(value = "distributionInfo")
+    private DistributionInfo distributionInfo;
+
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId;
+
+    /* Physical Partition Member */
     @SerializedName(value = "baseIndex")
     private MaterializedIndex baseIndex;
     /**
@@ -104,18 +116,20 @@ public class Partition extends MetaObject implements Writable {
     private long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
     private long visibleVersionTime;
+    /**
+     * ID of the transaction that has committed current visible version.
+     * Just for tracing the txn log, no need to persist.
+     */
+    private long visibleTxnId = -1;
     @SerializedName(value = "nextVersion")
     private long nextVersion;
-    @SerializedName(value = "distributionInfo")
-    private DistributionInfo distributionInfo;
 
-    @SerializedName(value = "shardGroupId")
-    private long shardGroupId;
+    private volatile long nextVacuumTime = 0;
+
+    private volatile long minRetainVersion = 0;
 
     private Partition() {
     }
-
-
 
     public Partition(long id, String name,
                      MaterializedIndex baseIndex,
@@ -154,6 +168,7 @@ public class Partition extends MetaObject implements Writable {
         partition.nextVersion = this.nextVersion;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
+        partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
         return partition;
     }
 
@@ -162,6 +177,24 @@ public class Partition extends MetaObject implements Writable {
     }
 
     public long getId() {
+        return this.id;
+    }
+
+    public void addSubPartition(PhysicalPartition subPartition) {
+        idToSubPartition.put(subPartition.getId(), subPartition);
+    }
+
+    public Collection<PhysicalPartition> getSubPartitions() {
+        List<PhysicalPartition> subPartitions = idToSubPartition.values().stream().collect(Collectors.toList());
+        subPartitions.add(this);
+        return subPartitions;
+    }
+
+    public PhysicalPartition getSubPartition(long id) {
+        return this.id == id ? this : idToSubPartition.get(id);
+    }
+
+    public long getParentId() {
         return this.id;
     }
 
@@ -200,6 +233,10 @@ public class Partition extends MetaObject implements Writable {
         this.setVisibleVersion(visibleVersion, visibleVersionTime);
     }
 
+    public void updateVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        setVisibleVersion(visibleVersion, visibleVersionTime, visibleTxnId);
+    }
+
     public long getVisibleVersion() {
         return visibleVersion;
     }
@@ -219,6 +256,15 @@ public class Partition extends MetaObject implements Writable {
         this.visibleVersionTime = visibleVersionTime;
     }
 
+    public void setVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        this.visibleVersion = visibleVersion;
+        this.visibleVersionTime = visibleVersionTime;
+        this.visibleTxnId = visibleTxnId;
+    }
+
+    public long getVisibleTxnId() {
+        return visibleTxnId;
+    }
 
     public PartitionState getState() {
         return this.state;
@@ -309,10 +355,14 @@ public class Partition extends MetaObject implements Writable {
     }
 
     public int getVisibleMaterializedIndicesCount() {
-        return getMaterializedIndicesCount(IndexExtState.VISIBLE);
+        int count = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            count += subPartition.getMaterializedIndices(IndexExtState.VISIBLE).size();
+        }
+        return count;
     }
 
-    public long getDataSize() {
+    public long storageDataSize() {
         long dataSize = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             dataSize += mIndex.getDataSize();
@@ -320,7 +370,15 @@ public class Partition extends MetaObject implements Writable {
         return dataSize;
     }
 
-    public long getRowCount() {
+    public long getDataSize() {
+        long dataSize = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            dataSize += subPartition.storageDataSize();
+        }
+        return dataSize;
+    }
+
+    public long storageRowCount() {
         long rowCount = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             rowCount += mIndex.getRowCount();
@@ -328,10 +386,26 @@ public class Partition extends MetaObject implements Writable {
         return rowCount;
     }
 
-    public long getReplicaCount() {
+    public long getRowCount() {
+        long rowCount = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            rowCount += subPartition.storageRowCount();
+        }
+        return rowCount;
+    }
+
+    public long storageReplicaCount() {
         long replicaCount = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             replicaCount += mIndex.getReplicaCount();
+        }
+        return replicaCount;
+    }
+
+    public long getReplicaCount() {
+        long replicaCount = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            replicaCount += subPartition.storageReplicaCount();
         }
         return replicaCount;
     }
@@ -340,12 +414,24 @@ public class Partition extends MetaObject implements Writable {
         return !idToVisibleRollupIndex.isEmpty();
     }
 
-    public boolean hasData() {
+    public boolean hasStorageData() {
         // The fe unit test need to check the selected index id without any data.
         // So if set FeConstants.runningUnitTest, we can ensure that the number of partitions is not empty,
         // And the test case can continue to execute the logic of 'select best roll up'
         return ((visibleVersion != PARTITION_INIT_VERSION)
                 || FeConstants.runningUnitTest);
+    }
+
+    public boolean hasData() {
+        boolean hasData = false;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            hasData |= subPartition.hasStorageData();
+        }
+        return hasData;
+    }
+
+    public boolean isFirstLoad() {
+        return visibleVersion == PARTITION_INIT_VERSION + 1;
     }
 
     /*
@@ -516,5 +602,21 @@ public class Partition extends MetaObject implements Writable {
             hasChanged = true;
         }
         return hasChanged;
+    }
+
+    public long getNextVacuumTime() {
+        return nextVacuumTime;
+    }
+
+    public void setNextVacuumTime(long nextVacuumTime) {
+        this.nextVacuumTime = nextVacuumTime;
+    }
+
+    public long getMinRetainVersion() {
+        return minRetainVersion;
+    }
+
+    public void setMinRetainVersion(long minRetainVersion) {
+        this.minRetainVersion = minRetainVersion;
     }
 }

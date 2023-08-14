@@ -54,6 +54,8 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.JSONPATHS)
             .add(CreateRoutineLoadStmt.JSONROOT)
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
+            .add(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)
+            .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .build();
@@ -164,6 +166,73 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             }
             analyzedJobProperties.put(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY,
                     String.valueOf(maxFilterRatio));
+        }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.TASK_CONSUME_SECOND) &&
+                jobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
+            long taskConsumeSecond;
+            try {
+                taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of task_consume_second", exception);
+            }
+            if (taskConsumeSecond <= 0) {
+                throw new UserException(
+                        CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
+            }
+
+            long taskTimeoutSecond;
+            try {
+                taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of task_timeout_second", exception);
+            }
+            if (taskTimeoutSecond <= 0) {
+                throw new UserException(
+                        CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
+            }
+
+            if (taskConsumeSecond >= taskTimeoutSecond) {
+                throw new UserException("task_timeout_second must be larger than task_consume_second");
+            }
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_CONSUME_SECOND,
+                    String.valueOf(taskConsumeSecond));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND,
+                    String.valueOf(taskTimeoutSecond));
+        } else if (jobProperties.containsKey(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)) {
+            long taskConsumeSecond;
+            try {
+                taskConsumeSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of task_consume_second", exception);
+            }
+            if (taskConsumeSecond <= 0) {
+                throw new UserException(
+                        CreateRoutineLoadStmt.TASK_CONSUME_SECOND + " must be greater than 0");
+            }
+
+            long taskTimeoutSecond = taskConsumeSecond * CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_CONSUME_SECOND,
+                    String.valueOf(taskConsumeSecond));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND,
+                    String.valueOf(taskTimeoutSecond));
+        } else if (jobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
+            long taskTimeoutSecond;
+            try {
+                taskTimeoutSecond = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of task_timeout_second", exception);
+            }
+            if (taskTimeoutSecond <= 0) {
+                throw new UserException(
+                        CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND + " must be greater than 0");
+            }
+
+            long taskConsumeSecond = taskTimeoutSecond / CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_CONSUME_SECOND,
+                    String.valueOf(taskConsumeSecond));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND,
+                    String.valueOf(taskTimeoutSecond));
         }
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {

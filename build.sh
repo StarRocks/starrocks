@@ -32,14 +32,34 @@
 # compiled and installed correctly.
 ##############################################################
 
-set -eo pipefail
-
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
+if [ -z $BUILD_TYPE ]; then
+    export BUILD_TYPE=Release
+fi
+
+cd $STARROCKS_HOME
+if [ -z $STARROCKS_VERSION ]; then
+    tag_name=$(git describe --tags --exact-match 2>/dev/null)
+    branch_name=$(git symbolic-ref -q --short HEAD)
+    if [ ! -z $tag_name ]; then
+        export STARROCKS_VERSION=$tag_name
+    elif [ ! -z $branch_name ]; then
+        export STARROCKS_VERSION=$branch_name
+    else
+        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+    fi
+fi
+
+if [ -z $STARROCKS_COMMIT_HASH]; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+fi
+
+set -eo pipefail
 . ${STARROCKS_HOME}/env.sh
 
 if [[ $OSTYPE == darwin* ]] ; then
@@ -66,6 +86,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      -j                 build Backend parallel
 
   Eg.
@@ -89,6 +110,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
@@ -108,6 +130,7 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
+WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 MSG=""
 MSG_FE="Frontend"
@@ -137,7 +160,7 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is now always compiled in.
+# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
 # This option will soon be deprecated.
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # force turn off cachelib on arm platform
@@ -155,8 +178,8 @@ if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-if [[ -z ${USE_JEMALLOC} ]]; then
-    USE_JEMALLOC=ON
+if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
+    ENABLE_FAULT_INJECTION=OFF
 fi
 
 HELP=0
@@ -192,6 +215,7 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -220,13 +244,14 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
+    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
-    USE_JEMALLOC        -- $USE_JEMALLOC
+    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
 "
 
 check_tool()
@@ -274,7 +299,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         exit 1
     fi
 
-    CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
+    CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
@@ -288,7 +313,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
 
     source ${STARROCKS_HOME}/bin/common.sh
-    update_submodules
 
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
@@ -296,43 +320,31 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
         STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
       fi
-      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-                    -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
-                    -DSTARROCKS_HOME=${STARROCKS_HOME} \
-                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
-                    -DUSE_JEMALLOC=$USE_JEMALLOC \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                    -DUSE_STAROS=${USE_STAROS} \
-                    -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
-                    -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
-                    -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
-                    -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-                    -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib/cmake ..
-    else
-      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-                    -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
-                    -DSTARROCKS_HOME=${STARROCKS_HOME} \
-                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
-                    -DUSE_JEMALLOC=$USE_JEMALLOC \
-                    -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_COMPRESS=${WITH_COMPRESS} \
-                    -DWITH_CACHELIB=${WITH_CACHELIB} \
-                    -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
-                    -DSTARCACHE_SKIP_INSTALL=ON \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+      export STARLET_INSTALL_DIR
     fi
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
+                  -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
+                  -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
+                  -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                  \
+                  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
+                  -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
+                  -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
+                  -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+                  -DWITH_CACHELIB=${WITH_CACHELIB}                      \
+                  -DUSE_STAROS=${USE_STAROS}                            \
+                  -DWITH_STARCACHE=${USE_STAROS}                        \
+                  -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+
     time ${BUILD_SYSTEM} -j${PARALLEL}
+    if [ "${WITH_CLANG_TIDY}" == "ON" ];then
+        exit 0
+    fi
+
     ${BUILD_SYSTEM} install
 
     # Build JDBC Bridge
@@ -393,6 +405,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -409,7 +422,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
-               ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
@@ -417,11 +429,26 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be_test.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
-    cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j.properties ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j2.properties ${STARROCKS_OUTPUT}/be/conf/
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    # format $BUILD_TYPE to lower case
+    ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
+    if [ "${ibuildtype}" == "release" ] ; then
+        pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
+        BE_BIN=starrocks_be
+        BE_BIN_DEBUGINFO=starrocks_be.debuginfo
+        echo "Split $BE_BIN debug symbol to $BE_BIN_DEBUGINFO ..."
+        # strip be binary
+        # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
+        objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
+        strip --strip-debug $BE_BIN
+        objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        popd &>/dev/null
+    fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -430,6 +457,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/hudi-reader-lib ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
@@ -445,15 +475,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
 
-    # note: do not use oracle jdk to avoid commercial dispute
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/aarch64 ${STARROCKS_OUTPUT}/be/lib/jvm/
-    else
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
-    fi
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

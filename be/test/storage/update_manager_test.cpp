@@ -196,4 +196,20 @@ TEST_F(UpdateManagerTest, testExpireEntry) {
     ASSERT_EQ(peak_size - expiring_size, remaining_size);
 }
 
+TEST_F(UpdateManagerTest, testSetEmptyCachedDeltaColumnGroup) {
+    srand(time(nullptr));
+    create_tablet(rand(), rand());
+    TabletSegmentId tsid;
+    tsid.tablet_id = _tablet->tablet_id();
+    tsid.segment_id = 1;
+    _update_manager->set_cached_empty_delta_column_group(_tablet->data_dir()->get_meta(), tsid);
+    // search this empty dcg
+    DeltaColumnGroupList dcgs;
+    // search in cache
+    ASSERT_TRUE(_update_manager->get_cached_delta_column_group(tsid, 1, &dcgs));
+    ASSERT_TRUE(dcgs.empty());
+    _update_manager->get_delta_column_group(_tablet->data_dir()->get_meta(), tsid, 1, &dcgs);
+    ASSERT_TRUE(dcgs.empty());
+}
+
 } // namespace starrocks

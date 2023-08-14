@@ -48,7 +48,7 @@ struct ScannerCounter {
 class FileScanner {
 public:
     FileScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                ScannerCounter* counter);
+                ScannerCounter* counter, bool schema_only = false);
     virtual ~FileScanner();
 
     virtual Status init_expr_ctx();
@@ -58,6 +58,8 @@ public:
     virtual StatusOr<ChunkPtr> get_next() = 0;
 
     virtual void close();
+
+    virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
@@ -97,5 +99,7 @@ protected:
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
 
     bool _case_sensitive = true;
+
+    bool _schema_only;
 };
 } // namespace starrocks

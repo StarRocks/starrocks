@@ -17,25 +17,25 @@ package com.starrocks.jni.connector;
 import java.util.List;
 
 public interface ColumnValue {
-    public boolean getBoolean();
+    boolean getBoolean();
 
-    public short getShort();
+    short getShort();
 
-    public int getInt();
+    int getInt();
 
-    public float getFloat();
+    float getFloat();
 
-    public long getLong();
+    long getLong();
 
-    public double getDouble();
+    double getDouble();
 
-    public String getString();
-    public String getTimestamp(ColumnType.TypeValue type);
-    public byte[] getBytes();
+    String getString(ColumnType.TypeValue type);
+    String getTimestamp(ColumnType.TypeValue type);
+    byte[] getBytes();
 
-    public void unpackArray(List<ColumnValue> values);
+    void unpackArray(List<ColumnValue> values);
 
-    public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
+    void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
 
-    public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
+    void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
 }

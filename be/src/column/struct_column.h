@@ -27,7 +27,14 @@ public:
     using Container = Buffer<std::string>;
 
     // Used to construct an unnamed struct
-    StructColumn(Columns fields) : _fields(std::move(fields)) {}
+    StructColumn(Columns fields) : _fields(std::move(fields)) {
+        DCHECK(_fields.size() > 0);
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
+    }
 
     StructColumn(Columns fields, std::vector<std::string> field_names)
             : _fields(std::move(fields)), _field_names(std::move(field_names)) {
@@ -37,6 +44,12 @@ public:
 
         // fields and field_names must have the same size.
         DCHECK(_fields.size() == _field_names.size());
+
+        for (auto& f : fields) {
+            DCHECK(f->is_nullable());
+            DCHECK_EQ(f->size(), size());
+            f->check_or_die();
+        }
     }
 
     StructColumn(const StructColumn& rhs) {
@@ -69,6 +82,8 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
+    size_t byte_size(size_t from, size_t size) const override;
+
     void reserve(size_t n) override;
 
     void resize(size_t n) override;
@@ -89,7 +104,7 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
@@ -128,7 +143,7 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    bool equals(size_t left, const Column& rhs, size_t right) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
@@ -163,8 +178,6 @@ public:
     // Struct Column own functions
     const Columns& fields() const;
 
-    bool is_unnamed_struct() const { return _field_names.empty(); }
-
     Columns& fields_column();
 
     ColumnPtr field_column(const std::string& field_name);
@@ -180,6 +193,7 @@ private:
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
     // _field_names will not participate in serialization because it is created based on meta information
+    // must be nullable column
     std::vector<std::string> _field_names;
 };
 

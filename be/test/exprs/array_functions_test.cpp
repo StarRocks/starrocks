@@ -20,10 +20,10 @@
 #include <unordered_set>
 
 #include "column/const_column.h"
+#include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
 
-namespace {
 TypeDescriptor array_type(const TypeDescriptor& child_type) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
@@ -39,7 +39,6 @@ TypeDescriptor array_type(const LogicalType& child_type) {
     t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
     return t;
 }
-} // namespace
 
 class ArrayFunctionsTest : public ::testing::Test {
 protected:
@@ -245,11 +244,22 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only null
     {
-        auto c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 1);
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 10);
 
         auto result = ArrayFunctions::array_length(nullptr, {c}).value();
-        EXPECT_EQ(1, result->size());
+        EXPECT_EQ(10, result->size());
         EXPECT_TRUE(result->is_null(0));
+    }
+
+    // [] only const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        src_column->append_datum(DatumArray{"5", "5", "33", "666"});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+
+        auto result = ArrayFunctions::array_length(nullptr, {src_column}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(4, result->get(1).get_int32());
     }
 }
 
@@ -4681,7 +4691,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
@@ -5028,7 +5038,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test const
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5037,7 +5047,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test array[null]
     {
-        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", Datum(), Datum(), "5", "33", "666", Datum()});
         src_column = std::make_shared<ConstColumn>(src_column, 1);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5295,4 +5305,109 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_only_null) {
     ASSERT_TRUE(dest_column->get(2).is_null());
 }
 
+TEST_F(ArrayFunctionsTest, array_match_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    src_column->append_datum(DatumArray{(int8_t)1, (int8_t)1, (int8_t)0});
+    src_column->append_datum(DatumArray{(int8_t)0});
+    src_column->append_datum(DatumArray{(int8_t)1});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int8_t)1, Datum()});
+    src_column->append_datum(DatumArray{(int8_t)0, Datum()});
+    src_column->append_datum(DatumArray{});
+
+    auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_TRUE(dest_column->get(0).get_int8());
+    ASSERT_FALSE(dest_column->get(1).get_int8());
+    ASSERT_TRUE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_int8());
+    ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_FALSE(dest_column->get(6).get_int8());
+
+    dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_FALSE(dest_column->get(0).get_int8());
+    ASSERT_FALSE(dest_column->get(1).get_int8());
+    ASSERT_TRUE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).is_null());
+    ASSERT_FALSE(dest_column->get(5).get_int8());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
+}
+
+TEST_F(ArrayFunctionsTest, array_match_not_null) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    src_column->append_datum(DatumArray{(int8_t)1, (int8_t)1, (int8_t)0});
+    src_column->append_datum(DatumArray{(int8_t)0});
+    src_column->append_datum(DatumArray{(int8_t)1});
+    src_column->append_datum(DatumArray{Datum()});
+    src_column->append_datum(DatumArray{(int8_t)1, Datum()});
+    src_column->append_datum(DatumArray{(int8_t)0, Datum()});
+    src_column->append_datum(DatumArray{});
+
+    auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_TRUE(dest_column->get(0).get_int8());
+    ASSERT_FALSE(dest_column->get(1).get_int8());
+    ASSERT_TRUE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_int8());
+    ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_FALSE(dest_column->get(6).get_int8());
+
+    dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_FALSE(dest_column->get(0).get_int8());
+    ASSERT_FALSE(dest_column->get(1).get_int8());
+    ASSERT_TRUE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).is_null());
+    ASSERT_FALSE(dest_column->get(5).get_int8());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
+}
+
+TEST_F(ArrayFunctionsTest, array_match_only_null) {
+    // test only null
+    {
+        auto src_column = ColumnHelper::create_const_null_column(3);
+        auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->only_null());
+
+        dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->only_null());
+    }
+    // test const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        src_column->append_datum(DatumArray{(uint8) false, (uint8) true});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+        auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_FALSE(dest_column->get(0).get_int8());
+
+        dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->get(0).get_int8());
+    }
+    // test const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        src_column->append_datum(DatumArray{});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+        auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_FALSE(dest_column->get(0).get_int8());
+
+        dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->get(0).get_int8());
+    }
+}
 } // namespace starrocks

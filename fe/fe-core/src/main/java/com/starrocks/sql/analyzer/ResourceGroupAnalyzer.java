@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.Predicate;
@@ -49,7 +50,7 @@ public class ResourceGroupAnalyzer {
         ResourceGroupClassifier classifier = new ResourceGroupClassifier();
         for (Predicate pred : predicates) {
             if (pred instanceof BinaryPredicate &&
-                    ((BinaryPredicate) pred).getOp().equals(BinaryPredicate.Operator.EQ)) {
+                    ((BinaryPredicate) pred).getOp().equals(BinaryType.EQ)) {
                 BinaryPredicate eqPred = (BinaryPredicate) pred;
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);
@@ -201,11 +202,12 @@ public class ResourceGroupAnalyzer {
                 try {
                     resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
                     if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
-                        throw new SemanticException("Only support 'normal' and 'short_query' type");
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY &&
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_MV) {
+                        throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' and 'short_query' type");
+                    throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
                 }
                 continue;
             }

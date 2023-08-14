@@ -39,7 +39,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         std::shared_lock<std::shared_mutex> L(lock);
 
         int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
-        int64_t avail_count = (max_count - running_chunk_source_count) / dop;
+        int64_t avail_count = (max_count - running_chunk_source_count) / static_cast<int64_t>(dop);
         avail_count = std::max<int64_t>(avail_count, 0);
         if (avail_count == 0 && running_chunk_source_count == 0) {
             avail_count = 1;
@@ -461,7 +461,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
-    _op = down_cast<ConnectorScanOperator*>(op);
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -482,8 +481,7 @@ const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
 }
 
 ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_limiter() const {
-    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
-    ConnectorScanOperatorFactory* f = down_cast<ConnectorScanOperatorFactory*>(op->get_factory());
+    auto* f = down_cast<ConnectorScanOperatorFactory*>(_scan_op->get_factory());
     return f->_io_tasks_mem_limiter;
 }
 
@@ -539,6 +537,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         // Improve for select * from table limit x, x is small
         if (_reach_eof()) {
+            _reach_limit.store(true);
             return Status::EndOfFile("limit reach");
         }
 

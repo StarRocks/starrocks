@@ -56,6 +56,7 @@ public:
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
+    void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
 
     void to_pb(PQueryStatistics* statistics);
 
@@ -68,15 +69,24 @@ public:
     void clear();
 
 private:
+    void update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes);
+
     std::atomic_int64_t scan_rows{0};
     std::atomic_int64_t scan_bytes{0};
     std::atomic_int64_t cpu_ns{0};
     std::atomic_int64_t mem_cost_bytes{0};
+    std::atomic_int64_t spill_bytes{0};
 
     // number rows returned by query.
     // only set once by result sink when closing.
     int64_t returned_rows{0};
-    std::vector<QueryStatisticsItemPB> _stats_items;
+    struct ScanStats {
+        ScanStats(int64_t rows, int64_t bytes) : scan_rows(rows), scan_bytes(bytes) {}
+        int64_t scan_rows = 0;
+        int64_t scan_bytes = 0;
+    };
+    SpinLock _lock;
+    std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
 };
 
 // It is used for collecting sub plan query statistics in DataStreamRecvr.

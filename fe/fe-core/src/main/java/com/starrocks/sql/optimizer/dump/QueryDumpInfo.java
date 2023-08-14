@@ -17,12 +17,16 @@ package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
@@ -37,7 +41,7 @@ public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
     private final Set<Resource> resourceSet = new HashSet<>();
     // tableId-><dbName, table>
-    private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    private final Map<Long, Pair<String, Table>> tableMap = new LinkedHashMap<>();
     // resourceName->dbName->tableName->externalTable
     private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
     // viewId-><dbName, view>
@@ -46,7 +50,6 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
-    private SessionVariable sessionVariable;
     // tableName->createTableStmt
     private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
@@ -59,11 +62,16 @@ public class QueryDumpInfo implements DumpInfo {
     private int cachedAvgNumOfHardwareCores = -1;
     private Map<Long, Integer> numOfHardwareCoresPerBe = Maps.newHashMap();
 
-    public QueryDumpInfo(SessionVariable sessionVariable) {
-        this.sessionVariable = sessionVariable;
+    private SessionVariable sessionVariable;
+    private final ConnectContext connectContext;
+
+    public QueryDumpInfo(ConnectContext context) {
+        this.connectContext = context;
+        this.sessionVariable = context.getSessionVariable();
     }
 
     public QueryDumpInfo() {
+        this.connectContext = null;
         this.sessionVariable = VariableMgr.newSessionVariable();
     }
 
@@ -86,7 +94,27 @@ public class QueryDumpInfo implements DumpInfo {
 
     @Override
     public void addTable(String dbName, Table table) {
-        tableMap.put(table.getId(), new Pair<>(dbName, table));
+        if (tableMap.containsKey(table.getId())) {
+            return;
+        }
+
+        if (table instanceof MaterializedView) {
+            String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
+            // Disable mv rewrite just like `PartitionBasedMvRefreshProcessor`.
+            connectContext.getSessionVariable().setQueryExcludingMVNames(table.getName());
+            {
+                MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+                OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.COST_BASED);
+                // NOTE: Since materialized view support unique/foreign constraints, we use `optimize` here to visit
+                // all dependent tables again to add it into `dump info`.
+                // NOTE: The optimizer should not contain self to avoid stack overflow.
+                mvOptimizer.optimize((MaterializedView) table, connectContext, optimizerConfig);
+                tableMap.put(table.getId(), new Pair<>(dbName, table));
+            }
+            connectContext.getSessionVariable().setQueryExcludingMVNames(queryExcludingMVNames);
+        } else {
+            tableMap.put(table.getId(), new Pair<>(dbName, table));
+        }
     }
 
     @Override
@@ -150,8 +178,9 @@ public class QueryDumpInfo implements DumpInfo {
     }
 
     public HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
-        return hmsTableMap.getOrDefault(resourceName, new HashMap<>()).getOrDefault(dbName, new HashMap<>())
-                .getOrDefault(tableName, new HiveTableDumpInfo());
+        return hmsTableMap.computeIfAbsent(resourceName, x -> new HashMap<>())
+                .computeIfAbsent(dbName, x -> new HashMap<>())
+                .computeIfAbsent(tableName, x -> new HiveTableDumpInfo());
     }
 
     @Override

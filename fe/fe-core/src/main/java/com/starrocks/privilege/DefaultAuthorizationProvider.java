@@ -59,7 +59,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.CREATE_EXTERNAL_CATALOG,
                             PrivilegeType.REPOSITORY,
                             PrivilegeType.CREATE_RESOURCE_GROUP,
-                            PrivilegeType.CREATE_GLOBAL_FUNCTION))
+                            PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                            PrivilegeType.CREATE_STORAGE_VOLUME))
 
                     .put(ObjectType.USER, ImmutableList.of(
                             PrivilegeType.IMPERSONATE))
@@ -97,6 +98,11 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                     .put(ObjectType.GLOBAL_FUNCTION, ImmutableList.of(
                             PrivilegeType.USAGE,
                             PrivilegeType.DROP))
+
+                    .put(ObjectType.STORAGE_VOLUME, ImmutableList.of(
+                            PrivilegeType.DROP,
+                            PrivilegeType.ALTER,
+                            PrivilegeType.USAGE))
                     .build();
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
@@ -133,31 +139,24 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     @Override
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)
             throws PrivilegeException {
-        switch (objectType) {
-            case TABLE:
-                return TablePEntryObject.generate(mgr, objectTokens);
-
-            case DATABASE:
-                return DbPEntryObject.generate(mgr, objectTokens);
-
-            case RESOURCE:
-                return ResourcePEntryObject.generate(mgr, objectTokens);
-
-            case VIEW:
-                return ViewPEntryObject.generate(mgr, objectTokens);
-
-            case MATERIALIZED_VIEW:
-                return MaterializedViewPEntryObject.generate(mgr, objectTokens);
-
-            case CATALOG:
-                return CatalogPEntryObject.generate(mgr, objectTokens);
-
-            case RESOURCE_GROUP:
-                return ResourceGroupPEntryObject.generate(mgr, objectTokens);
-
-            default:
-                throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
+        if (ObjectType.TABLE.equals(objectType)) {
+            return TablePEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.DATABASE.equals(objectType)) {
+            return DbPEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.RESOURCE.equals(objectType)) {
+            return ResourcePEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.VIEW.equals(objectType)) {
+            return ViewPEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+            return MaterializedViewPEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.CATALOG.equals(objectType)) {
+            return CatalogPEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.RESOURCE_GROUP.equals(objectType)) {
+            return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.STORAGE_VOLUME.equals(objectType)) {
+            return StorageVolumePEntryObject.generate(mgr, objectTokens);
         }
+        throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }
 
     @Override
@@ -194,31 +193,31 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean check(ObjectType objectType, PrivilegeType want, PEntryObject object, PrivilegeCollection
+    public boolean check(ObjectType objectType, PrivilegeType want, PEntryObject object, PrivilegeCollectionV2
             currentPrivilegeCollection) {
         return currentPrivilegeCollection.check(objectType, want, object);
     }
 
     @Override
     public boolean searchAnyActionOnObject(ObjectType objectType, PEntryObject object,
-                                           PrivilegeCollection currentPrivilegeCollection) {
+                                           PrivilegeCollectionV2 currentPrivilegeCollection) {
         return currentPrivilegeCollection.searchAnyActionOnObject(objectType, object);
     }
 
     @Override
     public boolean searchActionOnObject(ObjectType objectType, PEntryObject object,
-                                        PrivilegeCollection currentPrivilegeCollection, PrivilegeType want) {
+                                        PrivilegeCollectionV2 currentPrivilegeCollection, PrivilegeType want) {
         return currentPrivilegeCollection.searchActionOnObject(objectType, object, want);
     }
 
     @Override
     public boolean allowGrant(ObjectType objectType, List<PrivilegeType> wants, List<PEntryObject> objects,
-                              PrivilegeCollection currentPrivilegeCollection) {
+                              PrivilegeCollectionV2 currentPrivilegeCollection) {
         return currentPrivilegeCollection.allowGrant(objectType, wants, objects);
     }
 
     @Override
-    public void upgradePrivilegeCollection(PrivilegeCollection info, short pluginId, short metaVersion)
+    public void upgradePrivilegeCollection(PrivilegeCollectionV2 info, short pluginId, short metaVersion)
             throws PrivilegeException {
         if (pluginId != PLUGIN_ID && metaVersion != PLUGIN_VERSION) {
             throw new PrivilegeException(String.format(

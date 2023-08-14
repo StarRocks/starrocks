@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -66,7 +66,7 @@ public class PruneHDFSScanColumnRuleTest {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 
@@ -109,6 +109,9 @@ public class PruneHDFSScanColumnRuleTest {
                 taskContext.getRequiredColumns();
                 minTimes = 0;
                 result = requiredOutputColumns;
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
             }
         };
         List<OptExpression> list = icebergRule.transform(scan, context);
@@ -125,7 +128,7 @@ public class PruneHDFSScanColumnRuleTest {
         OptExpression scan = new OptExpression(
                 new LogicalHudiScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 
@@ -156,8 +159,8 @@ public class PruneHDFSScanColumnRuleTest {
 
     @Test
     public void transformHudiWithUnknownScanColumn(@Mocked HudiTable table,
-                                              @Mocked OptimizerContext context,
-                                              @Mocked TaskContext taskContext) {
+                                                   @Mocked OptimizerContext context,
+                                                   @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalHudiScanOperator(table,
                         scanColumnMapWithUnknown, Maps.newHashMap(), -1, null));
@@ -184,11 +187,15 @@ public class PruneHDFSScanColumnRuleTest {
                 taskContext.getRequiredColumns();
                 minTimes = 0;
                 result = requiredOutputColumns;
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
             }
         };
         List<OptExpression> list = hudiRule.transform(scan, context);
-        Map<ColumnRefOperator, Column> transferMap = ((LogicalHudiScanOperator) list.get(0)
-                .getOp()).getColRefToColumnMetaMap();
+        LogicalHudiScanOperator scanOperator = (LogicalHudiScanOperator) list.get(0).getOp();
+        Assert.assertEquals(scanOperator.getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
+        Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
         Assert.assertEquals(transferMap.size(), 1);
         Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }

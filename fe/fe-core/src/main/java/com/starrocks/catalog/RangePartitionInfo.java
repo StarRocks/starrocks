@@ -40,10 +40,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -71,7 +70,7 @@ public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
     @SerializedName(value = "partitionColumns")
-    private List<Column> partitionColumns = Lists.newArrayList();
+    protected List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
     protected Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
@@ -121,8 +120,8 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, StorageCacheInfo storageCacheInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
@@ -224,11 +223,12 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
         idToReplicationNum.put(partitionId, desc.getReplicationNum());
         idToInMemory.put(partitionId, desc.isInMemory());
-        idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
+        idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
         return range;
     }
 
-    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    @Override
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
         Range<PartitionKey> range = null;
         try {
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
@@ -243,9 +243,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
         idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
         idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
-                Config.lake_default_storage_cache_ttl_seconds, false));
-        return range;
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
     }
 
     public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,
@@ -267,7 +265,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
                 idToReplicationNum.put(partitionId, desc.getReplicationNum());
                 idToInMemory.put(partitionId, desc.isInMemory());
-                idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
+                idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
             }
         }
     }
@@ -292,7 +290,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, info.getDataProperty());
         idToReplicationNum.put(partitionId, info.getReplicationNum());
         idToInMemory.put(partitionId, info.isInMemory());
-        idToStorageCacheInfo.put(partitionId, info.getStorageCacheInfo());
+        idToStorageCacheInfo.put(partitionId, info.getDataCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {
@@ -418,6 +416,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPreProcess() throws IOException {
+        super.gsonPreProcess();
         serializedIdToRange = Maps.newConcurrentMap();
         for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
             byte[] serializedRange = serializeRange(entry.getValue());
@@ -433,6 +432,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
         idToRange = Maps.newConcurrentMap();
         if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
@@ -553,6 +553,10 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public boolean isPartitionedBy(PrimitiveType type) {
+        return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
     }
 }
 

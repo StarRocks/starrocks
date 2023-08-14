@@ -48,6 +48,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
@@ -90,6 +91,9 @@ Status StorageEngine::start_bg_threads() {
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
+
+    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -199,7 +203,7 @@ Status StorageEngine::start_bg_threads() {
 
     for (uint32_t i = 0; i < config::manual_compaction_threads; i++) {
         _manual_compaction_threads.emplace_back([this] { _manual_compaction_thread_callback(nullptr); });
-        Thread::set_thread_name(_update_compaction_threads.back(), "manual_compact");
+        Thread::set_thread_name(_manual_compaction_threads.back(), "manual_compact");
     }
 
     // tablet checkpoint thread
@@ -265,7 +269,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (config::disable_storage_page_cache) {
             continue;
         }
-        MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
         if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
             continue;
         }
@@ -305,7 +309,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
@@ -373,6 +377,19 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
     return nullptr;
 }
 
+void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::pindex_major_compaction_schedule_interval_seconds);
+        // schedule persistent index compaction
+        _update_manager->get_pindex_compaction_mgr()->schedule();
+    }
+
+    return nullptr;
+}
+
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -431,7 +448,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
             }
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;

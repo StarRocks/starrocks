@@ -110,6 +110,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -117,7 +127,7 @@ public class StatisticExecutor {
     }
 
     public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
-                                                    List<Long> pids) {
+                                                       List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids);
         LOG.debug("Expire invalid partition statistic SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
@@ -165,7 +175,7 @@ public class StatisticExecutor {
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.setThreadLocalInfo();
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -203,7 +213,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_DICT_VERSION
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION) {
+                || version == StatsConstants.STATISTIC_BATCH_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -290,14 +301,15 @@ public class StatisticExecutor {
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            throw new SemanticException("Statistics query fail | Error Message [%s] | {} | SQL [%s]",
+            throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;
@@ -307,7 +319,7 @@ public class StatisticExecutor {
     private boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());

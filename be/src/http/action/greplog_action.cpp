@@ -25,7 +25,7 @@ namespace starrocks {
 const int64_t GREP_LOG_LIMIT = 1000000;
 
 Status get_int64_param(HttpRequest* req, const std::string& name, int64_t* value) {
-    std::string str_value = req->param(name);
+    const std::string& str_value = req->param(name);
     if (!str_value.empty()) {
         try {
             *value = std::stoll(str_value);

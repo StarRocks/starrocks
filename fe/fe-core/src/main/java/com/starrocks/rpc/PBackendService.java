@@ -23,12 +23,16 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 
 import java.util.concurrent.Future;
 
@@ -64,11 +68,22 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 600000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_file_schema",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
+    Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
+
     @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
             attachmentHandler = ThriftClientAttachmentHandler.class)
     Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
     Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "update_fail_point_status", onceTalkTimeout = 60000)
+    Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(PUpdateFailPointStatusRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "list_fail_point",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request);
 }
 

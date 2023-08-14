@@ -34,10 +34,11 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
-import org.spark_project.guava.base.Objects;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -45,12 +46,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
  * PersistInfo for ColocateTableIndex
  */
 public class ColocatePersistInfo implements Writable {
+    @SerializedName("gp")
     private GroupId groupId;
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("bs")
     private List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
 
     public ColocatePersistInfo() {

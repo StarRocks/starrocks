@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
@@ -106,5 +107,22 @@ public class MaterializedViewAnalyzerTest {
         analyzeFail("create materialized view mv partition by k1 distributed by hash(k2) buckets 3 refresh async " +
                         "as select  k1, k2 from tbl1 where rand() > 0.5",
                 "Materialized view query statement select item rand() not supported nondeterministic function.");
+    }
+
+    @Test
+    public void testCreateMvWithNotExistResourceGroup() {
+        String sql = "create materialized view mv\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh async\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"resource_group\" = \"not_exist_rg\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
+        Assert.assertThrows("resource_group not_exist_rg does not exist.",
+                DdlException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
     }
 }

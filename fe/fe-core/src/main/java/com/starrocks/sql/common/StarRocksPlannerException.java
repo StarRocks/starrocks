@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.base.Strings;
+
 public class StarRocksPlannerException extends RuntimeException {
     private final ErrorType type;
 
@@ -25,6 +27,13 @@ public class StarRocksPlannerException extends RuntimeException {
         super(message);
         this.type = type;
     }
+
+    public StarRocksPlannerException(ErrorType type, String messageTemplate,  Object... errorMessageArgs) {
+        super(Strings.lenientFormat(messageTemplate, errorMessageArgs));
+        this.type = type;
+    }
+
+
 
     @Override
     public String getMessage() {

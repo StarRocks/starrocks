@@ -463,9 +463,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ")");
 
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
-                "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
-
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +

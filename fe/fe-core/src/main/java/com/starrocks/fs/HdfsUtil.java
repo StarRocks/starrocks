@@ -20,6 +20,7 @@ package com.starrocks.fs;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsService;
@@ -38,6 +39,9 @@ import com.starrocks.thrift.TBrokerPWriteRequest;
 import com.starrocks.thrift.TBrokerRenamePathRequest;
 import com.starrocks.thrift.TBrokerVersion;
 import com.starrocks.thrift.THdfsProperties;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,17 +72,29 @@ public class HdfsUtil {
      * @param fileStatuses: file path, size, isDir, isSplitable
      * @throws UserException if broker op failed
      */
-    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir, 
-            boolean fileNameOnly) throws UserException {
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
+                                 boolean fileNameOnly) throws UserException {
+        if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
+            fileStatuses.add(new TBrokerFileStatus("file1", false, 1024, false));
+            return;
+        }
         TBrokerListPathRequest request = new TBrokerListPathRequest(
                 TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
         hdfsService.listPath(request, fileStatuses, skipDir, fileNameOnly);
     }
 
-    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
-        TBrokerListPathRequest request = new TBrokerListPathRequest(
-                TBrokerVersion.VERSION_ONE, path, false, brokerDesc.getProperties());
-        hdfsService.listPath(request, fileStatuses, true, false);
+    public static List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
+        if (path.startsWith(TableFunctionTable.FAKE_PATH)) {
+            path = StringUtils.removeStart(path, TableFunctionTable.FAKE_PATH);
+            FileStatus fakeFile = new FileStatus(1, false, 1, 1024, System.currentTimeMillis(), new Path(path));
+            return Lists.newArrayList(fakeFile);
+        }
+        return hdfsService.listFileMeta(path, brokerDesc.getProperties(), true);
+    }
+
+    public static void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+            throws UserException {
+        parseFile(path, brokerDesc, fileStatuses, true, false);
     }
 
     public static List<String> parseColumnsFromPath(String filePath, List<String> columnsFromPath)

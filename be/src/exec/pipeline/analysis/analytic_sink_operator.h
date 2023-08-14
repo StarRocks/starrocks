@@ -62,6 +62,12 @@ private:
     // For example, `ntile` need all the data to calculate the bucket step
     void _process_by_partition_for_unbounded_preceding_rows_frame_materializing(size_t chunk_size,
                                                                                 bool is_new_partition);
+    // For window frame `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
+    // materializing means that although the frame is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, we
+    // cannot evaluate window function until all the data of current partition is reached
+    // For example, `cume_dist` need all the data to calculate
+    void _process_by_partition_for_unbounded_preceding_range_frame_materializing(size_t chunk_size,
+                                                                                 bool is_new_partition);
     // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
     void _process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition);
     ProcessByPartitionFunc _process_by_partition = nullptr;

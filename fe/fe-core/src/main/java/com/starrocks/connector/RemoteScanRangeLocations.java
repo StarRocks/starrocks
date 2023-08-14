@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -46,6 +45,22 @@ public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
+
+    public void setup(DescriptorTable descTbl, Table table, HDFSScanNodePredicates scanNodePredicates) {
+        Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
+        if (selectedPartitionIds.isEmpty()) {
+            return;
+        }
+
+        for (long partitionId : selectedPartitionIds) {
+            PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
+            DescriptorTable.ReferencedPartitionInfo partitionInfo =
+                    new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey);
+            partitionInfos.add(partitionInfo);
+            descTbl.addReferencedPartitions(table, partitionInfo);
+        }
+    }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        RemoteFileBlockDesc blockDesc) {
@@ -70,18 +85,10 @@ public class RemoteScanRangeLocations {
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
         do {
-            if (remainingBytes <= splitSize) {
+            if (remainingBytes < 2 * splitSize) {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
                         blockDesc, offset + length - remainingBytes,
                         remainingBytes);
-                remainingBytes = 0;
-            } else if (remainingBytes <= 2 * splitSize) {
-                long mid = (remainingBytes + 1) / 2;
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes, mid);
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes + mid,
-                        remainingBytes - mid);
                 remainingBytes = 0;
             } else {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
@@ -104,6 +111,7 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setLength(length);
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
+        hdfsScanRange.setModification_time(fileDesc.getModificationTime());
         hdfsScanRange.setFile_format(partition.getFormat().toThrift());
         if (isTextFormat(hdfsScanRange.getFile_format())) {
             hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
@@ -162,30 +170,29 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl, Table table,
-                                        HDFSScanNodePredicates scanNodePredicates) {
+    public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
+                                           HDFSScanNodePredicates scanNodePredicates) {
+        result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-        Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
-        if (selectedPartitionIds.isEmpty()) {
-            return;
-        }
 
         long start = System.currentTimeMillis();
         List<PartitionKey> partitionKeys = Lists.newArrayList();
-        List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = Lists.newArrayList();
-        for (long partitionId : selectedPartitionIds) {
+        for (long partitionId : scanNodePredicates.getSelectedPartitionIds()) {
             PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
             partitionKeys.add(partitionKey);
-            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
         }
         String catalogName = hiveMetaStoreTable.getCatalogName();
-        List<RemoteFileInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getRemoteFileInfos(catalogName, table, partitionKeys);
+        List<RemoteFileInfo> partitions;
+
+        try {
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(catalogName, table, partitionKeys);
+        } catch (Exception e) {
+            LOG.error("Failed to get remote files", e);
+            throw e;
+        }
 
         if (table instanceof HiveTable) {
-            Preconditions.checkState(partitions.size() == partitionKeys.size());
             for (int i = 0; i < partitions.size(); i++) {
-                descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
                     if (fileDesc.getLength() == 0) {
                         continue;
@@ -231,9 +238,6 @@ public class RemoteScanRangeLocations {
 
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
-    }
-
-    public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return result;
     }
 

@@ -1,141 +1,186 @@
 # MAP
 
-## Background
+## Description
 
-Maps, as an extended type of database, are supported in PG, ClickHouse, Snowflake and other systems. They are widely used to express key-value pairs. Note there are no duplicate keys in a map.
+MAP is a complex data type that stores a set of key-value pairs, for example, `{a:1, b:2, c:3}`. Keys in a map must be unique. A nested map can contain up to 14 levels of nesting.
 
-## Map usage
+The MAP data type is supported from v3.1 onwards. In v3.1, you can define MAP columns when you create a StarRocks table, load MAP data into that table, and query MAP data.
 
-### Map definition
+From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
 
-`MAP<KEY-TYPE,VALUE-TYPE>`
+## Syntax
 
-`KEY-TYPE` should be base types in StarRocks, such as numeric types, string types and date-related types, excepting HLL, JSON, ARRAY, MAP, BITMAP, STRUCT.
-`VALUE-TYPE` can be any supported types. `KEY-TYPE` and `VALUE-TYPE` are natively nullable.
+```Haskell
+MAP<key_type,value_type>
+```
 
-The following is an example of defining a map column in StarRocks:
+- `key_type`: the data type of the key. The key must be of a primitive type supported by StarRocks, such as numeric, string, or date. It cannot be of the HLL, JSON, ARRAY, MAP, BITMAP, or STRUCT type.
+- `value_type`: the data type of the value. The value can be of any supported type.
 
-~~~SQL
--- One-dimensional map
-create table t0(
+Keys and values are **natively nullable**.
+
+## Define a MAP column in StarRocks
+
+You can define a MAP column when you create a table and load MAP data into this column.
+
+```SQL
+-- Define a one-dimensional map.
+CREATE TABLE t0(
   c0 INT,
-  c1 `MAP<INT,INT>`
+  c1 MAP<INT,INT>
 )
-duplicate key(c0);
+DUPLICATE KEY(c0);
 
--- Define nested maps
-create table t1(
+-- Define a nested map.
+CREATE TABLE t1(
   c0 INT,
-  c1 `MAP<DATE, MAP<VARCHAR(10), INT>>`
+  c1 MAP<DATE, MAP<VARCHAR(10), INT>>
 )
-duplicate key(c0);
+DUPLICATE KEY(c0);
 
--- Define not-null nullable maps
-create table t2(
+-- Define a NOT NULL map.
+CREATE TABLE t2(
   c0 INT,
-  c1 `MAP<INT,DATETIME>` NOT NULL
+  c1 MAP<INT,DATETIME> NOT NULL
 )
-duplicate key(c0)
-~~~
+DUPLICATE KEY(c0);
+```
 
-The map type has the following restrictions:
+Columns with the MAP type have the following restrictions:
 
-* Map columns cannot be used as key columns (maybe supported later)
-* Map columns cannot be used as distribution columns
-* Map columns cannot be used as partition columns
+- Cannot be used as key columns in a table. They can only be used as value columns.
+- Cannot be used as partition key columns (the columns following PARTITION BY) in a table.
+- Cannot be used as bucketing columns (the columns following DISTRIBUTED BY) in a table.
 
-### Construct maps in SQL
+## Construct maps in SQL
 
-Map can be constructed in SQL using brackets ("{" and "}"), with each map element separated by a comma (","), keys and values are separated by a colon (":");
+Map can be constructed in SQL using the following two syntaxes:
 
-Or alternatively constructing maps using `MAP(key_expr, value_expr ...)`, the expressions of keys and values should be in pairs.
+- `map{key_expr:value_expr, ...}`: Map elements are separated by a comma (`,`), and keys and values are separated by a colon (`:`), for example, `map{a:1, b:2, c:3}`.
 
-~~~SQL
-select {1:1, 2:2, 3:3} as numbers;
-select map(1,1,2,2,3,3) as numbers; -- The result is {{1:1,2:2,3:3}
-select {1:"apple", 2:"orange", 3:"pear"} as fruit;
-select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- The result is {1:"apple",2:"orange",3:"pear"}
-select {true:{3.13:"abc"}, false:{}} as nest;
-select map(true, map(3.13, "abc"), false, {}) as nest; -- The result is {1:{3.13:"abc"},0:{}}
-~~~
+- `map(key_expr, value_expr ...)`: The expressions of keys and values must be in pairs, for example, `map(a,1,b,2,c,3)`.
 
-When map'keys or values have different types, StarRocks will automatically derive the appropriate type (supertype)
+StarRocks can derive the data types of keys and values from all the input keys and values.
 
-~~~SQL
-select {1:2.2, 1.2:21} as floats_floats; -- The result is {1.0:2.2,1.2:21.0}
-select {12:"a", "100":1, NULL:NULL} as string_string; -- The result is {"12":"a","100":"1",null:null}
-~~~
+```SQL
+select map{1:1, 2:2, 3:3} as numbers;
+select map(1,1,2,2,3,3) as numbers; -- Return {1:1,2:2,3:3}.
+select map{1:"apple", 2:"orange", 3:"pear"} as fruit;
+select map(1, "apple", 2, "orange", 3, "pear") as fruit; -- Return {1:"apple",2:"orange",3:"pear"}.
+select map{true:map{3.13:"abc"}, false:map{}} as nest;
+select map(true, map(3.13, "abc"), false, map{}) as nest; -- Return {1:{3.13:"abc"},0:{}}.
+```
 
-You can specifically define the maps'type when using `{}` to construct maps.
+If the keys or values have different types, StarRocks automatically derives the appropriate type (supertype).
 
-~~~SQL
-select `MAP<FLOAT,INT>`{1:2}; -- The result is {1.0:2}
-select `MAP<INT:INT>`["12": "100"]; -- The result is {12:100}.
-~~~
+```SQL
+select map{1:2.2, 1.2:21} as floats_floats; -- Return {1.0:2.2,1.2:21.0}.
+select map{12:"a", "100":1, NULL:NULL} as string_string; -- Return {"12":"a","100":"1",null:null}.
+```
 
-NULL can be included in the key/value elements.
+You can also define the data type using `<>` when you construct a map. The input keys or values must be able to cast into the specified types.
 
-~~~SQL
-select {1:NULL};
-~~~
+```SQL
+select map<FLOAT,INT>{1:2}; -- Return {1:2}.
+select map<INT,INT>{"12": "100"}; -- Return {12:100}.
+```
 
-Construct empty maps
+Keys and values are nullable.
 
-~~~SQL
-select {} as empty_map;
-select map() as empty_map; --The result is {}
-~~~
+```SQL
+select map{1:NULL};
+```
 
-### Map import
+Construct empty maps.
 
-There are two ways to write map values to StarRocks. Insert into is suitable for small-scale data testing. ORC Parquet import is suitable for large-scale data import. NOTE StarRocks will remove duplicate keys of each map when importing maps.
+```SQL
+select map{} as empty_map;
+select map() as empty_map; -- Return {}.
+```
 
-* **INSERT INTO**
+## Load MAP data into StarRocks
 
-  ~~~SQL
-  create table t0(c0 INT, c1 `MAP<INT:INT>`)duplicate key(c0);
-  INSERT INTO t0 VALUES(1, {1:2,3:NULL});
-  ~~~
+You can load map data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../data-manipulation/BROKER%20LOAD.md).
 
-* **Import from ORC Parquet file**
+Note that StarRocks will remove duplicate keys of each map when loading MAP data.
 
-  The map type in StarRocks corresponds to the list structure in ORC/Parquet format; no additional specification is needed. 
+### INSERT INTO
 
+```SQL
+  CREATE TABLE t0(
+    c0 INT,
+    c1 MAP<INT,INT>
+  )
+  DUPLICATE KEY(c0);
 
-### Map element access
+  INSERT INTO t0 VALUES(1, map{1:2,3:NULL});
+```
 
-Access a key-value pair of a map using `[ ]` with a specific key, or using `element_at(any_map, any_key)`.
+### Load MAP data from ORC and Parquet files
 
-~~~Plain Text
-mysql> select {1:2,3:NULL}[1];
+The MAP data type in StarRocks corresponds to the map structure in ORC or Parquet format. No additional specification is needed. You can load MAP data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../data-manipulation/BROKER%20LOAD.md).
 
+## Access MAP data
+
+Example 1: Query MAP column `c1` from table `t0`.
+
+```Plain Text
+mysql> select c1 from t0;
++--------------+
+| c1           |
++--------------+
+| {1:2,3:null} |
++--------------+
+```
+
+Example 2: Use the `[ ]` operator to retrieve values from a map by key, or use the `element_at(any_map, any_key)` function.
+
+The following example queries the value corresponding to key `1`.
+
+```Plain Text
+mysql> select map{1:2,3:NULL}[1];
 +-----------------------+
 | map(1, 2, 3, NULL)[1] |
 +-----------------------+
 |                     2 |
 +-----------------------+
-~~~
 
-If the key does not exist in the map, returning `NULL`.
+mysql> select element_at(map{1:2,3:NULL},1);
++--------------------+
+| map{1:2,3:NULL}[1] |
++--------------------+
+|                  2 |
++--------------------+
+```
 
-~~~Plain Text
-mysql> select {1:2,3:NULL}[2];
+If the key does not exist in the map, `NULL` is returned.
 
+The following example queries the value corresponding to key 2, which does not exist.
+
+```Plain Text
+mysql> select map{1:2,3:NULL}[2];
 +-----------------------+
 | map(1, 2, 3, NULL)[2] |
 +-----------------------+
 |                  NULL |
 +-----------------------+
-~~~
+```
 
-For multidimensional maps, the internal maps can be accessed **recursively**.
+Example 3: Query multidimensional maps **recursively**.
 
-~~~Plain Text
-mysql> select {1:{2:1},3:NULL}[1][2];
+The following example first queries the value corresponding to key `1`, which is `map{2:1}` and then recursively queries the value corresponding to key `2` in `map{2:1}`.
+
+```Plain Text
+mysql> select map{1:map{2:1},3:NULL}[1][2];
 
 +----------------------------------+
 | map(1, map(2, 1), 3, NULL)[1][2] |
 +----------------------------------+
 |                                1 |
 +----------------------------------+
-~~~
+```
+
+## References
+
+- [Map functions](../../sql-functions/map-functions/map_values.md)
+- [element_at](../../sql-functions/array-functions/element_at.md)

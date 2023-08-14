@@ -32,7 +32,7 @@ The second syntax here is a shortened version of the first one, where the Latera
 >
 > If you want to perform unnest on multiple columns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
 
-The current version of StarRocks supports type conversion between Bitmap, String, Array, and Column.
+StarRocks supports type conversion among BITMAP, STRING, ARRAY, and Column.
 ![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
 
 ## Usage examples
@@ -49,9 +49,9 @@ Together with unnest(), you can achieve the following column-to-row conversion f
         `v2` string NULL COMMENT ""
     )
     DUPLICATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
-        "replication_num" = "1",
+        "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
 
@@ -120,9 +120,9 @@ Together with unnest(), you can achieve the following column-to-row conversion f
         `v2` ARRAY NULL COMMENT ""
     ) 
     DUPLICATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
-        "replication_num" = "1",
+        "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
 
@@ -169,7 +169,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     `v2` Bitmap BITMAP_UNION COMMENT ""
     )
     AGGREGATE KEY(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1;
+    DISTRIBUTED BY HASH(`v1`);
 
     INSERT INTO lateral_test3 VALUES (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
     ~~~

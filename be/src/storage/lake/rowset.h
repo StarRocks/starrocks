@@ -71,9 +71,14 @@ public:
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-private:
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_data_cache, bool fill_metadata_cache);
+
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
 
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache,
+                                       bool fill_metadata_cache);
+
+private:
     // _tablet is owned by TabletReader
     Tablet* _tablet;
     RowsetMetadataPtr _rowset_metadata;

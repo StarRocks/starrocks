@@ -261,7 +261,7 @@ public:
 
         TabletSharedPtr tablet =
                 Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-        tablet->init();
+        ASSERT_OK(tablet->init());
 
         CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
         auto res = cumulative_compaction.compact();
@@ -279,7 +279,7 @@ public:
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
-        config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
+        config::storage_root_path = std::filesystem::current_path().string() + "/cumulative_compaction_test";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
         std::vector<StorePath> paths;
@@ -341,7 +341,7 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
     tablet_meta->set_tablet_schema(schema);
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    tablet->init();
+    ASSERT_OK(tablet->init());
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
 }
@@ -369,7 +369,7 @@ TEST_F(CumulativeCompactionTest, test_min_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     auto res = cumulative_compaction.compact();
@@ -397,7 +397,7 @@ TEST_F(CumulativeCompactionTest, test_max_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     auto res = cumulative_compaction.compact();
@@ -427,7 +427,7 @@ TEST_F(CumulativeCompactionTest, test_missed_first_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     {
         CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
@@ -463,7 +463,7 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     ASSERT_EQ(4, tablet->version_count());
 
@@ -575,7 +575,7 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     ASSERT_EQ(4, tablet->version_count());
 
@@ -721,7 +721,7 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     ASSERT_EQ(3, tablet->version_count());
     ASSERT_EQ(-1, tablet->cumulative_layer_point());
@@ -801,7 +801,7 @@ TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     ASSERT_EQ(5, tablet->version_count());
 
@@ -941,7 +941,7 @@ TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     auto res = cumulative_compaction.compact();
@@ -967,7 +967,7 @@ TEST_F(CumulativeCompactionTest, test_cumulative_single_rowset) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     RowsetSharedPtr rowset_ptr;
     write_new_version_and_return(tablet, rowset_ptr);
@@ -1002,7 +1002,7 @@ TEST_F(CumulativeCompactionTest, test_issue_20084) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_OK(tablet->init());
 
     std::shared_ptr<Schema> schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     // test reader

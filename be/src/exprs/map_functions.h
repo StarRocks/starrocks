@@ -43,7 +43,7 @@ public:
     DEFINE_VECTORIZED_FN(map_concat);
 
 private:
-    static void _filter_map_items(const MapColumn* src_column, const ColumnPtr raw_filter, MapColumn* dest_column,
+    static void _filter_map_items(const MapColumn* src_column, const ColumnPtr& raw_filter, MapColumn* dest_column,
                                   NullColumn* dest_null_map);
 };
 

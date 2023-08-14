@@ -1,0 +1,56 @@
+-- name: testExternalParquetDictNullPredicate
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_with_null_value.parquet oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/dict_with_null_value.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 4,374. OK num: 1(upload 1 files).
+-- !result
+CREATE EXTERNAL TABLE tpch_customer_null
+(
+    c_custkey int,
+    c_name string,
+    c_address string,
+    c_nationkey int,
+    c_phone string,
+    c_acctbal decimal(15,2),
+    c_mktsegment string,
+    c_comment string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select count(*) from tpch_customer_null;
+-- result:
+30
+-- !result
+select count(*) from tpch_customer_null where (c_mktsegment = 'BUILDING' OR c_mktsegment is NULL);
+-- result:
+13
+-- !result
+select count(*) from tpch_customer_null where coalesce(c_mktsegment, 'BUILDING') = 'BUILDING';
+-- result:
+13
+-- !result
+select count(*) from tpch_customer_null where c_mktsegment is null;
+-- result:
+6
+-- !result
+select count(*) from tpch_customer_null where c_mktsegment is not null;
+-- result:
+24
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_dict_with_null_value/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

@@ -163,8 +163,8 @@ inline bool is_gcs_uri(std::string_view uri) {
     return starts_with(uri, "gs://");
 }
 
-inline bool is_jfs_uri(std::string_view uri) {
-    return starts_with(uri, "jfs://");
+inline bool is_hdfs_uri(std::string_view uri) {
+    return starts_with(uri, "hdfs://");
 }
 
 inline bool is_posix_uri(std::string_view uri) {

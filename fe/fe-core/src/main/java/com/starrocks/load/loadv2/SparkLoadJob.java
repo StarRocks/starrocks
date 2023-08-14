@@ -85,10 +85,12 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -138,16 +140,22 @@ public class SparkLoadJob extends BulkLoadJob {
 
     // --- members below need persist ---
     // create from resourceDesc when job created
+    @SerializedName("spkr")
     private SparkResource sparkResource;
     // members below updated when job state changed to etl
+    @SerializedName("etlt")
     private long etlStartTimestamp = -1;
     // for spark yarn
+    @SerializedName("appi")
     private String appId = "";
     // spark job outputPath
+    @SerializedName("etlo")
     private String etlOutputPath = "";
     // members below updated when job state changed to loading
     // { tableId.partitionId.indexId.bucket.schemaHash -> (etlFilePath, etlFileSize) }
+    @SerializedName("tbtm")
     private Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
+    @SerializedName("spkh")
     private SparkLoadAppHandle sparkLoadAppHandle = new SparkLoadAppHandle();
 
     // --- members below not persist ---
@@ -177,6 +185,12 @@ public class SparkLoadJob extends BulkLoadJob {
         this.resourceDesc = resourceDesc;
         timeoutSecond = Config.spark_load_default_timeout_second;
         jobType = EtlJobType.SPARK;
+    }
+
+    @Override
+    public String getCurrentWarehouse() {
+        // TODO(lzh): pass the current warehouse.
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     @Override
@@ -536,8 +550,9 @@ public class SparkLoadJob extends BulkLoadJob {
                                 } else {
                                     // lake tablet
                                     long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().
-                                            getBackend(backendId);
+                                    // TODO: need to refactor after be split into cn + dn
+                                    ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().
+                                            getBackendOrComputeNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
@@ -585,7 +600,7 @@ public class SparkLoadJob extends BulkLoadJob {
                           PushBrokerReaderParams params,
                           AgentBatchTask batchTask,
                           String tabletMetaStr,
-                          Backend backend, Replica replica, Set<Long> tabletFinishedReplicas,
+                          ComputeNode backend, Replica replica, Set<Long> tabletFinishedReplicas,
                           TTabletType tabletType)
             throws AnalysisException {
 

@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exprs/agg/count.h"
+#include "exprs/agg/window.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -29,6 +30,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "types/logical_type.h"
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
@@ -108,10 +110,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_intput_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
+    _partition_size_required_function_index.resize(0);
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _has_lead_lag_function = false;
+    _should_set_partition_size = false;
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = analytic_node.analytic_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
@@ -136,6 +140,16 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
+        if (require_partition_size(fn.name.function_name)) {
+            if (!state->enable_pipeline_engine()) {
+                return Status::NotSupported(strings::Substitute(
+                        "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
+            }
+            _should_set_partition_size = true;
+            _partition_size_required_function_index.emplace_back(i);
+            _need_partition_materializing = true;
+        }
+
         if (fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count") {
             if (state->enable_pipeline_engine()) {
                 _support_cumulative_algo = true;
@@ -145,12 +159,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank" ||
+            fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank" ||
             fn.name.function_name == "ntile") {
+            auto return_type = TYPE_BIGINT;
+            if (fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank") {
+                return_type = TYPE_DOUBLE;
+            }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
-            auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable,
+            auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, return_type, is_input_nullable,
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
-            _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
+            _agg_fn_types[i] = {TypeDescriptor(return_type), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
             // like other agg function.
             _agg_intput_columns[i].resize(1);
@@ -190,9 +209,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-            // Currently, only lead and lag window function have multi args.
-            // For performance, we do this special handle.
-            // In future, if need, we could remove this if else easily.
+            // we always treat first argument as non const, because most window function has only one args
+            // and cant't handler const column within the function
             if (j == 0) {
                 _agg_intput_columns[i][j] =
                         ColumnHelper::create_column(_agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
@@ -251,7 +269,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state);
+        RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -458,29 +476,35 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+        auto check_if_overflow = [](Column* column) {
+            std::string msg;
+            if (column->capacity_limit_reached(&msg)) {
+                return Status::InternalError(msg);
+            }
+            return Status::OK();
+        };
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
-                // Currently, only lead and lag window function have multi args.
-                // For performance, we do this special handle.
-                // In future, if need, we could remove this if else easily.
-                if (j == 0) {
-                    TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
-                } else {
-                    TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
-                }
+
+                // when chunk's column is const, maybe need to unpack it
+                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+
+                RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
         }
     }
 
@@ -492,13 +516,17 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
 }
 
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
+    DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
+             (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
-    } else if (src_column->is_constant()) {
-        auto* const_column = static_cast<ConstColumn*>(src_column.get());
+    } else if (src_column->is_constant() && !dst_column->is_constant()) {
+        // unpack const column, then append it to dst
+        auto* const_column = down_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {
+        // most of case
         dst_column->append(*src_column, 0, chunk_size);
     }
 }
@@ -637,6 +665,13 @@ void Analytor::reset_state_for_next_partition() {
     DCHECK_GE(_current_row_position, 0);
 }
 
+void Analytor::set_partition_size_for_function() {
+    for (auto i : _partition_size_required_function_index) {
+        auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
+        state.count = _partition_end - _partition_start;
+    }
+}
+
 void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     if (_input_chunks.size() <= _output_chunk_index ||
         _input_chunk_first_row_positions[_output_chunk_index] - _removed_from_buffer_rows <
@@ -728,13 +763,18 @@ void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t p
 void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const Column* agg_column = _agg_intput_columns[i][0].get();
+        size_t column_size = _agg_intput_columns[i].size();
+        const Column* data_columns[column_size];
+        for (size_t j = 0; j < column_size; j++) {
+            data_columns[j] = _agg_intput_columns[i][j].get();
+        }
+
         frame_start = std::max<int64_t>(frame_start, _partition_start);
         // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
         // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
         frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
         _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
+                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
                 peer_group_start, peer_group_end, frame_start, frame_end);
     }
 }

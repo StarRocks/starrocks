@@ -29,6 +29,7 @@ static const std::string AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_s
 static const std::string AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
 static const std::string AWS_S3_ACCESS_KEY = "aws.s3.access_key";
 static const std::string AWS_S3_SECRET_KEY = "aws.s3.secret_key";
+static const std::string AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
 static const std::string AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
 static const std::string AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
 static const std::string AWS_S3_REGION = "aws.s3.region";
@@ -48,6 +49,10 @@ static const std::string AWS_S3_ENABLE_PATH_STYLE_ACCESS = "aws.s3.enable_path_s
      * Default value: [true]
      */
 static const std::string AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
+
+static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
+static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
+static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 
 class CloudConfigurationFactory {
 public:
@@ -71,6 +76,7 @@ public:
         aws_cloud_credential.use_instance_profile = get_or_default(properties, AWS_S3_USE_INSTANCE_PROFILE, false);
         aws_cloud_credential.access_key = get_or_default(properties, AWS_S3_ACCESS_KEY, std::string());
         aws_cloud_credential.secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
+        aws_cloud_credential.session_token = get_or_default(properties, AWS_S3_SESSION_TOKEN, std::string());
         aws_cloud_credential.iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
         aws_cloud_credential.external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
         aws_cloud_credential.region = get_or_default(properties, AWS_S3_REGION, std::string());
@@ -80,12 +86,35 @@ public:
         return aws_cloud_configuration;
     }
 
+    // This is a reserved interface for aliyun EMR starrocks, and cannot be deleted
+    static const AliyunCloudConfiguration create_aliyun(const TCloudConfiguration& t_cloud_configuration) {
+        DCHECK(t_cloud_configuration.__isset.cloud_type);
+        DCHECK(t_cloud_configuration.cloud_type == TCloudType::ALIYUN);
+        std::unordered_map<std::string, std::string> properties;
+        _insert_properties(properties, t_cloud_configuration);
+
+        AliyunCloudConfiguration aliyun_cloud_configuration{};
+        AliyunCloudCredential aliyun_cloud_credential{};
+
+        aliyun_cloud_credential.access_key = get_or_default(properties, ALIYUN_OSS_ACCESS_KEY, std::string());
+        aliyun_cloud_credential.secret_key = get_or_default(properties, ALIYUN_OSS_SECRET_KEY, std::string());
+        aliyun_cloud_credential.endpoint = get_or_default(properties, ALIYUN_OSS_ENDPOINT, std::string());
+
+        aliyun_cloud_configuration.aliyun_cloud_credential = aliyun_cloud_credential;
+        return aliyun_cloud_configuration;
+    }
+
 private:
     static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
                                    const TCloudConfiguration& t_cloud_configuration) {
-        DCHECK(t_cloud_configuration.__isset.cloud_properties);
-        for (const auto& property : t_cloud_configuration.cloud_properties) {
-            properties.insert({property.key, property.value});
+        if (t_cloud_configuration.__isset.cloud_properties) {
+            for (const auto& property : t_cloud_configuration.cloud_properties) {
+                properties.insert({property.key, property.value});
+            }
+        } else {
+            DCHECK(t_cloud_configuration.__isset.cloud_properties_v2);
+            properties.insert(t_cloud_configuration.cloud_properties_v2.begin(),
+                              t_cloud_configuration.cloud_properties_v2.end());
         }
     }
 

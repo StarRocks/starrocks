@@ -32,7 +32,7 @@ public class ScoreSelector implements Selector {
         return statistics.stream()
                 .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> p.getCompactionScore() != null)
-                .filter(p -> p.getCompactionScore().getAvg() >= minScore || p.getCompactionScore().getP50() >= minScore)
+                .filter(p -> p.getCompactionScore().getMax() >= minScore)
                 .collect(Collectors.toList());
     }
 }

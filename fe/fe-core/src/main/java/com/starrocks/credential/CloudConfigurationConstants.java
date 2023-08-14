@@ -24,6 +24,7 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
     public static final String AWS_S3_ACCESS_KEY = "aws.s3.access_key";
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
+    public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
     public static final String AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
     public static final String AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
     public static final String AWS_S3_REGION = "aws.s3.region";
@@ -50,6 +51,7 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
     public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
+    public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
     public static final String AWS_GLUE_IAM_ROLE_ARN = "aws.glue.iam_role_arn";
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
@@ -58,6 +60,9 @@ public class CloudConfigurationConstants {
 
     // Credential for Azure storage
     // For Azure Blob Storage
+
+    // Endpoint already contains storage account, so if user set endpoint, they don't need to set storage account anymore
+    public static final String AZURE_BLOB_ENDPOINT = "azure.blob.endpoint";
     public static final String AZURE_BLOB_STORAGE_ACCOUNT = "azure.blob.storage_account";
     public static final String AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
     public static final String AZURE_BLOB_CONTAINER = "azure.blob.container";
@@ -93,4 +98,9 @@ public class CloudConfigurationConstants {
     public static final String HDFS_KERBEROS_PRINCIPAL = "kerberos_principal";
     public static final String HDFS_KERBEROS_KEYTAB = "kerberos_keytab";
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
+
+    // Credential for Aliyun OSS
+    public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
+    public static final String ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
+    public static final String ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 }

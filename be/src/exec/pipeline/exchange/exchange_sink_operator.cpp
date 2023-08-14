@@ -619,6 +619,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
     return Status::OK();
 }
 
+void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
+}
+
 Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
@@ -645,7 +651,9 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
-    _buffer->update_profile(_unique_metrics.get());
+    if (_driver_sequence == 0) {
+        _buffer->update_profile(_unique_metrics.get());
+    }
     Operator::close(state);
 }
 

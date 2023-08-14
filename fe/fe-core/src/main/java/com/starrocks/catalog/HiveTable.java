@@ -47,6 +47,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -71,6 +72,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -102,14 +104,21 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
 
     private String catalogName;
+    @SerializedName(value = "dn")
     private String hiveDbName;
+    @SerializedName(value = "tn")
     private String hiveTableName;
+    @SerializedName(value = "rn")
     private String resourceName;
+    @SerializedName(value = "tl")
     private String tableLocation;
+    @SerializedName(value = "pcn")
     private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
+    @SerializedName(value = "dcn")
     private List<String> dataColumnNames = Lists.newArrayList();
+    @SerializedName(value = "prop")
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
@@ -222,7 +231,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             HiveResource hiveResource = (HiveResource) resource;
             hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
         }
-        return hiveProperties;
+        return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
@@ -427,7 +436,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onCreate() {
+    public void onReload() {
         if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(
                     String.join(".", getCatalogName(), hiveDbName, hiveTableName));

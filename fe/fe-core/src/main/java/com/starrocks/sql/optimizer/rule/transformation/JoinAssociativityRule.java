@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,11 +27,14 @@ import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
@@ -49,6 +53,11 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.ASSOCIATIVITY_TOP_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_BOTTOM_MASK;
+import static com.starrocks.sql.optimizer.rule.join.JoinReorderProperty.LEFT_ASSCOM_TOP_MASK;
+
 /*       Join            Join
  *      /    \          /    \
  *     Join   C  =>    A     Join
@@ -57,9 +66,6 @@ import java.util.Map;
  */
 
 public class JoinAssociativityRule extends JoinAssociateBaseRule {
-
-    public final boolean isInnerMode;
-
     public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
             RuleType.TF_JOIN_ASSOCIATIVITY_INNER, true);
 
@@ -71,17 +77,18 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE);
-        this.isInnerMode = isInnerMode;
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE,
+                isInnerMode);
     }
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (JoinReorderHelper.existTableFunc(input)) {
-            return false;
-        }
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
+        if ((topJoin.getTransformMask() & (ASSOCIATIVITY_TOP_MASK | LEFT_ASSCOM_TOP_MASK)) > 0 &&
+                (bottomJoin.getTransformMask() & (ASSOCIATIVITY_BOTTOM_MASK | LEFT_ASSCOM_BOTTOM_MASK)) > 0) {
+            return false;
+        }
         if (StringUtils.isNotEmpty(topJoin.getJoinHint()) || StringUtils.isNotEmpty(bottomJoin.getJoinHint())) {
             return false;
         }
@@ -119,6 +126,11 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
         return OptExpression.create(newTopJoin, newTopJoinChild, newBotJoinExpr);
     }
 
+    @Override
+    public int createTransformMask(boolean isTop) {
+        return isTop ? ASSOCIATIVITY_TOP_MASK : ASSOCIATIVITY_BOTTOM_MASK;
+    }
+
     /*
      * JoinOnConditionShuttle is used for rewrite the join on condition when the expr in this condition can be
      * pushed to its child. For example select t1.v1 from t1 join t2 joint t3 on t1.v1 = t2.v1 + t3.v1, we can rewrite
@@ -154,8 +166,18 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
         }
 
         @Override
-        public ScalarOperator visit(ScalarOperator operator, Void context) {
-            return operator;
+        public ScalarOperator visitArray(ArrayOperator array, Void context) {
+            return array;
+        }
+
+        @Override
+        public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+            return collectionElementOp;
+        }
+
+        @Override
+        public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
+            return array;
         }
 
         @Override
@@ -186,7 +208,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() != BinaryPredicateOperator.BinaryType.EQ) {
+            if (predicate.getBinaryType() != BinaryType.EQ) {
                 return predicate;
             } else {
                 return super.visitBinaryPredicate(predicate, context);
@@ -195,22 +217,12 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         @Override
         public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-            if (!predicate.isAnd()) {
-                return predicate;
-            } else {
-                return super.visitCompoundPredicate(predicate, context);
-            }
+            return predicate;
         }
 
         @Override
         public ScalarOperator visitExistsPredicate(ExistsPredicateOperator predicate, Void context) {
-            boolean[] update = {false};
-            List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
-            if (update[0]) {
-                return new ExistsPredicateOperator(predicate.isNotExists(), clonedOperators);
-            } else {
-                return predicate;
-            }
+            return predicate;
         }
 
         @Override

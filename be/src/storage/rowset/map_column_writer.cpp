@@ -64,7 +64,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
                                                                  const TabletColumn* column, WritableFile* wfile) {
     DCHECK(column->subcolumn_count() == 2);
 
-    // crete key columns writer
+    // create key columns writer
     std::unique_ptr<ColumnWriter> keys_writer;
     {
         const TabletColumn& key_column = column->subcolumn(0);
@@ -84,7 +84,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         ASSIGN_OR_RETURN(keys_writer, ColumnWriter::create(key_options, &key_column, wfile));
     }
 
-    // crete key columns writer
+    // create value columns writer
     std::unique_ptr<ColumnWriter> values_writer;
     {
         const TabletColumn& value_column = column->subcolumn(1);

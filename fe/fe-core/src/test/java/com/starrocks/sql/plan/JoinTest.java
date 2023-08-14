@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Database;
@@ -666,7 +665,7 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "9:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 21> : 37\n" +
+                "  |  <slot 21> : 21: expr\n" +
                 "  |  <slot 22> : 22: P_PARTKEY\n" +
                 "  |  <slot 23> : 23: P_NAME\n" +
                 "  |  <slot 24> : 24: P_MFGR\n" +
@@ -677,7 +676,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 29> : 29: P_RETAILPRICE\n" +
                 "  |  <slot 30> : 30: P_COMMENT\n" +
                 "  |  <slot 31> : 31: PAD\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 40> : CAST(21: expr AS INT)");
     }
 
     @Test
@@ -2443,7 +2442,8 @@ public class JoinTest extends PlanTestBase {
             String sql = "select * from ( select * from t0 right join[bucket] t1 on t0.v1 = t1.v4 ) s1 " +
                     "join[bucket] t2 on s1.v4 = t2.v7";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  |  join op: INNER JOIN (PARTITIONED)\n" +
+            assertContains(plan, "6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }
@@ -2749,5 +2749,28 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: LEFT SEMI JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 19: v4 = 1");
+    }
+
+    @Test
+    public void testTopFragmentOnComputeNode() throws Exception {
+        String sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+
+        try {
+            connectContext.getSessionVariable().setPreferComputeNode(true);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1\n" +
+                    "  PARTITION: UNPARTITIONED\n" +
+                    "\n" +
+                    "  RESULT SINK");
+        } finally {
+            connectContext.getSessionVariable().setPreferComputeNode(false);
+        }
     }
 }

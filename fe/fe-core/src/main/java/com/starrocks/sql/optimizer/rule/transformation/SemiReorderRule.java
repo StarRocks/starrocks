@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -49,6 +48,8 @@ import java.util.stream.Collectors;
  *    /    \                 /       \
  *   X      Y               X        Z
  */
+
+@Deprecated
 public class SemiReorderRule extends TransformationRule {
     public SemiReorderRule() {
         super(RuleType.TF_JOIN_SEMI_REORDER, Pattern.create(OperatorType.LOGICAL_JOIN)
@@ -88,10 +89,10 @@ public class SemiReorderRule extends TransformationRule {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
 
-        Preconditions.checkState(topJoin.getPredicate() == null);
 
         LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder().withOperator(leftChildJoin)
                 .setProjection(topJoin.getProjection())
+                .setPredicate(Utils.compoundAnd(leftChildJoin.getPredicate(), topJoin.getPredicate()))
                 .setLimit(topJoin.getLimit())
                 .build();
 
@@ -157,11 +158,13 @@ public class SemiReorderRule extends TransformationRule {
         // build new semi join projection
         if (semiExpression.isEmpty()) {
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
+                    .setPredicate(null)
                     .setLimit(Operator.DEFAULT_LIMIT)
                     .setProjection(new Projection(projectMap)).build();
         } else {
             semiExpression.putAll(projectMap);
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
+                    .setPredicate(null)
                     .setLimit(Operator.DEFAULT_LIMIT)
                     .setProjection(new Projection(semiExpression)).build();
         }

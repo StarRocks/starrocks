@@ -2,7 +2,7 @@
 
 ## Authentication methods
 
-StarRocks supports using one of the following authentication methods to access Google Cloud Storage (GCS):
+From v3.0 onwards, StarRocks supports using one of the following authentication methods to access Google Cloud Storage (GCS):
 
 - VM-based authentication
 
@@ -39,8 +39,8 @@ Use the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definitio
 CREATE EXTERNAL CATALOG hive_catalog_gcs
 PROPERTIES
 (
-    "type"="hive", 
-    "hive.metastore.uris"="thrift://34.132.15.127:9083",
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     StorageCredentialParams
 );
 ```

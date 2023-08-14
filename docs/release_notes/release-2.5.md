@@ -1,8 +1,146 @@
 # StarRocks version 2.5
 
-Release date: April 28, 2023
+## 2.5.10
+
+Release date: August 7, 2023
+
+### New features
+
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+### Improvements
+
+- Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- When Schema Change and Routine Load occur simultaneously, Routine Load jobs may fail if Schema Change completes first. The error message reported in this situation is optimized. [#28425](https://github.com/StarRocks/starrocks/pull/28425)
+- Users are prohibited from defining NOT NULL columns when they create external tables (If NOT NULL columns are defined, errors will occur after an upgrade and the table must be created again). External catalogs are recommended starting from v2.3.0 to replace external tables. [#25485](https://github.com/StarRocks/starrocks/pull/25441)
+- Added an error message when Broker Load retries encounter an error. This facilitates troubleshooting and debugging during data loading. [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- Supports large-scale data writes when a load job involves both UPSERT and DELETE operations. [#17264](https://github.com/StarRocks/starrocks/pull/17264)
+- Optimized query rewrite using materialized views. [#27934](https://github.com/StarRocks/starrocks/pull/27934) [#25542](https://github.com/StarRocks/starrocks/pull/25542) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#27557](https://github.com/StarRocks/starrocks/pull/27557) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#26957](https://github.com/StarRocks/starrocks/pull/26957) [#27728](https://github.com/StarRocks/starrocks/pull/27728) [#27900](https://github.com/StarRocks/starrocks/pull/27900)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When CAST is used to convert a string into an array, the result may be incorrect if the input includes constants. [#19793](https://github.com/StarRocks/starrocks/pull/19793)
+- SHOW TABLET returns incorrect results if it contains ORDER BY and LIMIT. [#23375](https://github.com/StarRocks/starrocks/pull/23375)
+- Outer join and Anti join rewrite errors for materialized views. [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- `An exception occurred when using the current long link to access metastore. msg: Failed to get next notification based on last event id: 707602` is reported in FE logs if event listener is configured on the HMS to incrementally update Hive metadata. [#21056](https://github.com/StarRocks/starrocks/pull/21056)
+- The query result is not stable if the sort key is modified for a partitioned table. [#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- Data loaded using Spark Load may be distributed to the wrong buckets if the bucketing column is a DATE, DATETIME, or DECIMAL column. [#27005](https://github.com/StarRocks/starrocks/pull/27005)
+- The regex_replace function may cause BEs to crash in some scenarios. [#27117](https://github.com/StarRocks/starrocks/pull/27117)
+- BE crashes if the input of the sub_bitmap function is not a BITMAP value. [#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- "Unknown error" is returned for a query when Join Reorder is enabled. [#27472](https://github.com/StarRocks/starrocks/pull/27472)
+- Inaccurate estimation of average row size causes Primary Key partial updates to occupy excessively large memory. [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- If users specify `"hadoop.security.authentication" = "simple"` in their Broker Load jobs created to load data from HDFS, the job fails. [#27774](https://github.com/StarRocks/starrocks/pull/27774)
+- Modifying the refresh mode of materialized views causes inconsistent metadata between the leader FE and follower FE. [#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
+- Passwords are not hidden when SHOW CREATE CATALOG and SHOW RESOURCES are used to query specific information. [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+- FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311)
+
+## 2.5.9
+
+Release date: July 19, 2023
+
+### New features
+
+- Queries that contain a different type of join than the materialized view can be rewritten. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### Improvements
+
+- StarRocks external tables whose destination cluster is the current StarRocks cluster cannot be created. [#25441](https://github.com/StarRocks/starrocks/pull/25441)
+- If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- Added a new field `table_id` to the table `tables_config` in the database `Information_schema`. You can join `tables_config` with `be_tablets` on the column `table_id` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Count Distinct result is incorrect for Duplicate Key tables. [#24222](https://github.com/StarRocks/starrocks/pull/24222)
+- BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- The INSERT operation hangs if the length of CHAR data in a STRUCT to be inserted exceeds the maximum CHAR length defined in the STRUCT column. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- The result of coalesce() is incorrect. [#26250](https://github.com/StarRocks/starrocks/pull/26250)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created for recovered tables. [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+
+## 2.5.8
+
+Release date: June 30, 2023
+
+### Improvements
+
+- Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the default comments in the CREATE TABLE statement. [#24803](https://github.com/StarRocks/starrocks/pull/24803)
+- You can initiate synchronous manual refresh tasks for asynchronous materialized views using REFRESH MATERIALIZED VIEW WITH SYNC MODE. [#25910](https://github.com/StarRocks/starrocks/pull/25910pr)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The COUNT result of an asynchronous materialized view may be inaccurate if the materialized view is built on Union results. [#24460](https://github.com/StarRocks/starrocks/issues/24460)
+- "Unknown error" is reported when users attempt to forcibly reset the root password. [#25492](https://github.com/StarRocks/starrocks/pull/25492)
+- Inaccurate error message is displayed when INSERT OVERWRITE is executed on a cluster with less than three alive BEs. [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
+## 2.5.7
+
+Release date: June 14, 2023
+
+### New features
+
+- Inactive materialized views can be manually activated using `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. You can use this SQL command to activate materialized views whose base tables were dropped and then recreated. For more information, see [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md). [#24001](https://github.com/StarRocks/starrocks/pull/24001)
+- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](../table_design/Data_distribution.md#determine-the-number-of-tablets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
+
+### Improvements
+
+- Optimized the I/O concurrency of Scan nodes used in external table queries, which reduces memory usage and improves the stability of data loading from external tables. [#23617](https://github.com/StarRocks/starrocks/pull/23617) [#23624](https://github.com/StarRocks/starrocks/pull/23624) [#23626](https://github.com/StarRocks/starrocks/pull/23626)
+- Optimized the error message for Broker Load jobs. The error message contains retry information and the name of erroneous files. [#18038](https://github.com/StarRocks/starrocks/pull/18038) [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- Optimized the error message returned when CREATE TABLE times out and added parameter tuning tips. [#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- Optimized the error message returned when ALTER TABLE fails because the table status is not Normal. [#24381](https://github.com/StarRocks/starrocks/pull/24381)
+- Ignores full-width spaces in the CREATE TABLE statement. [#23885](https://github.com/StarRocks/starrocks/pull/23885)
+- Optimized the Broker access timeout to increase the success rate of Broker Load jobs. [#22699](https://github.com/StarRocks/starrocks/pull/22699)
+- For Primary Key tables, the `VersionCount` field returned by SHOW TABLET contains Rowsets that are in the Pending state. [#23847](https://github.com/StarRocks/starrocks/pull/23847)
+- Optimized the Persistent Index policy. [#22140](https://github.com/StarRocks/starrocks/pull/22140)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When users load Parquet data into StarRocks, DATETIME values overflow during type conversion, causing data errors. [#22356](https://github.com/StarRocks/starrocks/pull/22356)
+- Bucket information is lost after Dynamic Partitioning is disabled. [#22595](https://github.com/StarRocks/starrocks/pull/22595)
+- Using unsupported properties in the CREATE TABLE statement causes null pointer exceptions (NPEs). [#23859](https://github.com/StarRocks/starrocks/pull/23859)
+- Table permission filtering in `information_schema` becomes ineffective. As a result, users can view tables they do not have permission to. [#23804](https://github.com/StarRocks/starrocks/pull/23804)
+- Information returned by SHOW TABLE STATUS is incomplete. [#24279](https://github.com/StarRocks/starrocks/issues/24279)
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- RocksDB WAL flush blocks the brpc worker from processing bthreads, which interrupts high-frequency data loading into Primary Key tables. [#22489](https://github.com/StarRocks/starrocks/pull/22489)
+- TIME-type columns that are not supported in StarRocks can be successfully created. [#23474](https://github.com/StarRocks/starrocks/pull/23474)
+- Materialized view Union rewrite fails. [#22922](https://github.com/StarRocks/starrocks/pull/22922)
+
+## 2.5.6
+
+Release date: May 19, 2023
+
+### Improvements
+
+- Optimized the error message reported when INSERT INTO ... SELECT expires due to a small `thrift_server_max_worker_thread` value. [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- Tables created using CTAS have three replicas by default, which is consistent with the default replica number for common tables. [#22854](https://github.com/StarRocks/starrocks/pull/22854)
+
+### Bug Fixes
+
+- Truncating partitions fails because the TRUNCATE operation is case-sensitive to partition names. [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- Decommissioning BE fails due to the failure in creating temporary partitions for materialized views. [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- Dynamic FE parameters that require an ARRAY value cannot be set to an empty array. [#22225](https://github.com/StarRocks/starrocks/pull/22225)
+- Materialized views with the `partition_refresh_number` property specified may fail to completely refresh. [#21619](https://github.com/StarRocks/starrocks/pull/21619)
+- SHOW CREATE TABLE masks cloud credential information, which causes incorrect credential information in memory. [#21311](https://github.com/StarRocks/starrocks/pull/21311)
+- Predicates cannot take effect on some ORC files that are queried via external tables. [#21901](https://github.com/StarRocks/starrocks/pull/21901)
+- The min-max filter cannot properly handle lower- and upper-case letters in column names. [#22626](https://github.com/StarRocks/starrocks/pull/22626)
+- Late materialization causes errors in querying complex data types (STRUCT or MAP).  [#22862](https://github.com/StarRocks/starrocks/pull/22862)
+- The issue that occurs when restoring a Primary Key table. [#23384](https://github.com/StarRocks/starrocks/pull/23384)
 
 ## 2.5.5
+
+Release date: April 28, 2023
 
 ### New features
 
@@ -162,7 +300,7 @@ Release date: January 22, 2023
 - Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](../administration/resource_group.md). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](../table_design/data_compression.md). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
 - Supports [user-defined variables](../reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
-- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_filter](../sql-reference/sql-functions/array-functions/array_filter.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
+- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - Provides the QUALIFY clause that filters the results of [window functions](../sql-reference/sql-functions/Window_function.md). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
 - Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - Supports the following functions: [map_size](../sql-reference/sql-functions/map-functions/map_size.md), [map_keys](../sql-reference/sql-functions/map-functions/map_keys.md), [map_values](../sql-reference/sql-functions/map-functions/map_values.md), [max_by](../sql-reference/sql-functions/aggregate-functions/max_by.md), [sub_bitmap](../sql-reference/sql-functions/bitmap-functions/sub_bitmap.md), [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md), [host_name](../sql-reference/sql-functions/utility-functions/host_name.md), and [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md). [#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
@@ -175,7 +313,6 @@ Release date: January 22, 2023
   - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#about-async-refresh-mechanisms-for-materialized-views). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
   - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#enable-query-rewrite-based-on-async-materialized-views). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - The efficiency of refreshing materialized views is improved. [#13167](https://github.com/StarRocks/starrocks/issues/13167)
-- StarRocks automatically sets an appropriate number of tablets when you create a table, eliminating the need for manual operations. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - Optimized the following aspects of data loading:
   - Optimized loading performance in multi-replica scenarios by supporting the "single leader replication" mode. Data loading gains a one-fold performance lift. For more information about "single leader replication", see `replicated_storage` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#10138](https://github.com/StarRocks/starrocks/pull/10138)
   - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)

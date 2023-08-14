@@ -146,6 +146,9 @@ struct FilterIniter {
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    if (column->has_large_column()) {
+        return Status::NotSupported("unsupported build runtime filter for large binary column");
+    }
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
 }

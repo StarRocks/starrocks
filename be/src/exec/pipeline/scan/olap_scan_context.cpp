@@ -21,6 +21,11 @@
 namespace starrocks::pipeline {
 
 /// OlapScanContext.
+
+const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() const {
+    return &_scan_node->column_access_paths();
+}
+
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
@@ -134,7 +139,8 @@ OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence
     DCHECK_LT(idx, _contexts.size());
 
     if (_contexts[idx] == nullptr) {
-        _contexts[idx] = std::make_shared<OlapScanContext>(_scan_node, _dop, _shared_scan, _chunk_buffer);
+        _contexts[idx] =
+                std::make_shared<OlapScanContext>(_scan_node, _scan_table_id, _dop, _shared_scan, _chunk_buffer);
     }
     return _contexts[idx];
 }

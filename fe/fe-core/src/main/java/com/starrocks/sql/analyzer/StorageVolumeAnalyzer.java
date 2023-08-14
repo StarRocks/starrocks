@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
@@ -46,10 +47,20 @@ public class StorageVolumeAnalyzer {
             if (Strings.isNullOrEmpty(svName)) {
                 throw new SemanticException("'storage volume name' can not be null or empty");
             }
+            if (svName.equals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME)) {
+                throw new SemanticException(String.format(
+                        "%s is a reserved storage volume name, please choose a different name for the storage volume",
+                        StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+            }
 
             List<String> locations = statement.getStorageLocations();
             if (locations.isEmpty()) {
-                throw new SemanticException("'storage volume locations' can not be empty");
+                throw new SemanticException("'location' field is required to create the storage volume");
+            }
+            for (String location : locations) {
+                if (location.isEmpty()) {
+                    throw new SemanticException("'location' field is required to create the storage volume");
+                }
             }
 
             String svType = statement.getStorageVolumeType();
@@ -92,8 +103,12 @@ public class StorageVolumeAnalyzer {
             }
 
             StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-            if (!storageVolumeMgr.exists(svName)) {
-                throw new SemanticException(String.format("storage volume '%s' not exists", svName));
+            try {
+                if (!storageVolumeMgr.exists(svName)) {
+                    throw new SemanticException("Unknown storage volume: %s", svName);
+                }
+            } catch (DdlException e) {
+                throw new SemanticException("Failed to get storage volume", e);
             }
 
             return null;

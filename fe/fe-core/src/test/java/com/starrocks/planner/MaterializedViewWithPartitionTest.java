@@ -90,10 +90,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 10: c3 > 1999\n" +
-                        "     partitions=2/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=4/4");
+                        "     partitions=1/5");
 
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c3 < 1000")
@@ -175,11 +172,10 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 9: c2 >= 2000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part");
+                        "     partitions=5/5");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("PREDICATES: 2: c2 < 3000\n" +
+                .contains("PREDICATES: 9: c2 <= 2999, 9: c2 >= 2000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
@@ -265,6 +261,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test union all
         // TODO: MV can be rewritten but cannot bingo(because cost?)!
+        /*
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
@@ -284,22 +281,20 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
 
+
+         */
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: c1 IS NOT NULL, 3: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
-                .contains("TABLE: test_base_part2\n" +
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5")
+                .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 IS NOT NULL, 7: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
@@ -338,7 +333,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 2000 and t2.c3 > 100;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 101\n" +
+                        "     PREDICATES: 11: c3 >= 101, 11: c3 <= 1999\n" +
                         "     partitions=1/1");
 
         // test query delta
@@ -365,6 +360,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test union all
         // TODO: MV can be rewritten but cannot bingo(because cost?)!
+        /*
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
@@ -383,22 +379,21 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
 
+         */
+
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 1: c1 IS NOT NULL, 3: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
+                        "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
+                        "     partitions=1/5\n" +
+                        "     rollup: test_base_part")
                 .contains("TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 IS NOT NULL, 7: c3 IS NOT NULL\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
+                        "     PREDICATES: 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
+                        "     partitions=1/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
@@ -500,7 +495,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 >= 101, 5: c1 = 1\n" +
+                        "     PREDICATES: 5: c1 = 1, 7: c2 >= 101\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");
@@ -510,9 +505,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 9: c2 <= 10\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10");
+                        "     partitions=5/5");
 
         starRocksAssert.dropMaterializedView("partial_mv_8");
     }
@@ -557,7 +550,9 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
             String query = "select c1, c3, sum(c4) from test_base_part where c3 < 2000 group by c1, c3;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "partial_mv_11", "PREDICATES: 10: c3 > 999", "partitions=2/5");
+            PlanTestBase.assertContains(plan, "partial_mv_11", "TABLE: test_base_part\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/5");
             PlanTestBase.assertNotContains(plan, "10: c3 IS NULL");
             starRocksAssert.dropMaterializedView("partial_mv_11");
         }

@@ -103,7 +103,9 @@ Status DeltaWriter::_init() {
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
-        ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
+        ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
+              "try again. tablet_id="
+           << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         Status st = Status::InternalError(ss.str());
         _set_state(kUninitialized, st);
@@ -113,7 +115,7 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             auto msg = strings::Substitute(
-                    "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
+                    "primary key memory usage exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
                     _storage_engine->update_manager()->topn_memory_stats(5));
@@ -135,9 +137,11 @@ Status DeltaWriter::_init() {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
         auto msg = fmt::format(
-                "Too many versions, please reduce your insert/load request rate. tablet_id: {}, version_count: {}, "
-                "limit: {}, replica_state: {}",
-                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+                "Failed to load data into tablet {}, because of too many versions, current/limit: {}/{}. You can "
+                "reduce the loading job concurrency, or increase loading data batch size. If you are loading data with "
+                "Routine Load, you can increase FE configs routine_load_task_consume_second and "
+                "max_routine_load_batch_size,",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -240,8 +244,8 @@ Status DeltaWriter::_init() {
     }
 
     if (auto_increment_in_sort_key && _opt.miss_auto_increment_column) {
-        LOG(WARNING) << "table with sort key do not support partial update";
-        return Status::NotSupported("table with sort key do not support partial update");
+        LOG(WARNING) << "auto increment column in sort key do not support partial update";
+        return Status::NotSupported("auto increment column in sort key do not support partial update");
     }
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();
@@ -301,7 +305,7 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
     if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
         _opt.slots->back()->col_name() == "__op") {
         size_t op_column_id = chunk.num_columns() - 1;
-        auto op_column = chunk.get_column_by_index(op_column_id);
+        const auto& op_column = chunk.get_column_by_index(op_column_id);
         auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
         for (size_t i = 0; i < chunk.num_rows(); i++) {
             if (ops[i] == TOpType::UPSERT) {
@@ -622,12 +626,11 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     rss_rowids.resize(upserts->size());
 
     // 2. probe index
-    _tablet->updates()->prepare_partial_update_states(_tablet.get(), upserts, nullptr, &rss_rowids);
+    RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
     std::vector<uint8_t> filter;
     uint32_t gen_num = 0;
-    for (uint32_t i = 0; i < rss_rowids.size(); i++) {
-        uint64_t v = rss_rowids[i];
+    for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;
         if (rssid == (uint32_t)-1) {
             filter.emplace_back(1);

@@ -45,6 +45,9 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
+import static org.apache.iceberg.SnapshotSummary.TOTAL_EQ_DELETES_PROP;
+import static org.apache.iceberg.SnapshotSummary.TOTAL_POS_DELETES_PROP;
+import static org.apache.iceberg.SnapshotSummary.TOTAL_RECORDS_PROP;
 
 
 public class IcebergStatisticProvider {
@@ -78,10 +81,17 @@ public class IcebergStatisticProvider {
         String catalogName = icebergTable.getCatalogName();
 
         List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                catalogName, icebergTable, null, snapshotId, icebergPredicate);
+                catalogName, icebergTable, null, snapshotId, icebergPredicate, null);
 
         if (splits.isEmpty()) {
             return new IcebergFileStats(1);
+        }
+
+        if (icebergPredicate == null) {
+            long totalRecords = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_RECORDS_PROP, "1"));
+            long totalPosDeletes = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_POS_DELETES_PROP, "0"));
+            long totalEqDeletes = Long.parseLong(snapshot.get().summary().getOrDefault(TOTAL_EQ_DELETES_PROP, "0"));
+            return new IcebergFileStats(totalRecords - totalPosDeletes - totalEqDeletes);
         }
 
         RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);

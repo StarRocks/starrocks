@@ -28,6 +28,7 @@ public:
     struct IORange {
         int64_t offset;
         int64_t size;
+        bool active = true;
         bool operator<(const IORange& x) const { return offset < x.offset; }
     };
     struct CoalesceOptions {
@@ -35,9 +36,19 @@ public:
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
     };
+    struct SharedBuffer {
+        // request range
+        int64_t raw_offset;
+        int64_t raw_size;
+        // request range after alignment
+        int64_t offset;
+        int64_t size;
+        int64_t ref_count;
+        std::vector<uint8_t> buffer;
+        void align(int64_t align_size, int64_t file_size);
+    };
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
-                              size_t file_size);
+    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {
@@ -53,7 +64,15 @@ public:
         return _stream->skip(count);
     }
 
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
+    StatusOr<SharedBuffer*> find_shared_buffer(size_t offset, size_t count);
+
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+        return _stream->get_numeric_statistics();
+    }
+
     Status set_io_ranges(const std::vector<IORange>& ranges);
+    Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_together);
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
@@ -65,28 +84,18 @@ public:
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
-    int64_t estimated_mem_usage() const;
+    int64_t estimated_mem_usage() const { return _estimated_mem_usage; }
 
     StatusOr<std::string_view> peek(int64_t count) override;
 
 private:
-    struct SharedBuffer {
-    public:
-        // request range
-        int64_t raw_offset;
-        int64_t raw_size;
-        // request range after alignment
-        int64_t offset;
-        int64_t size;
-        int64_t ref_count;
-        std::vector<uint8_t> buffer;
-        void align(int64_t align_size, int64_t file_size);
-    };
+    void _update_estimated_mem_usage();
     Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
-    StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
-    Status _read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count);
-    std::shared_ptr<SeekableInputStream> _stream;
-    std::string _filename;
+    Status _sort_and_check_overlap(std::vector<IORange>& ranges);
+    void _merge_small_ranges(const std::vector<IORange>& ranges);
+    Status _set_io_ranges_separately(const std::vector<IORange>& ranges);
+    const std::shared_ptr<SeekableInputStream> _stream;
+    const std::string _filename;
     std::map<int64_t, SharedBuffer> _map;
     CoalesceOptions _options;
     int64_t _offset = 0;
@@ -98,6 +107,7 @@ private:
     int64_t _direct_io_bytes = 0;
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
+    int64_t _estimated_mem_usage = 0;
 };
 
 } // namespace starrocks::io

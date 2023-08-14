@@ -16,16 +16,16 @@ StarRocks supports both storage and efficient querying and analytics of JSON dat
 
 When you create a table, you can use the `JSON` keyword to specify the `j` column as a JSON column.
 
-```Plain%20Text
+```sql
 CREATE TABLE `tj` (
     `id` INT(11) NOT NULL COMMENT "",
     `j`  JSON NULL COMMENT ""
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
 );
 ```
@@ -50,7 +50,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
   - If you want to load a root JSON object, set `jsonpaths` to `$`.
   - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
-- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../data-manipulation/BROKER%20LOAD.md).
 
 StarRocks supports the following data type conversions at Parquet file loading.
 

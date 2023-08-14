@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -72,6 +73,7 @@ public class KafkaProgress extends RoutineLoadProgress {
     public static final long OFFSET_END_VAL = -1;
 
     // (partition id, begin offset)
+    @SerializedName("po")
     private Map<Integer, Long> partitionIdToOffset = Maps.newConcurrentMap();
 
     public KafkaProgress() {

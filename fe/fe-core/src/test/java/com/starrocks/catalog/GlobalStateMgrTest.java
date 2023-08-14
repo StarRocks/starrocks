@@ -64,16 +64,11 @@ import org.junit.Test;
 
 import java.io.DataInputStream;
 import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
-
-    @Mocked
-    InetAddress addr1;
 
     @Before
     public void setUp() {
@@ -95,21 +90,20 @@ public class GlobalStateMgrTest {
 
         DataInputStream dis = image1.getDataInputStream();
         long checksum2 = globalStateMgr.loadVersion(dis, 0);
-        checksum2 = globalStateMgr.loadHeader(dis, checksum2);
+        checksum2 = globalStateMgr.loadHeaderV1(dis, checksum2);
         Assert.assertEquals(checksum1, checksum2);
 
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
-        checksum1 = globalStateMgr.saveHeaderV2(image2.getDataOutputStream(), 0);
+        globalStateMgr.saveHeaderV2(image2.getDataOutputStream());
         MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
-        checksum2 = globalStateMgr.loadHeader(image2.getDataInputStream(), 0);
-        Assert.assertEquals(checksum1, checksum2);
+        globalStateMgr.loadHeaderV2(image2.getDataInputStream());
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        NodeMgr nodeMgr = new NodeMgr(false, globalStateMgr);
+        NodeMgr nodeMgr = new NodeMgr();
 
         Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
@@ -132,32 +126,6 @@ public class GlobalStateMgrTest {
         field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
-    }
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
-    }
-
-    @Test
-    public void testGetFeByHost() throws Exception {
-        mockNet();
-        new Expectations() {
-            {
-                addr1.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
-
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        Frontend testFeIp = globalStateMgr.getFeByHost("127.0.0.1");
-        Assert.assertNotNull(testFeIp);
-        Frontend testFeHost = globalStateMgr.getFeByHost("sandbox");
-        Assert.assertNotNull(testFeHost);
     }
 
     @Test

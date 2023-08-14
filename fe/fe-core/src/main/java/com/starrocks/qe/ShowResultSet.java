@@ -114,6 +114,10 @@ public class ShowResultSet {
         return Short.parseShort(getString(col));
     }
 
+    public int numColumns() {
+        return metaData.getColumnCount();
+    }
+
     public TShowResultSet tothrift() {
         TShowResultSet set = new TShowResultSet();
         set.metaData = new TShowResultSetMetaData();

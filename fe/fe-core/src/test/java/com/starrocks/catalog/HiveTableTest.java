@@ -111,7 +111,7 @@ public class HiveTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hive_tbl (col1 int, col2 int) engine=hive properties " +
+        String createTableSql = "create external table if not exists  db.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);
@@ -180,7 +180,8 @@ public class HiveTableTest {
             }
         };
 
-        String createTableSql = "create external table db.hive_tbl (col1 int, not_exist int) engine=hive properties " +
+        String createTableSql = "create external table  if not exists  db.hive_tbl (col1 int, not_exist int) " +
+                "engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);

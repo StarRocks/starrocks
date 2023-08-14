@@ -16,3 +16,10 @@ storage_volume_alter	S3	false	s3://xxx	{"aws.s3.region":"us-west-1","aws.s3.use_
 DROP STORAGE VOLUME IF EXISTS storage_volume_alter;
 -- result:
 -- !result
+DESC STORAGE VOLUME storage_volume_alter;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Unknown storage volume: storage_volume_alter.')
+-- !result
+SHOW STORAGE VOLUMES LIKE 'storage_volume_alter';
+-- result:
+-- !result

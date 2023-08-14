@@ -47,6 +47,11 @@ namespace starrocks {
     M(TYPE_VARBINARY)                \
     M(TYPE_BOOLEAN)
 
+#define APPLY_FOR_COMPLEX_TYPE(M) \
+    M(TYPE_STRUCT)                \
+    M(TYPE_MAP)                   \
+    M(TYPE_ARRAY)
+
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
     APPLY_FOR_ALL_SCALAR_TYPE(M)               \
     M(TYPE_NULL)
@@ -107,6 +112,19 @@ template <class Functor, class... Args>
 auto type_dispatch_basic(LogicalType ltype, Functor fun, Args... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "Unknown type: " << ltype;
+        __builtin_unreachable();
+    }
+}
+
+template <class Functor, class... Args>
+auto type_dispatch_basic_and_complex_types(LogicalType ltype, Functor fun, Args... args) {
+    switch (ltype) {
+        APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
+        _TYPE_DISPATCH_CASE(TYPE_ARRAY)
+        _TYPE_DISPATCH_CASE(TYPE_MAP)
+        _TYPE_DISPATCH_CASE(TYPE_STRUCT)
     default:
         CHECK(false) << "Unknown type: " << ltype;
         __builtin_unreachable();

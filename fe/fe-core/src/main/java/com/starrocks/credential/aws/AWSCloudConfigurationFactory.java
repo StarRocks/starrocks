@@ -28,6 +28,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_EXTE
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
@@ -38,6 +39,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERN
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
@@ -64,6 +66,7 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
                 hiveConf.getBoolean(AWS_GLUE_USE_INSTANCE_PROFILE, false),
                 hiveConf.get(AWS_GLUE_ACCESS_KEY, ""),
                 hiveConf.get(AWS_GLUE_SECRET_KEY, ""),
+                hiveConf.get(AWS_GLUE_SESSION_TOKEN, ""),
                 hiveConf.get(AWS_GLUE_IAM_ROLE_ARN, ""),
                 hiveConf.get(AWS_GLUE_EXTERNAL_ID, ""),
                 hiveConf.get(AWS_GLUE_REGION, ""),
@@ -83,6 +86,7 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false")),
                 properties.getOrDefault(AWS_S3_ACCESS_KEY, ""),
                 properties.getOrDefault(AWS_S3_SECRET_KEY, ""),
+                properties.getOrDefault(AWS_S3_SESSION_TOKEN, ""),
                 properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, ""),
                 properties.getOrDefault(AWS_S3_EXTERNAL_ID, ""),
                 properties.getOrDefault(AWS_S3_REGION, ""),

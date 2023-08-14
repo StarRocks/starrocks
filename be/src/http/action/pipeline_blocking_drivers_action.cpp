@@ -160,7 +160,7 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
         };
 
         QueryMap query_map_not_in_wg;
-        _exec_env->driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_not_in_wg));
+        _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_not_in_wg));
         rapidjson::Document queries_not_in_wg_obj = query_map_to_doc_func(query_map_not_in_wg);
 
         QueryMap query_map_in_wg;

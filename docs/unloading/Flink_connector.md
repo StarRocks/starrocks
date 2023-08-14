@@ -166,10 +166,10 @@ The following examples assume you have created a database named `test` in your S
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`id`) BUCKETS 1
+   DISTRIBUTED BY HASH(`id`)
    PROPERTIES
    (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 

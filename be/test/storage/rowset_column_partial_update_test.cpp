@@ -28,6 +28,7 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset_column_update_state.h"
+#include "storage/schema_change_utils.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -136,7 +137,8 @@ public:
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
                                           std::function<int32_t(int64_t)> v2_func,
-                                          const std::shared_ptr<TabletSchema>& partial_schema, int segment_num) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema, int segment_num,
+                                          PartialUpdateMode mode = PartialUpdateMode::COLUMN_UPDATE_MODE) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -153,7 +155,7 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
-        writer_context.partial_update_mode = PartialUpdateMode::COLUMN_MODE;
+        writer_context.partial_update_mode = mode;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(*partial_schema.get());
@@ -241,25 +243,23 @@ static bool check_tablet(const TabletSharedPtr& tablet, int64_t version, int64_t
 }
 
 static void commit_rowsets(const TabletSharedPtr& tablet, std::vector<RowsetSharedPtr>& rowsets, int64_t& version) {
-    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
         auto st = tablet->rowset_commit(++version, rowsets[i], 10000);
         CHECK(st.ok()) << st.to_string();
-        // Ensure that there is at most one thread doing the version apply job.
-        ASSERT_EQ(pool->num_threads(), 1);
         ASSERT_EQ(version, tablet->updates()->max_version());
         ASSERT_EQ(version, tablet->updates()->version_history_count());
     }
 }
 
-static void compact(const TabletSharedPtr& tablet, int64_t& version, MemTracker* compaction_mem_tracker) {
+static void compact(const TabletSharedPtr& tablet, int64_t& version, int64_t expected_num_rowsets,
+                    MemTracker* compaction_mem_tracker) {
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(tablet->data_dir());
     ASSERT_EQ(best_tablet->tablet_id(), tablet->tablet_id());
     ASSERT_TRUE(best_tablet->updates()->get_compaction_score() > 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(compaction_mem_tracker).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), expected_num_rowsets);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), version + 1);
     // the time interval is not enough after last compaction
     ASSERT_EQ(best_tablet->updates()->get_compaction_score(), -1);
@@ -550,8 +550,8 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_compaction_and_check) {
     prepare_tablet(this, tablet, version, version_before_partial_update, N);
 
     {
-        // compaction
-        compact(tablet, version, _compaction_mem_tracker.get());
+        // compaction, only merge empty rowsets
+        compact(tablet, version, 2, _compaction_mem_tracker.get());
         // check data
         ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
@@ -642,7 +642,8 @@ TEST_F(RowsetColumnPartialUpdateTest, test_schema_change) {
         // create table with add column, test link_from
         auto new_tablet = create_tablet(6000, 6000, true);
         new_tablet->set_tablet_state(TABLET_NOTREADY);
-        ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version).ok());
+        auto chunk_changer = std::make_unique<ChunkChanger>(new_tablet->tablet_schema());
+        ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version, chunk_changer.get()).ok());
         // check data
         ASSERT_TRUE(check_tablet(new_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
@@ -704,6 +705,74 @@ TEST_F(RowsetColumnPartialUpdateTest, test_dcg_gc) {
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));
+}
+
+TEST_F(RowsetColumnPartialUpdateTest, test_get_column_values) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+
+    {
+        // get columns by `get_column_values`
+        std::vector<uint32_t> column_ids = {0, 1, 2};
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        for (int rowid = 0; rowid < N; rowid++) {
+            rowids_by_rssid[9].push_back(rowid);
+        }
+        auto read_column_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_ids);
+        vector<std::unique_ptr<Column>> columns(column_ids.size());
+        for (int colid = 0; colid < column_ids.size(); colid++) {
+            auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
+            columns[colid] = column->clone_empty();
+        }
+        ASSERT_OK(tablet->updates()->get_column_values(column_ids, version, false, rowids_by_rssid, &columns, nullptr));
+        // check column values
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(columns[0]->get(i).get_int64(), i);
+            ASSERT_EQ(columns[1]->get(i).get_int16(), (int16_t)(i % 100 + 3));
+            ASSERT_EQ(columns[2]->get(i).get_int32(), (int32_t)(i % 1000 + 4));
+        }
+    }
+}
+
+TEST_F(RowsetColumnPartialUpdateTest, test_upsert) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+
+    {
+        // upsert keys, because keys aren't exist, so they will be inserted.
+        std::vector<int64_t> keys(N);
+        for (int i = 0; i < N; i++) {
+            keys[i] = i + N;
+        }
+        std::vector<RowsetSharedPtr> rowsets;
+        rowsets.reserve(10);
+        std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+        // upsert v1 and v2 one by one
+        for (int i = 0; i < 10; i++) {
+            std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+            partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+            rowsets.emplace_back(create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func,
+                                                       partial_schemas[i], 5, PartialUpdateMode::COLUMN_UPSERT_MODE));
+            ASSERT_EQ(rowsets[i]->num_update_files(), 5);
+            // preload rowset update state
+            ASSERT_OK(StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowsets[i].get()));
+        }
+        commit_rowsets(tablet, rowsets, version);
+        // check data
+        ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        }));
+    }
 }
 
 } // namespace starrocks

@@ -50,11 +50,10 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -63,6 +62,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -100,9 +100,12 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -170,48 +173,27 @@ public class AstToStringBuilder {
             } else {
                 sb.append("REVOKE ");
             }
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                List<String> privList = new ArrayList<>();
-                for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
-                    privList.add(privilegeType.name().replace("_", " "));
-                }
+            List<String> privList = new ArrayList<>();
+            for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                privList.add(privilegeType.name().replace("_", " "));
+            }
 
-                sb.append(Joiner.on(", ").join(privList));
-                sb.append(" ON ");
+            sb.append(Joiner.on(", ").join(privList));
+            sb.append(" ON ");
 
-                if (stmt.getObjectType() == ObjectType.SYSTEM) {
-                    sb.append(stmt.getObjectType().name());
-                } else {
-                    if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
-                        sb.append(stmt.getObjectList().get(0).toString());
-                    } else {
-                        sb.append(stmt.getObjectType().name()).append(" ");
-
-                        List<String> objectString = new ArrayList<>();
-                        for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
-                            objectString.add(tablePEntryObject.toString());
-                        }
-                        sb.append(Joiner.on(", ").join(objectString));
-                    }
-                }
-
+            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+                sb.append(stmt.getObjectType().name());
             } else {
-                boolean firstLine = true;
-                for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
-                    if (firstLine) {
-                        firstLine = false;
-                    } else {
-                        sb.append(", ");
-                    }
-                    String priv = privilege.toString().toUpperCase();
-                    sb.append(priv, 0, priv.length() - 5);
-                }
-                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
-                    sb.append(" ON ").append(stmt.getTblPattern());
-                } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
-                    sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
+                if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                    sb.append(stmt.getObjectList().get(0).toString());
                 } else {
-                    sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
+                    sb.append(stmt.getObjectType().name()).append(" ");
+
+                    List<String> objectString = new ArrayList<>();
+                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                        objectString.add(tablePEntryObject.toString());
+                    }
+                    sb.append(Joiner.on(", ").join(objectString));
                 }
             }
             if (stmt instanceof GrantPrivilegeStmt) {
@@ -346,8 +328,18 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+            String dbName = null;
+            String jobName = null;
+            if (stmt.getLabelName() != null) {
+                dbName = stmt.getLabelName().getDbName();
+                jobName = stmt.getLabelName().getLabelName();
+            }
+            if (dbName != null) {
+                sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(jobName).append(" ON ").append(stmt.getTableName());
+            } else {
+                sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
+            }
 
             if (stmt.getRoutineLoadDesc() != null) {
                 sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
@@ -781,14 +773,14 @@ public class AstToStringBuilder {
 
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append('{');
+            sb.append("map{");
             for (int i = 0; i < node.getChildren().size(); i = i + 2) {
                 if (i > 0) {
                     sb.append(',');
                 }
                 sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
             }
-            sb.append('}');
+            sb.append("}");
             return sb.toString();
         }
 
@@ -1162,6 +1154,54 @@ public class AstToStringBuilder {
             } else {
                 return "(" + visit(node) + ")";
             }
+        }
+
+        // --------------------------------------------Storage volume Statement ----------------------------------------
+
+        @Override
+        public String visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE STORAGE VOLUME ");
+            if (stmt.isSetIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getName());
+            sb.append(" TYPE = ").append(stmt.getStorageVolumeType());
+            sb.append(" LOCATIONS = (");
+            List<String> locations = stmt.getStorageLocations();
+            for (int i = 0; i < locations.size(); ++i) {
+                if (i == 0) {
+                    sb.append("'").append(locations.get(i)).append("'");
+                } else {
+                    sb.append(", '").append(locations.get(i)).append("'");
+                }
+            }
+            sb.append(")");
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            sb.append(" PROPERTIES (").
+                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER STORAGE VOLUME ").append(stmt.getName());
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT = '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            if (!properties.isEmpty()) {
+                sb.append(" SET (").
+                        append(new PrintableMap<>(properties, "=", true, false))
+                        .append(")");
+            }
+            return sb.toString();
         }
     }
 }

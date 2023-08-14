@@ -4,7 +4,7 @@
 
 Creates a MAP value from the given pair of key item array and value item array.
 
-This function is supported from v3.0.
+This function is supported from v3.1 onwards.
 
 ## Syntax
 
@@ -28,6 +28,7 @@ Returns a MAP that is constructed from the input keys and values.
 ## Examples
 
 ```Plaintext
+select map_from_arrays([1, 2], ['Star', 'Rocks']);
 +--------------------------------------------+
 | map_from_arrays([1, 2], ['Star', 'Rocks']) |
 +--------------------------------------------+

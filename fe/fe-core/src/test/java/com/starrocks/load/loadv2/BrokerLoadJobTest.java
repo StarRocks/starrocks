@@ -53,6 +53,7 @@ import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -65,6 +66,8 @@ import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -74,6 +77,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class BrokerLoadJobTest {
 
@@ -312,6 +316,14 @@ public class BrokerLoadJobTest {
             }
         };
 
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logSaveNextId(long nextId) {
+
+            }
+        };
+
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         brokerLoadJob.unprotectedExecuteJob();
 
@@ -538,6 +550,18 @@ public class BrokerLoadJobTest {
         Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
         Assert.assertEquals(99, progress);
+    }
+
+    @Test
+    public void testLoadingTaskOnFinishedPartialUpdate(@Injectable BrokerPendingTaskAttachment attachment1,
+                                          @Injectable LoadTask loadTask1,
+                                          @Mocked GlobalStateMgr globalStateMgr,
+                                          @Injectable Database database) throws DdlException {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.PARTIAL_UPDATE_MODE, "column");
+        brokerLoadJob.setJobProperties(properties);
+        brokerLoadJob.onTaskFinished(attachment1);
     }
 
     @Test

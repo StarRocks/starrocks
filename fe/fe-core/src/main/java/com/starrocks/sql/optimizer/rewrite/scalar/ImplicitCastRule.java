@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -83,6 +85,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                         String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
             }
 
+            boolean needAdjustScale = ArithmeticExpr.DECIMAL_SCALE_ADJUST_OPERATOR_SET
+                    .contains(fn.getFunctionName().getFunction());
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
@@ -94,7 +98,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                     continue;
                 }
 
-                if (!type.matchesType(child.getType())) {
+                // for compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
+                // determine whether to cast child of the ArithmeticExpr
+                if ((needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) ||
+                        !type.matchesType(child.getType())) {
                     addCastChild(type, call, i);
                 }
             }
@@ -141,7 +148,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type type2 = rightChild.getType();
 
         // For a query like: select 'a' <=> NULL, we should cast Constant Null to the type of the other side
-        if (predicate.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ_FOR_NULL &&
+        if (predicate.getBinaryType() == BinaryType.EQ_FOR_NULL &&
                 (leftChild.isConstantNull() || rightChild.isConstantNull())) {
             if (leftChild.isConstantNull()) {
                 predicate.setChild(0, ConstantOperator.createNull(type2));
@@ -179,8 +186,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBinary(
-                predicate.getBinaryType().isNotRangeComparison(), type1, type2);
+        Type compatibleType = TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);

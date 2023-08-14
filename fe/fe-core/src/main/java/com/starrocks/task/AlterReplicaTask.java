@@ -47,16 +47,21 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -166,14 +171,29 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 List<SlotRef> slots = Lists.newArrayList();
                 entry.getValue().collect(SlotRef.class, slots);
                 TAlterMaterializedViewParam mvParam = new TAlterMaterializedViewParam(entry.getKey());
-                mvParam.setOrigin_column_name(slots.get(0).getLabel());
+                mvParam.setOrigin_column_name(slots.get(0).getColumnName());
                 mvParam.setMv_expr(entry.getValue().treeToThrift());
                 req.addToMaterialized_view_params(mvParam);
             }
         }
         req.setMaterialized_column_req(materializedColumnReq);
+
+        // TODO: merge `materializedColumnReq`'s query options into this later.
+        if (defineExprs != null && defineExprs.size() > 0) {
+            // we need this thing, otherwise some expr evalution will fail in BE
+            TQueryGlobals queryGlobals = new TQueryGlobals();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            queryGlobals.setNow_string(dateFormat.format(new Date()));
+            queryGlobals.setTimestamp_ms(new Date().getTime());
+            queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+            TQueryOptions queryOptions = new TQueryOptions();
+            req.setQuery_globals(queryGlobals);
+            req.setQuery_options(queryOptions);
+        }
+
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
+        req.setJob_id(jobId);
         return req;
     }
 

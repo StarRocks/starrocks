@@ -554,6 +554,21 @@ build_flatbuffers() {
   cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
 }
 
+build_brotli() {
+    check_if_source_exist $BROTLI_SOURCE
+    cd $TP_SOURCE_DIR/$BROTLI_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
+    rm $TP_INSTALL_DIR/lib64/libbrotli*.so
+    rm $TP_INSTALL_DIR/lib64/libbrotli*.so.*
+}
+
 # arrow
 build_arrow() {
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
@@ -573,27 +588,42 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
+    # https://github.com/apache/arrow/blob/apache-arrow-5.0.0/cpp/src/arrow/memory_pool.cc#L286
+    #
+    # JemallocAllocator use mallocx and rallocx to allocate new memory, but mallocx and rallocx are Non-standard APIs,
+    # and can not be hooked in BE, the memory used by arrow can not be counted by BE,
+    # so disable jemalloc here and use SystemAllocator.
+    #
+    # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
+    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
+    -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
     -DJEMALLOC_HOME=$TP_INSTALL_DIR \
     -Dzstd_SOURCE=BUNDLED \
+    -DRapidJSON_ROOT=$TP_INSTALL_DIR \
+    -DARROW_SNAPPY_USE_SHARED=OFF \
+    -DZLIB_ROOT=$TP_INSTALL_DIR \
+    -DLZ4_INCLUDE_DIR=$TP_INSTALL_DIR/include/lz4 \
+    -DARROW_LZ4_USE_SHARED=OFF \
+    -DBROTLI_ROOT=$TP_INSTALL_DIR \
+    -DARROW_BROTLI_USE_SHARED=OFF \
     -Dgflags_ROOT=$TP_INSTALL_DIR/ \
     -DSnappy_ROOT=$TP_INSTALL_DIR/ \
     -DGLOG_ROOT=$TP_INSTALL_DIR/ \
     -DLZ4_ROOT=$TP_INSTALL_DIR/ \
+    -DBoost_DIR=$TP_INSTALL_DIR \
+    -DBoost_ROOT=$TP_INSTALL_DIR \
+    -DARROW_BOOST_USE_SHARED=OFF \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-    #copy dep libs
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
+
     if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
         cp -rf ./zstd_ep-install/lib64/libzstd.a $TP_INSTALL_DIR/lib64/libzstd.a
     else
@@ -784,6 +814,8 @@ build_breakpad() {
 build_hadoop() {
     check_if_source_exist $HADOOP_SOURCE
     cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
+    # remove unnecessary doc and logs
+    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
     mkdir -p $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
@@ -874,6 +906,11 @@ build_broker_thirdparty_jars() {
     mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
     cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
     rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
+    # cloudfs-hadoop-with-dependencies will include aws jars, but we already support aws by official sdk, so we don't need it anymore.
+    # And it will conflict with Iceberg's S3FileIO, make access S3 files failed.
+    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/cloudfs-hadoop-with-dependencies-1.1.21.jar
+    # ensure read permission is granted for all users
+    chmod -R +r $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/
 }
 
 build_aws_cpp_sdk() {
@@ -1065,6 +1102,37 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
+# fiu
+build_fiu() {
+    check_if_source_exist $FIU_SOURCE
+    cd $TP_SOURCE_DIR/$FIU_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$FIU_SOURCE/installed
+    make -j$PARALLEL
+    make PREFIX=$TP_SOURCE_DIR/$FIU_SOURCE/installed install
+
+    mkdir -p $TP_INSTALL_DIR/include/fiu
+    cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/include/* $TP_INSTALL_DIR/include/fiu/
+    cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/lib/libfiu.a $TP_INSTALL_DIR/lib/
+}
+
+# libdeflate
+build_libdeflate() {
+    check_if_source_exist $LIBDEFLATE_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    cd $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1074,6 +1142,13 @@ restore_compile_flags() {
     # c++ flags
     export CXXFLAGS=$GLOBAL_CXXFLAGS
 }
+
+strip_binary() {
+    # strip binary tools and ignore any errors
+    echo "Strip binaries in $TP_INSTALL_DIR/bin/ ..."
+    strip $TP_INSTALL_DIR/bin/* 2>/dev/null || true
+}
+
 
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
 export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
@@ -1110,8 +1185,9 @@ build_rocksdb
 build_sasl
 build_librdkafka
 build_flatbuffers
-# must build before arrow
 build_jemalloc
+build_brotli
+# must build before arrow
 build_arrow
 build_pulsar
 build_s2
@@ -1139,10 +1215,15 @@ build_jansson
 build_avro_c
 build_serdes
 build_datasketches
+build_async_profiler
+build_fiu
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
+    build_libdeflate
 fi
 
-echo "Finished to build all thirdparties"
+# strip unnecessary debug symbol for binaries in thirdparty
+strip_binary
 
+echo "Finished to build all thirdparties"

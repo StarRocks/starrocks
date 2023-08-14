@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
@@ -32,13 +33,14 @@ import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.stream.Stream;
-
 
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass
@@ -105,8 +107,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -245,17 +246,18 @@ public class InsertPlanTest extends PlanTestBase {
         explainString = getInsertExecPlan("insert into ti2(v2,v1,v3) select v1,2,NULL from ti1");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:7: v1 | 1: v1 | 8: v3 | 6: to_bitmap"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: v1\n" +
-                        "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
+                "  1:Project\n" +
+                        "  |  <slot 1> : 1: v1\n" +
+                        "  |  <slot 6> : to_bitmap(1: v1)\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
-        Assert.assertTrue(explainString.contains("  1:Project\n" +
+        Assert.assertTrue(explainString.contains("1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 5> : to_bitmap(CAST(2: v2 AS VARCHAR))"));
+                "  |  <slot 5> : to_bitmap(2: v2)"));
     }
 
     @Test
@@ -281,8 +283,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=4.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=4.0\n"));
 
         sql = "insert into test.mysql_table(k1) select v1 from t0";
         explainString = getInsertExecPlan(sql);
@@ -305,8 +306,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n" +
-                "     numNodes=0"));
+                "     avgRowSize=3.0\n"));
     }
 
     @Test
@@ -367,7 +367,7 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
                         .get(0);
@@ -386,8 +386,9 @@ public class InsertPlanTest extends PlanTestBase {
     public void testBitmapInsertInto() throws Exception {
         String sql = "INSERT INTO test.bitmap_table (id, id2) VALUES (1001, to_bitmap(1000)), (1001, to_bitmap(2000));";
         String plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: column_0 | 2: column_1", "OLAP TABLE SINK",
-                "constant exprs:", "1001 | to_bitmap('1000')", "1001 | to_bitmap('2000')");
+        containsKeywords(plan, "constant exprs: \n" +
+                "         1001 | to_bitmap(1000)\n" +
+                "         1001 | to_bitmap(2000)");
 
         sql = "insert into test.bitmap_table select id, bitmap_union(id2) from test.bitmap_table_2 group by id;";
         plan = getInsertExecPlan(sql);
@@ -601,6 +602,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void testInsertExchange() throws Exception {
         FeConstants.runningUnitTest = true;
         InsertPlanner.enableSingleReplicationShuffle = true;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
         {
             // keysType is DUP_KEYS
             String sql = "explain insert into t0 select * from t0";
@@ -721,6 +723,7 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
@@ -745,22 +748,22 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertMapColumn() throws Exception {
         String explainString = getInsertExecPlan("insert into tmap values (2,2,map())");
-        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+        Assert.assertTrue(explainString.contains("2 | 2 | map{}"));
 
         explainString = getInsertExecPlan("insert into tmap values (2,2,null)");
         Assert.assertTrue(explainString.contains("2 | 2 | NULL"));
 
         explainString = getInsertExecPlan("insert into tmap values (2,2,map(2,2))");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'2'}")); // implicit cast
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{}"));
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:3, 2:4})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'3',2:'4'}")); // will distinct in BE
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:3, 2:4})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'3',2:'4'}")); // will distinct in BE
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
-        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:2})");
+        Assert.assertTrue(explainString.contains("2 | 2 | map{2:'2'}")); // implicit cast
     }
 
     @Test
@@ -809,6 +812,12 @@ public class InsertPlanTest extends PlanTestBase {
                 icebergTable.isUnPartitioned();
                 result = true;
                 minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = new ArrayList<>();
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("k1", Type.INT), new Column("k2", Type.INT));
             }
         };
 
@@ -824,6 +833,10 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.properties();
                 result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
                 minTimes = 0;
             }
         };

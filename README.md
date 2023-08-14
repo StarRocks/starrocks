@@ -87,6 +87,7 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 | Section | Description |
 |-|-|
 | [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
+| [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
@@ -105,8 +106,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 1. See [Contributing.md](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) to get started.
 2. Set up StarRocks development environment:
-* [IDEA](https://github.com/StarRocks/community/blob/main/Contributors/guide/IDEA.md) 
-* [Clion](https://github.com/StarRocks/community/blob/main/Contributors/guide/Clion.md) 
+* [IDE Setup](https://docs.starrocks.io/en-us/main/developers/development-environment/ide-setup) 
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
@@ -105,10 +105,10 @@ public class PartitionPruneRuleTest {
         Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
         scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
         BinaryPredicateOperator binaryPredicateOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 6, 1, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                new BinaryPredicateOperator(BinaryType.LE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
         LogicalOlapScanOperator operator =
@@ -216,16 +216,16 @@ public class PartitionPruneRuleTest {
         scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
         scanMetaColMap.put(new Column("main_brand_id", Type.INT, false), column2);
         BinaryPredicateOperator binaryPredicateOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 8, 1, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                new BinaryPredicateOperator(BinaryType.LE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator3 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column2,
+                new BinaryPredicateOperator(BinaryType.GE, column2,
                         ConstantOperator.createInt(150));
         BinaryPredicateOperator binaryPredicateOperator4 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column2,
+                new BinaryPredicateOperator(BinaryType.LE, column2,
                         ConstantOperator.createInt(150));
         ScalarOperator predicate =
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, binaryPredicateOperator3,
@@ -296,7 +296,7 @@ public class PartitionPruneRuleTest {
                 new ColumnRefOperator(1, column.getType(), column.getName(), false));
 
         BinaryPredicateOperator binaryPredicateOperator =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column,
+                new BinaryPredicateOperator(BinaryType.EQ, column,
                         ConstantOperator.createVarchar("guangdong"));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator);
 
@@ -366,7 +366,7 @@ public class PartitionPruneRuleTest {
 
     @Test
     public void transformForSingleItemListPartitionWithTemp(@Mocked OlapTable olapTable,
-                                                    @Mocked ListPartitionInfo partitionInfo)
+                                                            @Mocked ListPartitionInfo partitionInfo)
             throws AnalysisException {
         FeConstants.runningUnitTest = true;
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -381,7 +381,7 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
                         null, -1, null, olapTable.getBaseIndexId(),
-                        null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList());
+                        null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);

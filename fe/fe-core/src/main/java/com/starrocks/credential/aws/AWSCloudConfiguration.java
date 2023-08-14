@@ -19,12 +19,12 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+
 public class AWSCloudConfiguration implements CloudConfiguration {
 
     private final AWSCloudCredential awsCloudCredential;
@@ -41,8 +41,16 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         this.enablePathStyleAccess = enablePathStyleAccess;
     }
 
+    public boolean getEnablePathStyleAccess() {
+        return this.enablePathStyleAccess;
+    }
+
     public void setEnableSSL(boolean enableSSL) {
         this.enableSSL = enableSSL;
+    }
+
+    public boolean getEnableSSL() {
+        return this.enableSSL;
     }
 
     public AWSCloudCredential getAWSCloudCredential() {
@@ -60,6 +68,13 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
 
+        // By default, S3AFileSystem will need 4 minutes to timeout when endpoint is unreachable,
+        // after change, it will need 30 seconds.
+        // Default value is 7.
+        configuration.set("fs.s3a.retry.limit", "3");
+        // Default value is 20
+        configuration.set("fs.s3a.attempts.maximum", "5");
+
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
@@ -69,12 +84,12 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
 
-        List<TCloudProperty> properties = new LinkedList<>();
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
-                String.valueOf(enablePathStyleAccess)));
-        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL)));
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                String.valueOf(enablePathStyleAccess));
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
         awsCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override

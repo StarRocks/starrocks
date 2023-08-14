@@ -29,7 +29,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    Column* arg0 = columns[0].get();
+    Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
     const size_t num_rows = arg0->size();
 
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
@@ -94,14 +94,12 @@ static StatusOr<ColumnPtr> do_array_append(const Column& elements, const UInt32C
 
 // FIXME: A proof-of-concept implementation with poor performance.
 StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const Column* arg0 = columns[0].get();
-    const Column* arg1 = columns[1].get();
-    if (arg0->only_null()) {
+    if (columns[0]->only_null()) {
         return columns[0];
     }
 
-    arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
-    arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
+    const Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
+    const Column* arg1 = columns[1].get();
 
     const Column* array = arg0;
     const NullableColumn* nullable_array = nullptr;
@@ -133,7 +131,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
 
 class ArrayRemoveImpl {
 public:
-    static StatusOr<ColumnPtr> evaluate(const ColumnPtr array, const ColumnPtr element) {
+    static StatusOr<ColumnPtr> evaluate(const ColumnPtr& array, const ColumnPtr& element) {
         return _array_remove_generic(array, element);
     }
 
@@ -210,7 +208,8 @@ private:
 
                 uint8_t found = 0;
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -283,12 +282,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -345,10 +343,8 @@ private:
     }
 
     static StatusOr<ColumnPtr> _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
-        if (array->only_null()) {
-            return array;
-        }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
+        if (array->is_nullable()) {
+            auto nullable = down_cast<const NullableColumn*>(array.get());
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target));
             DCHECK_EQ(nullable->size(), result->size());
@@ -473,8 +469,9 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 #undef DEFINE_ARRAY_CUMSUM_FN
 
 StatusOr<ColumnPtr> ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
 
     return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
@@ -540,7 +537,8 @@ private:
                     }
                 }
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
                     found = elements.equals(offset + j, targets, i);
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
@@ -609,13 +607,11 @@ private:
         HANDLE_ELEMENT_TYPE(DateColumn);
         HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
+        HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
         HANDLE_ELEMENT_TYPE(StructColumn);
 
-        // TODO(zhuming): demangle class name
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -670,13 +666,8 @@ private:
     }
 
     static StatusOr<ColumnPtr> _array_contains_generic(const Column& array, const Column& target) {
-        // array_contains(NULL, xxx) -> NULL
-        if (array.only_null()) {
-            auto result = NullableColumn::create(ReturnType::create(), NullColumn::create());
-            result->append_nulls(array.size());
-            return result;
-        }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
+        if (array.is_nullable()) {
+            auto nullable = down_cast<const NullableColumn*>(&array);
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_contains_non_nullable(*array_col, target));
             DCHECK_EQ(nullable->size(), result->size());
@@ -749,8 +740,9 @@ private:
                 }
                 //[null, x*, x] - [null, x*, x]
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn>) {
-                    found = (elements.compare_at(j, i, targets, -1) == 0);
+                              std::is_same_v<StructColumn, ElementColumn> ||
+                              std::is_same_v<JsonColumn, ElementColumn>) {
+                    found = (elements.equals(j, targets, i) == 1);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
                 }
@@ -853,12 +845,11 @@ private:
         HANDLE_HAS_TYPE(DateColumn);
         HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
+        HANDLE_HAS_TYPE(JsonColumn);
         HANDLE_HAS_TYPE(MapColumn);
         HANDLE_HAS_TYPE(StructColumn);
 
-        LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
-        return ColumnHelper::create_const_null_column(array_elements.size());
+        return Status::NotSupported("unsupported operation for type: " + array_elements.get_name());
     }
 
     // array is non-nullable.
@@ -926,12 +917,6 @@ private:
     }
 
     static StatusOr<ColumnPtr> _array_has_generic(const Column& array, const Column& target) {
-        // has_any(NULL, xxx) | has_any(xxx, NULL) -> NULL
-        if (array.only_null() || target.only_null()) {
-            auto result = NullableColumn::create(Int8Column::create(), NullColumn::create());
-            result->append_nulls(array.size());
-            return result;
-        }
         DCHECK_EQ(array.size(), target.size());
 
         const ArrayColumn* array_col = nullptr;
@@ -963,37 +948,41 @@ private:
         }
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col));
-        DCHECK_EQ(array_nullable->size(), result->size());
+        DCHECK_EQ(array_col->size(), result->size());
         return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
     }
 };
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
 
     return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context,
                                                        const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context,
                                                        const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
@@ -1007,8 +996,15 @@ StatusOr<ColumnPtr> ArrayFunctions::array_filter(FunctionContext* context, const
     return ArrayFilter::process(context, columns);
 }
 
+StatusOr<ColumnPtr> ArrayFunctions::all_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<false>::process(context, columns);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<true>::process(context, columns);
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
-    DCHECK(columns.size() > 1);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto num_rows = columns[0]->size();
@@ -1346,7 +1342,7 @@ inline static void nestloop_intersect(uint8_t* hits, const Column* base, size_t 
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
-    DCHECK_LE(2, columns.size());
+    DCHECK_LE(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t rows = columns[0]->size();

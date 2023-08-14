@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -44,7 +45,7 @@ public class PushDownScanRuleTest {
         PushDownPredicateScanRule rule = PushDownPredicateScanRule.OLAP_SCAN;
 
         OptExpression optExpression = new OptExpression(new LogicalFilterOperator(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new BinaryPredicateOperator(BinaryType.EQ,
                         new ColumnRefOperator(1, Type.INT, "id", true),
                         ConstantOperator.createInt(1))
         ));

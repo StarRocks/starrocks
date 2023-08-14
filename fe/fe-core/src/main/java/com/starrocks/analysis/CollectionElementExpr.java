@@ -94,4 +94,13 @@ public class CollectionElementExpr extends Expr {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCollectionElementExpr(this, context);
     }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        boolean ret = true;
+        for (Expr child : children) {
+            ret &= child.isSelfMonotonic();
+        }
+        return ret;
+    }
 }

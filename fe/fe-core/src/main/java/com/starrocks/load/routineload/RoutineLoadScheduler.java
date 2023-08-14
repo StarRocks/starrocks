@@ -52,15 +52,15 @@ public class RoutineLoadScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 
-    private RoutineLoadManager routineLoadManager;
+    private RoutineLoadMgr routineLoadManager;
 
     @VisibleForTesting
     public RoutineLoadScheduler() {
         super();
-        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
-    public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
+    public RoutineLoadScheduler(RoutineLoadMgr routineLoadManager) {
         super("Routine load scheduler", Config.routine_load_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }

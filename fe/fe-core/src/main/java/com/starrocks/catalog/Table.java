@@ -111,7 +111,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("FILE")
         FILE,
         @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
-        CLOUD_NATIVE_MATERIALIZED_VIEW;
+        CLOUD_NATIVE_MATERIALIZED_VIEW,
+        @SerializedName("TABLE_FUNCTION")
+        TABLE_FUNCTION,
+        @SerializedName("PAIMON")
+        PAIMON,
+        @SerializedName("HIVE_VIEW")
+        HIVE_VIEW;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -188,11 +194,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
+    protected Map<PartitionKey, Long> partitionKeyToId;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -210,10 +219,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         } else {
             // Only view in with-clause have null base
-            Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
+            Preconditions.checkArgument(type == TableType.VIEW || type == TableType.HIVE_VIEW,
+                    "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public void setTypeRead(boolean isTypeRead) {
@@ -241,6 +252,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getTableIdentifier() {
@@ -315,9 +330,24 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.DELTALAKE;
     }
 
+    public boolean isPaimonTable() {
+        return type == TableType.PAIMON;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
+    }
+
+    public boolean isExprPartitionTable() {
+        if (this instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) this;
+            if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE_V2) {
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                return partitionInfo instanceof ExpressionRangePartitionInfoV2;
+            }
+        }
+        return false;
     }
 
     public List<Column> getFullSchema() {
@@ -351,6 +381,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public String getTableLocation() {
+        String msg = "The getTableLocation() method needs to be implemented.";
+        throw new NotImplementedException(msg);
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
@@ -454,6 +489,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        for (Column column : fullSchema) {
+            this.nameToColumn.put(column.getName(), column);
+        }
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -487,6 +525,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public Collection<Partition> getPartitions() {
         return Collections.emptyList();
+    }
+
+    public PhysicalPartition getPhysicalPartition(long partitionId) {
+        return null;
     }
 
     public Set<String> getDistributionColumnNames() {
@@ -538,7 +580,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
+    }
+
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return "";
     }
 
     public void setComment(String comment) {
@@ -600,8 +651,12 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     /**
      * onCreate is called when this table is created
      */
-    public void onCreate() {
+    public void onReload() {
         // Do nothing by default.
+    }
+
+    public void onCreate(Database database) {
+        onReload();
     }
 
     /**
@@ -666,7 +721,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
-
     public boolean supportInsert() {
         return false;
     }
@@ -690,5 +744,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
+        long size = partitionKeyToId.size();
+        List<Long> ret = new ArrayList<>();
+        for (PartitionKey key : keys) {
+            Long v = partitionKeyToId.get(key);
+            if (v == null) {
+                partitionKeyToId.put(key, size);
+                v = size;
+                size += 1;
+            }
+            ret.add(v);
+        }
+        return ret;
     }
 }

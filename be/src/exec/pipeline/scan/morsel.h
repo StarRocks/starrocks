@@ -47,7 +47,6 @@ struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 class Schema;
 using SchemaPtr = std::shared_ptr<Schema>;
-class Range;
 
 namespace pipeline {
 
@@ -83,7 +82,14 @@ public:
     int64_t from_version() { return _from_version; }
 
     void set_rowsets(const std::vector<RowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
-    const std::vector<RowsetSharedPtr>& rowsets() const { return *_rowsets; }
+    void set_delta_rowsets(std::vector<RowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const {
+        if (_delta_rowsets.has_value()) {
+            return _delta_rowsets.value();
+        } else {
+            return *_rowsets;
+        }
+    }
 
 private:
     int32_t _plan_node_id;
@@ -92,6 +98,7 @@ private:
     static const std::vector<RowsetSharedPtr> kEmptyRowsets;
     // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
     const std::vector<RowsetSharedPtr>* _rowsets = &kEmptyRowsets;
+    std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
 };
 
 class ScanMorsel : public Morsel {
@@ -346,8 +353,8 @@ private:
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<SeekRange> _tablet_seek_ranges;
-    SparseRange _segment_scan_range;
-    SparseRangeIterator _segment_range_iter;
+    SparseRange<> _segment_scan_range;
+    SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
 

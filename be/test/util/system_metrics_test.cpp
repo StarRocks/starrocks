@@ -162,9 +162,6 @@ TEST_F(SystemMetricsTest, normal) {
         Metric* cpu_guest = registry.get_metric("cpu", MetricLabels().add("mode", "guest"));
         ASSERT_TRUE(cpu_guest != nullptr);
         ASSERT_STREQ("0", cpu_guest->to_string().c_str());
-        // memroy
-        Metric* memory_allocated_bytes = registry.get_metric("memory_allocated_bytes");
-        ASSERT_TRUE(memory_allocated_bytes != nullptr);
         // network
         Metric* receive_bytes = registry.get_metric("network_receive_bytes", MetricLabels().add("device", "xgbe0"));
         ASSERT_TRUE(receive_bytes != nullptr);
@@ -268,9 +265,6 @@ TEST_F(SystemMetricsTest, no_proc_file) {
         Metric* cpu_user = registry.get_metric("cpu", MetricLabels().add("mode", "user"));
         ASSERT_TRUE(cpu_user != nullptr);
         ASSERT_STREQ("0", cpu_user->to_string().c_str());
-        // memroy
-        Metric* memory_allocated_bytes = registry.get_metric("memory_allocated_bytes");
-        ASSERT_TRUE(memory_allocated_bytes != nullptr);
         // network
         Metric* receive_bytes = registry.get_metric("network_receive_bytes", MetricLabels().add("device", "xgbe0"));
         ASSERT_TRUE(receive_bytes != nullptr);

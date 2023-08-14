@@ -41,8 +41,7 @@ public:
         TypeDescriptor type;
     };
 
-    static TupleDescriptor *
-    create_tuple_descriptor(RuntimeState *state, ObjectPool *pool, const SlotDesc *slot_descs) {
+    static TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
         TDescriptorTableBuilder table_desc_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
         for (int i = 0;; i++) {
@@ -57,18 +56,18 @@ public:
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{true};
-        DescriptorTbl *tbl = nullptr;
+        DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        RowDescriptor *row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         return row_desc->tuple_descriptors()[0];
     }
 
-    static void make_column_info_vector(const TupleDescriptor *tuple_desc,
-                                        std::vector<HdfsScannerContext::ColumnInfo> *columns) {
+    static void make_column_info_vector(const TupleDescriptor* tuple_desc,
+                                        std::vector<HdfsScannerContext::ColumnInfo>* columns) {
         columns->clear();
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
-            SlotDescriptor *slot = tuple_desc->slots()[i];
+            SlotDescriptor* slot = tuple_desc->slots()[i];
             HdfsScannerContext::ColumnInfo c;
             c.col_name = slot->col_name();
             c.col_idx = i;
@@ -79,15 +78,15 @@ public:
         }
     }
 
-    static void assert_equal_chunk(const Chunk *expected, const Chunk *actual) {
+    static void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
         if (expected->debug_columns() != actual->debug_columns()) {
             std::cout << expected->debug_columns() << std::endl;
             std::cout << actual->debug_columns() << std::endl;
         }
         ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
         for (size_t i = 0; i < expected->num_columns(); i++) {
-            const auto &expected_col = expected->get_column_by_index(i);
-            const auto &actual_col = expected->get_column_by_index(i);
+            const auto& expected_col = expected->get_column_by_index(i);
+            const auto& actual_col = expected->get_column_by_index(i);
             if (expected_col->debug_string() != actual_col->debug_string()) {
                 std::cout << expected_col->debug_string() << std::endl;
                 std::cout << actual_col->debug_string() << std::endl;
@@ -97,4 +96,4 @@ public:
     }
 };
 
-} // namespace starrocks
+} // namespace starrocks::parquet

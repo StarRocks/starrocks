@@ -6,6 +6,10 @@ Exports the data of a table to a specified location.
 
 This is an asynchronous operation. The export result is returned after you submit the export task. You can use [SHOW EXPORT](../../../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) to view the progress of the export task.
 
+> **NOTICE**
+>
+> You can export data out of StarRocks tables only as a user who has the EXPORT privilege on those StarRocks tables. If you do not have the EXPORT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the EXPORT privilege to the user that you use to connect to your StarRocks cluster.
+
 ## Syntax
 
 ```SQL

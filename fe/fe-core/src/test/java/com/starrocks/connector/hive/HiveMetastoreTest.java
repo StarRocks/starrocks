@@ -23,12 +23,6 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveColumnStats;
-import com.starrocks.connector.hive.HiveCommonStats;
-import com.starrocks.connector.hive.HiveMetaClient;
-import com.starrocks.connector.hive.HiveMetastore;
-import com.starrocks.connector.hive.HivePartitionStats;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -101,7 +95,8 @@ public class HiveMetastoreTest {
     public void testGetPartitionKeys() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
-        Assert.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeys("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeysByValue("db1", "tbl1",
+                HivePartitionValue.ALL_PARTITION_VALUES));
     }
 
     @Test
@@ -190,8 +185,27 @@ public class HiveMetastoreTest {
             return Lists.newArrayList("db1", "db2");
         }
 
+        public void createDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+
+        }
+
+        public void dropDatabase(String dbName, boolean deleteData) {
+        }
+
+        public void createTable(Table table) {
+
+        }
+
+        public void dropTable(String dbName, String tableName) {
+
+        }
+
         public List<String> getAllTableNames(String dbName) {
-            return Lists.newArrayList("table1", "table2");
+            if (dbName.equals("empty_db")) {
+                return Lists.newArrayList();
+            } else {
+                return Lists.newArrayList("table1", "table2");
+            }
         }
 
         public org.apache.hadoop.hive.metastore.api.Database getDb(String dbName) {

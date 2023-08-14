@@ -4,27 +4,29 @@ create table t1(k int, v int) duplicate key(k);
 -- !result
 create table t2(k int, v int) primary key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Random distribution must be used in DUP_KEYS.')
+E: (1064, 'Getting analyzing error. Detail message: Currently only support default distribution in DUP_KEYS.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 51 to line 1, column 81. Detail message: Random distribution must be used in DUP_KEYS.')
+-- !result
+drop table t4;
+-- result:
 -- !result
 -- name: test_create_default_random_distribution_table
 create table t(k int, v int);
@@ -56,9 +58,8 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY date_trunc('day', k)
-DISTRIBUTED BY RANDOM BUCKETS 6
+DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
@@ -95,7 +96,6 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
@@ -117,7 +117,6 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")),
 PARTITION p2 VALUES [("0"), ("20")))
@@ -140,7 +139,6 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")),
 PARTITION p2 VALUES [("0"), ("20")),
@@ -164,7 +162,6 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")),
 PARTITION p2 VALUES [("0"), ("20")),
@@ -213,7 +210,6 @@ t3	CREATE TABLE `t3` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`)
-COMMENT "OLAP"
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
@@ -236,7 +232,6 @@ t5	CREATE TABLE `t5` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
@@ -263,7 +258,6 @@ t2	CREATE TABLE `t2` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-COMMENT "OLAP"
 PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
@@ -342,4 +336,23 @@ create table c2 distributed by random buckets 10 as select * from t;
 show create table c2;
 -- result:
 [REGEX].*DISTRIBUTED BY RANDOM BUCKETS 10.*
+-- !result
+
+-- name: test_select_async_mv
+create table t(k int, v int);
+-- result:
+-- !result
+insert into t values(1,1);
+-- result:
+-- !result
+create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
+-- result:
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+ explain select sum(v) from t;
+-- result:
+[REGEX].*rollup: tva.*
 -- !result

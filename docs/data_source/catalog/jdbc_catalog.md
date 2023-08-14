@@ -1,17 +1,17 @@
 # JDBC catalog
 
+StarRocks supports JDBC catalogs from v3.0 onwards.
+
 A JDBC catalog is a kind of external catalog that enables you to query data from data sources accessed through JDBC without ingestion.
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on JDBC catalogs.
-
-StarRocks supports JDBC catalogs from v3.0 onwards, and the support for JDBC catalogs is now in preview.
 
 JDBC catalogs currently support MySQL and PostgreSQL.
 
 ## Prerequisites
 
 - The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
-- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`.
+- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`. You must add this configuration at the beginning of the script and restart the BE for the configuration to take effect.
 
 ## Create a JDBC catalog
 
@@ -23,16 +23,14 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...)
 ```
 
-For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-
 ### Parameters
 
 #### `catalog_name`
 
 The name of the JDBC catalog. The naming conventions are as follows:
 
-- The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
 #### `comment`
 

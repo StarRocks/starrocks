@@ -93,7 +93,7 @@ public:
         DCHECK(false);
     }
 
-    std::string toBucketJson(std::string lower, std::string upper, size_t count, size_t upper_repeats,
+    std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
         return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
                            std::to_string((int64_t)(upper_repeats * sample_ratio)));

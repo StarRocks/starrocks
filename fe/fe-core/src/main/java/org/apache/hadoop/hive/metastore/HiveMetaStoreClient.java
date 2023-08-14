@@ -163,6 +163,10 @@ import org.apache.thrift.transport.TTransportException;
 
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.security.PrivilegedExceptionAction;
@@ -617,6 +621,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             // Using get_table() first, if user's Hive forbidden this request,
             // then fail over to use get_table_req() instead.
             return client.get_table(dbName, tableName);
+        } catch (NoSuchObjectException e) {
+            // NoSuchObjectException need to be thrown when creating iceberg table.
+            LOG.warn("Failed to get table {}.{}", dbName, tableName, e);
+            throw e;
         } catch (Exception e) {
             LOG.warn("Using get_table() failed, fail over to use get_table_req()", e);
             GetTableRequest req = new GetTableRequest(dbName, tableName);
@@ -742,6 +750,41 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public CurrentNotificationEventId getCurrentNotificationEventId() throws TException {
         return client.get_current_notificationEventId();
+    }
+
+    /**
+     * Creates a synchronized wrapper for any {@link IMetaStoreClient}.
+     * This may be used by multi-threaded applications until we have
+     * fixed all reentrancy bugs.
+     *
+     * @param client unsynchronized client
+     *
+     * @return synchronized client
+     */
+    public static IMetaStoreClient newSynchronizedClient(
+            IMetaStoreClient client) {
+        return (IMetaStoreClient) Proxy.newProxyInstance(
+                HiveMetaStoreClient.class.getClassLoader(),
+                new Class [] { IMetaStoreClient.class },
+                new SynchronizedHandler(client));
+    }
+
+    private static class SynchronizedHandler implements InvocationHandler {
+        private final IMetaStoreClient client;
+
+        SynchronizedHandler(IMetaStoreClient client) {
+            this.client = client;
+        }
+
+        @Override
+        public synchronized Object invoke(Object proxy, Method method, Object [] args)
+                throws Throwable {
+            try {
+                return method.invoke(client, args);
+            } catch (InvocationTargetException e) {
+                throw e.getTargetException();
+            }
+        }
     }
 
     public void setMetaConf(String key, String value) throws MetaException, TException {
@@ -1011,13 +1054,13 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public List<Table> getTableObjectsByName(String dbName, List<String> tableNames)
             throws MetaException, InvalidOperationException, UnknownDBException, TException {
-        throw new TException("method not implemented");
+        return getTableObjectsByName(null, dbName, tableNames);
     }
 
     @Override
     public List<Table> getTableObjectsByName(String catName, String dbName, List<String> tableNames)
             throws MetaException, InvalidOperationException, UnknownDBException, TException {
-        throw new TException("method not implemented");
+        return client.get_table_objects_by_name(dbName, tableNames);
     }
 
     @Override

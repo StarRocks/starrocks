@@ -15,7 +15,6 @@
 #include "storage/lake/async_delta_writer.h"
 
 #include <bthread/execution_queue.h>
-#include <bthread/mutex.h>
 #include <fmt/format.h>
 
 #include <memory>
@@ -27,6 +26,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
+#include "util/stack_trace_mutex.h"
 
 namespace starrocks::lake {
 
@@ -53,6 +53,17 @@ public:
                          MemTracker* mem_tracker)
             : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
                                           mem_tracker)),
+              _queue_id{kInvalidQueueId},
+              _mtx(),
+              _status(),
+              _opened(false),
+              _closed(false) {}
+
+    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                         const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                         bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                          miss_auto_increment_column, table_id, mem_tracker)),
               _queue_id{kInvalidQueueId},
               _mtx(),
               _status(),
@@ -94,7 +105,7 @@ private:
 
     DeltaWriter::Ptr _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
-    bthread::Mutex _mtx;
+    StackTraceMutex<bthread::Mutex> _mtx;
     // _status、_opened and _closed are protected by _mtx
     Status _status;
     bool _opened;
@@ -277,6 +288,17 @@ std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet
                                                            MemTracker* mem_tracker) {
     auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
                                          mem_tracker);
+    return std::make_unique<AsyncDeltaWriter>(impl);
+}
+
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+                                                           int64_t txn_id, int64_t partition_id,
+                                                           const std::vector<SlotDescriptor*>* slots,
+                                                           const std::string& merge_condition,
+                                                           bool miss_auto_increment_column, int64_t table_id,
+                                                           MemTracker* mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition,
+                                         miss_auto_increment_column, table_id, mem_tracker);
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

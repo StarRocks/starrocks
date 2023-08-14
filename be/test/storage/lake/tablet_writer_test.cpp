@@ -24,15 +24,11 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
@@ -40,15 +36,9 @@ namespace starrocks::lake {
 
 using namespace starrocks;
 
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-
-class LakeTabletWriterTest : public testing::Test, public testing::WithParamInterface<KeysType> {
+class LakeTabletWriterTest : public TestBase, testing::WithParamInterface<KeysType> {
 public:
-    LakeTabletWriterTest() {
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
+    LakeTabletWriterTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -81,28 +71,22 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_tablet_writer";
+    constexpr static const char* const kTestDirectory = "test_lake_tablet_writer";
 
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<TabletManager> _tablet_manager;
-    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
 };
 
 TEST_P(LakeTabletWriterTest, test_write_success) {
@@ -121,13 +105,13 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
-    VChunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk1({c2, c3}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
     // segment #1
@@ -148,11 +132,11 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     writer->close();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _location_provider->segment_location(_tablet_metadata->id(), files[0]),
-                                             0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _location_provider->segment_location(_tablet_metadata->id(), files[1]),
-                                             1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
+                                             _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
+                                             _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -199,18 +183,18 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    auto schema0 = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
-    auto schema1 = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
 
-    VChunk c0_chunk({c0}, schema0);
-    VChunk c1_chunk({c1}, schema1);
-    VChunk c2_chunk({c2}, schema0);
-    VChunk c3_chunk({c3}, schema1);
+    Chunk c0_chunk({c0}, schema0);
+    Chunk c1_chunk({c1}, schema1);
+    Chunk c2_chunk({c2}, schema0);
+    Chunk c3_chunk({c3}, schema1);
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, segment_rows + 1));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     // generate 2 segments automatically
     ASSERT_OK(writer->open());
@@ -234,11 +218,11 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     writer->close();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _location_provider->segment_location(_tablet_metadata->id(), files[0]),
-                                             0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _location_provider->segment_location(_tablet_metadata->id(), files[1]),
-                                             1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
+                                             _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
+                                             _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -270,7 +254,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 }
 
 TEST_P(LakeTabletWriterTest, test_write_fail) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 
@@ -279,17 +263,17 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
-    ASSERT_OK(fs::remove_all(kTestGroupPath));
+    ASSERT_OK(fs::remove_all(kTestDirectory));
     ASSERT_ERROR(writer->write(chunk0));
 }
 
 TEST_P(LakeTabletWriterTest, test_close_without_finish) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 
@@ -298,17 +282,17 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
     ASSERT_OK(writer->write(chunk0));
     ASSERT_OK(writer->flush());
 
     ASSERT_EQ(1, writer->files().size());
-    auto seg_path = _location_provider->segment_location(_tablet_metadata->id(), writer->files()[0]);
+    auto seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), writer->files()[0]);
     ASSERT_OK(fs->path_exists(seg_path));
 
     // `close()` directly without calling `finish()`

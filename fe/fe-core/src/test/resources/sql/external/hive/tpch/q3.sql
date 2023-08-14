@@ -34,8 +34,8 @@ cardinality: 10
 column statistics:
 * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.685171583236066E7] ESTIMATE
-* sum-->[810.9, 1315947.4994776784, 0.0, 16.0, 3736520.0] ESTIMATE
+* l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
+* sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 
 PLAN FRAGMENT 1(F06)
 
@@ -51,8 +51,8 @@ OutPut Exchange Id: 14
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.685171583236066E7] ESTIMATE
-|  * sum-->[810.9, 1315947.4994776784, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
+|  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 12:AGGREGATE (update finalize)
 |  aggregate: sum[([34: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
@@ -61,8 +61,8 @@ OutPut Exchange Id: 14
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.685171583236066E7] ESTIMATE
-|  * sum-->[810.9, 1315947.4994776784, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
+|  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 11:Project
 |  output columns:
@@ -74,7 +74,7 @@ OutPut Exchange Id: 14
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.685171583236066E7] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 10:HASH JOIN
@@ -85,11 +85,10 @@ OutPut Exchange Id: 14
 |  output columns: 13, 16, 18, 23, 24
 |  cardinality: 46851716
 |  column statistics:
-|  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
-|  * o_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
+|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.685171583236066E7] ESTIMATE
+|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
@@ -145,7 +144,6 @@ NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
 MIN/MAX PREDICATES: 37: o_orderdate < '1995-03-11'
 partitions=1/1
 avgRowSize=24.0
-numNodes=0
 cardinality: 72661123
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -174,7 +172,6 @@ NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
 MIN/MAX PREDICATES: 38: c_mktsegment <= 'HOUSEHOLD', 39: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
 avgRowSize=18.0
-numNodes=0
 cardinality: 3000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
@@ -203,7 +200,6 @@ NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
 MIN/MAX PREDICATES: 36: l_shipdate > '1995-03-11'
 partitions=1/1
 avgRowSize=28.0
-numNodes=0
 cardinality: 323426370
 probe runtime filters:
 - filter_id = 1, probe_expr = (18: l_orderkey)

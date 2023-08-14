@@ -127,10 +127,10 @@ namespace starrocks {
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
-        return fun.template operator()<type>(args...);
+        return fun.template operator()<type>(std::forward<Args>(args)...);
 
 template <class Functor, class... Args>
-auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -141,7 +141,7 @@ auto field_type_dispatch_basic(LogicalType ftype, Functor fun, Args... args) {
 
 // Types could built into columns
 template <class Functor, class... Args>
-auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
@@ -155,7 +155,7 @@ auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
 }
 
 template <class Functor, class... Args>
-auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_COMPLEX_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
@@ -171,7 +171,7 @@ auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args... args)
 }
 
 template <class Functor, class... Args>
-auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_BITMAP_INDEX_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -181,7 +181,7 @@ auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args... ar
 }
 
 template <class Functor, class... Args>
-auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args&&... args) {
     // tinyint is not supported specially
     if (ftype == TYPE_TINYINT) {
         return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(ftype));
@@ -195,7 +195,7 @@ auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args... arg
 }
 
 template <class Functor, class... Args>
-auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -205,7 +205,7 @@ auto field_type_dispatch_zonemap_index(LogicalType ftype, Functor fun, Args... a
 }
 
 template <class Functor, class... Args>
-auto field_type_dispatch_supported(LogicalType ftype, Functor fun, Args... args) {
+auto field_type_dispatch_supported(LogicalType ftype, Functor fun, Args&&... args) {
     switch (ftype) {
         APPLY_FOR_SUPPORTED_FIELD_TYPE(_TYPE_DISPATCH_CASE)
     default:

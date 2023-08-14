@@ -50,6 +50,7 @@
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
+#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 class TExprBuilder {
@@ -167,20 +168,20 @@ using SpilledOptions = spill::SpilledOptions;
 class SpillTest : public ::testing::Test {
 public:
     void SetUp() override {
-        config::storage_root_path = std::filesystem::current_path().string() + "/spill_test_data";
+        TUniqueId dummy_query_id = generate_uuid();
+        auto path = config::storage_root_path + "/spill_test_data/" + print_id(dummy_query_id);
         auto fs = FileSystem::Default();
-        fs->delete_dir_recursive(config::storage_root_path);
-        ASSERT_OK(fs->create_dir_recursive(config::storage_root_path));
+        ASSERT_OK(fs->create_dir_recursive(path));
+        LOG(WARNING) << "TRACE:" << path;
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
-        ASSERT_OK(dummy_dir_mgr->init());
+        ASSERT_OK(dummy_dir_mgr->init(path));
 
-        TUniqueId dummy_query_id;
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
         dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
-        metrics = SpillProcessMetrics(&dummy_profile);
+        metrics = SpillProcessMetrics(&dummy_profile, &spill_bytes);
     }
     void TearDown() override {}
     std::unique_ptr<spill::DirManager> dummy_dir_mgr;
@@ -188,6 +189,7 @@ public:
     RuntimeState dummy_rt_st;
     RuntimeProfile dummy_profile{"dummy"};
     std::vector<std::string> clean_up;
+    std::atomic_int64_t spill_bytes;
     SpillProcessMetrics metrics;
 };
 
@@ -290,7 +292,7 @@ TEST_F(SpillTest, unsorted_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 4;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 
@@ -384,7 +386,7 @@ TEST_F(SpillTest, order_by_process) {
     // 4 buffer chunk
     spill_options.mem_table_pool_size = 2;
     // file size: 1M
-    spill_options.spill_file_size = 1 * 1024 * 1024;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
     // spill format type
     spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
 

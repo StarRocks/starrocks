@@ -64,7 +64,7 @@ public class SecurityIntegrationStatementAnalyzer {
                         propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY) + "'");
             }
 
-            if (context.getGlobalStateMgr().getAuthenticationManager()
+            if (context.getGlobalStateMgr().getAuthenticationMgr()
                     .getSecurityIntegration(statement.getName()) != null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' already exists");
             }

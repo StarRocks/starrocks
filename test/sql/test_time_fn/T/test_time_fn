@@ -189,3 +189,111 @@ select week_iso("2023-01-02");
 select week_iso("2023-01-03");
 select week_iso("");
 select week_iso(NULL);
+
+-- name: test_dayofweek_iso
+select dayofweek_iso("2023-01-01");
+select dayofweek_iso("2023-01-02");
+select dayofweek_iso("2023-01-03");
+select dayofweek_iso("");
+select dayofweek_iso(NULL);
+
+-- name: test_makedate
+CREATE TABLE IF NOT EXISTS `makedate_test` (
+  `id` int,
+  `col_year` int,
+  `col_day` int
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `makedate_test`(id, col_year, col_day)
+VALUES (1, NUll, NUll),
+       (2, 1, NUll),
+       (3, NULL, 1),
+       (4, 0, 1),
+       (5, 2023, 0),
+       (6, 2023, 32),
+       (7, 2023, 365),
+       (8, 2023, 366),
+       (9, 9999, 1),
+       (10, 9999, 365),
+       (11, 9999, 366),
+       (12, 10000, 1),
+       (13, 1, -1);
+
+select makedate(NUll,NUll);
+select makedate(1, NUll);
+select makedate(NULL, 1);
+select makedate(0, 1);
+select makedate(2023, 0);
+select makedate(2023, 32);
+select makedate(2023, 365);
+select makedate(2023, 366);
+select makedate(9999, 1);
+select makedate(9999, 365);
+select makedate(9999, 366);
+select makedate(10000, 1);
+select makedate(1, -1);
+
+select makedate(col_year, col_day) from makedate_test order by id;
+
+-- name: test_last_day
+select last_day('2023-02-12', 'month');
+select last_day('2020-02-12');
+select last_day('2023-05-10', 'quarter');
+select last_day('2023-05-10', 'year');
+create database test_last_day_db;
+use test_last_day_db;
+CREATE TABLE IF NOT EXISTS `last_day_table` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_table`(d1, d2)
+VALUES ('2020-02-12', '2020-02-12 08:08:14'),
+       ('2021-03-28', '2021-03-28 08:08:14'),
+       ('2022-04-28', '2022-04-28 08:08:14'),
+       ('2023-05-29', '2023-05-29 08:08:14');
+CREATE TABLE IF NOT EXISTS `last_day_with_optional_table` (
+  `d1` DATE,
+  `d2` DATETIME,
+  `optional` CHAR(8)
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+INSERT INTO `last_day_with_optional_table`(d1, d2, optional)
+VALUES ('2020-02-12', '2020-02-12 08:08:14', 'month'),
+       ('2021-03-28', '2021-03-28 08:08:14', 'quarter'),
+       ('2022-04-28', '2022-04-28 08:08:14', 'year'),
+       ('2023-05-29', '2023-05-29 08:08:14', 'year');
+select d1, last_day(d1, 'month'), d2, last_day(d2, 'month') from last_day_table order by d1;
+select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional) from last_day_with_optional_table order by d1;
+drop database test_last_day_db;
+
+-- name: test_to_iso8601
+CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `to_iso8601_test`(d1, d2)
+VALUES ('2020-01-01','2020-01-01 00:00:00'),
+  ('2020-01-02', '2020-01-01 00:00:00.1'),
+  ('2020-01-03', '2020-01-01 00:00:00.12'),
+  ('2020-01-04', '2020-01-01 00:00:00.123'),
+  ('2020-01-05', '2020-01-01 00:00:00.1234');
+
+select to_iso8601(d1),to_iso8601(d2) from to_iso8601_test order by d1;
+
+select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),to_iso8601(datetime'2020-01-01 00:00:00.1');

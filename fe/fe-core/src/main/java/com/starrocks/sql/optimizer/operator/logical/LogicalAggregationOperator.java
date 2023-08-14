@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +71,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
+    // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
+    // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
+    // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
@@ -144,11 +148,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
         if (groupingKeys.isEmpty() || aggregations.size() != 1) {
             return false;
         }
+
         CallOperator call = aggregations.values().stream().iterator().next();
         if (call.isDistinct() && call.getFnName().equalsIgnoreCase(FunctionSet.COUNT) &&
                 call.getChildren().size() == 1 && call.getChild(0).isColumnRef() &&
                 groupingKeys.stream().noneMatch(groupCol -> call.getChild(0).equals(groupCol))) {
-            return true;
+            // GroupByCountDistinctDataSkewEliminateRule will return with empty logical plan
+            // in case below, so that we should not skip SplitAggregateRule in this case
+            return ScalarOperatorUtil.buildMultiCountDistinct(call) != null;
         }
         return false;
     }
@@ -258,7 +265,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
             Preconditions.checkNotNull(builder.aggregations);
             Preconditions.checkNotNull(builder.groupingKeys);
             Preconditions.checkNotNull(builder.partitionByColumns);
-            builder.isSplit = !builder.type.isGlobal() || builder.isSplit;
             return super.build();
         }
 

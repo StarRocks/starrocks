@@ -1,4 +1,4 @@
--- name: test01
+-- name: test_array_test01
 select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
 
 -- name: testArrayPredicate
@@ -10,7 +10,7 @@ CREATE TABLE array_data_type
     c5  array<bigint> not null)
     PRIMARY KEY(c1) 
     DISTRIBUTED BY HASH(c1) 
-    buckets 1 
+    BUCKETS 1 
     PROPERTIES ("replication_num" = "1");
 
 insert into array_data_type (c1, c2, c3, c4,c5) values 
@@ -44,7 +44,7 @@ CREATE TABLE array_data_type_1
     c6  array<array<varchar(10)>>)
     PRIMARY KEY(c1)
     DISTRIBUTED BY HASH(c1)
-    buckets 1
+    BUCKETS 1
     PROPERTIES ("replication_num" = "1");
 
 insert into array_data_type_1 values
@@ -59,3 +59,26 @@ select * from array_data_type_1 where c5 = c4 or c6 = [['a']];
 select * from array_data_type_1 where array_map((x) -> concat(x, 'a'), c5) = c4;
 select c6[0] = ['a'] from array_data_type_1;
 select c6[0] > array_map((x) -> concat(x, 'a'), c5) from array_data_type_1;
+
+-- name: testArrayTopN
+CREATE TABLE array_top_n
+    (c1 int,
+    c2 array<int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_top_n values
+(1, [1]),
+(2, [5, 6]),
+(3, [2, 3, 4]),
+(4, [12, 13, 14, 15]),
+(5, [7, 8, 9, 10, 11]);
+
+select * from array_top_n order by c2[1];
+select * from array_top_n order by c2[1] limit 1,10;
+select * from array_top_n order by c2[1] limit 2,10;
+select * from array_top_n order by c2[1] limit 3,10;
+select * from array_top_n order by c2[1] limit 4,10;
+select * from array_top_n order by c2[1] limit 5,10;

@@ -77,10 +77,19 @@ public:
                            ::starrocks::lake::RestoreSnapshotsResponse* response,
                            ::google::protobuf::Closure* done) override;
 
+    void abort_compaction(::google::protobuf::RpcController* controller,
+                          const ::starrocks::lake::AbortCompactionRequest* request,
+                          ::starrocks::lake::AbortCompactionResponse* response,
+                          ::google::protobuf::Closure* done) override;
+
+    void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumRequest* request,
+                ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) override;
+
+    void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::lake::VacuumFullRequest* request,
+                     ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
-
-    std::unique_ptr<ThreadPool> _compact_thread_pool;
 };
 
 } // namespace starrocks

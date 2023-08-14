@@ -115,7 +115,7 @@ OutPut Exchange Id: 03
 |  9 <-> [9: l_returnflag, VARCHAR, true]
 |  10 <-> [10: l_linestatus, VARCHAR, true]
 |  17 <-> [32: multiply, DECIMAL128(33,4), true]
-|  18 <-> [32: multiply, DECIMAL128(33,4), true] * 1 + cast([8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(19,2))
+|  18 <-> [32: multiply, DECIMAL128(33,4), true] * cast(1 + [8: l_tax, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  common expressions:
 |  32 <-> [28: cast, DECIMAL128(15,2), true] * [31: cast, DECIMAL128(18,2), true]
 |  28 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
@@ -138,7 +138,6 @@ NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
 MIN/MAX PREDICATES: 27: l_shipdate <= '1998-12-01'
 partitions=1/1
 avgRowSize=70.0
-numNodes=0
 cardinality: 600037902
 column statistics:
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
@@ -151,3 +150,4 @@ column statistics:
 * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 * expr-->[810.9, 113345.46, 0.0, 16.0, 3736520.0] ESTIMATE
 [end]
+

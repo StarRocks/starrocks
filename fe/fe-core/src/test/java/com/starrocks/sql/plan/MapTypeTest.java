@@ -28,15 +28,30 @@ public class MapTypeTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withTable("create table test_map(c0 INT, c1 map<int,varchar(65533)>, c2 map<int, map<int,double>>) " +
+        starRocksAssert.withTable("create table test_map(" +
+                "c0 INT, " +
+                "c1 map<int,varchar(65533)>, " +
+                "c2 map<int, map<int,double>>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
     }
 
     @Test
     public void testMapFunc() throws Exception { // get super common return type
-        String sql = "select map_concat({16865432442:3},{3.323777777:'3'})";
+        String sql = "select map_concat(map{16865432442:3},map{3.323777777:'3'})";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MAP<DECIMAL128(28,9),VARCHAR>");
+    }
+
+    @Test
+    public void testInsertErrorType() throws Exception {
+        String sql = "insert into test_map values (1, map{1: map{1:2}}, map{1:1});";
+        try {
+            String plan = getFragmentPlan(sql);
+        } catch (Exception e) {
+            assertContains(e.getMessage(), 
+                    "Cannot cast 'map{1:map{1:2}}' from " + 
+                    "MAP<TINYINT,MAP<TINYINT,TINYINT>> to MAP<INT,VARCHAR(65533)>.");
+        }
     }
 }

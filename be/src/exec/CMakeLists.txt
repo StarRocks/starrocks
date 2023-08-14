@@ -31,6 +31,9 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
+    tablet_sink_colocate_sender.cpp
+    tablet_sink_index_channel.cpp
+    tablet_sink_sender.cpp
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -132,9 +135,13 @@ set(EXEC_FILES
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_pipe_files.cpp
+    schema_scanner/schema_pipes.cpp
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
+    schema_scanner/schema_routine_load_jobs_scanner.cpp
+    schema_scanner/schema_stream_loads_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -190,6 +197,8 @@ set(EXEC_FILES
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
+    pipeline/nljoin/spillable_nljoin_build_operator.cpp
+    pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
@@ -208,19 +217,7 @@ set(EXEC_FILES
     pipeline/query_context.cpp
     pipeline/stream_epoch_manager.cpp
     pipeline/stream_pipeline_driver.cpp
-    pipeline/aggregate/aggregate_blocking_sink_operator.cpp
-    pipeline/aggregate/aggregate_blocking_source_operator.cpp
-    pipeline/aggregate/aggregate_streaming_sink_operator.cpp
-    pipeline/aggregate/aggregate_streaming_source_operator.cpp
-    pipeline/aggregate/aggregate_distinct_blocking_sink_operator.cpp
-    pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
-    pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
-    pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
-    pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
-    pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
-    pipeline/aggregate/spillable_aggregate_blocking_sink_operator.cpp
-    pipeline/aggregate/spillable_aggregate_blocking_source_operator.cpp
-    pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.cpp
+    pipeline/aggregate/aggregate_operators.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
@@ -271,6 +268,7 @@ set(EXEC_FILES
     spill/serde.cpp
     spill/input_stream.cpp
     spill/log_block_manager.cpp
+    spill/operator_mem_resource_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

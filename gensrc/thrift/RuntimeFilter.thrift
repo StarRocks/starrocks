@@ -53,6 +53,11 @@ enum TRuntimeFilterBuildType {
   TOPN_FILTER
 }
 
+struct TRuntimeFilterDestination {
+  1: optional Types.TNetworkAddress address;
+  2: optional list<Types.TUniqueId> finstance_ids;
+}
+
 struct TRuntimeFilterDescription {
   // Filter unique id (within a query)
   1: optional i32 filter_id
@@ -103,11 +108,6 @@ struct TRuntimeFilterDescription {
 struct TRuntimeFilterProberParams {
   1: optional Types.TUniqueId fragment_instance_id
   2: optional Types.TNetworkAddress fragment_instance_address
-}
-
-struct TRuntimeFilterDestination {
-  1: optional Types.TNetworkAddress address;
-  2: optional list<Types.TUniqueId> finstance_ids;
 }
 
 struct TRuntimeFilterParams {

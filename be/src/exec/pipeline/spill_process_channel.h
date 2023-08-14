@@ -17,16 +17,19 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
+#include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 class SpillProcessChannel;
+class SpillProcessTasksBuilder;
 namespace spill {
 class Spiller;
 }
@@ -40,6 +43,11 @@ public:
     StatusOr<ChunkPtr> operator()() const { return _task(); }
 
     operator bool() const { return !!_task; }
+
+    SpillProcessTask& operator=(std::function<StatusOr<ChunkPtr>()> task) {
+        _task = std::move(task);
+        return *this;
+    }
 
     void reset();
 
@@ -71,11 +79,13 @@ public:
     SpillProcessChannel(SpillProcessChannelFactory* factory) : _parent(factory) {}
 
     bool add_spill_task(SpillProcessTask&& task) {
+        DCHECK(!_is_finishing);
         _is_working = true;
         return _spill_tasks.put(std::move(task));
     }
 
     bool add_last_task(SpillProcessTask&& task) {
+        DCHECK(!_is_finishing);
         _is_working = true;
         set_finishing();
         return _spill_tasks.put(std::move(task));
@@ -102,6 +112,8 @@ public:
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
 
+    Status execute(SpillProcessTasksBuilder& task_builder);
+
 private:
     bool _is_finishing = false;
     bool _is_working = false;
@@ -109,7 +121,43 @@ private:
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
     SpillProcessChannelFactory* _parent;
-    std::mutex _mutex;
+};
+
+class SpillProcessTasksBuilder {
+public:
+    SpillProcessTasksBuilder(RuntimeState* state, std::shared_ptr<spill::IOTaskExecutor> executor)
+            : _runtime_state(state), _io_executor(std::move(executor)) {}
+
+    template <class Task>
+    SpillProcessTasksBuilder& then(Task task) {
+        auto runtime_state = this->_runtime_state;
+        auto& io_executor = this->_io_executor;
+        std::function<StatusOr<ChunkPtr>()> spill_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state, io_executor));
+            return Status::EndOfFile("eos");
+        };
+        _spill_tasks.emplace_back(std::move(spill_task));
+        return *this;
+    }
+
+    template <class Task>
+    void finally(Task task) {
+        auto runtime_state = this->_runtime_state;
+        auto& io_executor = this->_io_executor;
+        _final_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state, io_executor));
+            return Status::EndOfFile("eos");
+        };
+    }
+
+    std::vector<SpillProcessTask>& tasks() { return _spill_tasks; }
+    SpillProcessTask& final_task() { return _final_task; }
+
+private:
+    RuntimeState* _runtime_state;
+    std::shared_ptr<spill::IOTaskExecutor> _io_executor;
+    std::vector<SpillProcessTask> _spill_tasks;
+    SpillProcessTask _final_task;
 };
 
 } // namespace starrocks

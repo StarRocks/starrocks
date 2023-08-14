@@ -18,6 +18,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.UserException;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -45,4 +46,6 @@ public interface QeProcessor {
     Coordinator getCoordinator(TUniqueId queryId);
 
     List<Coordinator> getCoordinators();
+
+    long getCoordinatorCount();
 }

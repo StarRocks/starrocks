@@ -274,9 +274,13 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_overlap(const Columns& columns) {
-        size_t chunk_size = columns[0]->size();
+    static ColumnPtr _array_overlap(const Columns& original_columns) {
+        size_t chunk_size = original_columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(chunk_size, col));
+        }
 
         bool is_nullable = false;
         bool has_null = false;
@@ -285,15 +289,15 @@ private:
         NullColumnPtr null_result = NullColumn::create();
         null_result->resize(chunk_size);
 
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
+        for (const auto& column : columns) {
+            if (column->is_nullable()) {
                 is_nullable = true;
-                has_null = (columns[i]->has_null() || has_null);
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                has_null = (column->has_null() || has_null);
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(column.get());
                 src_columns.emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
                 null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
             } else {
-                src_columns.emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+                src_columns.emplace_back(down_cast<ArrayColumn*>(column.get()));
             }
         }
 
@@ -403,12 +407,17 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_intersect(const Columns& columns) {
-        if (columns.size() == 1) {
-            return columns[0];
+    static ColumnPtr _array_intersect(const Columns& original_columns) {
+        if (original_columns.size() == 1) {
+            return original_columns[0];
         }
 
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        RETURN_IF_COLUMNS_ONLY_NULL(original_columns);
+
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(col->size(), col));
+        }
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;
@@ -799,14 +808,14 @@ private:
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
             Slice null_slice = null_replace_column->get(i).get_slice();
-            for (size_t j = 0; j < datum_array.size(); j++) {
+            for (const auto& datum : datum_array) {
                 if (append) {
                     res.append_partial(sep_slice);
                 }
-                if (datum_array[j].is_null()) {
+                if (datum.is_null()) {
                     res.append_partial(null_slice);
                 } else {
-                    Slice value_slice = datum_array[j].get_slice();
+                    Slice value_slice = datum.get_slice();
                     res.append_partial(value_slice);
                 }
                 append = true;
@@ -835,14 +844,14 @@ private:
             const auto& datum_array = datum.get_array();
             bool append = false;
             Slice sep_slice = sep_column->get(i).get_slice();
-            for (size_t j = 0; j < datum_array.size(); j++) {
-                if (datum_array[j].is_null()) {
+            for (const auto& datum : datum_array) {
+                if (datum.is_null()) {
                     continue;
                 }
                 if (append) {
                     res.append_partial(sep_slice);
                 }
-                Slice value_slice = datum_array[j].get_slice();
+                Slice value_slice = datum.get_slice();
                 res.append_partial(value_slice);
                 append = true;
             }
@@ -850,6 +859,68 @@ private:
         }
 
         return res.build_nullable_column();
+    }
+};
+
+// all/any_match(lambda_func, array1, array2...)-> all/any_match(array_map(lambda_func, array1, array2...))
+// -> all/any_match(bool_array), result is bool type.
+// any_match: if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
+// all_match: if there are false matched, return false, else if there are null, return null, otherwise, return true;
+template <bool isAny>
+class ArrayMatch {
+public:
+    static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
+        return _array_match(columns);
+    }
+
+private:
+    static ColumnPtr _array_match(const Columns& columns) {
+        DCHECK(columns.size() == 1);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+
+        auto dest_null_column = NullColumn::create(chunk_size, 0);
+        auto dest_data_column = BooleanColumn::create(chunk_size);
+        dest_null_column->get_data().resize(chunk_size, 0);
+
+        ArrayColumn* bool_array;
+        NullColumn* array_null_map = nullptr;
+
+        if (bool_column->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(bool_column.get());
+            bool_array = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            array_null_map = nullable_column->null_column().get();
+        } else {
+            bool_array = down_cast<ArrayColumn*>(bool_column.get());
+        }
+        auto offsets = bool_array->offsets().get_data();
+
+        ColumnViewer<TYPE_BOOLEAN> bool_elements(bool_array->elements_column());
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (array_null_map == nullptr || !array_null_map->get_data()[i]) { // array_null_map[i] is not null
+                bool has_null = false;
+                bool res = !isAny;
+                for (auto id = offsets[i]; id < offsets[i + 1]; ++id) {
+                    if (bool_elements.is_null(id)) {
+                        has_null = true;
+                    } else {
+                        if (bool_elements.value(id) == isAny) {
+                            res = isAny;
+                            break;
+                        }
+                    }
+                }
+                dest_null_column->get_data()[i] = res != isAny && has_null;
+                dest_data_column->get_data()[i] = res;
+            } else { // array_null_map[i] is null, result is null
+                dest_null_column->get_data()[i] = 1;
+                dest_data_column->get_data()[i] = 0;
+            }
+        }
+
+        return NullableColumn::create(dest_data_column, dest_null_column);
     }
 };
 
@@ -915,8 +986,8 @@ private:
         return dest_column;
     }
 
-    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
-                                    NullColumn* dest_null_map) {
+    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr& raw_filter,
+                                    ArrayColumn* dest_column, NullColumn* dest_null_map) {
         ArrayColumn* filter;
         NullColumn* filter_null_map = nullptr;
         auto& dest_offsets = dest_column->offsets_column()->get_data();
@@ -1008,7 +1079,7 @@ public:
 
 private:
     static void _sort_array_column(Column* dest_array_column, const Column& src_array_column,
-                                   const ColumnPtr key_array_ptr, const NullColumn* src_null_map) {
+                                   const ColumnPtr& key_array_ptr, const NullColumn* src_null_map) {
         NullColumnPtr key_null_map = nullptr;
         ColumnPtr key_data = key_array_ptr;
         if (key_array_ptr->is_nullable()) { // Nullable(array(Nullable(element), offsets), null_map)

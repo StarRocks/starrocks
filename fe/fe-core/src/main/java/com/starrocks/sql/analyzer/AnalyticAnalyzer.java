@@ -31,6 +31,8 @@ import com.starrocks.common.AnalysisException;
 
 import java.math.BigDecimal;
 
+import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
+
 public class AnalyticAnalyzer {
     public static void verifyAnalyticExpression(AnalyticExpr analyticExpr) {
         for (Expr e : analyticExpr.getPartitionExprs()) {
@@ -39,7 +41,7 @@ public class AnalyticAnalyzer {
                         + e.toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
             }
             if (!e.getType().canPartitionBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as partition by column", e.getPos());
+                throw new SemanticException(e.getType().toSql() + " type can't as partition by column", e.getPos());
             }
         }
 
@@ -49,7 +51,7 @@ public class AnalyticAnalyzer {
                         + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
             }
             if (!e.getExpr().getType().canOrderBy()) {
-                throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as order by column", e.getPos());
+                throw new SemanticException(e.getExpr().getType().toString() + " type can't as order by column", e.getPos());
             }
         }
 
@@ -129,9 +131,15 @@ public class AnalyticAnalyzer {
             }
         }
 
+        if (isStatisticFn(analyticFunction.getFn()) && (!analyticExpr.getOrderByElements().isEmpty())) {
+            throw new SemanticException("order by not allowed with '" + analyticFunction.toSql() + "'",
+                    analyticExpr.getPos());
+        }
+
         if (analyticExpr.getWindow() != null) {
-            if ((isRankingFn(analyticFunction.getFn()) || isOffsetFn(analyticFunction.getFn()) ||
-                    isHllAggFn(analyticFunction.getFn()))) {
+            if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
+                    isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn())) ||
+                    isStatisticFn(analyticFunction.getFn())) {
                 throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
                         analyticExpr.getPos());
             }
@@ -272,7 +280,8 @@ public class AnalyticAnalyzer {
                     isPos = false;
                 }
             } catch (AnalysisException exc) {
-                throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(), e.getPos());
+                throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
+                        e.getPos());
             }
         }
 
@@ -351,12 +360,25 @@ public class AnalyticAnalyzer {
                 || fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
     }
 
+    private static boolean isCumeFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST)
+                || fn.functionName().equalsIgnoreCase(AnalyticExpr.PERCENTRANK);
+    }
+
     private static boolean isNtileFn(Function fn) {
         if (!isAnalyticFn(fn)) {
             return false;
         }
 
         return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    private static boolean isStatisticFn(Function fn) {
+        return STATISTIC_FUNCTIONS.contains(fn.functionName().toLowerCase());
     }
 
     private static boolean isHllAggFn(Function fn) {

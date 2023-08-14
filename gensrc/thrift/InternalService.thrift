@@ -102,7 +102,16 @@ enum TPipelineProfileLevel {
 
 enum TSpillMode {
   AUTO,
-  FORCE
+  FORCE,
+  NONE
+}
+
+enum TSpillableOperatorType {
+  HASH_JOIN = 0;
+  AGG = 1;
+  AGG_DISTINCT = 2;
+  SORT = 3;
+  NL_JOIN = 4;
 }
 
 enum TTabletInternalParallelMode {
@@ -184,6 +193,7 @@ struct TQueryOptions {
   76: optional i64 spill_operator_min_bytes;
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
+  79: optional i64 spill_revocable_max_bytes;
 
   85: optional TSpillMode spill_mode;
   
@@ -200,6 +210,12 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  96: optional i64 spillable_operator_mask;
+  // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
+  97: optional i64 load_profile_collect_second;
+
+  101: optional i64 runtime_profile_report_interval = 30;
 }
 
 
@@ -440,3 +456,7 @@ struct TExportStatusResult {
     3: optional list<string> files
 }
 
+struct TGetFileSchemaRequest {
+  1: required PlanNodes.TScanRange scan_range
+  2: optional i32 volume_id = -1
+}

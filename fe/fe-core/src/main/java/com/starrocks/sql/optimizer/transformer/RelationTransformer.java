@@ -99,10 +99,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -418,8 +420,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
-    private DistributionSpec getTableDistributionSpec(TableRelation node, Map<Column,
-            ColumnRefOperator> columnMetaToColRefMap) {
+    private DistributionSpec getTableDistributionSpec(TableRelation node,
+                                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
 
@@ -484,18 +486,19 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
             } else if (!isMVPlanner) {
-                scanOperator = new LogicalOlapScanOperator(node.getTable(),
-                        colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap,
-                        distributionSpec,
-                        Operator.DEFAULT_LIMIT,
-                        null,
-                        ((OlapTable) node.getTable()).getBaseIndexId(),
-                        null,
-                        node.getPartitionNames(),
-                        node.hasTableHints(),
-                        Lists.newArrayList(),
-                        node.getTabletIds());
+                scanOperator = LogicalOlapScanOperator.builder()
+                        .setTable(node.getTable())
+                        .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                        .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                        .setDistributionSpec(distributionSpec)
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
+                        .setPartitionNames(node.getPartitionNames())
+                        .setSelectedTabletId(Lists.newArrayList())
+                        .setHintsTabletIds(node.getTabletIds())
+                        .setHintsReplicaIds(node.getReplicaIds())
+                        .setHasTableHints(node.hasTableHints())
+                        .setUsePkIndex(node.isUsePkIndex())
+                        .build();
             } else {
                 scanOperator = new LogicalBinlogScanOperator(
                         node.getTable(),
@@ -523,6 +526,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate);
         } else if (Table.TableType.DELTALAKE.equals(node.getTable().getType())) {
             scanOperator = new LogicalDeltaLakeScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.PAIMON.equals(node.getTable().getType())) {
+            scanOperator = new LogicalPaimonScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
@@ -558,6 +564,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalJDBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+        } else if (Table.TableType.TABLE_FUNCTION.equals(node.getTable().getType())) {
+            scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);

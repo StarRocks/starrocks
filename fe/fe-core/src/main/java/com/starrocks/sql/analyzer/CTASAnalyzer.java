@@ -91,7 +91,7 @@ public class CTASAnalyzer {
         }
 
         for (int i = 0; i < allFields.size(); i++) {
-            Type type = AnalyzerUtils.transformType(allFields.get(i).getType());
+            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");

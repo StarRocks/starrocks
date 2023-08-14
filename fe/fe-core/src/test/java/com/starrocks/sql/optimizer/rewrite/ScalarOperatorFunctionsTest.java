@@ -38,6 +38,8 @@ import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 import static org.junit.Assert.assertEquals;
@@ -295,7 +297,7 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 13, 4, 5)),
                                 ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
-        assertEquals("000123", ScalarOperatorFunctions
+        assertEquals("123000", ScalarOperatorFunctions
                 .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000000)),
                         ConstantOperator.createVarchar("%f")).getVarchar());
 
@@ -567,6 +569,182 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows("undefine_dow not supported in previous_day dow_string", IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.previousDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
                         .getVarchar());
+    }
+
+    @Test
+    public void makeDate() {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(1),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(0)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(367)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(-1), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(10000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 12, 31, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(366)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(0, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(0), ConstantOperator.createInt(1)));
+    }
+
+    @Test
+    public void timeSlice() throws AnalysisException {
+        class Param {
+            final LocalDateTime dateTime;
+            final int interval;
+            final String unit;
+            final String boundary;
+
+            LocalDateTime expect;
+            String e;
+
+            public Param(LocalDateTime dateTime, int interval, String unit, LocalDateTime expect) {
+                this(dateTime, interval, unit, "floor", expect);
+            }
+
+            private Param(LocalDateTime dateTime, int interval, String unit, String boundary, LocalDateTime expect) {
+                this.dateTime = dateTime;
+                this.interval = interval;
+                this.unit = unit;
+                this.boundary = boundary;
+                this.expect = expect;
+            }
+
+            private Param(LocalDateTime dateTime, int interval, String unit, String boundary, String e) {
+                this.dateTime = dateTime;
+                this.interval = interval;
+                this.unit = unit;
+                this.boundary = boundary;
+                this.e = e;
+            }
+        }
+
+        // test case from be TimeFunctionsTest
+        List<Param> cases = Arrays.asList(
+                // second
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", LocalDateTime.of(0001, 1, 1, 21, 22, 50)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", LocalDateTime.of(0001, 3, 2, 14, 17, 25)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", LocalDateTime.of(0001, 5, 6, 11, 54, 20)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", LocalDateTime.of(2022, 7, 8, 9, 13, 15)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", LocalDateTime.of(2022, 9, 9, 8, 8, 15)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", LocalDateTime.of(2022, 11, 3, 23, 41, 35)),
+
+                // minute
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "minute", LocalDateTime.of(0001, 1, 1, 21, 20, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "minute", LocalDateTime.of(0001, 3, 2, 14, 15, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "minute", LocalDateTime.of(0001, 5, 6, 11, 50, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "minute", LocalDateTime.of(2022, 7, 8, 9, 10, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "minute", LocalDateTime.of(2022, 9, 9, 8, 5, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "minute", LocalDateTime.of(2022, 11, 3, 23, 40, 0)),
+
+                // hour
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "hour", LocalDateTime.of(0001, 1, 1, 20, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "hour", LocalDateTime.of(0001, 3, 2, 10, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "hour", LocalDateTime.of(0001, 5, 6, 10, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "hour", LocalDateTime.of(2022, 7, 8, 8, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "hour", LocalDateTime.of(2022, 9, 9, 6, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "hour", LocalDateTime.of(2022, 11, 3, 21, 0, 0)),
+
+                // day
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "day", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "day", LocalDateTime.of(0001, 3, 2, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "day", LocalDateTime.of(0001, 5, 6, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "day", LocalDateTime.of(2022, 7, 5, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "day", LocalDateTime.of(2022, 9, 8, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "day", LocalDateTime.of(2022, 11, 2, 0, 0, 0)),
+
+                // month
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "month", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "month", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "month", LocalDateTime.of(2022, 9, 1, 0, 0, 0)),
+
+                // year
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "year", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "year", LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+
+                // week
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "week", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "week", LocalDateTime.of(0001, 2, 5, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "week", LocalDateTime.of(0001, 4, 16, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "week", LocalDateTime.of(2022, 6, 20, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "week", LocalDateTime.of(2022, 8, 29, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "week", LocalDateTime.of(2022, 10, 3, 0, 0, 0)),
+
+                // quarter
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "quarter", LocalDateTime.of(0001, 1, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "quarter", LocalDateTime.of(2022, 4, 1, 0, 0, 0)),
+
+                // second ceil
+                new Param(LocalDateTime.of(0001, 1, 1, 21, 22, 51), 5, "second", "ceil", LocalDateTime.of(0001, 1, 1, 21, 22,
+                        55)),
+                new Param(LocalDateTime.of(0001, 3, 2, 14, 17, 28), 5, "second", "ceil", LocalDateTime.of(0001, 3, 2, 14, 17,
+                        30)),
+                new Param(LocalDateTime.of(0001, 5, 6, 11, 54, 23), 5, "second", "ceil", LocalDateTime.of(0001, 5, 6, 11, 54,
+                        25)),
+                new Param(LocalDateTime.of(2022, 7, 8, 9, 13, 19), 5, "second", "ceil", LocalDateTime.of(2022, 7, 8, 9, 13,
+                        20)),
+                new Param(LocalDateTime.of(2022, 9, 9, 8, 8, 16), 5, "second", "ceil", LocalDateTime.of(2022, 9, 9, 8, 8,
+                        20)),
+                new Param(LocalDateTime.of(2022, 11, 3, 23, 41, 37), 5, "second", "ceil", LocalDateTime.of(2022, 11, 3, 23, 41,
+                        40)),
+                new Param(LocalDateTime.of(0000, 01, 01, 00, 00, 00), 5, "hour", "floor",
+                        "time used with time_slice can't before 0001-01-01 00:00:00"),
+                new Param(LocalDateTime.of(2023, 12, 31, 03, 12, 00), 2147483647, "minute", "floor",
+                        LocalDateTime.of(0001, 01, 01, 00, 00, 00))
+        );
+
+        for (Param testCase : cases) {
+            try {
+                ConstantOperator result = ScalarOperatorFunctions.timeSlice(
+                        ConstantOperator.createDatetime(testCase.dateTime),
+                        ConstantOperator.createInt(testCase.interval),
+                        ConstantOperator.createVarchar(testCase.unit),
+                        ConstantOperator.createVarchar(testCase.boundary)
+                );
+                if (testCase.expect != null) {
+                    assertEquals(testCase.expect, result.getDatetime());
+                } else {
+                    Assert.fail();
+                }
+            } catch (AnalysisException e) {
+                assertTrue(e.getMessage().contains(testCase.e));
+            }
+        }
     }
 
     @Test
@@ -1083,7 +1261,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.utcTimestamp().getDatetime());
     }
@@ -1093,7 +1271,7 @@ public class ScalarOperatorFunctionsTest {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setThreadLocalInfo();
         ctx.setStartTime();
-        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
     }
@@ -1106,6 +1284,79 @@ public class ScalarOperatorFunctionsTest {
         LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
+    }
+
+    @Test
+    public void testSubString() {
+        assertEquals("ab", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2)).getVarchar());
+        assertEquals("c", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2), ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(10)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(3), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(0), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(5), ConstantOperator.createInt(2)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrockscluster", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("rocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(8, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-100, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("apple", ScalarOperatorFunctions.substring(
+                new ConstantOperator("apple", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(10, Type.INT)).getVarchar());
     }
 
 }

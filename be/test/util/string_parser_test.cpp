@@ -47,7 +47,6 @@
 namespace starrocks {
 
 std::string space[] = {"", "   ", "\t\t\t", "\n\n\n", "\v\v\v", "\f\f\f", "\r\r\r"};
-const int space_len = 7;
 
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
@@ -277,6 +276,11 @@ TEST(StringToUnsignedInt, Basic) {
     test_unsigned_int_value<uint16_t>("-0", 0, StringParser::PARSE_FAILURE);
     test_unsigned_int_value<uint32_t>("+0", 0, StringParser::PARSE_FAILURE);
     test_unsigned_int_value<uint64_t>("-0", 0, StringParser::PARSE_FAILURE);
+}
+
+TEST(StringToUnsignedInt, Basic2) {
+    test_unsigned_int_value<uint64_t>("123", static_cast<uint64_t>(123), StringParser::PARSE_SUCCESS);
+    test_unsigned_int_value<uint64_t>("-123", 0, StringParser::PARSE_FAILURE);
 }
 
 TEST(StringToUnsignedInt, Limit) {

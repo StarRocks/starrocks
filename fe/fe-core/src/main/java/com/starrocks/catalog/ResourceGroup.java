@@ -46,6 +46,9 @@ public class ResourceGroup implements Writable {
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
+    public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
+    public static final long DEFAULT_MV_WG_ID = 1;
+    public static final long DEFAULT_MV_VERSION = 1;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()

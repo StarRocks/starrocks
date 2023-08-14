@@ -82,7 +82,6 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
-    auto t0 = std::chrono::steady_clock::now();
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
@@ -113,37 +112,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
-            auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
-            if (local_tablets_channel) {
-                size_t i = 0;
-                while (local_tablets_channel->num_ref_senders() != 0) {
-                    bthread_usleep(10000); // 10ms
-                    auto t1 = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 >
-                        request.timeout_ms()) {
-                        std::stringstream ss;
-                        ss << "LoadChannel txn_id: " << request.txn_id() << " load_id: " << print_id(request.id())
-                           << " wait other sender finish write " << request.timeout_ms() << "ms timeout still has "
-                           << local_tablets_channel->num_ref_senders() << " sender";
-                        LOG(INFO) << ss.str();
-                        st = Status::InternalError(ss.str());
-                        break;
-                    }
-
-                    if (++i % 60000 == 0) {
-                        LOG(INFO) << "LoadChannel txn_id: " << request.txn_id()
-                                  << " load_id: " << print_id(request.id())
-                                  << " wait other sender finish write already "
-                                  << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
-                                  << "ms still has " << local_tablets_channel->num_ref_senders() << " sender";
-                    }
-                }
-                if (st.ok()) {
-                    st = local_tablets_channel->incremental_open(request, _schema);
-                }
-            } else {
-                st = Status::NotSupported("incremental open not supported by this tablets channel");
-            }
+            st = it->second->incremental_open(request, _schema);
         }
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
@@ -250,16 +219,10 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     auto channel = get_tablets_channel(index_id);
     if (channel != nullptr) {
-        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
-        if (local_tablets_channel != nullptr) {
-            local_tablets_channel->incr_num_ref_senders();
-            local_tablets_channel->abort(tablet_ids);
-        } else {
-            channel->abort();
-        }
+        channel->abort(tablet_ids, reason);
     }
 }
 
@@ -277,12 +240,6 @@ std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_i
     std::lock_guard l(_lock);
     auto it = _tablets_channels.find(index_id);
     if (it != _tablets_channels.end()) {
-        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
-        if (local_tablets_channel) {
-            local_tablets_channel->incr_num_ref_senders();
-        } else {
-            // nothing to do
-        }
         return it->second;
     } else {
         return nullptr;
@@ -296,6 +253,9 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     std::lock_guard l(_chunk_meta_lock);
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
+    }
+    if (_row_desc == nullptr) {
+        return Status::InternalError(fmt::format("load channel not open yet, load id: {}", _load_id.to_string()));
     }
     StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
     if (!res.ok()) return res.status();

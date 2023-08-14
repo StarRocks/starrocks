@@ -40,7 +40,7 @@ void SortedAggregateStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 bool SortedAggregateStreamingSinkOperator::need_input() const {
-    return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+    return !is_finished() && !_aggregator->is_chunk_buffer_full();
 }
 
 bool SortedAggregateStreamingSinkOperator::is_finished() const {
@@ -55,7 +55,7 @@ Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) 
         _accumulator.push(std::move(res));
     }
     _accumulator.finalize();
-    if (_accumulator.has_output()) {
+    while (_accumulator.has_output()) {
         auto accumulated = std::move(_accumulator.pull());
         _aggregator->offer_chunk_to_buffer(accumulated);
     }

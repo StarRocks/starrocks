@@ -1,5 +1,52 @@
 # StarRocks version 2.3
 
+## 2.3.14
+
+Release date: June 28, 2023
+
+### Improvements
+
+- Optimized the error message returned when CREATE TABLE times out and added parameter tuning tips. [#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- Optimized the memory usage for the Primary Key tables with a large number of accumulated tablet versions. [#20760](https://github.com/StarRocks/starrocks/pull/20760)
+- The synchronization of StarRocks external table metadata has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- Removed the dependency of NetworkTime on system clocks to fix incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When low cardinality dictionary optimization is applied for small tables that undergo frequent TRUNCATE operations, queries may encounter errors. [#23185](https://github.com/StarRocks/starrocks/pull/23185)
+- BEs may crash when a view that contains UNION whose first child is a constant NULL is queried. [#13792](https://github.com/StarRocks/starrocks/pull/13792)  
+- In some cases, a query based on Bitmap Index may return an error. [#23484](https://github.com/StarRocks/starrocks/pull/23484)
+- The result of rounding a DOUBLE or FLOAT value into a DECIMAL value in BEs is inconsistent with the result in FEs. [#23152](https://github.com/StarRocks/starrocks/pull/23152)
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- When you load a Parquet file into StarRocks by using Broker Load, Spark connector or Flink connector, BE OOM issues may occur. [#25254](https://github.com/StarRocks/starrocks/pull/25254)
+- The error message `unknown error` is returned when a constant is specified in the ORDER BY clause and there is a LIMIT clause in the query. [#25538](https://github.com/StarRocks/starrocks/pull/25538)
+
+## 2.3.13
+
+Release date: June 1, 2023
+
+### Improvements
+
+- Optimized the error message reported when INSERT INTO ... SELECT expires due to a small `thrift_server_max_worker_thread` value. [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- Reduced memory consumption and optimized performance for multi-table joins that use the `bitmap_contains` function. [#20617](https://github.com/StarRocks/starrocks/pull/20617) [#20653](https://github.com/StarRocks/starrocks/pull/20653)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Truncating partitions fails because the TRUNCATE operation is case-sensitive to partition names. [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- Loading int96 timestamp data from Parquet files causes data overflow. [#22355](https://github.com/StarRocks/starrocks/issues/22355)
+- Decommissioning a BE fails after a materialized view is dropped. [#22743](https://github.com/StarRocks/starrocks/issues/22743)
+- When the execution plan for a query includes a Broadcast Join followed by a Bucket Shuffle Join, such as `SELECT * FROM t1 JOIN [Broadcast] t2 ON t1.a = t2.b JOIN [Bucket] t3 ON t2.b = t3.c`, and the data of the equijoin key of the left table in the Broadcast Join is deleted before the data is sent to Bucket Shuffle Join, a BE may crash. [#23227](https://github.com/StarRocks/starrocks/pull/23227)
+- When the execution plan for a query includes a Cross Join followed by a Hash Join, and the right table of the Hash Join within a fragment instance is empty, the returned result may be incorrect. [#23877](https://github.com/StarRocks/starrocks/pull/23877)
+- Decommissioning a BE fails due to failures in creating temporary partitions for materialized views. [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- If a SQL statement contains a STRING value with multiple escape characters, the SQL statement cannot be parsed. [#23119](https://github.com/StarRocks/starrocks/issues/23119)
+- Querying the data with the maximum value in the partition column fails. [#23153](https://github.com/StarRocks/starrocks/issues/23153)
+- Load jobs fail after StarRocks rolls back from v2.4 to v2.3. [#23642](https://github.com/StarRocks/starrocks/pull/23642)
+- Issues related to column pruning and reuse. [#16624](https://github.com/StarRocks/starrocks/issues/16624)
+
 ## 2.3.12
 
 Release date: April 25, 2023

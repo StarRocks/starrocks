@@ -57,6 +57,58 @@ import java.util.Set;
 
 public class RuntimeProfileTest {
 
+    private static void testCounterPrinter(TUnit type, long value, String expected) {
+        Counter counter = new Counter(type, null, value);
+        String printContent = RuntimeProfile.printCounter(counter);
+        Assert.assertEquals(expected, printContent);
+    }
+
+    @Test
+    public void testCounterPrinter() {
+        testCounterPrinter(TUnit.BYTES, 0, "0.000 B");
+        testCounterPrinter(TUnit.BYTES, DebugUtil.KILOBYTE - 1, "1023.000 B");
+        testCounterPrinter(TUnit.BYTES, DebugUtil.KILOBYTE, "1.000 KB");
+        testCounterPrinter(TUnit.BYTES, DebugUtil.MEGABYTE, "1.000 MB");
+        testCounterPrinter(TUnit.BYTES, DebugUtil.GIGABYTE, "1.000 GB");
+        testCounterPrinter(TUnit.BYTES, DebugUtil.TERABYTE, "1.000 TB");
+        testCounterPrinter(TUnit.BYTES, 2 * DebugUtil.TERABYTE + 200 * DebugUtil.GIGABYTE, "2.195 TB");
+
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, 0, "0.000 B/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, DebugUtil.KILOBYTE - 1, "1023.000 B/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, DebugUtil.KILOBYTE, "1.000 KB/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, DebugUtil.MEGABYTE, "1.000 MB/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, DebugUtil.GIGABYTE, "1.000 GB/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, DebugUtil.TERABYTE, "1.000 TB/sec");
+        testCounterPrinter(TUnit.BYTES_PER_SECOND, 2 * DebugUtil.TERABYTE + 200 * DebugUtil.GIGABYTE, "2.195 TB/sec");
+
+        testCounterPrinter(TUnit.UNIT, 0, "0");
+        testCounterPrinter(TUnit.UNIT, 999, "999");
+        testCounterPrinter(TUnit.UNIT, DebugUtil.THOUSAND, "1.000K (1000)");
+        testCounterPrinter(TUnit.UNIT, DebugUtil.MILLION, "1.000M (1000000)");
+        testCounterPrinter(TUnit.UNIT, DebugUtil.BILLION, "1.000B (1000000000)");
+        testCounterPrinter(TUnit.UNIT, 2L * DebugUtil.BILLION + 200L * DebugUtil.MILLION, "2.200B (2200000000)");
+
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, 0, "0 /sec");
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, 999, "999 /sec");
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, DebugUtil.THOUSAND, "1.000K (1000) /sec");
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, DebugUtil.MILLION, "1.000M (1000000) /sec");
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, DebugUtil.BILLION, "1.000B (1000000000) /sec");
+        testCounterPrinter(TUnit.UNIT_PER_SECOND, 2L * DebugUtil.BILLION + 200L * DebugUtil.MILLION,
+                "2.200B (2200000000) /sec");
+
+        testCounterPrinter(TUnit.TIME_NS, 0, "0ns");
+        testCounterPrinter(TUnit.TIME_NS, 999, "999ns");
+        testCounterPrinter(TUnit.TIME_NS, DebugUtil.THOUSAND, "1us");
+        testCounterPrinter(TUnit.TIME_NS, DebugUtil.MILLION, "1ms");
+        testCounterPrinter(TUnit.TIME_NS, DebugUtil.BILLION, "1s0ms");
+        testCounterPrinter(TUnit.TIME_NS, 30L * DebugUtil.BILLION, "30s0ms");
+        testCounterPrinter(TUnit.TIME_NS, 60L * DebugUtil.BILLION, "1m");
+        testCounterPrinter(TUnit.TIME_NS, 90L * DebugUtil.BILLION, "1m30s");
+        testCounterPrinter(TUnit.TIME_NS, 3600L * DebugUtil.BILLION, "1h");
+        testCounterPrinter(TUnit.TIME_NS, 5400L * DebugUtil.BILLION, "1h30m");
+        testCounterPrinter(TUnit.TIME_NS, 5490L * DebugUtil.BILLION, "1h31m");
+    }
+
     @Test
     public void testSortChildren() {
         RuntimeProfile profile = new RuntimeProfile("profile");
@@ -226,9 +278,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2000000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
@@ -299,9 +351,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2500000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
@@ -374,9 +426,8 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
-
-        RuntimeProfile mergedProfile = profiles.get(0);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
 
         Counter mergedTime1 = mergedProfile.getCounter("time1");
         Assert.assertEquals(2000000000L, mergedTime1.getValue());
@@ -483,9 +534,9 @@ public class RuntimeProfileTest {
             profiles.add(profile2);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
 
-        RuntimeProfile mergedProfile = profiles.get(0);
         Assert.assertEquals(13, mergedProfile.getCounterMap().size());
         RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
         Assert.assertEquals(7, mergedProfile.getCounterMap().size());
@@ -539,8 +590,8 @@ public class RuntimeProfileTest {
             profiles.add(profile5);
         }
 
-        RuntimeProfile.mergeIsomorphicProfiles(profiles);
-        RuntimeProfile mergedProfile = profiles.get(0);
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
 
         Set<String> expectedValues = Sets.newHashSet("value1", "value2", "value3", "value4", "value5", "value6");
         Set<String> actualValues = Sets.newHashSet();
@@ -602,13 +653,12 @@ public class RuntimeProfileTest {
 
         JsonObject jsonObjchild11 = jsonObjchild1.getAsJsonObject("child11");
         Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("child11_key").getAsString(), "child11_value");
-        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.0K /sec");
-        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.0 KB/sec");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("count2").getAsString(), "1.000K (1000) /sec");
+        Assert.assertEquals(jsonObjchild11.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB/sec");
 
         JsonObject jsonObjchild12 = jsonObjchild1.getAsJsonObject("child12");
         Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("count3").getAsString(), "15");
-        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.00 KB");
-        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1.0ms");
-
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB");
+        Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1ms");
     }
 }

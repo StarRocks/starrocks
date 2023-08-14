@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -127,6 +128,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private static final List<String> HISTOGRAM_KEY_COLUMNS = ImmutableList.of(
             "table_id", "column_name"
+    );
+
+    private static final List<String> EXTERNAL_FULL_STATISTICS_KEY_COLUMNS = ImmutableList.of(
+            "table_uuid", "partition_name", "column_name"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
@@ -228,6 +233,36 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createExternalFullStatisticsTable(ConnectContext context) {
+        LOG.info("create external full statistics table start");
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+        CreateTableStmt stmt = new CreateTableStmt(false, false,
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME),
+                EngineType.defaultEngine().name(),
+                new KeysDesc(keysType, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
+                null,
+                new HashDistributionDesc(10, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
+                properties,
+                null,
+                "");
+
+        Analyzer.analyze(stmt, context);
+        try {
+            GlobalStateMgr.getCurrentState().createTable(stmt);
+        } catch (DdlException e) {
+            LOG.warn("Failed to create full statistics table" + e.getMessage());
+            return false;
+        }
+        LOG.info("create external full statistics table done");
+        return checkTableExist(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -276,6 +311,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return createFullStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return createHistogramStatisticsTable(context);
+        } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
+            return createExternalFullStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }
@@ -314,10 +351,13 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+
+        RepoCreator.getInstance().run();
     }
 
     public void createStatisticsTablesForTest() {

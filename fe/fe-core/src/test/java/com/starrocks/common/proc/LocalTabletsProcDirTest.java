@@ -119,7 +119,7 @@ public class LocalTabletsProcDirTest {
 
         // Db
         Database db = new Database(dbId, "test_db");
-        db.createTable(table);
+        db.registerTableUnlocked(table);
 
         // Check
         LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);

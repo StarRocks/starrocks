@@ -68,7 +68,10 @@ public class UpdatePlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
+            Table table = updateStmt.getTable();
+            long tableId = table.getId();
             Optimizer optimizer = new Optimizer();
+            optimizer.setUpdateTableId(tableId);
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -80,12 +83,12 @@ public class UpdatePlanner {
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-            Table table = updateStmt.getTable();
-            long tableId = table.getId();
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
-                if (updateStmt.usePartialUpdate() && !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
-                    // When using partial update, skip columns which aren't key column and not be assign
+                if (updateStmt.usePartialUpdate() && !column.isMaterializedColumn() &&
+                        !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                    // When using partial update, skip columns which aren't key column and not be assign, except for
+                    // generated column
                     continue;
                 }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
@@ -113,7 +116,7 @@ public class UpdatePlanner {
                                 olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
                 }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);

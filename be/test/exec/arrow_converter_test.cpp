@@ -30,6 +30,7 @@
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/parquet_scanner.h"
 #include "runtime/datetime_value.h"
+#include "util/arrow/row_batch.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
     do {                          \
@@ -43,6 +44,16 @@ class ArrowConverterTest : public ::testing::Test {
 public:
     void SetUp() override { date::init_date_cache(); }
 };
+
+std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDescriptor& to_arrow_type,
+                                       ConvertFuncTree& cf, bool is_nullable = false) {
+    std::shared_ptr<arrow::DataType> arrow_type;
+    convert_to_arrow_type(to_arrow_type, &arrow_type);
+    TypeDescriptor raw_type;
+    bool need_cast = false;
+    auto st = ParquetScanner::build_dest(arrow_type.get(), &type, is_nullable, &raw_type, &cf, need_cast, false);
+    return {need_cast, st};
+}
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
           typename BuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType>
@@ -1262,7 +1273,6 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
     return builder.Finish().ValueOrDie();
 }
 
-
 static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool is_null) {
     auto int1_builder = std::make_shared<arrow::Int32Builder>();
     auto str_builder = std::make_shared<arrow::StringBuilder>();
@@ -1275,7 +1285,8 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
 
     auto data_type = std::make_shared<arrow::StructType>(fields);
 
-    arrow::TypeTraits<arrow::StructType>::BuilderType builder(data_type, arrow::default_memory_pool(), {int1_builder, str_builder, int2_builder});
+    arrow::TypeTraits<arrow::StructType>::BuilderType builder(data_type, arrow::default_memory_pool(),
+                                                              {int1_builder, str_builder, int2_builder});
 
     for (int i = 0; i < elemnts_num; i++) {
         if (is_null && i % 2 == 0) {
@@ -1340,7 +1351,7 @@ PARALLEL_TEST(ArrowConverterTest, test_map_to_json) {
 }
 
 static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssize_t& counter, bool add_null = false) {
-    auto value_builder = std::make_shared<arrow::UInt64Builder>();
+    auto value_builder = std::make_shared<arrow::Int32Builder>();
     int fix_size = 10;
     arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
                                                                      fix_size);
@@ -1359,34 +1370,65 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
+
     auto column = ColumnHelper::create_column(array_type, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
     auto array = create_list_array(num, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
-    ASSERT_TRUE(conv_func != nullptr);
     ASSERT_EQ(num, counter);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
-                               &array_type));
+    ASSERT_STATUS_OK(
+            cf.func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr, &cf));
     ASSERT_EQ(column->size(), 10);
 }
 
-static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_elements, ssize_t& counter) {
-    int fix_size = 5;
-    int fix_size1 = 10;
-    auto value_builder = std::make_shared<arrow::UInt64Builder>();
-    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder, fix_size);
-    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder, fix_size1);
+PARALLEL_TEST(ArrowConverterTest, test_convert_list_array_cast) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_INT));
+    std::shared_ptr<arrow::DataType> arrow_type;
+    convert_to_arrow_type(array_type, &arrow_type);
+    array_type.children[0].type = LogicalType::TYPE_FLOAT; // hack type here
+    TypeDescriptor raw_type;
+    ConvertFuncTree cf;
+    bool need_cast;
+    auto st = ParquetScanner::build_dest(arrow_type.get(), &array_type, false, &raw_type, &cf, need_cast, false);
+    ASSERT_STATUS_OK(st);
+    ASSERT_TRUE(need_cast);
+    ASSERT_EQ(raw_type.children[0].type, LogicalType::TYPE_INT);
+    auto column = ColumnHelper::create_column(raw_type, false);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_list_array(num, counter);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            cf.func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr, &cf));
+    ASSERT_EQ(column->size(), 10);
+}
 
-    for (auto num1 = 0; num1 < num_elements; num1 += fix_size1) {
+static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents, int64_t num_children,
+                                                            int64_t num_child_values, ssize_t& counter) {
+    auto value_builder = std::make_shared<arrow::Int64Builder>();
+    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder,
+                                                                 num_child_values);
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder,
+                                                                      num_children);
+
+    for (auto num1 = 0; num1 < num_parents; ++num1) {
         builder1.Append();
-        for (auto num = 0; num < fix_size1; num += fix_size) {
+        for (auto num = 0; num < num_children; ++num) {
             builder->Append();
-            for (int i = 0; i < fix_size; i++) {
+            for (int i = 0; i < num_child_values; ++i) {
                 value_builder->Append(counter);
                 counter += 1;
             }
@@ -1401,36 +1443,42 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
     TypeDescriptor array_type(TYPE_ARRAY);
     array_type.children.push_back(array_type0);
 
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
+
     auto column = ColumnHelper::create_column(array_type, false);
     column->reserve(4096);
     ssize_t counter = 0;
-    int num = 100;
-    auto array = create_nest_list_array(num, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
-    ASSERT_TRUE(conv_func != nullptr);
-    ASSERT_EQ(num, counter);
+    auto array = create_nest_list_array(10, 2, 5, counter);
+    ASSERT_EQ(10 * 2 * 5, counter);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
-                               &array_type));
+    ASSERT_STATUS_OK(
+            cf.func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr, &cf));
     ASSERT_EQ(column->size(), 10);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(array_type, array_type, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
+
     auto column = ColumnHelper::create_column(array_type, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
     auto array = create_list_array(num, counter, true);
-    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
     ASSERT_EQ(num, counter);
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &array_type,
-                                                             column, 0, column->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), column, 0,
+                                                             column->size(), &filter, nullptr));
     ASSERT_EQ(column->size(), 20);
     ASSERT_EQ(down_cast<NullableColumn*>(column.get())->null_count(), 10);
 }
@@ -1439,13 +1487,14 @@ void convert_arrow_map_to_map_column(Column* column, size_t num_elements, const 
                                      size_t& counter, const TypeDescriptor& type) {
     ASSERT_EQ(column->size(), counter);
     auto array = create_map_array(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_MAP, false, false);
-    ASSERT_TRUE(conv_func != nullptr);
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(type, type, cf);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
 
     Filter filter;
     filter.resize(array->length() + column->size(), 1);
-    ASSERT_STATUS_OK(
-            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, &type));
+    ASSERT_STATUS_OK(cf.func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, &cf));
     ASSERT_EQ(column->size(), counter);
 }
 
@@ -1480,13 +1529,15 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
     };
     int num_elements = 10;
     auto array = create_map_array(num_elements, map_value, counter, true);
-    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_MAP, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(map_type, map_type, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
 
     Filter filter;
     filter.resize(array->length() + map_column->size(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &map_type,
-                                                             map_column, 0, map_column->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), map_column, 0,
+                                                             map_column->size(), &filter, nullptr));
     ASSERT_EQ(map_column->size(), counter);
     ASSERT_EQ(down_cast<NullableColumn*>(map_column.get())->null_count(), num_elements);
     ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'haha':2,'hehe':1,'hehe':1}");
@@ -1505,13 +1556,16 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct) {
     auto st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, false);
-    auto conv_func = get_arrow_converter(ArrowTypeId::STRUCT, TYPE_STRUCT, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
+
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(struct_type, struct_type, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &struct_type,
-                                                             st_col, 0, st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
+                                                             st_col->size(), &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
 
@@ -1532,13 +1586,15 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_null) {
     auto st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, true);
-    auto conv_func = get_arrow_converter(ArrowTypeId::STRUCT, TYPE_STRUCT, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(struct_type, struct_type, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &struct_type,
-                                                             st_col, 0, st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
+                                                             st_col->size(), &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 5);
     ASSERT_EQ(st_col->debug_item(0), "NULL");
@@ -1559,22 +1615,32 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_less_column) {
     struct_type.field_names.emplace_back("col3");
     struct_type.field_names.emplace_back("col4");
 
-    auto st_col = ColumnHelper::create_column(struct_type, true);
+    TypeDescriptor struct_type1(TYPE_STRUCT);
+    struct_type1.children.emplace_back(TYPE_INT);
+    struct_type1.children.emplace_back(TYPE_VARCHAR);
+    struct_type1.children.emplace_back(TYPE_INT);
+
+    struct_type1.field_names.emplace_back("col1");
+    struct_type1.field_names.emplace_back("col2");
+    struct_type1.field_names.emplace_back("col3");
 
     auto array = create_struct_array(10, true);
-    auto conv_func = get_arrow_converter(ArrowTypeId::STRUCT, TYPE_STRUCT, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(struct_type, struct_type1, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
+
+    auto st_col = ColumnHelper::create_column(struct_type, true);
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &struct_type,
-                                                             st_col, 0, st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
+                                                             st_col->size(), &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 5);
     ASSERT_EQ(st_col->debug_item(3), "{col1:3,col2:'char-3',col3:30,col4:NULL}");
     ASSERT_EQ(st_col->debug_item(9), "{col1:9,col2:'char-9',col3:90,col4:NULL}");
 }
-
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     TypeDescriptor struct_type(TYPE_STRUCT);
@@ -1587,13 +1653,15 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     auto st_col = ColumnHelper::create_column(struct_type, true);
 
     auto array = create_struct_array(10, false);
-    auto conv_func = get_arrow_converter(ArrowTypeId::STRUCT, TYPE_STRUCT, true, false);
-    ASSERT_TRUE(conv_func != nullptr);
+    ConvertFuncTree cf;
+    auto [need_cast, st] = get_conv_func(struct_type, struct_type, cf, true);
+    ASSERT_STATUS_OK(st);
+    ASSERT_FALSE(need_cast);
 
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &struct_type,
-                                                             st_col, 0, st_col->size(), &filter, nullptr));
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&cf, array->length(), array.get(), st_col, 0,
+                                                             st_col->size(), &filter, nullptr));
     ASSERT_EQ(st_col->size(), 10);
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
     ASSERT_EQ(st_col->debug_item(0), "{col1:0,col2:'char-0'}");

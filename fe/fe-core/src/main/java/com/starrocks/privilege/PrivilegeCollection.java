@@ -11,17 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,59 +28,27 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class PrivilegeCollection {
-    private static final Logger LOG = LogManager.getLogger(PrivilegeCollection.class);
+public class PrivilegeCollection implements GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(PrivilegeCollectionV2.class);
 
     @SerializedName("m2")
-    protected Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
+    protected Map<ObjectTypeDeprecate, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
-    public static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
-        @SerializedName(value = "a")
-        protected ActionSet actionSet;
-        @SerializedName(value = "o")
-        protected PEntryObject object;
-        @SerializedName(value = "g")
-        protected boolean withGrantOption;
-
-        public PrivilegeEntry(ActionSet actionSet, PEntryObject object, boolean withGrantOption) {
-            this.actionSet = actionSet;
-            this.object = object;
-            this.withGrantOption = withGrantOption;
-        }
-
-        public PrivilegeEntry(PrivilegeEntry other) {
-            this.actionSet = new ActionSet(other.actionSet);
-            if (other.object == null) {
-                this.object = null;
-            } else {
-                this.object = other.object.clone();
+    /**
+     * Remove invalid {@link ForwardCompatiblePEntryObject} after deserialization.
+     *
+     * @throws IOException
+     */
+    @Override
+    public void gsonPostProcess() throws IOException {
+        Iterator<Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>>> mapIter = typeToPrivilegeEntryList.entrySet().iterator();
+        while (mapIter.hasNext()) {
+            Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> entry = mapIter.next();
+            List<PrivilegeEntry> pEntryList = entry.getValue();
+            pEntryList.removeIf(privilegeEntry -> privilegeEntry.getObject() instanceof ForwardCompatiblePEntryObject);
+            if (pEntryList.isEmpty()) {
+                mapIter.remove();
             }
-            this.withGrantOption = other.withGrantOption;
-        }
-
-        public ActionSet getActionSet() {
-            return actionSet;
-        }
-
-        public PEntryObject getObject() {
-            return object;
-        }
-
-        public boolean isWithGrantOption() {
-            return withGrantOption;
-        }
-
-        @Override
-        public int compareTo(@NotNull PrivilegeEntry o) {
-            //object is null when objectType is SYSTEM
-            if (this.object == null && o.object == null) {
-                return 0;
-            } else if (this.object == null) {
-                return -1;
-            } else if (o.object == null) {
-                return 1;
-            }
-            return this.object.compareTo(o.object);
         }
     }
 
@@ -140,8 +107,8 @@ public class PrivilegeCollection {
         }
     }
 
-    public void grant(ObjectType objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
-            throws PrivilegeException {
+    public void grant(ObjectTypeDeprecate objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects,
+                      boolean isGrant) throws PrivilegeException {
         typeToPrivilegeEntryList.computeIfAbsent(objectType, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         for (PEntryObject object : objects) {
@@ -176,7 +143,7 @@ public class PrivilegeCollection {
         }
     }
 
-    public void revoke(ObjectType objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
+    public void revoke(ObjectTypeDeprecate objectType, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects)
             throws PrivilegeException {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         if (privilegeEntryList == null) {
@@ -207,7 +174,7 @@ public class PrivilegeCollection {
         }
     }
 
-    public boolean check(ObjectType objectType, PrivilegeType want, PEntryObject object) {
+    public boolean check(ObjectTypeDeprecate objectType, PrivilegeType want, PEntryObject object) {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         if (privilegeEntryList == null) {
             return false;
@@ -221,7 +188,7 @@ public class PrivilegeCollection {
         return false;
     }
 
-    private boolean searchObject(ObjectType objectType, PEntryObject object, PrivilegeType want) {
+    private boolean searchObject(ObjectTypeDeprecate objectType, PEntryObject object, PrivilegeType want) {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         if (privilegeEntryList == null) {
             return false;
@@ -240,15 +207,15 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public boolean searchAnyActionOnObject(ObjectType objectType, PEntryObject object) {
+    public boolean searchAnyActionOnObject(ObjectTypeDeprecate objectType, PEntryObject object) {
         return searchObject(objectType, object, null);
     }
 
-    public boolean searchActionOnObject(ObjectType objectType, PEntryObject object, PrivilegeType want) {
+    public boolean searchActionOnObject(ObjectTypeDeprecate objectType, PEntryObject object, PrivilegeType want) {
         return searchObject(objectType, object, want);
     }
 
-    public boolean allowGrant(ObjectType objectType, List<PrivilegeType> wantSet, List<PEntryObject> objects) {
+    public boolean allowGrant(ObjectTypeDeprecate objectType, List<PrivilegeType> wantSet, List<PEntryObject> objects) {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
         if (privilegeEntryList == null) {
             return false;
@@ -279,7 +246,7 @@ public class PrivilegeCollection {
     }
 
     public void removeInvalidObject(GlobalStateMgr globalStateMgr) {
-        Iterator<Map.Entry<ObjectType, List<PrivilegeEntry>>> listIter = typeToPrivilegeEntryList.entrySet().iterator();
+        Iterator<Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>>> listIter = typeToPrivilegeEntryList.entrySet().iterator();
         while (listIter.hasNext()) {
             List<PrivilegeEntry> list = listIter.next().getValue();
             Iterator<PrivilegeEntry> entryIterator = list.iterator();
@@ -298,8 +265,8 @@ public class PrivilegeCollection {
     }
 
     public void merge(PrivilegeCollection other) {
-        for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeEntry : other.typeToPrivilegeEntryList.entrySet()) {
-            ObjectType typeId = typeEntry.getKey();
+        for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> typeEntry : other.typeToPrivilegeEntryList.entrySet()) {
+            ObjectTypeDeprecate typeId = typeEntry.getKey();
             ArrayList<PrivilegeEntry> otherList = (ArrayList<PrivilegeEntry>) typeEntry.getValue();
             if (!typeToPrivilegeEntryList.containsKey(typeId)) {
                 // deep copy here
@@ -321,7 +288,7 @@ public class PrivilegeCollection {
         return typeToPrivilegeEntryList.isEmpty();
     }
 
-    public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryList() {
+    public Map<ObjectTypeDeprecate, List<PrivilegeEntry>> getTypeToPrivilegeEntryList() {
         return typeToPrivilegeEntryList;
     }
 }

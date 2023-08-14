@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -25,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -148,20 +150,24 @@ public class TypeChecker implements PlanValidator.Checker {
         private void checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations, AggType aggType, boolean isSplit,
                                   int singleDistinctFunctionPos) {
             int index = -1;
+            boolean hasSingleDistinct = singleDistinctFunctionPos != - 1;
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
                 index++;
                 ColumnRefOperator outputCol = entry.getKey();
                 CallOperator aggCall = entry.getValue();
                 boolean isMergeAggFn = false;
-                if (aggType.isGlobal() || (aggType.isLocal() && !isSplit)) {
-                    if (singleDistinctFunctionPos != -1 && index != singleDistinctFunctionPos) {
+                switch (aggType) {
+                    case LOCAL:
+                        isMergeAggFn = isSplit && hasSingleDistinct && (index != singleDistinctFunctionPos);
+                        break;
+                    case GLOBAL:
+                        isMergeAggFn = isSplit && (!hasSingleDistinct || index != singleDistinctFunctionPos);
+                        break;
+                    case DISTINCT_GLOBAL:
                         isMergeAggFn = true;
-                    } else if (isSplit) {
-                        isMergeAggFn = true;
-                    }
-                } else if (aggType.isDistinctGlobal() ||
-                        (aggType.isDistinctLocal() && index != singleDistinctFunctionPos)) {
-                    isMergeAggFn = true;
+                        break;
+                    case DISTINCT_LOCAL:
+                        isMergeAggFn = index != singleDistinctFunctionPos;
                 }
 
                 if (aggType.isGlobal()) {
@@ -182,6 +188,18 @@ public class TypeChecker implements PlanValidator.Checker {
             checkArgument(actual.matchesType(defined),
                     "%s the type of arg %s in expr '%s' is defined as %s, but the actual type is %s",
                     PREFIX, arg, expr, defined, actual);
+        }
+
+        private void checkPercentileApprox(List<ScalarOperator> arguments) {
+            ScalarOperator arg1 = arguments.get(1);
+            if (!(arguments.get(1) instanceof ConstantOperator)) {
+                throw new IllegalArgumentException("percentile_approx " +
+                        "requires the second parameter's type is numeric constant type");
+            }
+            ConstantOperator rate = (ConstantOperator) arg1;
+            if (rate.getDouble() < 0 || rate.getDouble() > 1) {
+                throw new SemanticException("percentile_approx second parameter'value must be between 0 and 1");
+            }
         }
 
         private void checkAggArguments(CallOperator aggCall, boolean isMergeAggFn) {
@@ -212,9 +230,16 @@ public class TypeChecker implements PlanValidator.Checker {
                 case NDV:
                 case APPROX_COUNT_DISTINCT:
                 case HLL_RAW:
-                case PERCENTILE_APPROX:
                 case AVG:
                 case PERCENTILE_UNION:
+                    if (!isMergeAggFn) {
+                        checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
+                    } else {
+                        // check args in merge phase
+                    }
+                    break;
+                case PERCENTILE_APPROX:
+                    checkPercentileApprox(arguments);
                     if (!isMergeAggFn) {
                         checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
                     } else {

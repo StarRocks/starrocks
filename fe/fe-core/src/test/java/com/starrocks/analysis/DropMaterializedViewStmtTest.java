@@ -84,7 +84,7 @@ public class DropMaterializedViewStmtTest {
         OlapTable table = new OlapTable(30000, "table",
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
         table.setBaseIndexId(100);
-        db.createTable(table);
+        db.registerTableUnlocked(table);
         table.addPartition(new Partition(100, "p",
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,

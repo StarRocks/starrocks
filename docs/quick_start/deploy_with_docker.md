@@ -1,5 +1,3 @@
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />
-
 # Deploy StarRocks with Docker
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
@@ -8,7 +6,7 @@ By following these steps, you can deploy a simple StarRocks cluster with **one F
 
 > **CAUTION**
 >
-> Deploying StarRocks in Docker containers merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To deploy a high-availability StarRocks cluster, see [Deployment overview](../deployment/deployment_overview.md) for other options that suit your scenarios.
+> Deploying StarRocks with the Docker image used in this tutorial merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To deploy a high-availability StarRocks cluster, see [Deployment overview](../deployment/deployment_overview.md) for other options that suit your scenarios.
 
 ## Prerequisites
 
@@ -31,7 +29,7 @@ Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker
 
 ```Bash
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd registry.starrocks.io/starrocks/allin1-ubuntu
+    -itd starrocks/allin1-ubuntu
 ```
 
 > **TROUBLESHOOTING**
@@ -168,3 +166,5 @@ sudo docker rm <container_id>
 ## What to do next
 
 Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md).
+
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />

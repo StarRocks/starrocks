@@ -30,6 +30,7 @@
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "testutil/sync_point.h"
 #include "util/threadpool.h"
 
 namespace starrocks::lake {
@@ -78,16 +79,17 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
         : _tablet_mgr(tablet_mgr),
           _limiter(config::compact_threads),
-          _states_lock(),
+          _contexts_lock(),
           _contexts(),
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
     CHECK_GT(_task_queue_count, 0);
-    ThreadPoolBuilder("clound_native_compact")
-            .set_min_threads(_task_queue_count)
-            .set_max_threads(_task_queue_count)
-            .set_max_queue_size(_task_queue_count)
-            .build(&_threads);
+    auto st = ThreadPoolBuilder("clound_native_compact")
+                      .set_min_threads(_task_queue_count)
+                      .set_max_threads(_task_queue_count)
+                      .set_max_queue_size(_task_queue_count)
+                      .build(&_threads);
+    CHECK(st.ok()) << st;
 
     for (int i = 0; i < _task_queue_count; i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
@@ -110,15 +112,16 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
         {
-            std::lock_guard l(_states_lock);
+            std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
         _task_queues[idx].put(std::move(context));
     }
+    TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
-    std::lock_guard l(_states_lock);
+    std::lock_guard l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
          node = node->next()) {
         CompactionTaskContext* context = node->value();
@@ -140,7 +143,7 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
 }
 
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
-    std::lock_guard l(_states_lock);
+    std::lock_guard l(_contexts_lock);
     for (auto& context : states) {
         context->RemoveFromList();
     }
@@ -201,7 +204,9 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     } else {
         auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
         if (task_or.ok()) {
-            status.update(task_or.value()->execute(&context->progress));
+            auto should_cancel = [&]() { return context->callback->has_error(); };
+            TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
+            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
         } else {
             status.update(task_or.status());
         }
@@ -212,8 +217,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
     if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
-        VLOG(3) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
-                << " txn_id=" << txn_id << " cost=" << cost << "s";
+        LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
+                     << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
         auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task
@@ -243,6 +248,19 @@ bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) cons
     auto txn_log = _tablet_mgr->txn_log_location(tablet_id, txn_id);
     auto fs_or = FileSystem::CreateSharedFromString(txn_log);
     return fs_or.ok() && fs_or.value()->path_exists(txn_log).ok();
+}
+
+Status CompactionScheduler::abort(int64_t txn_id) {
+    std::lock_guard l(_contexts_lock);
+    for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
+         node = node->next()) {
+        CompactionTaskContext* context = node->value();
+        if (context->txn_id == txn_id) {
+            context->callback->update_status(Status::Aborted("aborted on demand"));
+            return Status::OK();
+        }
+    }
+    return Status::NotFound(fmt::format("no compaction task with txn id {}", txn_id));
 }
 
 } // namespace starrocks::lake

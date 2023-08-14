@@ -21,7 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -38,12 +38,11 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -383,7 +382,7 @@ public class DataDescription implements ParseNode {
                         + "Expr: " + columnExpr.toSql());
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
-            if (predicate.getOp() != Operator.EQ) {
+            if (predicate.getOp() != BinaryType.EQ) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
                         + "The mapping operator error, op: " + predicate.getOp());
             }
@@ -644,39 +643,18 @@ public class DataDescription implements ParseNode {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                    tableName, PrivilegeType.INSERT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "INSERT",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), tableName);
+        try {
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                    ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
+
+            if (isLoadFromTable()) {
+                Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
             }
-        } else {
-            // check auth
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
-                    PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), tableName);
-            }
-        }
-        // check hive table auth
-        if (isLoadFromTable()) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkTableAction(ConnectContext.get(), fullDbName,
-                        srcTableName, PrivilegeType.SELECT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                            ConnectContext.get().getQualifiedUser(),
-                            ConnectContext.get().getRemoteIP(), srcTableName);
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
-                        PrivPredicate.SELECT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                            ConnectContext.get().getQualifiedUser(),
-                            ConnectContext.get().getRemoteIP(), srcTableName);
-                }
-            }
+        } catch (AccessDeniedException e) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT/INSERT",
+                    ConnectContext.get().getQualifiedUser(),
+                    ConnectContext.get().getRemoteIP(), srcTableName);
         }
     }
 

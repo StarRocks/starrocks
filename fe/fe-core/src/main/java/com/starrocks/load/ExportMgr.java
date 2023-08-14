@@ -39,21 +39,24 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.common.MetaUtils;
@@ -150,20 +153,12 @@ public class ExportMgr {
         }
         return matchedJob;
     }
+
     public void cancelExportJob(CancelExportStmt stmt) throws UserException {
         ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
         UUID queryId = stmt.getQueryId();
         if (matchedJob == null) {
             throw new AnalysisException("Export job [" + queryId.toString() + "] is not found");
-        }
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // check auth
-            TableName tableName = matchedJob.getTableName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         tableName.getDb(), tableName.getTbl(),
-                                                                         PrivPredicate.SELECT)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, Privilege.SELECT_PRIV);
-            }
         }
         matchedJob.cancel(ExportFailMsg.CancelType.USER_CANCEL, "user cancel");
     }
@@ -228,28 +223,21 @@ public class ExportMgr {
                     if (db == null) {
                         continue;
                     }
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnOrInDb(ConnectContext.get(), db.getFullName())) {
-                            continue;
-                        }
-                    } else {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
-                                db.getFullName(), PrivPredicate.SHOW)) {
-                            continue;
-                        }
+
+                    try {
+                        Authorizer.checkAnyActionOnOrInDb(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(),
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                db.getFullName());
+                    } catch (AccessDeniedException e) {
+                        continue;
                     }
                 } else {
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
-                                tableName.getDb(),
-                                tableName.getTbl())) {
-                            continue;
-                        }
-                    } else {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
-                            continue;
-                        }
+                    try {
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                ConnectContext.get().getCurrentRoleIds(), tableName);
+                    } catch (AccessDeniedException e) {
+                        continue;
                     }
                 }
 
@@ -362,11 +350,12 @@ public class ExportMgr {
         }
     }
 
+    @Deprecated
     public void replayUpdateJobState(long jobId, ExportJob.JobState newState) {
         writeLock();
         try {
             ExportJob job = idToJob.get(jobId);
-            job.updateState(newState, true);
+            job.updateState(newState, true, System.currentTimeMillis());
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(jobId);
@@ -380,12 +369,12 @@ public class ExportMgr {
         writeLock();
         try {
             ExportJob job = idToJob.get(info.jobId);
-            job.updateState(info.state, true);
+            job.updateState(info.state, true, info.stateChangeTime);
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(info.jobId);
             }
-            job.setSnapshotPaths(info.snapshotPaths);
+            job.setSnapshotPaths(info.deserialize(info.snapshotPaths));
             job.setExportTempPath(info.exportTempPath);
             job.setExportedFiles(info.exportedFiles);
             job.setFailMsg(info.failMsg);
@@ -443,5 +432,29 @@ public class ExportMgr {
         }
 
         return checksum;
+    }
+
+    public void saveExportJobV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToJob.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
+        writer.writeJson(idToJob.size());
+        for (ExportJob job : idToJob.values()) {
+            writer.writeJson(job);
+        }
+        writer.close();
+    }
+
+    public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        for (int i = 0; i < size; i++) {
+            ExportJob job = reader.readJson(ExportJob.class);
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                continue;
+            }
+            unprotectAddJob(job);
+        }
     }
 }

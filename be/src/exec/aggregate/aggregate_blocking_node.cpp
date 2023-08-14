@@ -175,7 +175,8 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
                                                                     pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
@@ -267,7 +268,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
-        if (runtime_state()->enable_spill() && has_group_by_keys) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
             ops_with_source =
                     _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
                                            SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
@@ -282,14 +283,15 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         ops_with_source = try_interpolate_local_shuffle(ops_with_source);
     }
 
-    if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
-    }
-
     if (limit() != -1) {
         ops_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+
+    if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
+        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+    }
+
     return ops_with_source;
 }
 

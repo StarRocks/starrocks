@@ -14,6 +14,8 @@
 
 #pragma once
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 
@@ -102,7 +104,7 @@ public:
         }
 
         Column* data_column = nullable_column->mutable_data_column();
-        InputColumnType* column = down_cast<InputColumnType*>(data_column);
+        auto* column = down_cast<InputColumnType*>(data_column);
         auto value = AggregateFunctionStateHelper<State>::data(state).value;
         for (size_t i = start; i < end; ++i) {
             AggDataTypeTraits<LT>::assign_value(column, i, value);
@@ -132,7 +134,7 @@ public:
         }
 
         Column* data_column = nullable_column->mutable_data_column();
-        InputColumnType* column = down_cast<InputColumnType*>(data_column);
+        auto* column = down_cast<InputColumnType*>(data_column);
         auto value = AggregateFunctionStateHelper<State>::data(state).value;
         for (size_t i = start; i < end; ++i) {
             AggDataTypeTraits<LT>::append_value(column, value);
@@ -231,6 +233,86 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     }
 
     std::string get_name() const override { return "dense_rank"; }
+};
+
+struct CumeDistState {
+    int64_t rank;
+    int64_t frame_start;
+    int64_t count;
+};
+
+class CumeDistWindowFunction final : public WindowFunction<CumeDistState> {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        auto& s = this->data(state);
+        s.rank = 0;
+        s.frame_start = -1;
+        s.count = 1;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        auto& s = this->data(state);
+        if (s.frame_start != peer_group_start) {
+            s.frame_start = peer_group_start;
+            int64_t peer_group_count = peer_group_end - peer_group_start;
+            s.rank += peer_group_count;
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+        auto& s = this->data(state);
+        auto* column = down_cast<DoubleColumn*>(dst);
+        for (size_t i = start; i < end; ++i) {
+            column->get_data()[i] = (double)s.rank / s.count;
+        }
+    }
+
+    std::string get_name() const override { return "cume_dist"; }
+};
+
+struct PercentRankState : CumeDistState {
+    int64_t peer_group_count;
+};
+
+class PercentRankWindowFunction final : public WindowFunction<PercentRankState> {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        auto& s = this->data(state);
+        s.rank = 0;
+        s.frame_start = -1;
+        s.peer_group_count = 1;
+        s.count = 1;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        int64_t peer_group_count = peer_group_end - peer_group_start;
+        auto& s = this->data(state);
+        if (s.frame_start != peer_group_start) {
+            s.frame_start = peer_group_start;
+            s.rank += s.peer_group_count;
+        }
+        s.peer_group_count = peer_group_count;
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+        auto& s = this->data(state);
+        auto* column = down_cast<DoubleColumn*>(dst);
+        for (size_t i = start; i < end; ++i) {
+            if (s.count > 1) {
+                column->get_data()[i] = (double)(s.rank - 1) / (s.count - 1);
+            } else {
+                column->get_data()[i] = (double)0;
+            }
+        }
+    }
+
+    std::string get_name() const override { return "percent_rank"; }
 };
 
 // The NTILE window function divides ordered rows in the partition into `num_buckets` ranked groups
@@ -340,7 +422,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
             AggDataTypeTraits<LT>::assign_value(this->data(state).value,
@@ -393,7 +475,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
             AggDataTypeTraits<LT>::assign_value(this->data(state).value,
@@ -518,7 +600,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 }
             } else {
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+                const auto* column = down_cast<const InputColumnType*>(data_column);
                 this->data(state).is_null = false;
                 AggDataTypeTraits<LT>::assign_value(this->data(state).value,
                                                     AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
@@ -527,7 +609,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             if (!columns[0]->is_null(frame_end - 1)) {
                 this->data(state).is_null = false;
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+                const auto* column = down_cast<const InputColumnType*>(data_column);
                 AggDataTypeTraits<LT>::assign_value(this->data(state).value,
                                                     AggDataTypeTraits<LT>::get_row_ref(*column, frame_end - 1));
             } else {
@@ -542,6 +624,86 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     }
 
     std::string get_name() const override { return "lead-lag"; }
+};
+
+// result value
+template <LogicalType LT>
+struct AllocateSessionState {
+    using T = AggDataValueType<LT>;
+    int64_t session_id{};
+    T last_not_null_value{};
+    bool is_null{};
+    bool has_value{};
+    int32_t delta{};
+};
+
+template <LogicalType LT, typename T = RunTimeCppType<LT>>
+class SessionNumberWindowFunction final : public WindowFunction<AllocateSessionState<LT>> {
+public:
+    using InputColumnType = RunTimeColumnType<LT>;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).session_id = 1;
+        this->data(state).last_not_null_value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
+
+        const Column* delta_column = args[1].get();
+        DCHECK(delta_column->is_constant());
+        if (!delta_column->only_null() && !delta_column->empty()) {
+            this->data(state).delta = ColumnHelper::get_const_value<LogicalType::TYPE_INT>(args[1]);
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
+
+        DCHECK(frame_start < frame_end);
+        if (frame_start > frame_end) {
+            return;
+        }
+
+        auto delta = this->data(state).delta;
+        size_t current_row = frame_end - 1;
+        if (columns[0]->is_null(current_row)) {
+            this->data(state).is_null = true;
+        } else {
+            auto current_value = AggDataTypeTraits<LT>::get_row_ref(*column, current_row);
+            if (this->data(state).has_value && current_value - this->data(state).last_not_null_value > delta) {
+                this->data(state).session_id++;
+            }
+            this->data(state).is_null = false;
+            this->data(state).last_not_null_value = AggDataTypeTraits<LT>::get_row_ref(*column, frame_start);
+        }
+        this->data(state).has_value = true;
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& s = this->data(state);
+        if (dst->is_nullable()) {
+            auto* nullable_dst = down_cast<NullableColumn*>(dst);
+            auto* data_column = down_cast<Int64Column*>(nullable_dst->data_column().get());
+            for (size_t i = start; i < end; ++i) {
+                data_column->get_data()[i] = s.session_id;
+            }
+            if (s.is_null) {
+                for (size_t i = start; i < end; ++i) {
+                    nullable_dst->set_null(i);
+                }
+            }
+        } else {
+            auto* data_column = down_cast<Int64Column*>(dst);
+            for (size_t i = start; i < end; ++i) {
+                data_column->get_data()[i] = s.session_id;
+            }
+        }
+    }
+
+    std::string get_name() const override { return "session_number"; }
 };
 
 } // namespace starrocks

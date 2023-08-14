@@ -22,18 +22,27 @@ import com.starrocks.catalog.Table;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public interface IHiveMetastore {
 
     List<String> getAllDatabaseNames();
 
-    List<String> getAllTableNames(String dbName);
+    void createDb(String dbName, Map<String, String> properties);
+
+    void dropDb(String dbName, boolean deleteData);
 
     Database getDb(String dbName);
 
+    List<String> getAllTableNames(String dbName);
+
+    void createTable(String dbName, Table table);
+
+    void dropTable(String dbName, String tableName);
+
     Table getTable(String dbName, String tableName);
 
-    List<String> getPartitionKeys(String dbName, String tableName);
+    List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 
     default Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionNames) {
         return Maps.newHashMap();
@@ -72,7 +81,7 @@ public interface IHiveMetastore {
     default void invalidatePartition(HivePartitionName partitionName) {
     }
 
-    default void invalidatePartitionKeys(HiveTableName tableName) {
+    default void invalidatePartitionKeys(HivePartitionValue partitionValue) {
     }
 
     default long getCurrentEventId() {

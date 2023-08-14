@@ -30,6 +30,9 @@ public class CreateDbInfo implements Writable {
     @SerializedName(value = "n")
     private String dbName;
 
+    @SerializedName(value = "svId")
+    private String storageVolumeId;
+
     public CreateDbInfo(long id, String dbName) {
         this.id = id;
         this.dbName = dbName;
@@ -41,6 +44,14 @@ public class CreateDbInfo implements Writable {
 
     public String getDbName() {
         return dbName;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     @Override

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
@@ -1325,7 +1326,7 @@ public class OptimizerTaskTest {
         LogicalAggregationOperator aggregationOperator =
                 new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column4), map);
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.GT,
                 column5,
                 ConstantOperator.createInt(1));
         LogicalFilterOperator filterOperator = new LogicalFilterOperator(predicate);
@@ -1384,7 +1385,7 @@ public class OptimizerTaskTest {
         LogicalAggregationOperator aggregationOperator =
                 new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column3), Maps.newHashMap());
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.GT,
                 column3,
                 ConstantOperator.createInt(1));
         LogicalFilterOperator filterOperator = new LogicalFilterOperator(predicate);
@@ -1445,7 +1446,7 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column2, new Column("t2", ScalarType.INT, true));
         scanColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column2,
                 ConstantOperator.createInt(1));
 
@@ -1492,7 +1493,7 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column1, new Column("t1", ScalarType.INT, true));
         scanColumnMap.put(column2, new Column("t2", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column2,
                 ConstantOperator.createInt(1));
 
@@ -1635,7 +1636,7 @@ public class OptimizerTaskTest {
         scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scan2ColumnMap.put(this.column4, new Column("t4", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column3);
 
@@ -1724,11 +1725,11 @@ public class OptimizerTaskTest {
         scan3ColumnMap.put(column5, new Column("t5", ScalarType.INT, true));
         scan3ColumnMap.put(this.column6, new Column("t6", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column3);
 
-        BinaryPredicateOperator predicate2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate2 = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column5);
 
@@ -1833,7 +1834,7 @@ public class OptimizerTaskTest {
         scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scan2ColumnMap.put(this.column4, new Column("t4", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column3);
 
@@ -1938,7 +1939,7 @@ public class OptimizerTaskTest {
         scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scan2ColumnMap.put(this.column4, new Column("t4", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column3);
 
@@ -2051,7 +2052,7 @@ public class OptimizerTaskTest {
         scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scan2ColumnMap.put(this.column4, new Column("t4", ScalarType.INT, true));
 
-        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
                 column1,
                 column3);
 

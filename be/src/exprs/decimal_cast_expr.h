@@ -220,7 +220,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
         for (int i = 0; i < num_rows; ++i) {
             bool overflow = false;
             if constexpr (lt_is_boolean<NonDecimalType>) {
-                static constexpr DecimalCppType zero = DecimalCppType(0);
+                static constexpr auto zero = DecimalCppType(0);
                 result_data[i] = (data[i] != zero);
             } else if constexpr (lt_is_integer<NonDecimalType>) {
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, NonDecimalCppType, check_overflow>(

@@ -7,7 +7,7 @@
 #
 #  `distro` argument can be specified to build for a different linux distribution other than default `ubuntu`.
 #  For example, build centos7 dev-env with following commands
-#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks/dev-env-centos7:<tag> .
+#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t dev-env-centos7:latest .
 #
 #  Supported linux distribution are: centos7, ubuntu
 
@@ -19,10 +19,10 @@ ARG prebuild_maven=true
 # value: true | false
 # default: false
 ARG predownload_thirdparty=false
-ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230317.tar
+ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230720.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v1.0.1
+ARG starlet_tag=v3.1-rc8
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 

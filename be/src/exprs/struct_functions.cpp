@@ -14,16 +14,40 @@
 
 #include "exprs/struct_functions.h"
 
+#include "column/column_helper.h"
 #include "column/struct_column.h"
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> StructFunctions::row(FunctionContext* context, const Columns& columns) {
-    Columns field_columns;
-    for (auto& column : columns) {
-        field_columns.emplace_back(column->clone());
+StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const Columns& columns) {
+    ColumnPtr res = context->create_column(context->get_return_type(), false);
+
+    StructColumn* st = down_cast<StructColumn*>(res.get());
+    auto fields = st->fields_column();
+
+    DCHECK_EQ(fields.size(), columns.size());
+
+    for (int i = 0; i < columns.size(); i++) {
+        auto& column = columns[i];
+        if (column->only_null()) {
+            fields[i]->append_nulls(column->size());
+        } else if (column->is_constant()) {
+            auto* cc = ColumnHelper::get_data_column(column.get());
+            fields[i]->append_value_multiple_times(*cc, 0, column->size(), true);
+        } else {
+            fields[i]->append(*column, 0, column->size());
+        }
     }
-    return StructColumn::create(std::move(field_columns));
+
+    return res;
 }
 
+StatusOr<ColumnPtr> StructFunctions::named_struct(FunctionContext* context, const Columns& columns) {
+    Columns cols;
+    for (int i = 1; i < columns.size(); i = i + 2) {
+        cols.emplace_back(columns[i]);
+    }
+
+    return new_struct(context, cols);
+}
 } // namespace starrocks

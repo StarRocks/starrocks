@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -40,8 +41,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private boolean hasTableHints;
     private List<Long> selectedTabletId;
     private List<Long> hintsTabletIds;
+    private List<Long> hintsReplicaIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
+    private boolean usePkIndex;
+
+    // record if this scan is derived from SplitScanORToUnionRule
+    private boolean fromSplitOR;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -61,7 +67,9 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 null,
                 false,
                 Lists.newArrayList(),
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
     }
 
     public LogicalOlapScanOperator(
@@ -76,7 +84,9 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             PartitionNames partitionNames,
             boolean hasTableHints,
             List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
+            List<Long> hintsTabletIds,
+            List<Long> hintsReplicaIds,
+            boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
 
@@ -88,11 +98,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+        this.hintsReplicaIds = hintsReplicaIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
+        this.usePkIndex = usePkIndex;
     }
 
     private LogicalOlapScanOperator() {
         super(OperatorType.LOGICAL_OLAP_SCAN);
+        this.prunedPartitionPredicates = ImmutableList.of();
     }
 
     public DistributionSpec getDistributionSpec() {
@@ -119,12 +132,24 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return hintsTabletIds;
     }
 
+    public List<Long> getHintsReplicaIds() {
+        return hintsReplicaIds;
+    }
+
     public boolean hasTableHints() {
         return hasTableHints;
     }
 
+    public boolean isUsePkIndex() {
+        return usePkIndex;
+    }
+
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
+    }
+
+    public boolean isFromSplitOR() {
+        return fromSplitOR;
     }
 
     @Override
@@ -148,13 +173,18 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
-                Objects.equals(hintsTabletIds, that.hintsTabletIds);
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
+                Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
-                selectedTabletId, hintsTabletIds);
+                selectedTabletId, hintsTabletIds, hintsReplicaIds);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder
@@ -175,7 +205,9 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.hasTableHints = scanOperator.hasTableHints;
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.usePkIndex = scanOperator.usePkIndex;
             return this;
         }
 
@@ -185,22 +217,52 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
-            builder.selectedTabletId = selectedTabletId;
+            builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            builder.selectedPartitionId = selectedPartitionId;
+            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
             return this;
         }
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
-            builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            builder.prunedPartitionPredicates = ImmutableList.copyOf(prunedPartitionPredicates);
             return this;
         }
 
         public Builder setDistributionSpec(DistributionSpec distributionSpec) {
             builder.distributionSpec = distributionSpec;
+            return this;
+        }
+
+        public Builder setPartitionNames(PartitionNames partitionNames) {
+            builder.partitionNames = partitionNames;
+            return this;
+        }
+
+        public Builder setHintsTabletIds(List<Long> hintsTabletIds) {
+            builder.hintsTabletIds = ImmutableList.copyOf(hintsTabletIds);
+            return this;
+        }
+
+        public Builder setHintsReplicaIds(List<Long> hintsReplicaIds) {
+            builder.hintsReplicaIds = ImmutableList.copyOf(hintsReplicaIds);
+            return this;
+        }
+
+        public Builder setHasTableHints(boolean hasTableHints) {
+            builder.hasTableHints = hasTableHints;
+            return this;
+        }
+
+        public Builder setFromSplitOR(boolean fromSplitOR) {
+            builder.fromSplitOR = fromSplitOR;
+            return this;
+        }
+
+        public Builder setUsePkIndex(boolean usePkIndex) {
+            builder.usePkIndex = usePkIndex;
             return this;
         }
     }

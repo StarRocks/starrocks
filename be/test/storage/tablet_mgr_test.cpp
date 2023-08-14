@@ -41,6 +41,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/compaction_manager.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
@@ -340,6 +341,7 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
     // because there maybe other tablets exists in storage engine
     ASSERT_GE(tablets_count, 20);
 
+    StorageEngine::instance()->compaction_manager()->init_max_task_num(10);
     size_t num = StorageEngine::instance()->_compaction_check_one_round();
     ASSERT_GE(num, 20);
 }

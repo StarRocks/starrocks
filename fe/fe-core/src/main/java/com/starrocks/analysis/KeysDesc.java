@@ -106,7 +106,8 @@ public class KeysDesc implements ParseNode, Writable {
                 if (!cols.stream().anyMatch(col->col.getName().equalsIgnoreCase(keyName))) {
                     throw new SemanticException("Key column(%s) doesn't exist.", keysColumnNames.get(i));
                 }
-                throw new SemanticException("Key columns should be a ordered prefix of the schema.");
+                throw new SemanticException("Key columns must be the first few columns of the schema and the order "
+                                            + " of the key columns must be consistent with the order of the schema");
             }
 
             if (cols.get(i).getAggregateType() != null) {
@@ -205,7 +206,8 @@ public class KeysDesc implements ParseNode, Writable {
         for (int i = 0; i < keysColumnNames.size(); ++i) {
             String name = cols.get(i).getName();
             if (!keysColumnNames.get(i).equalsIgnoreCase(name)) {
-                throw new SemanticException("Key columns should be a ordered prefix of the schema.");
+                throw new SemanticException("Key columns must be the first few columns of the schema and the order "
+                                            + " of the key columns must be consistent with the order of the schema");
             }
 
             if (cols.get(i).getAggregateType() != null) {

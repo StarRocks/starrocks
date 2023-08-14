@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -38,7 +39,7 @@ public class PushDownMinMaxConjunctsRuleTest {
         ExternalScanPartitionPruneRule rule0 = ExternalScanPartitionPruneRule.ICEBERG_SCAN;
 
         PredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
+                BinaryType.EQ, new ColumnRefOperator(1, Type.INT, "id", true),
                 ConstantOperator.createInt(1));
 
         OptExpression scan =

@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
@@ -94,7 +95,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 break CHECK;
             }
             BinaryPredicate binaryPredicate = (BinaryPredicate) jobNameExpr;
-            if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+            if (binaryPredicate.getOp() != BinaryType.EQ) {
                 valid = false;
                 break CHECK;
             }

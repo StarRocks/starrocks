@@ -66,12 +66,14 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Optional;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
+
+import static com.starrocks.qe.SessionVariableConstants.FORCE_PREAGGREGATION;
+import static com.starrocks.qe.SessionVariableConstants.FORCE_STREAMING;
+import static com.starrocks.qe.SessionVariableConstants.LIMITED;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -121,12 +123,16 @@ public class AggregationNode extends PlanNode {
      * Sets this node as a preaggregation. Only valid to call this if it is not marked
      * as a preaggregation
      */
-    public void setIsPreagg(boolean canUseStreamingPreAgg) {
-        useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
+    public void setIsPreagg(boolean useStreamingPreAgg) {
+        useStreamingPreagg = useStreamingPreAgg;
     }
 
     public AggregateInfo getAggInfo() {
         return aggInfo;
+    }
+
+    public boolean isNeedsFinalize() {
+        return needsFinalize;
     }
 
     /**
@@ -239,10 +245,12 @@ public class AggregationNode extends PlanNode {
         }
 
         msg.agg_node.setHas_outer_join_child(hasNullableGenerateChild);
-        if (streamingPreaggregationMode.equalsIgnoreCase("force_streaming")) {
+        if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_STREAMING)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
-        } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(FORCE_PREAGGREGATION)) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase(LIMITED)) {
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.LIMITED_MEM);
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }

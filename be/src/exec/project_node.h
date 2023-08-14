@@ -32,7 +32,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status reset(RuntimeState* state) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;

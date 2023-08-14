@@ -60,7 +60,7 @@ public class SecurityIntegrationTest {
                 ")";
         createSecurityIntegration(sql);
         LDAPSecurityIntegration ldap1 = (LDAPSecurityIntegration)
-                GlobalStateMgr.getCurrentState().getAuthenticationManager().getSecurityIntegration("ldap1");
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap1");
         Assert.assertEquals("ldap", ldap1.getType());
         Assert.assertEquals("memberUid", ldap1.getLdapUserGroupMatchAttr());
         Assert.assertEquals("uid", ldap1.getLdapUserSearchAttr());
@@ -131,7 +131,7 @@ public class SecurityIntegrationTest {
 
     @Test
     public void testCreateSecurityIntegrationPersist() throws Exception {
-        AuthenticationManager masterManager = new AuthenticationManager();
+        AuthenticationMgr masterManager = new AuthenticationMgr();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         masterManager.save(emptyImage.getDataOutputStream());
@@ -156,7 +156,7 @@ public class SecurityIntegrationTest {
         masterManager.save(finalImage.getDataOutputStream());
 
         // test replay OP_CREATE_SECURITY_INTEGRATION edit log
-        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
         Assert.assertNull(followerManager.getSecurityIntegration("ldap3"));
         SecurityIntegrationInfo info = (SecurityIntegrationInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_SECURITY_INTEGRATION);
@@ -164,7 +164,7 @@ public class SecurityIntegrationTest {
         Assert.assertNotNull(followerManager.getSecurityIntegration("ldap3"));
 
         // simulate restart (load from image)
-        AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertNotNull(imageManager.getSecurityIntegration("ldap3"));
 
         // check authentication with auth chain

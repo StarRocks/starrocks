@@ -68,7 +68,11 @@ fi
 export CLANG_COMPATIBLE_FLAGS=`echo | ${STARROCKS_GCC_HOME}/bin/gcc -Wp,-v -xc++ - -fsyntax-only 2>&1 \
                 | grep -E '^\s+/' | awk '{print "-I" $1}' | tr '\n' ' '`
 
-# check java home
+if [[ -z ${JAVA_HOME} ]]; then
+    export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
+    echo "Infered JAVA_HOME=$JAVA_HOME"
+fi
+
 if [[ -z ${JAVA_HOME} ]]; then
     echo "Error: JAVA_HOME is not set"
     exit 1

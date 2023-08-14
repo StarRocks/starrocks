@@ -59,7 +59,13 @@ enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
     STATISTIC,
-    VARIABLE
+    VARIABLE,
+    HTTP_PROTOCAL
+}
+
+enum TResultSinkFormatType {
+    JSON,
+    OTHERS
 }
 
 struct TParquetOptions {
@@ -98,7 +104,10 @@ struct TPlanFragmentDestination {
   1: required Types.TUniqueId fragment_instance_id
 
   // ... which is being executed on this server
-  2: required Types.TNetworkAddress server
+
+  // 'deprecated_server' changed from required to optional in version 3.2
+  // can be removed in version 4.0
+  2: optional Types.TNetworkAddress deprecated_server
   3: optional Types.TNetworkAddress brpc_server
 
   4: optional i32 pipeline_driver_sequence
@@ -141,6 +150,7 @@ struct TMultiCastDataStreamSink {
 struct TResultSink {
     1: optional TResultSinkType type;
     2: optional TResultFileSinkOptions file_options;
+    3: optional TResultSinkFormatType format;
 }
 
 struct TMysqlTableSink {
@@ -200,6 +210,8 @@ struct TOlapTableSink {
     24: optional i32 auto_increment_slot_id
     25: optional Types.TPartialUpdateMode partial_update_mode
     26: optional string label
+    // enable colocated for sync mv 
+    27: optional bool enable_colocate_mv_index 
 }
 
 struct TSchemaTableSink {

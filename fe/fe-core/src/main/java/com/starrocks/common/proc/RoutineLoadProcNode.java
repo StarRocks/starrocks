@@ -36,7 +36,7 @@ package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 
@@ -58,7 +58,7 @@ public class RoutineLoadProcNode implements ProcNodeInterface {
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         // check job id
-        RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         if (routineLoadJob == null) {
             throw new AnalysisException("Job[" + jobId + "] does not exist");

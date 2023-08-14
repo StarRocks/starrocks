@@ -49,7 +49,7 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * 2. Min-max pruning: creates an additional list of conjuncts that are used to
  * prune a row group if any fail the row group's min-max parquet::Statistics.
  * 3. Get scan range locations.
- * 4. Compute stats, like cardinality, avgRowSize and numNodes.
+ * 4. Compute stats, like cardinality, avgRowSize.
  * <p>
  * TODO: Dictionary pruning
  */
@@ -59,6 +59,8 @@ public class HdfsScanNode extends ScanNode {
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
+    private DescriptorTable descTbl;
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -82,8 +84,9 @@ public class HdfsScanNode extends ScanNode {
         return helper.toString();
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        scanRangeLocations.setupScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+    public void setupScanRangeLocations(DescriptorTable descTbl) {
+        this.descTbl = descTbl;
+        scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
     }
 
     private void setupCloudCredential() {
@@ -99,7 +102,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
+        return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
     }
 
     @Override
@@ -140,9 +143,6 @@ public class HdfsScanNode extends ScanNode {
         }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
@@ -208,6 +208,8 @@ public class HdfsScanNode extends ScanNode {
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
+        msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
+        msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
     }
 
     @Override

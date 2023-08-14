@@ -19,11 +19,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 public abstract class Warehouse implements Writable {
@@ -54,7 +56,7 @@ public abstract class Warehouse implements Writable {
         return id;
     }
 
-    public String getFullName() {
+    public String getName() {
         return name;
     }
 
@@ -77,6 +79,12 @@ public abstract class Warehouse implements Writable {
     public abstract Cluster getAnyAvailableCluster();
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
+
+    public List<List<String>> getClusterInfo() {
+        return getClusterProcData().getRows();
+    }
+
+    public abstract ProcResult getClusterProcData();
 
     @Override
     public void write(DataOutput out) throws IOException {

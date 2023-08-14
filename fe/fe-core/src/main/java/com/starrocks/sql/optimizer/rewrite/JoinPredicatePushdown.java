@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -40,11 +39,8 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static java.util.function.Function.identity;
 
 public class JoinPredicatePushdown {
     // is it on predicate or normal predicate
@@ -61,14 +57,16 @@ public class JoinPredicatePushdown {
 
     private List<ScalarOperator> leftPushDown;
     private List<ScalarOperator> rightPushDown;
+    private boolean enableLeftRightOuterJoinEquivalenceDerive = true;
 
     public JoinPredicatePushdown(
             OptExpression joinOptExpression, boolean isOnPredicate, boolean directToChild,
-            ColumnRefFactory columnRefFactory) {
+            ColumnRefFactory columnRefFactory, boolean enableLeftRightOuterJoinEquivalenceDerive) {
         this.joinOptExpression = joinOptExpression;
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
+        this.enableLeftRightOuterJoinEquivalenceDerive = enableLeftRightOuterJoinEquivalenceDerive;
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
     }
@@ -367,8 +365,12 @@ public class JoinPredicatePushdown {
                 return equivalenceDerive(predicate, true);
             } else {
                 ScalarOperator predicate = rangePredicateDerive(predicateToPush);
-                getPushdownPredicatesFromEquivalenceDerive(
-                        Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
+                JoinOperator joinType = join.getJoinType();
+                if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin() ||
+                        enableLeftRightOuterJoinEquivalenceDerive) {
+                    getPushdownPredicatesFromEquivalenceDerive(
+                            Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
+                }
                 return predicate;
             }
         }
@@ -395,26 +397,30 @@ public class JoinPredicatePushdown {
         if (join.getJoinType().isLeftSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (rightOutputColumns.containsAll(p.getUsedColumns())) {
+                    p.setIsPushdown(true);
                     rightPushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (rightOutputColumns.containsAll(p.getUsedColumns()) &&
-                        canEliminateNull(rightOutputColumnOps, p.clone())) {
+                        Utils.canEliminateNull(rightOutputColumnOps, p.clone())) {
+                    p.setIsPushdown(true);
                     rightPushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (leftOutputColumns.containsAll(p.getUsedColumns())) {
+                    p.setIsPushdown(true);
                     leftPushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (leftOutputColumns.containsAll(p.getUsedColumns()) &&
-                        canEliminateNull(leftOutputColumnOps, p.clone())) {
+                        Utils.canEliminateNull(leftOutputColumnOps, p.clone())) {
+                    p.setIsPushdown(true);
                     leftPushDown.add(p);
                 }
             }
@@ -448,12 +454,14 @@ public class JoinPredicatePushdown {
         } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (rightOutputColumns.containsAll(p.getUsedColumns())) {
+                    p.setIsPushdown(true);
                     pushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (leftOutputColumns.containsAll(p.getUsedColumns())) {
+                    p.setIsPushdown(true);
                     pushDown.add(p);
                 }
             }
@@ -510,7 +518,7 @@ public class JoinPredicatePushdown {
         Set<ColumnRefOperator> rightOutputColumnOps = columnRefFactory.getColumnRefs(rightColumns);
 
         if (join.getJoinType().isLeftOuterJoin()) {
-            if (canEliminateNull(rightOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(rightOutputColumnOps, predicateToPush)) {
                 OptExpression newOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                                 .setJoinType(JoinOperator.INNER_JOIN)
                                 .build(),
@@ -518,7 +526,7 @@ public class JoinPredicatePushdown {
                 return newOpt;
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
-            if (canEliminateNull(leftOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(leftOutputColumnOps, predicateToPush)) {
                 OptExpression newOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                                 .setJoinType(JoinOperator.INNER_JOIN)
                                 .build(),
@@ -529,10 +537,10 @@ public class JoinPredicatePushdown {
             boolean canConvertLeft = false;
             boolean canConvertRight = false;
 
-            if (canEliminateNull(leftOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(leftOutputColumnOps, predicateToPush)) {
                 canConvertLeft = true;
             }
-            if (canEliminateNull(rightOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(rightOutputColumnOps, predicateToPush)) {
                 canConvertRight = true;
             }
 
@@ -554,25 +562,5 @@ public class JoinPredicatePushdown {
             }
         }
         return joinOpt;
-    }
-
-    private boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
-        Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
-                .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
-                .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
-
-        for (ScalarOperator e : Utils.extractConjuncts(expression)) {
-            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
-
-            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-            // Call the ScalarOperatorRewriter function to perform constant folding
-            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
-                return true;
-            } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
-                return true;
-            }
-        }
-        return false;
     }
 }

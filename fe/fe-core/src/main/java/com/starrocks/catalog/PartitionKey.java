@@ -54,6 +54,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Calendar;
 import java.util.List;
 
@@ -88,12 +91,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
-    public static PartitionKey createShadowPartitionKey(List<Column> columns) 
+    public static PartitionKey createShadowPartitionKey(List<Column> columns)
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
             PrimitiveType primitiveType = column.getPrimitiveType();
-            DateLiteral shadowLiteral;
+            LiteralExpr shadowLiteral;
             switch (primitiveType) {
                 case DATE:
                     shadowLiteral = SHADOW_DATE_LITERAL;
@@ -129,6 +132,20 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         }
 
         Preconditions.checkState(partitionKey.keys.size() == columns.size());
+        return partitionKey;
+    }
+
+    public static PartitionKey ofDateTime(LocalDateTime dateTime) throws AnalysisException {
+        PartitionKey partitionKey = new PartitionKey();
+        partitionKey.keys.add(new DateLiteral(dateTime, Type.DATETIME));
+        partitionKey.types.add(PrimitiveType.DATETIME);
+        return partitionKey;
+    }
+
+    public static PartitionKey ofDate(LocalDate date) throws AnalysisException {
+        PartitionKey partitionKey = new PartitionKey();
+        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), Type.DATE));
+        partitionKey.types.add(PrimitiveType.DATE);
         return partitionKey;
     }
 

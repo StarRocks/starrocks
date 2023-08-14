@@ -25,7 +25,8 @@ namespace starrocks::parquet {
 // Used to parse page header of column chunk. This class don't parse page's type.
 class PageReader {
 public:
-    PageReader(io::SeekableInputStream* stream, size_t start, size_t length);
+    PageReader(io::SeekableInputStream* stream, size_t start, size_t length, size_t num_values);
+
     ~PageReader() = default;
 
     // Try to parse header starts from current _offset. Caller should assure that
@@ -45,20 +46,30 @@ public:
     Status skip_bytes(size_t size);
 
     // seek to read position, this position must be a start of a page header.
-    void seek_to_offset(uint64_t offset) {
+    Status seek_to_offset(uint64_t offset) {
         _offset = offset;
         _next_header_pos = offset;
-        _stream->seek(offset);
+        return _stream->seek(offset);
     }
+
+    uint64_t get_next_header_pos() const { return _next_header_pos; }
 
     uint64_t get_offset() const { return _offset; }
 
+    Status next_page() { return seek_to_offset(_next_header_pos); }
+
+    bool is_last_page() { return _num_values_read >= _num_values_total; }
+
 private:
-    io::SeekableInputStream* _stream;
+    io::SeekableInputStream* const _stream;
     tparquet::PageHeader _cur_header;
+
     uint64_t _offset = 0;
     uint64_t _next_header_pos = 0;
-    uint64_t _finish_offset = 0;
+    const uint64_t _finish_offset = 0;
+
+    uint64_t _num_values_read = 0;
+    const uint64_t _num_values_total = 0;
 };
 
 } // namespace starrocks::parquet

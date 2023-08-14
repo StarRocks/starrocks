@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -66,6 +67,10 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         return comment;
     }
 
+    public boolean isSetIfNotExists() {
+        return ifNotExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateStorageVolumeStatement(this, context);
@@ -95,5 +100,16 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         sb.append(" PROPERTIES (").
                 append(new PrintableMap<>(properties, "=", true, false)).append(")");
         return sb.toString();
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
+            return true;
+        }
+        return false;
     }
 }

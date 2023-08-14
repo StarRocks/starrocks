@@ -34,17 +34,6 @@
 
 namespace starrocks {
 
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
-
 ColumnPtr build_int_column(const std::vector<int>& values) {
     auto data = Int32Column::create();
     data->append_numbers(values.data(), values.size() * sizeof(int32_t));
@@ -53,9 +42,7 @@ ColumnPtr build_int_column(const std::vector<int>& values) {
 
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
-    void SetUp() override {
-        create_array_expr();
-    }
+    void SetUp() override { create_array_expr(); }
 
     static TExprNode create_expr_node();
 
@@ -243,15 +230,6 @@ std::vector<Expr*> VectorizedLambdaFunctionExprTest::create_lambda_expr(ObjectPo
     lambda_func->add_child(col8);
     lambda_funcs.push_back(lambda_func);
     return lambda_funcs;
-}
-
-TypeDescriptor array_type(const LogicalType& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.resize(1);
-    t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
-    return t;
 }
 
 // just consider one level, not nested

@@ -68,7 +68,7 @@ public class RoutineLoadSchedulerTest {
 
     @Test
     public void testNormalRunOneCycle(@Mocked GlobalStateMgr globalStateMgr,
-                                      @Injectable RoutineLoadManager routineLoadManager,
+                                      @Injectable RoutineLoadMgr routineLoadManager,
                                       @Injectable SystemInfoService systemInfoService,
                                       @Injectable Database database,
                                       @Injectable RoutineLoadDesc routineLoadDesc,
@@ -98,7 +98,7 @@ public class RoutineLoadSchedulerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
                 routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
@@ -148,7 +148,7 @@ public class RoutineLoadSchedulerTest {
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L,
                 "10.74.167.16:8092", "test");
-        RoutineLoadManager routineLoadManager = new RoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
 
         List<Long> backendIds = new ArrayList<>();
@@ -156,7 +156,7 @@ public class RoutineLoadSchedulerTest {
 
         new Expectations() {
             {
-                globalStateMgr.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
                 globalStateMgr.getDb(anyLong);

@@ -27,6 +27,8 @@
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
+#include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
+#include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
@@ -507,9 +509,9 @@ Status CrossJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             });
 }
 
-Status CrossJoinNode::close(RuntimeState* state) {
+void CrossJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     if (_build_chunk != nullptr) {
@@ -520,7 +522,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
     }
 
     Expr::close(_join_conjuncts, state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 void CrossJoinNode::_init_row_desc() {
@@ -585,7 +587,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
         _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
-    RETURN_IF_ERROR(child(1)->close(state));
+    child(1)->close(state);
     return Status::OK();
 }
 
@@ -637,7 +639,9 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     (*chunk)->reserve(runtime_state()->chunk_size());
 }
 
-pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+template <class BuildFactory, class ProbeFactory>
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
@@ -658,11 +662,17 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     context_params.filters = _join_conjuncts;
     std::copy(conjunct_ctxs().begin(), conjunct_ctxs().end(), std::back_inserter(context_params.filters));
 
+    size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
+    auto workgroup = context->fragment_context()->workgroup();
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto spill_process_factory_ptr =
+            std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+    context_params.spill_process_factory_ptr = spill_process_factory_ptr;
+
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
 
     // cross_join_right as sink operator
-    auto right_factory =
-            std::make_shared<NLJoinBuildOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
+    auto right_factory = std::make_shared<BuildFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
 
@@ -673,10 +683,10 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
-    auto left_factory = std::make_shared<NLJoinProbeOperatorFactory>(
-            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(cross_join_context),
-            _join_op);
+    auto left_factory =
+            std::make_shared<ProbeFactory>(context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(),
+                                           child(1)->row_desc(), _sql_join_conjuncts, std::move(_join_conjuncts),
+                                           std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
@@ -687,8 +697,23 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
+    if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
+        may_add_chunk_accumulate_operator(left_ops, context, id());
+    }
+
     // return as the following pipeline
     return left_ops;
+}
+
+pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    if (runtime_state()->enable_spill() && runtime_state()->enable_nl_join_spill() && _join_op == TJoinOp::CROSS_JOIN) {
+        return _decompose_to_pipeline<SpillableNLJoinBuildOperatorFactory, SpillableNLJoinProbeOperatorFactory>(
+                context);
+    } else {
+        return _decompose_to_pipeline<NLJoinBuildOperatorFactory, NLJoinProbeOperatorFactory>(context);
+    }
 }
 
 } // namespace starrocks

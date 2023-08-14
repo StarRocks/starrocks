@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -152,7 +153,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         LocalDateTime bottomDateTime = child2.getDatetime().truncatedTo(ChronoUnit.DAYS);
 
         LocalDateTime targetDateTime;
-        BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
+        BinaryType binaryType = operator.getBinaryType();
         int offset;
         BinaryPredicateOperator resultBinaryPredicateOperator;
         ConstantOperator newDate;
@@ -220,7 +221,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
         LocalDateTime originalDate = child2.getDate().truncatedTo(ChronoUnit.DAYS);
         LocalDateTime targetDate;
-        BinaryPredicateOperator.BinaryType binaryType = operator.getBinaryType();
+        BinaryType binaryType = operator.getBinaryType();
         int offset;
         ScalarOperator resultBinaryPredicateOperator;
         ConstantOperator newDatetime;

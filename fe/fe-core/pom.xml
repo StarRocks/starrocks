@@ -40,6 +40,7 @@ under the License.
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.2.1</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
+        <paimon.version>0.4.0-incubating</paimon.version>
         <python>python</python>
     </properties>
 
@@ -160,12 +161,6 @@ under the License.
             <artifactId>jackson-core</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.starrocks/starrocks-bdb-je -->
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -247,6 +242,14 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.assertj/assertj-core -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.24.2</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-api</artifactId>
@@ -287,21 +290,24 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws</artifactId>
             <version>${iceberg.version}</version>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
             <version>${awsv2.version}</version>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>url-connection-client</artifactId>
             <version>${awsv2.version}</version>
-            <scope>runtime</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>utils</artifactId>
+                    <groupId>software.amazon.awssdk</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -703,14 +709,26 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-bundle</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-s3</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.2.7</version>
+            <version>3.1-rc8</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.2.7</version>
+            <version>3.1-rc8</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
@@ -775,6 +793,21 @@ under the License.
             <artifactId>trino-parser</artifactId>
             <version>385</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.threeten</groupId>
+            <artifactId>threeten-extra</artifactId>
+            <version>1.7.2</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>

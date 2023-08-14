@@ -12,10 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
-#ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
-#ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
-#ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
+if (CLANG_TIDY_PATH)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+endif()
+
+ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
 #ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/roaring_bitmap_mem_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/get_dict_codes_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/persistent_index_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/orc_column_reader_bench)

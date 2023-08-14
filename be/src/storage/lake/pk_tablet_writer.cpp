@@ -19,18 +19,20 @@
 #include "column/chunk.h"
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
+#include "storage/lake/filenames.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema)
-        : HorizontalGeneralTabletWriter(tablet, std::move(tschema)),
+HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                                   int64_t txn_id)
+        : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
-    auto name = fmt::format("{}.del", generate_uuid_string());
+    auto name = gen_del_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
     _files.emplace_back(std::move(name));
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -59,9 +61,9 @@ Status HorizontalPkTabletWriter::flush_segment_writer() {
     return Status::OK();
 }
 
-VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema,
-                                               uint32_t max_rows_per_segment)
-        : VerticalGeneralTabletWriter(tablet, std::move(tschema), max_rows_per_segment) {}
+VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                               int64_t txn_id, uint32_t max_rows_per_segment)
+        : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 

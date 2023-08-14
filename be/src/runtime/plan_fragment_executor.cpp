@@ -90,6 +90,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     if (request.query_options.__isset.enable_profile) {
         enable_profile = request.query_options.enable_profile;
     }
+    if (request.query_options.__isset.load_profile_collect_second) {
+        load_profile_collect_second = request.query_options.load_profile_collect_second;
+    }
 
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
@@ -305,6 +308,12 @@ void PlanFragmentExecutor::send_report(bool done) {
     // This may happen when the query limit reached and
     // a internal cancellation being processed
     if (!enable_profile && !_is_report_on_cancel) {
+        return;
+    }
+
+    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
+    auto now = std::time(nullptr);
+    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
         return;
     }
 

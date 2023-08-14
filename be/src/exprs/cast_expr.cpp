@@ -576,7 +576,7 @@ UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_INT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_INT, ImplicitToNumber);
 DIAGNOSTIC_POP
@@ -599,7 +599,7 @@ UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_BIGINT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_BIGINT, ImplicitToNumber);
@@ -622,7 +622,7 @@ UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_LARGEINT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_LARGEINT, ImplicitToNumber);
@@ -643,7 +643,7 @@ UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_FLOAT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_FLOAT, ImplicitToNumber);
@@ -667,7 +667,7 @@ UNARY_FN_CAST_VALID(TYPE_INT, TYPE_DOUBLE, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_DOUBLE, ImplicitToNumber);
@@ -1178,8 +1178,8 @@ DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATETIME, timeToDatetime, false);
  */
 DEFINE_STRING_UNARY_FN_WITH_IMPL(FloatCastToString, v) {
     char buf[16] = {0};
-    int len = f2s_buffered_n(v, buf);
-    return std::string(buf, len);
+    size_t len = f2s_buffered_n(v, buf);
+    return {buf, len};
 }
 
 /**
@@ -1187,8 +1187,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(FloatCastToString, v) {
  */
 DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     char buf[32] = {0};
-    int len = d2s_buffered_n(v, buf);
-    return std::string(buf, len);
+    size_t len = d2s_buffered_n(v, buf);
+    return {buf, len};
 }
 
 // The StringUnaryFunction templace is defined in unary_function.h
@@ -1446,6 +1446,17 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
+StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    // only null
+    auto column = ColumnHelper::create_column(_type, true);
+    column->append_nulls(1);
+    auto only_null = ConstColumn::create(column, 1);
+    if (ptr != nullptr) {
+        only_null->resize(ptr->num_rows());
+    }
+    return only_null;
+}
+
 Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                                        LogicalType to_type, bool allow_throw_exception) {
     if (to_type == TYPE_CHAR) {
@@ -1621,6 +1632,9 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         if (from_type.children.size() != to_type.children.size()) {
             return Status::NotSupported("vectorized engine not support cast struct with different number of children.");
         }
+        if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
+            return Status::NotSupported("vectorized engine not support cast struct with different field of children.");
+        }
         std::vector<std::unique_ptr<Expr>> field_casts{from_type.children.size()};
         for (int i = 0; i < from_type.children.size(); ++i) {
             ASSIGN_OR_RETURN(field_casts[i],
@@ -1630,6 +1644,9 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
             pool->add(cast_input.release());
         }
         return std::make_unique<CastStructExpr>(node, std::move(field_casts));
+    }
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+        return std::make_unique<MustNullExpr>(node);
     }
     auto res = create_primitive_cast(pool, node, from_type.type, to_type.type, allow_throw_exception);
     if (res == nullptr) {

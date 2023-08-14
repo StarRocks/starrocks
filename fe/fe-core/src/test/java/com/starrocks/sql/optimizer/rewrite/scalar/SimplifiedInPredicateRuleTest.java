@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -37,7 +38,7 @@ public class SimplifiedInPredicateRuleTest {
         ScalarOperator result = rule.apply(operator, null);
 
         assertEquals(OperatorType.BINARY, result.getOpType());
-        assertEquals(BinaryPredicateOperator.BinaryType.EQ, ((BinaryPredicateOperator) result).getBinaryType());
+        assertEquals(BinaryType.EQ, ((BinaryPredicateOperator) result).getBinaryType());
         assertEquals(ConstantOperator.createVarchar("zxcv"), result.getChild(1));
     }
 }

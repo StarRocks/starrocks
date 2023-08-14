@@ -1346,19 +1346,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Thread.sleep(3000);
         String sql = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: lineorder_flat_for_mv\n" +
                 "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
                 "     partitions=7/7\n" +
@@ -1367,28 +1355,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql2 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE)" +
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan2 = getFragmentPlan(sql2);
-        assertContains(plan2, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  2:EXCHANGE\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 41> : 13: LO_REVENUE\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
+        assertContains(plan2, "  0:OlapScanNode\n" +
                 "     TABLE: lineorder_flat_for_mv\n" +
                 "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
                 "     partitions=7/7\n" +
@@ -1398,30 +1365,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql3 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE), count(C_NAME)" +
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan3 = getFragmentPlan(sql3);
-        assertContains(plan3, "PLAN FRAGMENT 0\n" +
-                        " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
-                        "  PARTITION: UNPARTITIONED\n" +
-                        "\n" +
-                        "  RESULT SINK\n" +
-                        "\n" +
-                        "  2:EXCHANGE\n" +
-                        "\n" +
-                        "PLAN FRAGMENT 1\n" +
-                        " OUTPUT EXPRS:\n" +
-                        "  PARTITION: RANDOM\n" +
-                        "\n" +
-                        "  STREAM DATA SINK\n" +
-                        "    EXCHANGE ID: 02\n" +
-                        "    UNPARTITIONED\n" +
-                        "\n" +
-                        "  1:Project\n" +
-                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                        "  |  <slot 41> : 13: LO_REVENUE\n" +
-                        "  |  <slot 42> : ",
-                ": mv_count_c_name\n" +
-                        "  |  \n" +
-                        "  0:OlapScanNode\n" +
+        assertContains(plan3, "  0:OlapScanNode\n" +
                         "     TABLE: lineorder_flat_for_mv\n" +
                         "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
                         "     partitions=7/7\n" +
@@ -1431,14 +1375,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql4 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE) + 1, count(C_NAME) * 3" +
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan4 = getFragmentPlan(sql4);
-        assertContains(plan4, "1:Project\n" +
-                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                        "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
-                        "  |  <slot 44> :",
-                ": mv_count_c_name * 3\n" +
-                        "  |  \n" +
-                        "  0:OlapScanNode\n" +
+        assertContains(plan4, "0:OlapScanNode\n" +
                         "     TABLE: lineorder_flat_for_mv\n" +
                         "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
                         "     partitions=7/7\n" +
@@ -2027,11 +1964,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: v5 = 7: v7");
-        assertContains(plan, "  6:HASH JOIN\n" +
+        assertContains(plan, "6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
-                "  |  equal join conjunct: 2: v2 = 8: v8");
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6");
 
         sql = "Select * " +
                 " from t0 join[unreorder] t1 on t0.v3 = t1.v6 " +

@@ -40,7 +40,7 @@ public:
     Status get_next_internal(RuntimeState* state, ChunkPtr* chunk, bool* eos,
                              ScopedTimer<MonotonicStopWatch>& probe_timer);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -59,6 +59,10 @@ public:
 private:
     Status _build(RuntimeState* state);
     Status _get_next_probe_chunk(RuntimeState* state);
+
+    template <class BuildFactory, class ProbeFactory>
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context);
 
     // append cross-joined rows into chunk
 

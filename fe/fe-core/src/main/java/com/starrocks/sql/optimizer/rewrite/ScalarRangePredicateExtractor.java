@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -37,8 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType;
 
 /**
  * Derive a expression's value range. such as:
@@ -93,7 +92,7 @@ public class ScalarRangePredicateExtractor {
 
         predicate = Utils.compoundAnd(Lists.newArrayList(conjuncts));
         if (isOnlyOrCompound(predicate)) {
-            Set<ColumnRefOperator> c = new HashSet<>(Utils.extractColumnRef(predicate));
+            Set<ColumnRefOperator> c = Sets.newHashSet(Utils.extractColumnRef(predicate));
             if (c.size() == extractMap.size() &&
                     extractMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
                 return extractExpr;

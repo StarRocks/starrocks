@@ -72,6 +72,8 @@ public:
             const std::shared_ptr<starrocks::DeltaWriter>& delta_writer,
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);
 
+    ThreadPool* get_thread_pool() { return _flush_pool.get(); }
+
 private:
     std::unique_ptr<ThreadPool> _flush_pool;
 };

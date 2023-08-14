@@ -69,6 +69,7 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
@@ -79,7 +80,8 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.UnlockTabletMetadataRequest;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -109,9 +111,11 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 // NOTE: we must be carefully if we send next request
 //       as soon as receiving one instance's report from one BE,
@@ -120,7 +124,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 // export file name format:
 // <prefix>_<task-number>_<instance-number>_<file-number>.csv  (if include_query_id is false)
 // <prefix>_<query-id>_<task-number>_<instance-number>_<file-number>.csv
-public class ExportJob implements Writable {
+public class ExportJob implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ExportJob.class);
     // descriptor used to register all column and table need
     private final DescriptorTable desc;
@@ -134,28 +138,46 @@ public class ExportJob implements Writable {
     // backend id => backend lastStartTime 
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
+    @SerializedName("id")
     private long id;
     private UUID queryId;
+    @SerializedName("qd")
+    private String queryIdString;
+    @SerializedName("dd")
     private long dbId;
+    @SerializedName("td")
     private long tableId;
+    @SerializedName("bd")
     private BrokerDesc brokerDesc;
     // exportPath has "/" suffix
+    @SerializedName("ep")
     private String exportPath;
     private String exportTempPath;
     private String fileNamePrefix;
+    @SerializedName("cs")
     private String columnSeparator;
+    @SerializedName("rd")
     private String rowDelimiter;
     private boolean includeQueryId;
+    @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
+    @SerializedName("ps")
     private List<String> partitions;
+    @SerializedName("tn")
     private TableName tableName;
     private List<String> columnNames;
     private String sql = "";
+    @SerializedName("se")
     private JobState state;
+    @SerializedName("ct")
     private long createTimeMs;
+    @SerializedName("st")
     private long startTimeMs;
+    @SerializedName("ft")
     private long finishTimeMs;
+    @SerializedName("pg")
     private int progress;
+    @SerializedName("fm")
     private ExportFailMsg failMsg;
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
@@ -189,6 +211,7 @@ public class ExportJob implements Writable {
         this();
         this.id = jobId;
         this.queryId = queryId;
+        this.queryIdString = queryId.toString();
     }
 
     public void setJob(ExportStmt stmt) throws UserException {
@@ -409,16 +432,19 @@ public class ExportJob implements Writable {
         return outputExprs;
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
         UUID uuid = UUID.randomUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);
             ScanNode scanNode = nodes.get(i);
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
-            Coordinator coord = new Coordinator(
+            Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
-            coord.setExecMemoryLimit(getMemLimit());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
@@ -460,10 +486,9 @@ public class ExportJob implements Writable {
         OlapScanNode newTaskScanNode = genOlapScanNodeByLocation(newLocations);
         PlanFragment newFragment = genPlanFragment(exportTable.getType(), newTaskScanNode, taskIndex);
 
-        Coordinator newCoord = new Coordinator(
+        Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
-        newCoord.setExecMemoryLimit(getMemLimit());
+                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit());
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
@@ -646,10 +671,10 @@ public class ExportJob implements Writable {
     }
 
     public synchronized boolean updateState(JobState newState) {
-        return this.updateState(newState, false);
+        return this.updateState(newState, false, System.currentTimeMillis());
     }
 
-    public synchronized boolean updateState(JobState newState, boolean isReplay) {
+    public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
             return false;
@@ -661,11 +686,11 @@ public class ExportJob implements Writable {
                 progress = 0;
                 break;
             case EXPORTING:
-                startTimeMs = System.currentTimeMillis();
+                startTimeMs = stateChangeTime;
                 break;
             case FINISHED:
             case CANCELLED:
-                finishTimeMs = System.currentTimeMillis();
+                finishTimeMs = stateChangeTime;
                 progress = 100;
                 break;
             default:
@@ -673,7 +698,7 @@ public class ExportJob implements Writable {
                 break;
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState,
+            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
         }
         return true;
@@ -998,6 +1023,22 @@ public class ExportJob implements Writable {
         CANCELLED,
     }
 
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (!Strings.isNullOrEmpty(queryIdString)) {
+            queryId = UUID.fromString(queryIdString);
+        }
+        isReplayed = true;
+        GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
+        Database db = null;
+        if (stateMgr.getMetadata() != null) {
+            db = stateMgr.getDb(dbId);
+        }
+        if (db != null) {
+            exportTable = db.getTable(tableId);
+        }
+    }
+
     // for only persist op when switching job state.
     public static class StateTransfer implements Writable {
         long jobId;
@@ -1038,8 +1079,10 @@ public class ExportJob implements Writable {
         long jobId;
         @SerializedName("state")
         JobState state;
+        @SerializedName("stateChangeTime")
+        long stateChangeTime;
         @SerializedName("snapshotPaths")
-        List<Pair<TNetworkAddress, String>> snapshotPaths;
+        List<Pair<NetworkAddress, String>> snapshotPaths;
         @SerializedName("exportTempPath")
         String exportTempPath;
         @SerializedName("exportedFiles")
@@ -1050,28 +1093,22 @@ public class ExportJob implements Writable {
         public ExportUpdateInfo() {
             this.jobId = -1;
             this.state = JobState.CANCELLED;
-            this.snapshotPaths =  Lists.newArrayList();
+            this.snapshotPaths = Lists.newArrayList();
             this.exportTempPath = "";
             this.exportedFiles = Sets.newConcurrentHashSet();
             this.failMsg = new ExportFailMsg();
         }
 
-        public ExportUpdateInfo(long jobId, JobState state, List<Pair<TNetworkAddress, String>> snapshotPaths,
-                String exportTempPath, Set<String> exportedFiles, ExportFailMsg failMsg) {
+        public ExportUpdateInfo(long jobId, JobState state, long stateChangeTime,
+                                List<Pair<TNetworkAddress, String>> snapshotPaths,
+                                String exportTempPath, Set<String> exportedFiles, ExportFailMsg failMsg) {
             this.jobId = jobId;
             this.state = state;
-            this.snapshotPaths = snapshotPaths;
+            this.stateChangeTime = stateChangeTime;
+            this.snapshotPaths = serialize(snapshotPaths);
             this.exportTempPath = exportTempPath;
             this.exportedFiles = exportedFiles;
             this.failMsg = failMsg;
-        }
-
-        public long getJobId() {
-            return jobId;
-        }
-
-        public JobState getState() {
-            return state;
         }
 
         @Override
@@ -1082,7 +1119,7 @@ public class ExportJob implements Writable {
             // Due to TNetworkAddress unsupport to_json, snapshotPaths can not be seralized to GSON automatically,
             // here we manually seralize it
             out.writeInt(snapshotPaths.size());
-            for (Pair<TNetworkAddress, String> entry : snapshotPaths) {
+            for (Pair<NetworkAddress, String> entry : snapshotPaths) {
                 Text.writeString(out, entry.first.hostname);
                 out.writeInt(entry.first.port);
                 Text.writeString(out, entry.second);
@@ -1097,12 +1134,78 @@ public class ExportJob implements Writable {
                 String hostName = Text.readString(input);
                 int port = input.readInt();
                 String path = Text.readString(input);
-                TNetworkAddress address = new TNetworkAddress(hostName, port);
-                Pair<TNetworkAddress, String> entry = new Pair<TNetworkAddress, String>(address, path);
+                Pair<NetworkAddress, String> entry = Pair.create(new NetworkAddress(hostName, port), path);
                 info.snapshotPaths.set(i, entry);
             }
 
             return info;
+        }
+
+        public List<Pair<NetworkAddress, String>> serialize(List<Pair<TNetworkAddress, String>> snapshotPaths) {
+            return snapshotPaths
+                    .stream()
+                    .map(snapshotPath
+                            -> Pair.create(new NetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                            snapshotPath.second))
+                    .collect(Collectors.toList());
+        }
+
+        public List<Pair<TNetworkAddress, String>> deserialize(List<Pair<NetworkAddress, String>> snapshotPaths) {
+            return snapshotPaths
+                    .stream()
+                    .map(snapshotPath
+                            -> Pair.create(new TNetworkAddress(snapshotPath.first.hostname, snapshotPath.first.port),
+                            snapshotPath.second))
+                    .collect(Collectors.toList());
+        }
+    }
+
+    public static class NetworkAddress {
+        @SerializedName("h")
+        String hostname;
+        @SerializedName("p")
+        int port;
+
+        public NetworkAddress() {
+
+        }
+
+        public NetworkAddress(String hostname, int port) {
+            this.hostname = hostname;
+            this.port = port;
+        }
+
+        public String getHostname() {
+            return hostname;
+        }
+
+        public void setHostname(String hostname) {
+            this.hostname = hostname;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof NetworkAddress
+                    && this.hostname.equals(((NetworkAddress) obj).hostname)
+                    && this.port == ((NetworkAddress) obj).port;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(hostname, port);
+        }
+
+        @Override
+        public String toString() {
+            return hostname + ":" + port;
         }
     }
 }

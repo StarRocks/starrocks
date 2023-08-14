@@ -28,6 +28,7 @@
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 
 namespace starrocks {
@@ -87,11 +88,11 @@ public:
     }
 
     void SetUp() override {
-        _tablet_mgr->delete_tablet(_tablet_id);
+        ASSERT_OK(_tablet_mgr->delete_tablet(_tablet_id));
         create_tablet();
     }
 
-    void TearDown() override { _tablet_mgr->delete_tablet(_tablet_id); }
+    void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
 
 protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
@@ -216,6 +217,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     ASSERT_EQ("1.dat", metadata->rowsets(0).segments(0));
     ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
 
+    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1000).status().is_not_found());
     ASSERT_TRUE(tablet.get_txn_log(1001).status().is_not_found());
@@ -261,8 +263,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSERT_EQ(0, response.compaction_scores_size());
     }
     // Delete old version metadata then send publish version again
-    tablet.delete_metadata(1);
-    tablet.delete_metadata(2);
+    ASSERT_OK(tablet.delete_metadata(1));
+    ASSERT_OK(tablet.delete_metadata(2));
     {
         lake::PublishVersionRequest request;
         lake::PublishVersionResponse response;
@@ -369,9 +371,7 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-    ASSERT_TRUE(tablet.get_schema().status().is_not_found()) << tablet.get_schema().status();
-    ASSERT_TRUE(tablet.get_metadata(1).status().is_not_found()) << tablet.get_metadata(1).status();
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
 // NOLINTNEXTLINE
@@ -384,6 +384,7 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
     // restore test directory
     ASSERT_OK(fs::create_directories(kRootLocation));
 }
@@ -576,6 +577,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -658,6 +660,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     ASSERT_EQ(3, rowset2.segments_size());
 }
 
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
     lake::LockTabletMetadataRequest lock_request;
@@ -694,4 +697,89 @@ TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
     ASSERT_TRUE(st.is_not_found()) << st;
 }
 
+TEST_F(LakeServiceTest, test_abort_compaction) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"CompactionScheduler::compact:return", "LakeServiceImpl::abort_compaction:enter"},
+             {"LakeServiceImpl::abort_compaction:aborted", "CompactionScheduler::do_compaction:before_execute_task"}});
+
+    auto txn_id = next_id();
+
+    auto compaction_thread = std::thread([&]() {
+        brpc::Controller cntl;
+        lake::CompactRequest request;
+        lake::CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.compact(&cntl, &request, &response, cb);
+        latch.wait();
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(TStatusCode::ABORTED, response.status().status_code());
+    });
+
+    {
+        brpc::Controller cntl;
+        lake::AbortCompactionRequest request;
+        lake::AbortCompactionResponse response;
+        request.set_txn_id(txn_id);
+        _lake_service.abort_compaction(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    }
+
+    compaction_thread.join();
+
+    {
+        brpc::Controller cntl;
+        lake::AbortCompactionRequest request;
+        lake::AbortCompactionResponse response;
+        request.set_txn_id(txn_id);
+        _lake_service.abort_compaction(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(TStatusCode::NOT_FOUND, response.status().status_code());
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// https://github.com/StarRocks/starrocks/issues/28244
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_publish_version_issue28244) {
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(102301);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("xxxxx.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("publish_version:delete_txn_log",
+                                          [](void* st) { *(Status*)st = Status::InternalError("injected"); });
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"LakeServiceImpl::publish_version:return", "publish_version:delete_txn_log"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(102301);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 102301).status().is_not_found());
+
+    SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
 } // namespace starrocks

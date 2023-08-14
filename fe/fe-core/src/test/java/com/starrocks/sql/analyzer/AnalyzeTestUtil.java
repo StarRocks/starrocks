@@ -116,7 +116,8 @@ public class AnalyzeTestUtil {
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
                 "  `v3` ARRAY<bigint(20)>  NULL,\n" +
-                "  `v4` ARRAY<largeint>  NULL\n" +
+                "  `v4` ARRAY<largeint>  NULL,\n" +
+                "  `v5` ARRAY<json>  NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -169,6 +170,24 @@ public class AnalyzeTestUtil {
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `ttypes` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `vm` map<bigint(20), char(20)>  NULL,\n" +
+                "  `vm1` map<bigint(20), char(20)>  NULL,\n" +
+                "  `va` array<bigint(20)>  NULL,\n" +
+                "  `va1` array<bigint(20)>  NULL,\n" +
+                "  `vs` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vs1` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vj` json  NULL,\n" +
+                "  `vj1` json  NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +

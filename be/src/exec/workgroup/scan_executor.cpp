@@ -15,11 +15,14 @@
 #include "exec/workgroup/scan_executor.h"
 
 #include "exec/workgroup/scan_task_queue.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 
 ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
-        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {}
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
+}
 
 ScanExecutor::~ScanExecutor() {
     _task_queue->close();
@@ -28,7 +31,7 @@ ScanExecutor::~ScanExecutor() {
 void ScanExecutor::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 
@@ -38,7 +41,7 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->worker_thread(); });
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
     }
 }
 

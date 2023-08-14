@@ -54,6 +54,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
@@ -177,12 +178,13 @@ public class OlapDeleteJob extends DeleteJob {
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
-                cancel(DeleteHandler.CancelType.UNKNOWN, t.getMessage());
+                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
             db.readUnlock();
         }
+        LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 
         long timeoutMs = getTimeoutMs();
         LOG.info("waiting delete Job finish, signature: {}, timeout: {}", getTransactionId(), timeoutMs);
@@ -192,8 +194,8 @@ public class OlapDeleteJob extends DeleteJob {
             while (countDownTime > 0) {
                 if (countDownTime > CHECK_INTERVAL) {
                     countDownTime -= CHECK_INTERVAL;
-                    if (GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId())) {
-                        cancel(DeleteHandler.CancelType.USER, "user cancelled");
+                    if (GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId())) {
+                        cancel(DeleteMgr.CancelType.USER, "user cancelled");
                         throw new DdlException("Cancelled");
                     }
                     ok = countDownLatch.await(CHECK_INTERVAL, TimeUnit.MILLISECONDS);
@@ -208,59 +210,65 @@ public class OlapDeleteJob extends DeleteJob {
         } catch (InterruptedException e) {
             LOG.warn("InterruptedException: ", e);
         }
-
-        if (!ok) {
-            String errMsg = "";
-            List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-            // only show at most 5 results
-            List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 5));
-            if (!subList.isEmpty()) {
-                errMsg = "unfinished replicas: " + Joiner.on(", ").join(subList);
-            }
-            LOG.warn(errMsg);
-
-            try {
-                checkAndUpdateQuorum();
-            } catch (MetaNotFoundException e) {
-                cancel(DeleteHandler.CancelType.METADATA_MISSING, e.getMessage());
-                throw new DdlException(e.getMessage(), e);
-            }
-            DeleteState state = getState();
-            switch (state) {
-                case DELETING:
-                    LOG.warn("delete job timeout: transactionId {}, timeout {}, {}", getTransactionId(), timeoutMs,
-                            errMsg);
-                    cancel(DeleteHandler.CancelType.TIMEOUT, "delete job timeout");
-                    throw new DdlException("failed to execute delete. transaction id " + getTransactionId() +
-                            ", timeout(ms) " + timeoutMs + ", " + errMsg);
-                case QUORUM_FINISHED:
-                case FINISHED:
-                    try {
-                        long nowQuorumTimeMs = System.currentTimeMillis();
-                        long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
-                        // if job's state is quorum_finished then wait for a period of time and commit it.
-                        while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs) {
-                            checkAndUpdateQuorum();
-                            Thread.sleep(1000);
-                            nowQuorumTimeMs = System.currentTimeMillis();
-                            LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", getId(),
-                                    getTransactionId());
-                        }
-                    } catch (MetaNotFoundException e) {
-                        cancel(DeleteHandler.CancelType.METADATA_MISSING, e.getMessage());
-                        throw new DdlException(e.getMessage(), e);
-                    } catch (InterruptedException e) {
-                        cancel(DeleteHandler.CancelType.UNKNOWN, e.getMessage());
-                        throw new DdlException(e.getMessage(), e);
-                    }
-                    commit(db, timeoutMs);
-                    break;
-                default:
-                    throw new IllegalStateException("wrong delete job state: " + state.name());
-            }
-        } else {
-            commit(db, timeoutMs);
+        LOG.info("delete job finish, countDownLatch count: {}", countDownLatch.getCount());
+ 
+        String errMsg = "";
+        List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
+        Status st = countDownLatch.getStatus();
+        // only show at most 5 results
+        List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 5));
+        if (!subList.isEmpty()) {
+            errMsg = "unfinished replicas: " + Joiner.on(", ").join(subList);
+        } else if (!st.ok()) {
+            errMsg = st.toString();
         }
+        LOG.warn(errMsg);
+
+        try {
+            checkAndUpdateQuorum();
+        } catch (MetaNotFoundException e) {
+            cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
+            throw new DdlException(e.getMessage(), e);
+        }
+        DeleteState state = getState();
+        switch (state) {
+            case DELETING:
+                LOG.warn("delete job failed: transactionId {}, timeout {}, {}", getTransactionId(), timeoutMs,
+                        errMsg);
+                if (countDownLatch.getCount() > 0) {
+                    cancel(DeleteMgr.CancelType.TIMEOUT, "delete job timeout");
+                } else {
+                    cancel(DeleteMgr.CancelType.UNKNOWN, "delete job failed");
+                }
+                throw new DdlException("failed to execute delete. transaction id " + getTransactionId() +
+                        ", timeout(ms) " + timeoutMs + ", " + errMsg);
+            case QUORUM_FINISHED:
+            case FINISHED:
+                try {
+                    long nowQuorumTimeMs = System.currentTimeMillis();
+                    long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
+                    // if job's state is quorum_finished then wait for a period of time and commit it.
+                    while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
+                          && countDownLatch.getCount() > 0) {
+                        checkAndUpdateQuorum();
+                        Thread.sleep(1000);
+                        nowQuorumTimeMs = System.currentTimeMillis();
+                        LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", getId(),
+                                getTransactionId());
+                    }
+                } catch (MetaNotFoundException e) {
+                    cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
+                    throw new DdlException(e.getMessage(), e);
+                } catch (InterruptedException e) {
+                    cancel(DeleteMgr.CancelType.UNKNOWN, e.getMessage());
+                    throw new DdlException(e.getMessage(), e);
+                }
+                commit(db, timeoutMs);
+                break;
+            default:
+                throw new IllegalStateException("wrong delete job state: " + state.name());
+        }
+
     }
 
     /**
@@ -343,7 +351,7 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean cancel(DeleteHandler.CancelType cancelType, String reason) {
+    public boolean cancel(DeleteMgr.CancelType cancelType, String reason) {
         if (!super.cancel(cancelType, reason)) {
             return false;
         }

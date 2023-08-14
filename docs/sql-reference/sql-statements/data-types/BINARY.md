@@ -31,9 +31,9 @@ CREATE TABLE `test_binary` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
 );
 
@@ -69,7 +69,7 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     INSERT INTO test_binary select 7, to_binary('abab', 'utf8');
     ```
 
-- Method 3: Use Broker Load to load a Parquet or ORC file and store the file as BINARY data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
+- Method 3: Use Broker Load to load a Parquet or ORC file and store the file as BINARY data. For more information, see [Broker Load](../data-manipulation/BROKER%20LOAD.md).
 
   - For Parquet files, convert `parquet::Type::type::BYTE_ARRAY` to `TYPE_VARBINARY` directly.
   - For ORC files, convert `orc::BINARY` to `TYPE_VARBINARY` directly.
@@ -91,7 +91,7 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     PARTITION p1 VALUES [("-2147483648"), ("0")),
     PARTITION p2 VALUES [("0"), ("10")),
     PARTITION p3 VALUES [("10"), ("20")))
-    DISTRIBUTED BY HASH(`k`) BUCKETS 1
+    DISTRIBUTED BY HASH(`k`)
     PROPERTIES ("replication_num" = "1");
 
     -- csv file
@@ -99,7 +99,7 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     0,0,ab
 
     -- Load CSV file using Stream Load.
-    curl --location-trusted -u root: -T temp_data -XPUT -H column_separator:, -H label:xx http://172.17.0.1:8131/api/test_mv/t1/_stream_load
+    curl --location-trusted -u <username>:<password> -T temp_data -XPUT -H column_separator:, -H label:xx http://172.17.0.1:8131/api/test_mv/t1/_stream_load
 
     -- Query the loaded data.
     mysql> select * from t1;

@@ -1,0 +1,88 @@
+-- name: test_pipe_basic
+show pipes;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_pipe/col_not_null.parquet >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${oss_bucket}/test_pipe/col_not_null.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,617. OK num: 1(upload 1 files).
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 
+properties('replication_num' = '1')
+as select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
+-- result:
+-- !result
+desc t1;
+-- result:
+col_int	int	YES	true	None	
+col_map	varchar(1048576)	YES	true	None	
+col_struct	varchar(1048576)	YES	false	None	
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
+create pipe p1 properties('auto_ingest'='false') as 
+    insert into t1 
+    select * from files('path' = 'oss://${oss_bucket}/test_pipe/col_not_null.parquet', 'format'='parquet');
+-- result:
+-- !result
+alter pipe p1 suspend;
+-- result:
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	SUSPEND
+-- !result
+select pipe_name, file_name, file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select count(*) from t1;
+-- result:
+6
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	FINISHED
+-- !result
+select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+p1	/test_pipe/col_not_null.parquet	1617	LOADED
+-- !result
+drop pipe p1;
+-- result:
+-- !result
+select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result
+select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+    from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
+-- result:
+-- !result

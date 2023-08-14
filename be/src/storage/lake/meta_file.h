@@ -36,12 +36,15 @@ class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
-    void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
+    void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
-    Status finalize();
+    // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
+    // the garbage collection module relies on this value to check if a delvec file can be safely
+    // deleted.
+    Status finalize(int64_t txn_id);
     // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
@@ -49,7 +52,10 @@ public:
     bool has_update_index() const { return _has_update_index; }
 
 private:
-    Status _finalize_delvec(int64_t version);
+    // update delvec in tablet meta
+    Status _finalize_delvec(int64_t version, int64_t txn_id);
+    // fill delvec cache, for better reading latency
+    void _fill_delvec_cache();
 
 private:
     Tablet _tablet;
@@ -61,13 +67,20 @@ private:
     bool _has_finalized = false;
     // whether update the state of pk index.
     bool _has_update_index = false;
+    // from segment id to delvec, used for fill cache in finalize stage.
+    std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
+    // from cache key to segment id
+    std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
 };
 
 class MetaFileReader {
 public:
     explicit MetaFileReader(const std::string& filepath, bool fill_cache);
     ~MetaFileReader() {}
+    // load tablet meta from file
     Status load();
+    // try to load tablet meta from cache first, if not exist then load from file
+    Status load_by_cache(const std::string& filepath, TabletManager* tablet_mgr);
     Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
     StatusOr<TabletMetadataPtr> get_meta();
 

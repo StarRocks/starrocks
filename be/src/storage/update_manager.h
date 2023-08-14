@@ -37,6 +37,7 @@ class KVStore;
 class RowsetUpdateState;
 class RowsetColumnUpdateState;
 class Tablet;
+class PersistentIndexCompactionManager;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
@@ -51,6 +52,9 @@ class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                DeltaColumnGroupList* pdcgs);
+    KVStore* meta() const { return _meta; }
 
 private:
     KVStore* _meta = nullptr;
@@ -86,6 +90,8 @@ public:
     void on_rowset_cancel(Tablet* tablet, Rowset* rowset);
 
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
+    ThreadPool* get_pindex_thread_pool() { return _get_pindex_thread_pool.get(); }
+    PersistentIndexCompactionManager* get_pindex_compaction_mgr() { return _persistent_index_compaction_mgr.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -99,6 +105,10 @@ public:
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     Status set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, const DeltaColumnGroupPtr& dcg);
+
+    Status set_cached_empty_delta_column_group(KVStore* meta, const TabletSegmentId& tsid);
+
+    bool get_cached_delta_column_group(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* dcgs);
 
     void clear_cache();
 
@@ -156,6 +166,8 @@ private:
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
+    std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
+    std::unique_ptr<PersistentIndexCompactionManager> _persistent_index_compaction_mgr;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;

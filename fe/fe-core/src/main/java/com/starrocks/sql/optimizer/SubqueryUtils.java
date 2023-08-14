@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -135,7 +136,7 @@ public class SubqueryUtils {
             }
 
             BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
-            if (!BinaryPredicateOperator.BinaryType.EQ.equals(bpo.getBinaryType())) {
+            if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
                 return false;
             }
         }

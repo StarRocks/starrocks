@@ -34,7 +34,7 @@ using ::testing::Values;
 
 class CSVScannerTest : public TestWithParam<bool> {
 protected:
-    virtual void SetUp() { _use_v2 = GetParam(); }
+    virtual void SetUp() override { _use_v2 = GetParam(); }
     void TearDown() override {}
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,

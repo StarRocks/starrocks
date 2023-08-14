@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -38,11 +39,12 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
-import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TNormalPlanNode;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
@@ -404,7 +406,7 @@ public class FragmentNormalizer {
             return !((BetweenPredicate) expr).isNotBetween();
         }
         if (expr instanceof BinaryPredicate) {
-            return ((BinaryPredicate) expr).getOp() != BinaryPredicate.Operator.EQ_FOR_NULL;
+            return ((BinaryPredicate) expr).getOp() != BinaryType.EQ_FOR_NULL;
         }
         return true;
     }
@@ -431,7 +433,7 @@ public class FragmentNormalizer {
         Preconditions.checkArgument(minKey != null && maxKey != null);
         if (expr instanceof BinaryPredicate) {
             BinaryPredicate predicate = (BinaryPredicate) expr;
-            if (predicate.getOp() == BinaryPredicate.Operator.EQ_FOR_NULL) {
+            if (predicate.getOp() == BinaryType.EQ_FOR_NULL) {
                 return result;
             }
             LiteralExpr rhs = (LiteralExpr) predicate.getChild(1);
@@ -797,57 +799,9 @@ public class FragmentNormalizer {
         return computeDigest(firstAggNode);
     }
 
-    public static class SlotEquivRelation {
-        private Map<SlotId, Integer> slotId2Group = Maps.newHashMap();
-        private Map<Integer, Set<SlotId>> eqGroupMap = Maps.newHashMap();
+    private UnionFind<SlotId> equivRelation = new UnionFind<>();
 
-        public Map<SlotId, Set<SlotId>> getEquivGroups(Set<SlotId> slotIds) {
-            Map<SlotId, Set<SlotId>> slotId2EqSlots = Maps.newHashMap();
-            for (SlotId slotId : slotIds) {
-                if (!slotId2Group.containsKey(slotId)) {
-                    continue;
-                }
-                Set<SlotId> eqSlots = eqGroupMap.get(slotId2Group.get(slotId));
-                if (eqSlots.size() > 1) {
-                    slotId2EqSlots.put(slotId, eqSlots);
-                }
-            }
-            return slotId2EqSlots;
-        }
-
-        public void add(List<SlotId> slotIds) {
-            slotIds.forEach(s -> {
-                if (!find(s)) {
-                    slotId2Group.put(s, s.asInt());
-                    eqGroupMap.put(s.asInt(), Sets.newHashSet(s));
-                }
-            });
-        }
-
-        public void union(SlotId lhs, SlotId rhs) {
-            add(Arrays.asList(lhs, rhs));
-            Integer lhsGroupId = slotId2Group.get(lhs);
-            Integer rhsGroupId = slotId2Group.get(rhs);
-            if (!lhsGroupId.equals(rhsGroupId)) {
-                Set<SlotId> lhsGroup = eqGroupMap.get(lhsGroupId);
-                Set<SlotId> rhsGroup = eqGroupMap.get(rhsGroupId);
-                Set<SlotId> newGroup = Sets.union(lhsGroup, rhsGroup);
-                rhsGroup.forEach(s -> {
-                    slotId2Group.put(s, lhsGroupId);
-                });
-                eqGroupMap.put(lhsGroupId, newGroup);
-                eqGroupMap.remove(rhsGroupId);
-            }
-        }
-
-        private boolean find(SlotId slotId) {
-            return slotId2Group.containsKey(slotId);
-        }
-    }
-
-    private SlotEquivRelation equivRelation = new SlotEquivRelation();
-
-    public SlotEquivRelation getEquivRelation() {
+    public UnionFind<SlotId> getEquivRelation() {
         return equivRelation;
     }
 

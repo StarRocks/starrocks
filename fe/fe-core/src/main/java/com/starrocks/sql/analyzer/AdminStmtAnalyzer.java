@@ -18,6 +18,7 @@ import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -44,6 +45,8 @@ import java.util.List;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AdminStmtAnalyzer {
+    public static final long DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC = 4 * 3600L;
+
     public static void analyze(StatementBase statementBase, ConnectContext session) {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
@@ -180,7 +183,7 @@ public class AdminStmtAnalyzer {
                 }
                 adminRepairTableStmt.setPartitions(partitionNames);
             }
-            adminRepairTableStmt.setTimeoutSec(4 * 3600L); // default 4 hours
+            adminRepairTableStmt.setTimeoutSec(DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC); // default 4 hours
             return null;
         }
 
@@ -240,8 +243,8 @@ public class AdminStmtAnalyzer {
             }
 
             BinaryPredicate binaryPredicate = (BinaryPredicate) where;
-            BinaryPredicate.Operator op = binaryPredicate.getOp();
-            if (op != BinaryPredicate.Operator.EQ && op != BinaryPredicate.Operator.NE) {
+            BinaryType op = binaryPredicate.getOp();
+            if (op != BinaryType.EQ && op != BinaryType.NE) {
                 return false;
             }
             adminShowReplicaStatusStmt.setOp(op);

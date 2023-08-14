@@ -149,6 +149,10 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    SCH_ROUTINE_LOAD_JOBS,
+    SCH_STREAM_LOADS,
+    SCH_PIPE_FILES,
+    SCH_PIPES,
 
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
@@ -364,6 +368,14 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TTableFunctionTable {
+    // Table Function Table's file dir 
+    1: optional string path 
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
 struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
 }
@@ -426,9 +438,17 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+}
 
-    // hudi table type: copy on write or merge on read
-    11: optional bool is_mor_table
+struct TPaimonTable {
+    // paimon table catalog type
+    1: optional string catalog_type
+
+    // paimon table metastore URI
+    2: optional string metastore_uri
+
+    // paimon table warehouse path
+    3: optional string warehouse_path
 }
 
 struct TDeltaLakeTable {
@@ -492,6 +512,12 @@ struct TTableDescriptor {
 
   // File Table
   34: optional TFileTable fileTable
+
+  // Table Function Table
+  35: optional TTableFunctionTable tableFunctionTable
+
+  // Paimon Table schema
+  36: optional TPaimonTable paimonTable
 }
 
 struct TDescriptorTable {

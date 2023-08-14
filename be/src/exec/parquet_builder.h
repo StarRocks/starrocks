@@ -49,6 +49,8 @@ public:
 
     ~ParquetBuilder() override = default;
 
+    Status init();
+
     Status add_chunk(Chunk* chunk) override;
 
     std::size_t file_size() override;

@@ -36,6 +36,7 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "storage/range.h"
 #include "storage/rowset/common.h"
 
 namespace starrocks {
@@ -44,7 +45,6 @@ class CondColumn;
 
 class Column;
 class ColumnPredicate;
-class SparseRange;
 
 class ColumnReader;
 class RandomAccessFile;
@@ -54,6 +54,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -93,7 +94,7 @@ public:
 
     virtual Status next_batch(size_t* n, Column* dst) = 0;
 
-    virtual Status next_batch(const SparseRange& range, Column* dst) {
+    virtual Status next_batch(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("ColumnIterator Not Support batch read");
     }
 
@@ -101,10 +102,10 @@ public:
 
     /// for vectorized engine
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                              const ColumnPredicate* del_predicate, SparseRange* row_ranges) = 0;
+                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) = 0;
 
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                  SparseRange* row_ranges) {
+                                                  SparseRange<>* row_ranges) {
         return Status::OK();
     }
 
@@ -130,7 +131,7 @@ public:
     // type of |dst| must be `FixedLengthColumn<int32_t>` or `NullableColumn(FixedLengthColumn<int32_t>)`.
     virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
 
-    virtual Status next_dict_codes(const SparseRange& range, Column* dst) { return Status::NotSupported(""); }
+    virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) { return Status::NotSupported(""); }
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.

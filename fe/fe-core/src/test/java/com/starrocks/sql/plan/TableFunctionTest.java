@@ -178,7 +178,6 @@ public class TableFunctionTest extends PlanTestBase {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) LEFT JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
                 " ON t0.x=t1 .x";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -223,5 +222,21 @@ public class TableFunctionTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
+    }
+
+    @Test
+    public void testTableFunctionReorder() throws Exception {
+        String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) LEFT JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
+                " ON t0.x=t1.x join t2 on t0.x = t2.v7";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "7:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v7 = 10: cast\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t2");
     }
 }

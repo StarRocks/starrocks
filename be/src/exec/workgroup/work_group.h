@@ -195,7 +195,9 @@ public:
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
 
     static constexpr int64 DEFAULT_WG_ID = 0;
+    static constexpr int64 DEFAULT_MV_WG_ID = 1;
     static constexpr int64 DEFAULT_VERSION = 0;
+    static constexpr int64 DEFAULT_MV_VERSION = 1;
 
 private:
     static constexpr double ABSENT_MEMORY_LIMIT = -1;
@@ -244,12 +246,13 @@ public:
     WorkGroupPtr add_workgroup(const WorkGroupPtr& wg);
     // return reserved beforehand default workgroup for query is not bound to any workgroup
     WorkGroupPtr get_default_workgroup();
+    // return reserved beforehand default mv workgroup for MV query is not bound to any workgroup
+    WorkGroupPtr get_default_mv_workgroup();
     // destruct workgroups
     void destroy();
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
-    std::vector<TWorkGroup> list_all_workgroups();
 
     void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
     void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }

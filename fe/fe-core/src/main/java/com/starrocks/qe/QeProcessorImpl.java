@@ -38,6 +38,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -206,6 +207,11 @@ public final class QeProcessorImpl implements QeProcessor {
         }
 
         return resultList;
+    }
+
+    @Override
+    public long getCoordinatorCount() {
+        return coordinatorMap.size();
     }
 
     public static final class QueryInfo {

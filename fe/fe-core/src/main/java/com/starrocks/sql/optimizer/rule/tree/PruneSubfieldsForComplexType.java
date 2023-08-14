@@ -19,6 +19,7 @@ import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -116,6 +117,20 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             }
             return visit(optExpression, context);
         }
+
+        @Override
+        public Void visitPhysicalScan(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
+            PhysicalScanOperator physicalScanOperator = (PhysicalScanOperator) optExpression.getOp();
+            Projection projection = optExpression.getOp().getProjection();
+            if (projection == null) {
+                for (ColumnRefOperator columnRefOperator : physicalScanOperator.getOutputColumns()) {
+                    if (columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) {
+                        context.add(columnRefOperator, columnRefOperator);
+                    }
+                }
+            }
+            return visit(optExpression, context);
+        }
     }
 
     private static class PruneSubfieldsOptVisitor extends OptExpressionVisitor<Void, PruneComplexTypeUtil.Context> {
@@ -137,6 +152,12 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         @Override
         public Void visitPhysicalScan(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
             PhysicalScanOperator physicalScanOperator = (PhysicalScanOperator) optExpression.getOp();
+
+            if (OperatorType.PHYSICAL_OLAP_SCAN.equals(physicalScanOperator.getOpType())) {
+                // olap scan operator prune column not in this rule
+                return null;
+            }
+
             for (Map.Entry<ColumnRefOperator, Column> entry : physicalScanOperator.getColRefToColumnMetaMap()
                     .entrySet()) {
                 if (entry.getKey().getType().isComplexType()) {

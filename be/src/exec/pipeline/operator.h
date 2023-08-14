@@ -17,6 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -130,6 +131,10 @@ public:
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
+    // Some operator's metrics are updated in the finishing stage, which is not suitable to the runtime profile mechanism.
+    // So we add this function for manual updation of metrics when reporting the runtime profile.
+    virtual void update_metrics(RuntimeState* state) {}
+
     virtual size_t output_amplification_factor() const { return 1; }
     enum class OutputAmplificationType { ADD, MAX };
     virtual OutputAmplificationType intra_pipeline_amplification_type() const { return OutputAmplificationType::MAX; }
@@ -222,14 +227,39 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
-    // it means this operator need spill
-    virtual void mark_need_spill() { _marked_need_spill = true; }
-    bool need_mark_spill() { return _marked_need_spill; }
+    // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
+    virtual void set_execute_mode(int performance_level) {}
+    // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
+    // or push the buffer data to the downstream operator.
+    // Maybe we don’t need to have the concepts of spillable and releasable, and we can use reclaimable instead.
+    // Later, we need to refactor here.
+    virtual bool spillable() const { return false; }
+    // Operator can free memory/buffer early
+    virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
+    spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
+
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
-    void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
+    void set_revocable_mem_bytes(size_t bytes) {
+        _revocable_mem_bytes = bytes;
+        if (_peak_revocable_mem_bytes) {
+            COUNTER_SET(_peak_revocable_mem_bytes, _revocable_mem_bytes);
+        }
+    }
     int32_t get_driver_sequence() const { return _driver_sequence; }
     OperatorFactory* get_factory() const { return _factory; }
+
+    // memory to be reserved before executing push_chunk
+    virtual size_t estimated_memory_reserved(const ChunkPtr& chunk) {
+        if (chunk && !chunk->is_empty()) {
+            return chunk->memory_usage();
+        }
+        return 0;
+    }
+
+    // memory to be reserved before executing set_finishing
+    virtual size_t estimated_memory_reserved() { return 0; }
 
 protected:
     OperatorFactory* _factory;
@@ -252,8 +282,8 @@ protected:
 
     RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
-    // if _need_spill is true. reserved data in this operator need spill
-    bool _marked_need_spill = false;
+    spill::OperatorMemoryResourceManager _mem_resource_manager;
+
     // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;
 
@@ -275,6 +305,10 @@ protected:
     RuntimeProfile::Counter* _conjuncts_timer = nullptr;
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
+
+    // only used in spillable operator to record peak revocable memory bytes,
+    // each operator should initialize it before use
+    RuntimeProfile::HighWaterMarkCounter* _peak_revocable_mem_bytes = nullptr;
 
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
@@ -301,7 +335,7 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
+    std::string get_name() const { return _name + "_(" + std::to_string(_plan_node_id) + ")"; }
     std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.

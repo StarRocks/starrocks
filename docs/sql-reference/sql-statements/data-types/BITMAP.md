@@ -16,7 +16,7 @@ This topic provides a simple example on how to create a BITMAP column and use bi
     ) ENGINE=OLAP
     AGGREGATE KEY(`dt`, `page`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`dt`) BUCKETS 2;
+    DISTRIBUTED BY HASH(`dt`);
     ```
 
 - Create a Primary Key table, in which the data type of the `userid` column is BITMAP.
@@ -29,7 +29,7 @@ This topic provides a simple example on how to create a BITMAP column and use bi
     ENGINE=OLAP
     PRIMARY KEY(`tagname`, `tagvalue`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`tagname`) BUCKETS 1;
+    DISTRIBUTED BY HASH(`tagname`);
     ```
 
 Before you insert data into BITMAP columns, you must first use the to_bitmap() function to convert data.

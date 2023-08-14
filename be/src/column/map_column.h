@@ -98,9 +98,9 @@ public:
 
     void fill_default(const Filter& filter) override;
 
-    Status update_rows(const Column& src, const uint32_t* indexes) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    void remove_first_n_values(size_t count) override {}
+    void remove_first_n_values(size_t count) override;
 
     uint32_t max_one_element_serialize_size() const override;
 
@@ -123,7 +123,7 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
-    bool equals(size_t left, const Column& rhs, size_t right) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
 
     void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;

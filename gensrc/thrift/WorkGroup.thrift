@@ -20,7 +20,8 @@ enum TWorkGroupType {
   WG_REALTIME,
   WG_NORMAL,
   WG_DEFAULT,
-  WG_SHORT_QUERY
+  WG_SHORT_QUERY,
+  WG_MV
 }
 
 struct TWorkGroup {

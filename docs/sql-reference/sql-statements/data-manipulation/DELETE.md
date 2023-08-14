@@ -62,9 +62,9 @@ PARTITION BY RANGE(`date`)
     PARTITION p1 VALUES [('2022-03-11'), ('2022-03-12')),
     PARTITION p2 VALUES [('2022-03-12'), ('2022-03-13'))
 )
-DISTRIBUTED BY HASH(`date`) BUCKETS 1
+DISTRIBUTED BY HASH(`date`)
 PROPERTIES
-("replication_num" = "1");
+("replication_num" = "3");
 
 INSERT INTO `my_table` VALUES
 ('2022-03-11', 3, 'abc'),
@@ -189,9 +189,9 @@ CREATE TABLE `score_board` (
 ) ENGINE=OLAP
 PRIMARY KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );
@@ -300,9 +300,9 @@ CREATE TABLE `users` (
 ) ENGINE=OLAP
 PRIMARY KEY(`uid`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`uid`) BUCKETS 1
+DISTRIBUTED BY HASH(`uid`)
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );

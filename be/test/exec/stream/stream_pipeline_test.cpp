@@ -46,7 +46,8 @@ Status StreamPipelineTest::prepare() {
     _query_ctx->set_query_expire_seconds(600);
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
-    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
@@ -111,11 +112,7 @@ Status StreamPipelineTest::execute() {
     DCHECK(prepare_status.ok());
     bool enable_resource_group = _fragment_ctx->enable_resource_group();
     _fragment_ctx->iterate_drivers([exec_env = _exec_env, enable_resource_group](const DriverPtr& driver) {
-        if (enable_resource_group) {
-            exec_env->wg_driver_executor()->submit(driver.get());
-        } else {
-            exec_env->driver_executor()->submit(driver.get());
-        }
+        exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
     return Status::OK();
@@ -126,7 +123,8 @@ OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpF
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
         auto pseudo_plan_node_id = -200;
-        auto mem_mgr = std::make_shared<pipeline::LocalExchangeMemoryManager>(config::vector_chunk_size);
+        auto mem_mgr = std::make_shared<pipeline::ChunkBufferMemoryManager>(
+                config::vector_chunk_size, config::local_exchange_buffer_mem_limit_per_driver);
         auto local_exchange_source = std::make_shared<pipeline::LocalExchangeSourceOperatorFactory>(
                 next_operator_id(), pseudo_plan_node_id, mem_mgr);
 
@@ -198,17 +196,10 @@ Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info
     auto are_all_drivers_parked_func = [=]() {
         size_t num_parked_drivers = 0;
         auto query_id = _fragment_ctx->query_id();
-        if (_fragment_ctx->enable_resource_group()) {
-            num_parked_drivers = _exec_env->wg_driver_executor()->calculate_parked_driver(
-                    [query_id](const pipeline::PipelineDriver* driver) {
-                        return driver->query_ctx()->query_id() == query_id;
-                    });
-        } else {
-            num_parked_drivers = _exec_env->driver_executor()->calculate_parked_driver(
-                    [query_id](const pipeline::PipelineDriver* driver) {
-                        return driver->query_ctx()->query_id() == query_id;
-                    });
-        }
+        num_parked_drivers = _exec_env->wg_driver_executor()->calculate_parked_driver(
+                [query_id](const pipeline::PipelineDriver* driver) {
+                    return driver->query_ctx()->query_id() == query_id;
+                });
         return num_parked_drivers == _fragment_ctx->num_drivers();
     };
 

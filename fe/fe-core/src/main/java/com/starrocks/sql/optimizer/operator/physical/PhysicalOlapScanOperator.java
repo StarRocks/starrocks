@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
@@ -27,6 +26,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -41,11 +41,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private final DistributionSpec distributionSpec;
     private final long selectedIndexId;
     private final List<Long> selectedTabletId;
+    private final List<Long> hintsReplicaId;
     private final List<Long> selectedPartitionId;
 
     private boolean isPreAggregation;
     private String turnOffReason;
     protected boolean needSortedByKeyPerTablet = false;
+
+    private boolean usePkIndex = false;
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     // TODO: remove this
@@ -61,14 +64,29 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     long selectedIndexId,
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
+                                    List<Long> hintsReplicaId,
                                     List<ScalarOperator> prunedPartitionPredicates,
-                                    Projection projection) {
+                                    Projection projection,
+                                    boolean usePkIndex) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.distributionSpec = distributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.selectedTabletId = selectedTabletId;
+        this.hintsReplicaId = hintsReplicaId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
+        this.usePkIndex = usePkIndex;
+    }
+
+    public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
+        this.distributionSpec = scanOperator.getDistributionSpec();
+        this.selectedIndexId = scanOperator.getSelectedIndexId();
+        this.selectedPartitionId = scanOperator.getSelectedPartitionId();
+        this.selectedTabletId = scanOperator.getSelectedTabletId();
+        this.hintsReplicaId = scanOperator.getHintsReplicaIds();
+        this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
+        this.usePkIndex = scanOperator.isUsePkIndex();
     }
 
     public long getSelectedIndexId() {
@@ -81,6 +99,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
+    }
+
+    public List<Long> getHintsReplicaId() {
+        return hintsReplicaId;
     }
 
     public boolean isPreAggregation() {
@@ -130,6 +152,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setNeedSortedByKeyPerTablet(boolean needSortedByKeyPerTablet) {
         this.needSortedByKeyPerTablet = needSortedByKeyPerTablet;
+    }
+
+    public boolean isUsePkIndex() {
+        return usePkIndex;
     }
 
     @Override

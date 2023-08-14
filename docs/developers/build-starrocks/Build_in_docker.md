@@ -12,7 +12,7 @@ Different branches of StarRocks correspond to different development environment 
 
 - For Ubuntu 22.04:
 
-  | **Branch name** | **Ima****ge na****me**              |
+  | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
   | main            | starrocks/dev-env-ubuntu:latest     |
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
@@ -67,7 +67,7 @@ You can launch the development environment Docker container with or without the 
   2. Launch the container.
 
      ```Bash
-     # Replace <code_dir> with the directory that stores the StarRocks source code.
+     # Replace <code_dir> with the parent directory of the StarRocks source code directory.
      # Replace <branch_name> with the name of the branch that corresponds to the image name.
      # Replace <image_name> with the name of the image that you downloaded.
      docker run -it -v <code_dir>/.m2:/root/.m2 \

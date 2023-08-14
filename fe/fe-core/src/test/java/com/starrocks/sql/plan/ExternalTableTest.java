@@ -158,13 +158,13 @@ public class ExternalTableTest extends PlanTestBase {
     public void testJDBCTableFilter() throws Exception {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("0:SCAN JDBC\n" +
+        Assert.assertTrue(plan, plan.contains("0:SCAN JDBC\n" +
                 "     TABLE: `test_table`\n" +
                 "     QUERY: SELECT a, b, c FROM `test_table` WHERE (a > 10) AND (b < 'abc')\n" +
                 "     limit: 10"));
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assert.assertTrue(plan, plan.contains(
                 "  1:SELECT\n" +
                         "  |  predicates: length(b) < 20\n" +
                         "  |  limit: 10\n" +

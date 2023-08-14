@@ -31,7 +31,7 @@ namespace starrocks {
 class MemPool;
 class MysqlRowBuffer;
 class Slice;
-class TypeDescriptor;
+struct TypeDescriptor;
 
 // Forward declaration
 class Datum;
@@ -56,6 +56,10 @@ public:
 
     static const uint64_t MAX_CAPACITY_LIMIT = static_cast<uint64_t>(UINT32_MAX) + 1;
     static const uint64_t MAX_LARGE_CAPACITY_LIMIT = UINT64_MAX;
+
+    static const int EQUALS_FALSE = 0;
+    static const int EQUALS_NULL = -1;
+    static const int EQUALS_TRUE = 1;
 
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
@@ -112,13 +116,7 @@ public:
 
     // Size of column data in memory (may be approximate). Zero, if could not be determined.
     virtual size_t byte_size() const = 0;
-    virtual size_t byte_size(size_t from, size_t size) const {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        if (empty()) {
-            return 0;
-        }
-        return byte_size() * size / this->size();
-    }
+    virtual size_t byte_size(size_t from, size_t size) const = 0;
 
     // The byte size for serialize, for varchar, we need to add the len byte size
     virtual size_t byte_size(size_t idx) const = 0;
@@ -192,7 +190,7 @@ public:
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
     // The values in indexes is incremented
-    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+    virtual void update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.
@@ -347,7 +345,10 @@ public:
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
     // For some columns equals will be overwritten for more efficient
-    virtual bool equals(size_t left, const Column& rhs, size_t right) const {
+    // When safe equals, 0: false, 1: true
+    // When unsafe equals, -1: NULL, 0: false, 1: true
+    // return: EQUALS_FALSE, EQUALS_NULL, EQUALS_TRUE
+    virtual int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const {
         return compare_at(left, right, rhs, -1) == 0;
     }
 
@@ -384,6 +385,9 @@ public:
     virtual std::string debug_item(size_t idx) const { return ""; }
 
     virtual std::string debug_string() const { return {}; }
+
+    // used for automatic partition item in this column
+    virtual std::string raw_item_value(size_t idx) const { return debug_item(idx); }
 
     // memory usage includes container memory usage and reference memory usage.
     // 1. container memory usage: container capacity * type size.

@@ -53,6 +53,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -578,4 +579,24 @@ public class BackupHandlerTest {
         UtFrameUtils.tearDownForPersisTest();
     }
 
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        handler = new BackupHandler(globalStateMgr);
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        handler.saveBackupHandlerV2(pseudoImage.getDataOutputStream());
+        BackupHandler followerHandler = new BackupHandler(globalStateMgr);
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
+        followerHandler.loadBackupHandlerV2(reader);
+        reader.close();
+
+        Assert.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
 }

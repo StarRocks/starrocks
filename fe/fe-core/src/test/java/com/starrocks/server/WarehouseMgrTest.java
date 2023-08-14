@@ -59,7 +59,7 @@ public class WarehouseMgrTest {
         out.flush();
         out.close();
 
-        Deencapsulation.setField(warehouseMgr, "fullNameToWh", new HashMap<>());
+        Deencapsulation.setField(warehouseMgr, "nameToWh", new HashMap<>());
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         warehouseMgr.loadWarehouses(in, 0);
     }

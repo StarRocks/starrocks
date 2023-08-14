@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -269,6 +268,15 @@ public class CreateTableLikeTest {
         checkCreateOlapTableLike(automaticTableSql, createTableLikeSql9, newDbName9, existedDbName9, newTblName9,
                 existedTblName9);
 
+        // 10. create table like with properties
+        String sql = "create table test.table_like_10 " +
+                "distributed by random buckets 7 " +
+                "properties('replication_num'='1') " +
+                "like test.duplicate_table_with_null";
+        createTableLike(sql);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(newDbName).getTable("table_like_10");
+        Assert.assertEquals(new RandomDistributionInfo(7), table.getDefaultDistributionInfo());
+        Assert.assertEquals("1", table.getProperties().get("replication_num"));
     }
 
     @Test
@@ -279,7 +287,7 @@ public class CreateTableLikeTest {
         String createTableLikeSql = "create table test.testAbTbl1 like test.testAbTbl1";
         String newDbName = "test";
         String newTblName = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Table 'testAbTbl1' already exists",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Table 'testAbTbl1' already exists",
                 () -> checkCreateOlapTableLike(createTableSql, createTableLikeSql, newDbName, newDbName, newTblName,
                         newTblName));
         // 2. create table with not existed DB

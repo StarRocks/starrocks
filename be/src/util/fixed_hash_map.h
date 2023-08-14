@@ -96,7 +96,7 @@ public:
 
     iterator find(KeyType key) {
         auto search_key = static_cast<search_key_type>(key);
-        if (_hash_table[search_key] != nullptr) {
+        if (_hash_table[search_key] == nullptr) {
             return end();
         }
         return iterator(_hash_table, search_key);

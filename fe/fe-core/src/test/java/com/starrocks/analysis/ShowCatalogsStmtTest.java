@@ -76,7 +76,7 @@ public class ShowCatalogsStmtTest {
         Assert.assertEquals("Comment", metaData.getColumn(2).getName());
         Assert.assertEquals("[default_catalog, Internal, An internal catalog contains this cluster's self-managed tables.]",
                 resultSet.getResultRows().get(0).toString());
-        Assert.assertEquals("[hive_catalog_1, hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
+        Assert.assertEquals("[hive_catalog_1, Hive, hive_catalog]", resultSet.getResultRows().get(1).toString());
     }
 
     @Test

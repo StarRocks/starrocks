@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -46,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -90,7 +92,7 @@ import java.util.List;
  *                 * __10023_seg2.dat.DNW231dnklawd
  *                 * __10023.hdr.dnmwDDWI92dDko
  */
-public class Repository implements Writable {
+public class Repository implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(Repository.class);
 
     public String prefixRepo = "__starrocks_repository_";
@@ -112,18 +114,24 @@ public class Repository implements Writable {
     private static final String PATH_DELIMITER = "/";
     private static final String CHECKSUM_SEPARATOR = ".";
 
+    @SerializedName("id")
     private long id;
+    @SerializedName("nm")
     private String name;
     private String errMsg;
+    @SerializedName("ct")
     private long createTime;
 
     // If True, user can not backup data to this repo.
+    @SerializedName("ro")
     private boolean isReadOnly;
 
     // BOS location should start with "bos://your_bucket_name/"
     // and the specified bucket should exist.
+    @SerializedName("lc")
     private String location;
 
+    @SerializedName("st")
     private BlobStorage storage;
 
     private Repository() {
@@ -702,22 +710,33 @@ public class Repository implements Writable {
         createTime = in.readLong();
 
         if (!GlobalStateMgr.isCheckpointThread()) {
-            // check __palo_repository_ first, if success, prefixRepo = __palo_repository_
-            String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name));
-            Status st;
-            try {
-                st = storage.checkPathExist(listPath);
-            } catch (Exception e) {
-                LOG.warn("check path exist fail");
-                prefixRepo = "__starrocks_repository_";
-                return;
-            }
+            genPrefixRepo();
+        }
+    }
 
-            if (st.ok()) {
-                prefixRepo = "__palo_repository_";
-            } else {
-                prefixRepo = "__starrocks_repository_";
-            }
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            genPrefixRepo();
+        }
+    }
+
+    private void genPrefixRepo() {
+        // check __palo_repository_ first, if success, prefixRepo = __palo_repository_
+        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name));
+        Status st;
+        try {
+            st = storage.checkPathExist(listPath);
+        } catch (Exception e) {
+            LOG.warn("check path exist fail");
+            prefixRepo = "__starrocks_repository_";
+            return;
+        }
+
+        if (st.ok()) {
+            prefixRepo = "__palo_repository_";
+        } else {
+            prefixRepo = "__starrocks_repository_";
         }
     }
 }

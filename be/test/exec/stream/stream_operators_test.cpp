@@ -68,7 +68,7 @@ StatusOr<ChunkPtr> GeneratorStreamSourceOperator::pull_chunk(starrocks::RuntimeS
 }
 
 Status PrinterStreamSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    std::cout << "<<<<<<<<< Sink Result: " << chunk->debug_columns() << std::endl;
+    std::cout << "========= Sink Result: " << chunk->debug_columns() << std::endl;
     for (auto& col : chunk->columns()) {
         std::cout << col->debug_string() << std::endl;
     }
@@ -347,7 +347,8 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_MultiDop) {
         ASSERT_IF_ERROR(wait_until_epoch_finished(epoch_info));
         CheckResult(fetch_results<PrinterStreamSinkOperator>(epoch_info),
                     {{{1, 2, 3, 4}, {(i + 1) * 4, (i + 1) * 4, (i + 1) * 4, (i + 1) * 4}}});
-        sleep(0.5);
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(500ms);
     }
     stop_mv();
 }

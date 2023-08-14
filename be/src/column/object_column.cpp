@@ -69,6 +69,12 @@ void ObjectColumn<T>::append(T&& object) {
 }
 
 template <typename T>
+void ObjectColumn<T>::append(const T& object) {
+    _pool.emplace_back(object);
+    _cache_ok = false;
+}
+
+template <typename T>
 void ObjectColumn<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _pool.size() - count;
     for (size_t i = 0; i < remain_size; ++i) {
@@ -187,7 +193,7 @@ void ObjectColumn<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
-Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
+void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();
     for (size_t i = 0; i < replace_num; i++) {
@@ -195,7 +201,6 @@ Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) 
         _pool[indexes[i]] = *obj_col.get_object(i);
     }
     _cache_ok = false;
-    return Status::OK();
 }
 
 template <typename T>
@@ -307,7 +312,7 @@ void ObjectColumn<T>::_build_slices() const {
     size_t old_size = 0;
     for (size_t i = 0; i < _pool.size(); ++i) {
         size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
-        _slices.emplace_back(Slice(_buffer.data() + old_size, slice_size));
+        _slices.emplace_back(_buffer.data() + old_size, slice_size);
         old_size += slice_size;
     }
 }

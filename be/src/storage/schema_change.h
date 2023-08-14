@@ -43,6 +43,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_handler.h"
+#include "storage/delta_column_group.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
@@ -73,6 +74,10 @@ public:
 
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                            TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    std::string alter_msg_header() { return _alter_msg_header; }
+
+    std::string _alter_msg_header;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -82,6 +87,11 @@ public:
 
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+
+    static Status generate_delta_column_group_and_cols(const Tablet* new_tablet, const Tablet* base_tablet,
+                                                       const RowsetSharedPtr& src_rowset, RowsetId rid, int64_t version,
+                                                       ChunkChanger* chunk_changer, DeltaColumnGroupList& dcgs,
+                                                       std::vector<int> last_dcg_counts);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -111,8 +121,8 @@ public:
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
-                                  TabletSharedPtr tablet);
+    static Status _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
+                                    TabletSharedPtr tablet);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -128,6 +138,8 @@ public:
     // schema change v2, it will not set alter task in base tablet
     Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+
 private:
     struct SchemaChangeParams {
         TabletSharedPtr base_tablet;
@@ -141,8 +153,8 @@ private:
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
-    static Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
-                                              std::vector<Version>* versions_to_be_changed);
+    Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
+                                       std::vector<Version>* versions_to_be_changed);
 
     Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
@@ -151,9 +163,10 @@ private:
 
     Status _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
-    static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
+    Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
     DISALLOW_COPY(SchemaChangeHandler);
+    std::string _alter_msg_header;
 };
 
 } // namespace starrocks

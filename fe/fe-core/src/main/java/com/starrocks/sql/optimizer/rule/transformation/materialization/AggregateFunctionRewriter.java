@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 
@@ -110,10 +111,6 @@ public class AggregateFunctionRewriter {
         }
     }
 
-    private Function findArithmeticFunction(Type[] argsType, String fnName) {
-        return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
-    }
-
     private Pair<ColumnRefOperator, CallOperator> createNewCallOperator(Function newFn,
                                                                         List<ScalarOperator> args) {
         Preconditions.checkState(newFn != null);
@@ -132,22 +129,11 @@ public class AggregateFunctionRewriter {
         Type argType = aggFunc.getChild(0).getType();
 
         // construct `sum` agg
-        Function sumFn = findArithmeticFunction(aggFunc.getFunction().getArgs(), FunctionSet.SUM);
-        Preconditions.checkState(sumFn != null);
-        Type sumReturnType;
-        if (argType.isDecimalV3()) {
-            sumReturnType =
-                    ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
-        } else {
-            sumReturnType = sumFn.getReturnType();
-        }
-        sumFn = sumFn.copy();
-        sumFn.setArgsType(aggFunc.getFunction().getArgs());
-        sumFn.setRetType(sumReturnType);
+        Function sumFn = ScalarOperatorUtil.findSumFn(aggFunc.getFunction().getArgs());
         Pair<ColumnRefOperator, CallOperator> sumCallOp =
                 createNewCallOperator(sumFn, aggFunc.getChildren());
 
-        Function countFn = findArithmeticFunction(aggFunc.getFunction().getArgs(), FunctionSet.COUNT);
+        Function countFn = ScalarOperatorUtil.findArithmeticFunction(aggFunc.getFunction().getArgs(), FunctionSet.COUNT);
         Pair<ColumnRefOperator, CallOperator> countCallOp = createNewCallOperator(countFn, aggFunc.getChildren());
 
         // add sum/count into projection
@@ -185,7 +171,7 @@ public class AggregateFunctionRewriter {
             CallOperator toBitmapOp = new CallOperator(FunctionSet.TO_BITMAP,
                     Type.BITMAP,
                     aggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] { Type.VARCHAR },
+                    Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] { aggChild.get(0).getType() },
                             IS_IDENTICAL));
             toBitmapOp = (CallOperator) scalarRewriter.rewrite(toBitmapOp,
                     Lists.newArrayList(new ImplicitCastRule()));
@@ -206,12 +192,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = Lists.newArrayList(newColRef);
         }
 
-        CallOperator bitmapCountOp = new CallOperator(FunctionSet.BITMAP_COUNT,
+        return new CallOperator(FunctionSet.BITMAP_COUNT,
                 aggFunc.getType(),
                 newAggFunc,
-                Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
+                Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] { Type.BITMAP },
                         IS_IDENTICAL));
-        return bitmapCountOp;
     }
 
     private CallOperator rewriteApproxCount(CallOperator aggFunc) {
@@ -228,7 +213,8 @@ public class AggregateFunctionRewriter {
             aggChild = Lists.newArrayList(hllHashOp);
         }
 
-        // rewrite approx_count_distinct to hll_union_agg(hll_union(hll_hash(x)))
+        // Rewrite approx_count_distinct to hll_cardinality(hll_union(hll_hash(x))).
+        // For approx_count_distinct and ndv, just used for mv rewrite.
         CallOperator hllUnionOp = new CallOperator(FunctionSet.HLL_UNION,
                 Type.HLL,
                 aggChild,
@@ -242,12 +228,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = newColRef;
         }
 
-        CallOperator hllUnionAggOp = new CallOperator(FunctionSet.HLL_CARDINALITY,
+        return new CallOperator(FunctionSet.HLL_CARDINALITY,
                 aggFunc.getType(),
                 Lists.newArrayList(newAggFunc),
-                Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL},
+                Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] { Type.HLL },
                         IS_IDENTICAL));
-        return hllUnionAggOp;
     }
 
     private CallOperator rewritePercentile(CallOperator aggFunc) {
@@ -278,12 +263,11 @@ public class AggregateFunctionRewriter {
             newAggFunc = newColRef;
         }
 
-        CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
+        return new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
                 Type.DOUBLE, Lists.newArrayList(newAggFunc, aggFunc.getChild(1)),
                 Expr.getBuiltinFunction(
                         FunctionSet.PERCENTILE_APPROX_RAW,
-                        new Type[] {Type.PERCENTILE, Type.DOUBLE},
+                        new Type[] { Type.PERCENTILE, Type.DOUBLE },
                         Function.CompareMode.IS_IDENTICAL));
-        return percentileApproxRaw;
     }
 }

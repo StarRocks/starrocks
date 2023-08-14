@@ -65,7 +65,7 @@ public class ConsistencyCheckerTest {
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
-        database.createTable(table);
+        database.registerTableUnlocked(table);
 
         new Expectations() {
             {
@@ -88,5 +88,14 @@ public class ConsistencyCheckerTest {
         // set table state to RESTORE, we will make sure checker will not choose its tablets.
         table.setState(OlapTable.OlapTableState.RESTORE);
         Assert.assertEquals(0, new ConsistencyChecker().chooseTablets().size());
+    }
+
+    @Test
+    public void testResetToBeCleanedTime() {
+        TabletMeta tabletMeta = new TabletMeta(1, 2, 3,
+                4, 5, TStorageMedium.HDD);
+        tabletMeta.setToBeCleanedTime(123L);
+        tabletMeta.resetToBeCleanedTime();
+        Assert.assertNull(tabletMeta.getToBeCleanedTime());
     }
 }

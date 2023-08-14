@@ -12,7 +12,7 @@ ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 
 ## Parameters
 
-- `col`: the column whose values you want to aggregate. Supported data types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
+- `col`: the column whose values you want to aggregate. Supported data types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE, ARRAY (since v3.1), MAP (since v3.1), and STRUCT (since v3.1).
 
 - `col0`: the column which decides the order of `col`. There may be more than one ORDER BY column.
 

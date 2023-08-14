@@ -25,7 +25,8 @@ Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
     _exchanger->incr_sinker();
     _unique_metrics->add_info_string("ShuffleNum", std::to_string(_exchanger->source_dop()));
     _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "LocalExchangePeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+            "LocalExchangePeakMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
     return Status::OK();
 }
 

@@ -42,6 +42,7 @@
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
+#include "util/cpu_info.h"
 #include "util/scoped_cleanup.h"
 #include "util/thread.h"
 
@@ -63,7 +64,7 @@ private:
 ThreadPoolBuilder::ThreadPoolBuilder(string name)
         : _name(std::move(name)),
           _min_threads(0),
-          _max_threads(base::NumCPUs()),
+          _max_threads(CpuInfo::num_cores()),
           _max_queue_size(std::numeric_limits<int>::max()),
           _idle_timeout(MonoDelta::FromMilliseconds(500)) {}
 

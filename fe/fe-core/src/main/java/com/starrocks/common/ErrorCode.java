@@ -84,7 +84,8 @@ public enum ErrorCode {
     ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for function '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
-    ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
+    ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s', " +
+            "the most similar variables are %s"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
             "User %s already has more than 'max_user_connections' active connections"),
     ERR_NO_PERMISSION_TO_CREATE_USER(1211, new byte[] {'4', '2', '0', '0', '0'},
@@ -109,6 +110,10 @@ public enum ErrorCode {
 
     ERR_NOT_SUPPORTED_AUTH_MODE(1251, new byte[] {'0', '8', '0', '0', '4'},
             "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
+
+    ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation"),
+
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
@@ -231,18 +236,22 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_BE_OLAP_TABLE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate table '%s' must be OLAP table"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables must have same replication num: %s, with group %s"),
+            "Colocate tables must have same replication num: %s, with group %s," +
+                    " partition info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_BUCKET_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables must have same bucket num: %s, with group %s"),
+            "Colocate tables must have same bucket num: %s, with group %s," +
+                    " current info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables distribution columns size must be the same : %s, with group %s"),
+            "Colocate tables distribution columns size must be the same : %s, with group %s," +
+                    " current info %s"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate tables distribution columns must have the same data type with group %s, current col: %s, should be: %s"),
+            "Colocate tables distribution columns must have the same data type with group %s," +
+                    " current col: %s, should be: %s, current info %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
     ERR_INVALID_OPERATION(5065, new byte[] {'4', '2', '0', '0', '0'}, "Operation %s is invalid"),
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},
-            "Unsupported time unit %s. Expect DAY/WEEK/MONTH."),
+            "Unsupported time unit %s. Expect DAY/WEEK/MONTH/YEAR."),
     ERROR_DYNAMIC_PARTITION_START_ZERO(5066, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic partition start must less than 0"),
     ERROR_DYNAMIC_PARTITION_START_FORMAT(5066, new byte[] {'4', '2', '0', '0', '0'},
@@ -296,7 +305,7 @@ public enum ErrorCode {
     ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
             "Db [%s] not found when checking privilege"),
     ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
-            "%s denied to user '%s'@'%s' for resoure '%s' when checking privilege"),
+            "%s denied to user '%s'@'%s' for resource '%s' when checking privilege"),
     ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to table '%s' when checking privilege"),
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
@@ -312,8 +321,16 @@ public enum ErrorCode {
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
 
     ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown warehouse '%s'");
+            "Unknown warehouse '%s'"),
 
+    ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
+    ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
+    ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
+    ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to storage volume '%s' when checking privilege");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

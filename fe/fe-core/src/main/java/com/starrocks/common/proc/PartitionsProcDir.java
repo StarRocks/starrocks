@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -65,7 +66,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
@@ -76,6 +77,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /*
@@ -113,7 +115,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("Buckets")
                     .add("DataSize")
                     .add("RowCount")
-                    .add("CacheTTL")
+                    .add("EnableDataCache")
                     .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
@@ -153,7 +155,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         if (subExpr instanceof BinaryPredicate) {
             BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
             if (subExpr.getChild(1) instanceof StringLiteral &&
-                    binaryPredicate.getOp() == BinaryPredicate.Operator.EQ) {
+                    binaryPredicate.getOp() == BinaryType.EQ) {
                 return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
             }
             long leftVal;
@@ -263,13 +265,15 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isCloudNativeTableOrMaterializedView() ? getLakePartitionInfos() : getOlapPartitionInfos();
-    }
-
-    private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isOlapTableOrMaterializedView());
+
+        BiFunction<PartitionInfo, Partition, List<Comparable>> partitionInfoGetter;
+        if (table.isOlapTableOrMaterializedView()) {
+            partitionInfoGetter = this::getOlapPartitionInfo;
+        } else {
+            partitionInfoGetter = this::getLakePartitionInfo;
+        }
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -293,44 +297,12 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (Long partitionId : partitionIds) {
                 Partition partition = table.getPartition(partitionId);
                 String partitionName = partition.getName();
-                if (partitionName != null && !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                if (partitionName != null &&
+                        !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                    partitionInfos.add(partitionInfoGetter.apply(tblPartitionInfo, partition));
                 } else if (Config.enable_display_shadow_partitions) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                    partitionInfos.add(partitionInfoGetter.apply(tblPartitionInfo, partition));
                 }
-            }
-        } finally {
-            db.readUnlock();
-        }
-        return partitionInfos;
-    }
-
-    private List<List<Comparable>> getLakePartitionInfos() {
-        Preconditions.checkNotNull(db);
-        Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
-
-        // get info
-        List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
-        try {
-            List<Long> partitionIds;
-            PartitionInfo tblPartitionInfo = table.getPartitionInfo();
-
-            // for range partitions, we return partitions in ascending range order by default.
-            // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.isRangePartition()) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
-                partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
-                        .map(Map.Entry::getKey).collect(Collectors.toList());
-            } else {
-                Collection<Partition> partitions =
-                        isTempPartition ? table.getTempPartitions() : table.getPartitions();
-                partitionIds = partitions.stream().map(Partition::getId).collect(Collectors.toList());
-            }
-
-            for (Long partitionId : partitionIds) {
-                partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, table.getPartition(partitionId)));
             }
         } finally {
             db.readUnlock();
@@ -389,9 +361,9 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
-        PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionManager().getStatistics(identifier);
+        PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-        StorageCacheInfo cacheInfo = tblPartitionInfo.getStorageCacheInfo(partition.getId());
+        DataCacheInfo cacheInfo = tblPartitionInfo.getDataCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
 
         partitionInfo.add(partition.getId()); // PartitionId
@@ -406,8 +378,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
-        partitionInfo.add(cacheInfo.isEnableStorageCache() ? cacheInfo.getStorageCacheTtlS() : 0); // CacheTTL
-        partitionInfo.add(cacheInfo.isEnableAsyncWriteBack()); // AsyncWrite
+        partitionInfo.add(cacheInfo.isEnabled()); // EnableCache
+        partitionInfo.add(cacheInfo.isAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS

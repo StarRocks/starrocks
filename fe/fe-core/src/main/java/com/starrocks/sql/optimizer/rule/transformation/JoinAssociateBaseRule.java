@@ -36,12 +36,17 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 
 public abstract class JoinAssociateBaseRule extends TransformationRule {
+
+    private static final Logger LOGGER = LogManager.getLogger(JoinAssociateBaseRule.class);
 
     protected static final List<int[]> ASSOCIATE_MODE = ImmutableList
             .of(new int[] {0, 0}, new int[] {0, 1}, new int[] {1, -1});
@@ -55,11 +60,15 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected final int[] newBotJoinRightChildLoc;
 
-    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode) {
+    // indicate whether the botJoin is inner/cross join.
+    protected final boolean isInnerMode;
+
+    protected JoinAssociateBaseRule(RuleType type, Pattern pattern, List<int[]> mode, boolean isInnerMode) {
         super(type, pattern);
         this.newTopJoinChildLoc = mode.get(0);
         this.newBotJoinLeftChildLoc = mode.get(1);
         this.newBotJoinRightChildLoc = mode.get(2);
+        this.isInnerMode = isInnerMode;
     }
 
     public abstract ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
@@ -70,6 +79,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     public abstract OptExpression createNewTopJoinExpr(LogicalJoinOperator newTopJoin, OptExpression newTopJoinChild,
                                                        OptExpression newBotJoinExpr);
 
+    public abstract int createTransformMask(boolean isTop);
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator.Builder newTopJoinBuilder = new LogicalJoinOperator.Builder();
@@ -79,16 +90,20 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) bottomJoinExpr.getOp();
 
+        ColumnRefSet newTopJoinChildOutCols = deriveTopJoinChildOutputCols(input);
+
+        List<ScalarOperator> topPredicates = Lists.newArrayList();
+        List<ScalarOperator> bottomPredicates = Lists.newArrayList();
+
+        splitPredicate(topJoin.getPredicate(), newTopJoinChildOutCols, topPredicates, bottomPredicates);
+        splitPredicate(bottomJoin.getPredicate(), newTopJoinChildOutCols, topPredicates, bottomPredicates);
+        ScalarOperator newTopPredicate = Utils.compoundAnd(topPredicates);
+        ScalarOperator newBotPredicate = Utils.compoundAnd(bottomPredicates);
+
         List<ScalarOperator> top = Lists.newArrayList();
         List<ScalarOperator> bottom = Lists.newArrayList();
 
-        // pull up bottom join predicate
-        ScalarOperator topPredicate = topJoin.getPredicate();
-        ScalarOperator newTopPredicate = Utils.compoundAnd(bottomJoin.getPredicate(), topPredicate);
-
-        ColumnRefSet newTopJoinChildOutCols = deriveTopJoinChildOutputCols(input);
-
-        splitCondition(topJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
+        splitPredicate(topJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
         // bottom join on condition doesn't need to split, it can be pulled up to the top directly.
         top.addAll(Utils.extractConjuncts(bottomJoin.getOnPredicate()));
 
@@ -107,7 +122,9 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         newTopOnCondition = rewriteNewTopOnCondition(newTopJoinType, splitter, newTopOnCondition,
                 newBotJoinColSet, context.getColumnRefFactory());
 
-        newBotOnCondition = rewriteNewBotOnCondition(splitter, newBotOnCondition);
+        newBotOnCondition = rewriteNewBotPredicate(splitter, newBotOnCondition);
+
+        newBotPredicate = rewriteNewBotPredicate(splitter, newBotPredicate);
 
         OptExpression newTopJoinChild = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
 
@@ -145,12 +162,12 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         }
 
         LogicalJoinOperator newBotJoin = newBottomJoinBuilder.setJoinType(newBotJoinType)
-                .setRowOutputInfo(newBotJoinRowInfo)
+                .setPredicate(newBotPredicate)
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
+                .setTransformMask(createTransformMask(false))
                 .build();
         OptExpression newBotJoinExpr = OptExpression.create(newBotJoin, newBotJoinLeftChild, newBotJoinRightChild);
-
         Projection newTopJoinProjection = null;
 
         if (needProject(input.getRowOutputInfo(), newTopJoinChild, newBotJoinExpr)) {
@@ -159,14 +176,19 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         LogicalJoinOperator newTopJoin = newTopJoinBuilder.withOperator(topJoin)
                 .setJoinType(newTopJoinType)
-                .setRowOutputInfo(input.getRowOutputInfo())
                 .setProjection(newTopJoinProjection)
                 .setOnPredicate(newTopOnCondition)
                 .setPredicate(newTopPredicate)
+                .setTransformMask(topJoin.getTransformMask() | createTransformMask(true))
                 .build();
 
         OptExpression newTopJoinExpr = createNewTopJoinExpr(newTopJoin, newTopJoinChild, newBotJoinExpr);
-
+        try {
+            InputDependenciesChecker.getInstance().validate(newTopJoinExpr, context.getTaskContext());
+        } catch (Exception e) {
+            LOGGER.debug("The transformation result is invalid.", e);
+            return Lists.newArrayList();
+        }
         return Lists.newArrayList(newTopJoinExpr);
     }
 
@@ -243,9 +265,9 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return !outputRowCols.equals(inputRowCols);
     }
 
-    protected void splitCondition(ScalarOperator onCondition, ColumnRefSet columnRefSet,
+    protected void splitPredicate(ScalarOperator predicate, ColumnRefSet columnRefSet,
                                   List<ScalarOperator> intersect, List<ScalarOperator> nonIntersect) {
-        List<ScalarOperator> conjuncts = Utils.extractConjuncts(onCondition);
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         for (ScalarOperator conjunct : conjuncts) {
             if (columnRefSet.isIntersect(conjunct.getUsedColumns())) {
                 intersect.add(conjunct);
@@ -263,17 +285,17 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         }
     }
 
-    protected ScalarOperator rewriteNewBotOnCondition(ProjectionSplitter splitter, ScalarOperator newBotOnCondition) {
-        if (newBotOnCondition == null || CollectionUtils.isEmpty(splitter.getConstCols())) {
-            return newBotOnCondition;
+    protected ScalarOperator rewriteNewBotPredicate(ProjectionSplitter splitter, ScalarOperator newBotPredicate) {
+        if (newBotPredicate == null || CollectionUtils.isEmpty(splitter.getConstCols())) {
+            return newBotPredicate;
         }
         Map<ColumnRefOperator, ScalarOperator> colRefMap = Maps.newHashMap();
         splitter.getConstCols().stream().forEach(e -> colRefMap.put(e.getColumnRef(), e.getScalarOp()));
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(colRefMap);
-        newBotOnCondition = rewriter.rewrite(newBotOnCondition);
+        newBotPredicate = rewriter.rewrite(newBotPredicate);
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        newBotOnCondition = scalarRewriter.rewrite(newBotOnCondition, ImmutableList.of(new NormalizePredicateRule()));
-        return newBotOnCondition;
+        newBotPredicate = scalarRewriter.rewrite(newBotPredicate, ImmutableList.of(new NormalizePredicateRule()));
+        return newBotPredicate;
 
     }
 

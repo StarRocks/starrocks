@@ -23,7 +23,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -58,11 +57,7 @@ public class GlobalDictMetaService {
                 return;
             }
             UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                checkUserOwnsAdminRole(currentUser);
-            } else {
-                checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
-            }
+            checkUserOwnsAdminRole(currentUser);
             executeInLeaderWithAdmin(request, response);
         }
 

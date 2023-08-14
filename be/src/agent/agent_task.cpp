@@ -63,7 +63,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     TSchemaHash new_schema_hash = 0;
     new_tablet_id = agent_task_req.new_tablet_id;
     new_schema_hash = agent_task_req.new_schema_hash;
-    EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
     Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
     AgentStatus status;
     if (!sc_status.ok()) {
@@ -72,9 +72,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         status = STARROCKS_SUCCESS;
     }
 
+    std::string alter_msg_head =
+            strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req.job_id, agent_task_req.base_tablet_id);
     if (status == STARROCKS_SUCCESS) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
-        LOG(INFO) << "alter finished. signature: " << signature;
+        LOG(INFO) << alter_msg_head << "alter finished. signature: " << signature;
     }
 
     // Return result to fe
@@ -99,7 +101,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         }
 
         LOG_IF(WARNING, status != STARROCKS_SUCCESS)
-                << "alter success, but get new tablet info failed."
+                << alter_msg_head << "alter success, but get new tablet info failed."
                 << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
                 << ", signature: " << signature;
     }
@@ -107,18 +109,18 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     if (status == STARROCKS_SUCCESS) {
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
-        LOG(INFO) << "alter success. signature: " << signature;
-        error_msgs.push_back("alter success");
+        LOG(INFO) << alter_msg_head << "alter success. signature: " << signature;
+        error_msgs.emplace_back("alter success");
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
-        LOG(WARNING) << "alter table request task type invalid. "
+        LOG(WARNING) << alter_msg_head << "alter table request task type invalid. "
                      << "signature:" << signature;
         error_msgs.emplace_back("alter table request new tablet id or schema count invalid.");
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
-        LOG(WARNING) << "alter failed. signature: " << signature;
-        error_msgs.push_back("alter failed");
-        error_msgs.push_back("status: " + print_agent_status(status));
+        LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
+        error_msgs.emplace_back("alter failed");
+        error_msgs.emplace_back("status: " + print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -215,7 +217,9 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     int64_t signatrue = agent_task_req->signature;
-    LOG(INFO) << "get alter table task, signature: " << agent_task_req->signature;
+    std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
+                                                     agent_task_req->task_req.base_tablet_id);
+    LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
     bool is_task_timeout = false;
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
@@ -290,17 +294,19 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "storage migrate failed. status:" << res << ", signature:" << agent_task_req->signature;
-                error_msgs.emplace_back("storage migrate failed.");
+                LOG(WARNING) << "local tablet migration failed. status: " << res
+                             << ", signature: " << agent_task_req->signature;
+                error_msgs.emplace_back("local tablet migration failed. error message: " + res.get_error_msg());
             } else {
-                LOG(INFO) << "storage migrate success. status:" << res << ", signature:" << agent_task_req->signature;
+                LOG(INFO) << "local tablet migration succeeded. status: " << res
+                          << ", signature: " << agent_task_req->signature;
 
                 TTabletInfo tablet_info;
                 AgentStatus status = TaskWorkerPoolBase::get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
                                                                          agent_task_req->signature, &tablet_info);
                 if (status != STARROCKS_SUCCESS) {
-                    LOG(WARNING) << "storage migrate success, but get tablet info failed"
-                                 << ". status:" << status << ", signature:" << agent_task_req->signature;
+                    LOG(WARNING) << "local tablet migration succeeded, but get tablet info failed"
+                                 << ". status: " << status << ", signature: " << agent_task_req->signature;
                 } else {
                     tablet_infos.push_back(tablet_info);
                 }
@@ -308,7 +314,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             }
         }
     } else {
-        EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
+        EngineCloneTask engine_task(GlobalEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
@@ -423,7 +429,7 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
     TStatus task_status;
     uint32_t checksum = 0;
 
-    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
@@ -463,7 +469,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     TStatus task_status;
 
     for (auto tablet_id : compaction_req.tablet_ids) {
-        EngineManualCompactionTask engine_task(ExecEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
+        EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
         StorageEngine::instance()->execute_task(&engine_task);
     }

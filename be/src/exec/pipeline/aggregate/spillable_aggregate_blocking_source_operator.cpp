@@ -40,6 +40,9 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (!_aggregator->spiller()->spilled()) {
         return false;
     }
+    if (_accumulator.has_output()) {
+        return true;
+    }
     // has output data from spiller.
     if (_aggregator->spiller()->has_output_data()) {
         return true;
@@ -57,6 +60,9 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
+    }
+    if (_accumulator.has_output()) {
+        return false;
     }
     if (_aggregator->spiller()->is_cancel()) {
         return true;
@@ -96,11 +102,16 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
     DCHECK(_accumulator.need_input());
     ChunkPtr res;
 
+    if (_accumulator.has_output()) {
+        auto accumulated = std::move(_accumulator.pull());
+        return accumulated;
+    }
+
+    auto& spiller = _aggregator->spiller();
+
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk,
-                         _aggregator->spiller()->restore(state, *executor, spill::MemTrackerGuard(tls_mem_tracker)));
-
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }
@@ -109,7 +120,7 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
         _accumulator.push(std::move(res));
 
-    } else {
+    } else if (_has_last_chunk) {
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {

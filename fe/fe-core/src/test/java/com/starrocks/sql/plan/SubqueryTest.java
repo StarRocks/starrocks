@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -493,8 +492,7 @@ public class SubqueryTest extends PlanTestBase {
                     "     tabletRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     cardinality=1\n" +
-                    "     avgRowSize=2.0\n" +
-                    "     numNodes=0");
+                    "     avgRowSize=2.0\n");
         }
         {
             connectContext.getSessionVariable().setNewPlanerAggStage(2);
@@ -1522,7 +1520,6 @@ public class SubqueryTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 1");
 
         sql = "((select * from t0) limit 2) order by v1 limit 1";
@@ -1558,7 +1555,6 @@ public class SubqueryTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 2");
     }
 
@@ -1877,5 +1873,18 @@ public class SubqueryTest extends PlanTestBase {
                 " else null end end from tmp a;";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         assertContains(pair.first, "CTEAnchor(cteid=2)");
+    }
+
+    @Test
+    public void testHavingSubqueryNoGroupMode() {
+        String sql = "select v3 from t0 group by v2 having 1 > (select v4 from t1 where t0.v1 = t1.v5)";
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(0);
+            Assert.assertThrows("must be an aggregate expression or appear in GROUP BY clause", SemanticException.class,
+                    () -> getFragmentPlan(sql));
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
     }
 }

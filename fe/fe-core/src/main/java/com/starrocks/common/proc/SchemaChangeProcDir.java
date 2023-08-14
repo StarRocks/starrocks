@@ -25,6 +25,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
@@ -68,7 +69,7 @@ public class SchemaChangeProcDir implements ProcDirInterface {
             return true;
         }
         BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-        if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryPredicate.Operator.EQ) {
+        if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryType.EQ) {
             return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {

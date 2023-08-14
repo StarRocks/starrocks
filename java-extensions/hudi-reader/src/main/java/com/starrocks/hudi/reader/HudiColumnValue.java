@@ -75,7 +75,7 @@ public class HudiColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getString() {
+    public String getString(ColumnType.TypeValue type) {
         return inspectObject().toString();
     }
 

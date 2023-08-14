@@ -22,15 +22,17 @@ import java.util.List;
 public class CreateRoleStmt extends DdlStmt {
     private final List<String> roles;
     private final boolean ifNotExists;
+    private final String comment;
 
-    public CreateRoleStmt(List<String> roles, boolean ifNotExists) {
-        this(roles, ifNotExists, NodePosition.ZERO);
+    public CreateRoleStmt(List<String> roles, boolean ifNotExists, String comment) {
+        this(roles, ifNotExists, comment, NodePosition.ZERO);
     }
 
-    public CreateRoleStmt(List<String> roles, boolean ifNotExists, NodePosition pos) {
+    public CreateRoleStmt(List<String> roles, boolean ifNotExists, String comment, NodePosition pos) {
         super(pos);
         this.roles = roles;
         this.ifNotExists = ifNotExists;
+        this.comment = comment;
     }
 
     public List<String> getRoles() {
@@ -39,6 +41,10 @@ public class CreateRoleStmt extends DdlStmt {
 
     public boolean isIfNotExists() {
         return ifNotExists;
+    }
+
+    public String getComment() {
+        return comment;
     }
 
     @Override

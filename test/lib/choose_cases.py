@@ -34,6 +34,7 @@ from typing import List
 from cup import log
 from nose import tools
 
+from lib import skip
 from lib import sr_sql_lib
 from lib.sr_sql_lib import RESULT_FLAG, UNCHECK_FLAG
 from lib.sr_sql_lib import RESULT_END_FLAT
@@ -41,15 +42,15 @@ from lib.sr_sql_lib import SHELL_FLAG
 from lib.sr_sql_lib import FUNCTION_FLAG
 from lib.sr_sql_lib import NAME_FLAG
 
-
 CASE_DIR = "sql"
 
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, name, file, sql, result, info):
-            """ init """
+        def __init__(self, ctx, name, file, sql, result, info):
+            """init"""
             super().__init__()
+            self.ctx = ctx
             self.info = info
             self.name = name
             self.file = file
@@ -57,63 +58,9 @@ class ChooseCase(object):
             self.ori_sql: List = copy.deepcopy(sql)
             self.result: List = result
 
-            variable_dict = {}
-
-            # get db from lines
-            self.db = set()
-            self.resource = set()
-            self.init_cmd = []
-
-            # identify uuid and replace them, save into variable_dict
-            for each_sql in sql:
-                uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_sql)
-
-                for each_uuid in uuid_vars:
-                    if each_uuid not in variable_dict:
-                        variable_dict[each_uuid] = uuid.uuid4().hex
-
-            for sql_id, each_sql in enumerate(sql):
-
-                # replace uuid
-                for each_var in variable_dict:
-                    each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
-
-                sql[sql_id] = each_sql
-
-                if "CREATE DATABASE" in each_sql.upper():
-                    # last word is db by default
-                    db_name = each_sql.rstrip(";").strip().split(" ")[-1]
-
-                    self.db.add(db_name)
-
-                if "CREATE EXTERNAL RESOURCE " in each_sql.upper():
-
-                    try:
-                        self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE ([a-zA-Z0-9_-]+)", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of CREATE EXTERNAL RESOURCE, %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"create external resource ([a-zA-Z0-9_-]+)", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of create external resource, %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of CREATE EXTERNAL RESOURCE \"\", %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of create external resource \"\", %s" % e)
-
-            # if no db is confirmed, init one
-            if len(self.db) == 0:
-                db_name = "test_db_%s" % uuid.uuid4().hex
-                self.db.add(db_name)
-                self.init_cmd.append("CREATE DATABASE %s;" % db_name)
-                self.init_cmd.append("USE %s;" % db_name)
+            # # get db from lines
+            # self.db = set()
+            # self.resource = set()
 
         def __lt__(self, other):
             """less than"""
@@ -132,12 +79,11 @@ class ChooseCase(object):
 
             return """---- CASE INFO ----
 [name]: {0}
-[db]: {1}
-[file]: {2}
+[file]: {1}
 [SQL]:
-{3}
+{2}
 """.format(
-                self.name, self.db, self.file, case_dict_str
+                self.name, self.file, case_dict_str
             )
 
     def __init__(self, case_dir=None, record_mode=False, file_regex=None, case_regex=None):
@@ -180,31 +126,38 @@ class ChooseCase(object):
             return
 
         # path is dir
-        for (dir_path, _, file_names) in os.walk(self.case_dir):
+        for dir_path, _, file_names in os.walk(self.case_dir):
             if len(file_names) <= 0:
                 continue
 
             if "/T" in dir_path:
                 for file in file_names:
+                    if file.startswith("."):
+                        continue
                     if file_regex is not None and not file_regex.search(file):
-                        # assign filename regex and not match
-                        pass
-                    else:
-                        self.t.append(os.path.join(dir_path, file))
+                        continue
+                    self.t.append(os.path.join(dir_path, file))
             elif "/R" in dir_path:
                 for file in file_names:
+                    if file.startswith("."):
+                        continue
                     if file_regex is not None and not file_regex.search(file):
-                        # assign filename regex and not match
-                        pass
-                    else:
-                        self.r.append(os.path.join(dir_path, file))
+                        continue
+                    self.r.append(os.path.join(dir_path, file))
 
     def get_cases(self, record_mode, case_regex):
         """get cases"""
         file_list = self.t if record_mode else self.r
 
         for file in file_list:
+            base_file = os.path.basename(file)
+            if base_file in skip.skip_files:
+                print('skip file {} because it is in skip_files'.format(file))
+                continue
+
             self.read_t_r_file(file, case_regex)
+
+        self.case_list = list(filter(lambda x: x.name.strip() != "", self.case_list))
 
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
@@ -215,7 +168,7 @@ class ChooseCase(object):
 
         tools.assert_greater(len(f_lines), 0, "case file lines must not be empty: %s" % file)
 
-        attr = os.environ.get("attr").split(",") if os.environ.get("attr") != '' else []
+        attr = os.environ.get("attr").split(",") if os.environ.get("attr") != "" else []
 
         line_id = 0
         name = ""
@@ -239,12 +192,15 @@ class ChooseCase(object):
                     if case_regex is not None and not re.compile(case_regex).search(name):
                         # case name don't match regex
                         pass
-                    elif any(each_attr not in tags for each_attr in attr):
+                    elif attr and any(each_attr not in tags for each_attr in attr):
                         # case attrs don't match attr filter
+                        pass
+                    elif not attr and "sequential" in tags:
+                        # no attr is confirmed, skip sequential cases in default
                         pass
                     else:
                         self.case_list.append(
-                            ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                            ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                         )
 
                 info = line_content
@@ -305,12 +261,17 @@ class ChooseCase(object):
 
         if len(tmp_sql) > 0:
             if case_regex is not None and not re.compile(case_regex).search(name):
+                # case name don't match regex
                 pass
-            elif any(each_attr not in tags for each_attr in attr):
+            elif attr and any(each_attr not in tags for each_attr in attr):
+                # case attrs don't match attr filter
+                pass
+            elif not attr and "sequential" in tags:
+                # no attr is confirmed, skip sequential cases in default
                 pass
             else:
                 self.case_list.append(
-                    ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                    ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                 )
 
 
@@ -328,14 +289,19 @@ def choose_cases(record_mode=False):
 [file regex]: %s
 [case regex]: %s
 [attr]: %s
-    """ % (confirm_case_dir, "RECORD" if record_mode else "VALIDATE", filename_regex, case_name_regex,
-           os.environ.get("attr"))
+    """ % (
+        confirm_case_dir,
+        "RECORD" if record_mode else "VALIDATE",
+        filename_regex,
+        case_name_regex,
+        os.environ.get("attr"),
+    )
     print(run_info)
     log.info(run_info)
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
 
     # check db
-    check_db_unique(cases.case_list)
+    # check_db_unique(cases.case_list)
 
     # log info: case list
     print("case num: %s" % len(cases.case_list))
@@ -347,7 +313,7 @@ def choose_cases(record_mode=False):
 
 
 def check_db_unique(case_list: List[ChooseCase.CaseTR]):
-    """ check db unique in case list """
+    """check db unique in case list"""
     db_and_case_dict = {}
 
     # get info dict, key: db value: [..case_names]

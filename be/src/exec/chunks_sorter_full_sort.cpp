@@ -37,8 +37,9 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
           _early_materialized_slots(early_materialized_slots.begin(), early_materialized_slots.end()) {}
 
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
-void ChunksSorterFullSort::setup_runtime(starrocks::RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
-    ChunksSorter::setup_runtime(profile, parent_mem_tracker);
+
+void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
     _runtime_profile = profile;
     _parent_mem_tracker = parent_mem_tracker;
     _object_pool = std::make_unique<ObjectPool>();
@@ -46,6 +47,7 @@ void ChunksSorterFullSort::setup_runtime(starrocks::RuntimeProfile* profile, Mem
     _runtime_profile->add_info_string("MaxBufferedBytes", strings::Substitute("$0", max_buffered_bytes));
     _profiler = _object_pool->add(new ChunksSorterFullSortProfiler(profile, parent_mem_tracker));
 }
+
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_merge_unsorted(state, chunk));
     RETURN_IF_ERROR(_partial_sort(state, false));
@@ -103,6 +105,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);
         concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
+        _staging_unsorted_chunks.clear();
         RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
         SCOPED_TIMER(_sort_timer);
@@ -119,7 +122,6 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         _unsorted_chunk->reset();
         _staging_unsorted_rows = 0;
         _staging_unsorted_bytes = 0;
-        _staging_unsorted_chunks.clear();
     }
 
     return Status::OK();

@@ -17,6 +17,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TMiniLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
@@ -27,9 +28,12 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
+    @SerializedName("lr")
     private long loadedRows;
+    @SerializedName("fr")
     private long filteredRows;
     // optional
+    @SerializedName("eu")
     private String errorLogUrl;
 
     public MiniLoadTxnCommitAttachment() {

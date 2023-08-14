@@ -37,18 +37,27 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
         DCHECK(!window.__isset.window_start);
         DCHECK(!window.__isset.window_end || window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW);
         if (!window.__isset.window_end) {
+            // RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
         } else {
+            // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             DCHECK_EQ(window.window_end.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-            _process_by_partition_if_necessary =
-                    &AnalyticSinkOperator::
-                            _process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming;
-            _process_by_partition = nullptr;
+            if (!_analytor->need_partition_materializing()) {
+                _process_by_partition_if_necessary =
+                        &AnalyticSinkOperator::
+                                _process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming;
+                _process_by_partition = nullptr;
+            } else {
+                _process_by_partition =
+                        &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_frame_materializing;
+            }
         }
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
         } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             if (!_analytor->need_partition_materializing()) {
                 _process_by_partition_if_necessary =
                         &AnalyticSinkOperator::
@@ -59,6 +68,8 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
                         &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame_materializing;
             }
         } else {
+            // ROWS BETWEEN N PRECEDING AND M FOLLOWING or
+            // ROWS BETWEEN N PRECEDING AND CURRENT ROW
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_sliding_frame;
         }
     }
@@ -73,6 +84,12 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
 
 Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
+
     _analytor->input_eos() = true;
     RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
     _analytor->sink_complete();
@@ -270,6 +287,36 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
         DCHECK_GE(frame_start, 0);
         _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
         _analytor->update_current_row_position(1);
+    }
+}
+
+void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_frame_materializing(
+        size_t chunk_size, bool is_new_partition) {
+    if (_analytor->should_set_partition_size()) {
+        _analytor->set_partition_size_for_function();
+    }
+    while (_analytor->current_row_position() < _analytor->partition_end() &&
+           !_analytor->is_current_chunk_finished_eval(chunk_size)) {
+        _analytor->find_peer_group_end();
+        _analytor->update_window_batch(_analytor->peer_group_start(), _analytor->peer_group_end(),
+                                       _analytor->peer_group_start(), _analytor->peer_group_end());
+
+        int64_t chunk_first_row_position = _analytor->first_total_position_of_current_chunk();
+        // Why use current_row_position to evaluate peer_group_start_offset here?
+        // Because the peer group may cross multiply chunks, we only need to update from the start of remaining part
+        int64_t peer_group_start_offset =
+                _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
+        int64_t peer_group_end_offset =
+                _analytor->get_total_position(_analytor->peer_group_end()) - chunk_first_row_position;
+        if (peer_group_end_offset > chunk_size) {
+            peer_group_end_offset = chunk_size;
+        }
+        _analytor->set_window_result_position(peer_group_end_offset);
+        DCHECK_GE(peer_group_start_offset, 0);
+        DCHECK_GT(peer_group_end_offset, peer_group_start_offset);
+
+        _analytor->get_window_function_result(peer_group_start_offset, peer_group_end_offset);
+        _analytor->update_current_row_position(peer_group_end_offset - peer_group_start_offset);
     }
 }
 

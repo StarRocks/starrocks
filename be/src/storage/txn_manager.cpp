@@ -297,7 +297,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
                   << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files();
+                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
+                  << " #uptfiles:" << rowset_ptr->num_update_files();
     }
     return Status::OK();
 }
@@ -404,8 +405,11 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
+        auto st = token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
         pair_vec[i].second = dir->path();
+        if (!st.ok()) {
+            pair_vec[i].first = std::move(st);
+        }
         i++;
     }
 

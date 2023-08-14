@@ -11,16 +11,16 @@ show backends;
 create database test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;
 use test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;
 CREATE TABLE `sr_8537` (
-                `brand_code` tinyint not null comment '品牌编码',
-                `operation_type` tinyint  not null comment "操作类型 1:进货 2:退货 3:调拨入库 4:调拨出库 5:损耗",
-                `merchandise_code` varchar(64) not null comment '货品编码',
-                `store_code` varchar(64) not null  comment '门店编号',
-                `business_date` date not null comment '业务日 yyyy-mm-dd',
-                `operation_flow_id` varchar(128)   comment "操作流水号",
-                `operation_amount` decimal(10,2) not null  comment "操作数量",
-                `unit_code` varchar(64)  comment "单位编码",
-                `origin_operation_amount` decimal(10,2) not null  comment "操作数量",
-                `operation_time` datetime not null  comment '操作时间'
+                `brand_code` tinyint not null comment '',
+                `operation_type` tinyint  not null comment "",
+                `merchandise_code` varchar(64) not null comment '',
+                `store_code` varchar(64) not null  comment '',
+                `business_date` date not null comment '',
+                `operation_flow_id` varchar(128)   comment "",
+                `operation_amount` decimal(10,2) not null  comment "",
+                `unit_code` varchar(64)  comment "",
+                `origin_operation_amount` decimal(10,2) not null  comment "",
+                `operation_time` datetime not null  comment ''
                 ) 
                 DUPLICATE KEY(brand_code, operation_type, merchandise_code,store_code,business_date)
                 PARTITION BY RANGE (`business_date`)(
@@ -29,13 +29,7 @@ CREATE TABLE `sr_8537` (
                 partition p3 values less than ("2022-06-01"))
                 DISTRIBUTED BY HASH(store_code) BUCKETS 12
                 PROPERTIES(
-                 "replication_num" = "1",
-                 "dynamic_partition.enable" = "true",
-                 "dynamic_partition.time_unit" = "MONTH",
-                 "dynamic_partition.start" = "-13",
-                 "dynamic_partition.end" = "3",
-                 "dynamic_partition.prefix" = "p_month",
-                 "dynamic_partition.buckets" = "12"
+                 "replication_num" = "1"
                 );
 shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8537.csv -XPUT -H label:stream_load_1668145399844 -H column_separator:, ${url}/api/test_number_bf5a0936_6183_11ed_b695_00163e0b9de0/sr_8537/_stream_load
 sync;
@@ -54,7 +48,7 @@ CREATE TABLE `test_decimal_type6` (
              COMMENT "OLAP"
              DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10
              PROPERTIES (
-             "replication_num" = "3",
+             "replication_num" = "1",
              "in_memory" = "false",
              "enable_persistent_index" = "false"
              );
@@ -67,9 +61,9 @@ show backends;
 create database test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;
 use test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;
 CREATE TABLE `ollo` (
-              `dt_year` datetime NOT NULL COMMENT "时间-年,yyyy-01-01 00:00:00",
-              `dt_month` datetime NOT NULL COMMENT "时间-月,yyyy-MM-01 00:00:00",
-              `dt_day` datetime NOT NULL COMMENT "时间-日,yyyy-MM-dd 00:00:00",
+              `dt_year` datetime NOT NULL COMMENT "yyyy-01-01 00:00:00",
+              `dt_month` datetime NOT NULL COMMENT "yyyy-MM-01 00:00:00",
+              `dt_day` datetime NOT NULL COMMENT "yyyy-MM-dd 00:00:00",
                 ol  DECIMAL(38,18) NOT NULL COMMENT "1",
                 lo  DECIMAL(38,18) NOT NULL COMMENT "2"
             ) ENGINE=OLAP 
@@ -80,7 +74,7 @@ CREATE TABLE `ollo` (
             PARTITION p20220411 VALUES [('2022-04-11 00:00:00'), ('2022-04-12 00:00:00')),
             PARTITION p20220421 VALUES [('2022-04-21 00:00:00'), ('2022-04-22 00:00:00')))
             DISTRIBUTED BY HASH(`dt_year`) BUCKETS 2
-            PROPERTIES ("replication_num" = "3");
+            PROPERTIES ("replication_num" = "1");
 insert INTO ollo values  ('2022-04-11','2022-04-11','2022-04-11',-2516.460439,1673.37);
 SELECT -2516.460439/1673.37;
 SELECT ol/lo from ollo;

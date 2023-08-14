@@ -93,6 +93,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -107,6 +109,8 @@ import static java.util.Objects.requireNonNull;
  * Translator from Expr to ScalarOperator
  */
 public final class SqlToScalarOperatorTranslator {
+    private static final Logger LOG = LogManager.getLogger(SqlToScalarOperatorTranslator.class);
+
     private SqlToScalarOperatorTranslator() {
     }
 
@@ -311,7 +315,7 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
             ScalarOperator child = visit(node.getChild(0), context);
-            return SubfieldOperator.build(child, node);
+            return new SubfieldOperator(child, node.getType(), node.getFieldNames());
         }
 
         @Override
@@ -336,7 +340,7 @@ public final class SqlToScalarOperatorTranslator {
             for (Expr expr : node.getChildren()) {
                 mapElements.add(visit(expr, context.clone(node)));
             }
-            return new MapOperator(node.getType(), node.isNullable(), mapElements);
+            return new MapOperator(node.getType(), mapElements);
         }
 
         @Override
@@ -432,38 +436,9 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicate node, Context context) {
-            switch (node.getOp()) {
-                case EQ:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case NE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case GT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case GE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case LT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case LE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                case EQ_FOR_NULL:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
-                            visit(node.getChild(0), context.clone(node)),
-                            visit(node.getChild(1), context.clone(node)));
-                default:
-                    throw new UnsupportedOperationException("nonsupport binary predicate type");
-            }
+            return new BinaryPredicateOperator(node.getOp(),
+                    visit(node.getChild(0), context.clone(node)),
+                    visit(node.getChild(1), context.clone(node)));
         }
 
         @Override
@@ -565,7 +540,8 @@ public final class SqlToScalarOperatorTranslator {
             }
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() != leftExprs.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
             ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
             ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
@@ -856,6 +832,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             return new ColumnRefOperator(node.getSlotId().asInt(),

@@ -324,7 +324,7 @@ public:
     RowReaderOptions& useWriterTimezone();
     bool getUseWriterTimezone() const;
     RowReaderOptions& includeLazyLoadColumnNames(const std::list<std::string>& include);
-    RowReaderOptions& includeLazyLoadColumnIndexes(const std::list<std::uint64_t>& include);
+    RowReaderOptions& includeLazyLoadColumnIndexes(const std::list<uint64_t>& include);
     const std::list<std::string>& getLazyLoadColumnNames() const;
     const std::list<uint64_t>& getLazyLoadColumnIndexes() const;
 };
@@ -427,6 +427,7 @@ public:
      * @return the information about that stripe
      */
     virtual ORC_UNIQUE_PTR<StripeInformation> getStripe(uint64_t stripeIndex) const = 0;
+    virtual const orc::proto::StripeInformation& getStripeInOrcFormat(uint64_t stripeIndex) const = 0;
 
     /**
      * Get the number of stripe statistics in the file.

@@ -6,7 +6,7 @@ github_checks:
 coverage:
   status:
     project:
-      fe-ut:
+      fe-total:
         target: 60%
         threshold: 5%
         only_pulls: true

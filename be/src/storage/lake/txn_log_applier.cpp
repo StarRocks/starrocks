@@ -22,6 +22,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -36,9 +37,7 @@ public:
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
-              _builder(_tablet, _metadata),
-              _inited(false),
-              _check_meta_version_succ(false) {
+              _builder(_tablet, _metadata) {
         _metadata->set_version(_new_version);
     }
 
@@ -70,6 +69,7 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
@@ -82,7 +82,7 @@ public:
         return Status::OK();
     }
 
-    Status finish() override { return _builder.finalize(); }
+    Status finish() override { return _builder.finalize(_max_txn_id); }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
@@ -133,11 +133,12 @@ private:
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadataPB> _metadata;
-    int64_t _base_version;
-    int64_t _new_version;
+    int64_t _base_version{0};
+    int64_t _new_version{0};
+    int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
-    bool _inited;
-    bool _check_meta_version_succ;
+    bool _inited{false};
+    bool _check_meta_version_succ{false};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -229,23 +230,26 @@ private:
 
         // Set new cumulative point
         uint32_t new_cumulative_point = 0;
-        if (first_idx >= _metadata->cumulative_point()) {
-            // cumulative compaction
-            new_cumulative_point = first_idx;
-        } else {
-            // base compaction
-            new_cumulative_point = _metadata->cumulative_point() - op_compaction.input_rowsets_size();
-        }
-        if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
-            ++new_cumulative_point;
-        }
-        if (new_cumulative_point > _metadata->rowsets_size()) {
-            return Status::InternalError(fmt::format("new cumulative point: {} exceeds rowset size: {}",
-                                                     new_cumulative_point, _metadata->rowsets_size()));
+        // size tiered compaction policy does not need cumulative point
+        if (!config::enable_size_tiered_compaction_strategy) {
+            if (first_idx >= _metadata->cumulative_point()) {
+                // cumulative compaction
+                new_cumulative_point = first_idx;
+            } else if (_metadata->cumulative_point() >= op_compaction.input_rowsets_size()) {
+                // base compaction
+                new_cumulative_point = _metadata->cumulative_point() - op_compaction.input_rowsets_size();
+            }
+            if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
+                ++new_cumulative_point;
+            }
+            if (new_cumulative_point > _metadata->rowsets_size()) {
+                return Status::InternalError(fmt::format("new cumulative point: {} exceeds rowset size: {}",
+                                                         new_cumulative_point, _metadata->rowsets_size()));
+            }
         }
         _metadata->set_cumulative_point(new_cumulative_point);
 
-        // Debug new tablet _metadata
+        // Debug new tablet metadata
         std::vector<uint32_t> rowset_ids;
         std::vector<uint32_t> delete_rowset_ids;
         for (const auto& rowset : _metadata->rowsets()) {
@@ -254,7 +258,7 @@ private:
                 delete_rowset_ids.emplace_back(rowset.id());
             }
         }
-        LOG(INFO) << "compaction finish. tablet: " << _metadata->id() << ", version: " << _metadata->version()
+        LOG(INFO) << "Compaction finish. tablet: " << _metadata->id() << ", version: " << _metadata->version()
                   << ", cumulative point: " << _metadata->cumulative_point() << ", rowsets: ["
                   << JoinInts(rowset_ids, ",") << "]"
                   << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";

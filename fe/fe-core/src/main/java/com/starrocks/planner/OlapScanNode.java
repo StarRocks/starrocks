@@ -70,13 +70,13 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -91,6 +91,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -109,6 +110,16 @@ public class OlapScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final List<String> selectedPartitionNames = Lists.newArrayList();
+    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
+    private final HashSet<Long> scanBackendIds = new HashSet<>();
+    // The column names applied dict optimization
+    // used for explain
+    private final List<String> appliedDictStringColumns = new ArrayList<>();
+    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
+    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
+    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
      * When the field value is OFF, the storage engine needs to aggregate the data before returning to scan node.
@@ -134,28 +145,21 @@ public class OlapScanNode extends ScanNode {
     private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private List<Long> selectedPartitionIds = Lists.newArrayList();
-    private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
     private long actualRows = 0;
-
     // List of tablets will be scanned by current olap_scan_node
-    private ArrayList<Long> scanTabletIds = Lists.newArrayList();
+    private List<Long> scanTabletIds = Lists.newArrayList();
+    private List<Long> hintsReplicaIds = Lists.newArrayList();
     private boolean isFinalized = false;
-
     private boolean isSortedByKeyPerTablet = false;
-
-    private final HashSet<Long> scanBackendIds = new HashSet<>();
-
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
-
     private List<Expr> bucketExprs = Lists.newArrayList();
     private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
-    public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
-
     // record the selected partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
+    // The dict id int column ids to dict string column ids
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    private boolean usePkIndex = false;
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -168,7 +172,7 @@ public class OlapScanNode extends ScanNode {
         this.reasonOfPreAggregation = reason;
     }
 
-    public ArrayList<Long> getScanTabletIds() {
+    public List<Long> getScanTabletIds() {
         return scanTabletIds;
     }
 
@@ -187,6 +191,10 @@ public class OlapScanNode extends ScanNode {
         return selectedPartitionIds;
     }
 
+    public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
+        this.selectedPartitionIds = selectedPartitionIds;
+    }
+
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
     }
@@ -194,9 +202,6 @@ public class OlapScanNode extends ScanNode {
     public List<Long> getSelectedPartitionVersions() {
         return selectedPartitionVersions;
     }
-
-    // The dict id int column ids to dict string column ids
-    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public List<Expr> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
@@ -227,10 +232,6 @@ public class OlapScanNode extends ScanNode {
         this.bucketExprs = bucketExprs;
     }
 
-    // The column names applied dict optimization
-    // used for explain
-    private final List<String> appliedDictStringColumns = new ArrayList<>();
-
     public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (appliedColumnIds.contains(slot.getId().asInt())) {
@@ -238,8 +239,6 @@ public class OlapScanNode extends ScanNode {
             }
         }
     }
-
-    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
 
     public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
                                              Set<String> aggOrPrimaryKeyTableValueColumnNames) {
@@ -297,10 +296,7 @@ public class OlapScanNode extends ScanNode {
             if (hasLimit()) {
                 cardinality = Math.min(cardinality, limit);
             }
-            numNodes = scanBackendIds.size();
         }
-        // even current node scan has no data,at least on backend will be assigned when the fragment actually execute
-        numNodes = numNodes <= 0 ? 1 : numNodes;
         // when node scan has no data, cardinality should be 0 instead of a invalid value after computeStats()
         cardinality = cardinality == -1 ? 0 : cardinality;
     }
@@ -341,7 +337,7 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    // update TScanRangeLocations based on the latest olapTable tablet distributions, 
+    // update TScanRangeLocations based on the latest olapTable tablet distributions,
     // this function will make sure the version of each TScanRangeLocations doesn't change.
     public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
             throws UserException {
@@ -393,19 +389,21 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
+            internalRange.setRow_count(selectedTablet.getRowCount(0));
 
             List<Replica> replicas = allQueryableReplicas;
 
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
-                if (backend == null) {
+                ComputeNode node =
+                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
                 }
-                String ip = backend.getHost();
-                int port = backend.getBePort();
+                String ip = node.getHost();
+                int port = node.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
                 scanRangeLocation.setBackend_id(replica.getBackendId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
@@ -433,8 +431,11 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
+        boolean fillDataCache =
+                olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
+
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
@@ -447,6 +448,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
+            internalRange.setRow_count(tablet.getRowCount(0));
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
@@ -482,31 +484,40 @@ public class OlapScanNode extends ScanNode {
                 replicas = allQueryableReplicas;
             }
 
+            if (!hintsReplicaIds.isEmpty()) {
+                replicas.removeIf(replica -> !hintsReplicaIds.contains(replica.getId()));
+                // direct return if no expected replica
+                if (replicas.isEmpty()) {
+                    continue;
+                }
+            }
+
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().
-                        getBackendOrComputeNode(replica.getBackendId());
-                if (backend == null) {
+                ComputeNode node =
+                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
                 }
-                String ip = backend.getHost();
-                int port = backend.getBePort();
+                String ip = node.getHost();
+                int port = node.getBePort();
                 TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(ip, port));
                 scanRangeLocation.setBackend_id(replica.getBackendId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
+                internalRange.setFill_data_cache(fillDataCache);
                 tabletIsNull = false;
 
-                //for CBO
+                // for CBO
                 if (!collectedStat && replica.getRowCount() != -1) {
                     actualRows += replica.getRowCount();
                     collectedStat = true;
                 }
-                scanBackendIds.add(backend.getId());
+                scanBackendIds.add(node.getId());
             }
             if (tabletIsNull) {
                 throw new UserException(tabletId + "have no alive replicas");
@@ -695,7 +706,6 @@ public class OlapScanNode extends ScanNode {
             output.append("\n");
             output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
             output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
-            output.append(prefix).append(String.format("numNodes=%s\n", numNodes));
         } else {
             output.append(prefix).append(String.format(
                             "partitionsRatio=%s/%s",
@@ -731,6 +741,7 @@ public class OlapScanNode extends ScanNode {
                     output.append(prefix).append("- ").append(col.toString()).append("\n");
                 }
             }
+            output.append(explainColumnAccessPath(prefix));
         }
 
         return output.toString();
@@ -791,6 +802,10 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
+
+            if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+                msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+            }
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -819,6 +834,12 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
+
+            if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+                msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+            }
+
+            msg.olap_scan_node.setUse_pk_index(usePkIndex);
         }
     }
 
@@ -853,8 +874,10 @@ public class OlapScanNode extends ScanNode {
      */
     public void updateScanInfo(List<Long> selectedPartitionIds,
                                List<Long> scanTabletIds,
+                               List<Long> hintsReplicaIds,
                                long selectedIndexId) {
-        this.scanTabletIds = new ArrayList<>(scanTabletIds);
+        this.scanTabletIds = Lists.newArrayList(scanTabletIds);
+        this.hintsReplicaIds = Lists.newArrayList(hintsReplicaIds);
         this.selectedTabletsNum = scanTabletIds.size();
         this.selectedPartitionIds = selectedPartitionIds;
         this.selectedPartitionNum = selectedPartitionIds.size();
@@ -865,16 +888,16 @@ public class OlapScanNode extends ScanNode {
         this.isPreAggregation = true;
     }
 
-    public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
-        this.selectedPartitionIds = selectedPartitionIds;
-    }
-
     public void setTabletId2BucketSeq(Map<Long, Integer> tabletId2BucketSeq) {
         this.tabletId2BucketSeq = tabletId2BucketSeq;
     }
 
     public void setTotalTabletsNum(long totalTabletsNum) {
         this.totalTabletsNum = totalTabletsNum;
+    }
+
+    public void setUsePkIndex(boolean usePkIndex) {
+        this.usePkIndex = usePkIndex;
     }
 
     @Override
