@@ -220,7 +220,7 @@ public class Pipe implements GsonPostProcessable {
                 if (txnStatus == null || txnStatus.isFailed()) {
                     file.loadState = FileListRepo.PipeFileState.ERROR;
                 } else {
-                    file.loadState = FileListRepo.PipeFileState.LOADED;
+                    file.loadState = FileListRepo.PipeFileState.FINISHED;
                 }
             }
         }
@@ -229,14 +229,14 @@ public class Pipe implements GsonPostProcessable {
                 .filter(x -> x.loadState == FileListRepo.PipeFileState.ERROR)
                 .collect(Collectors.toList());
         List<PipeFileRecord> loadedFiles = loadingFiles.stream()
-                .filter(x -> x.loadState == FileListRepo.PipeFileState.LOADED)
+                .filter(x -> x.loadState == FileListRepo.PipeFileState.FINISHED)
                 .collect(Collectors.toList());
 
         if (CollectionUtils.isNotEmpty(failedFiles)) {
             pipeSource.getFileListRepo().updateFileState(failedFiles, FileListRepo.PipeFileState.ERROR, null);
         }
         if (CollectionUtils.isNotEmpty(loadedFiles)) {
-            pipeSource.getFileListRepo().updateFileState(loadedFiles, FileListRepo.PipeFileState.LOADED, null);
+            pipeSource.getFileListRepo().updateFileState(loadedFiles, FileListRepo.PipeFileState.FINISHED, null);
         }
 
         LOG.info("{} pipe recovered to state {}, failed-files: {}, loaded-files: {}",
@@ -673,7 +673,6 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public enum State {
-        RECOVERING,
         SUSPEND,
         RUNNING,
         FINISHED,

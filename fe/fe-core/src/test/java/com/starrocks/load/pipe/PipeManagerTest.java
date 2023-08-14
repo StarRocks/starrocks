@@ -308,7 +308,7 @@ public class PipeManagerTest {
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
 
         FileListRepo repo = source.getFileListRepo();
-        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.LOADED).size());
+        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
     }
 
     @Test
@@ -705,7 +705,7 @@ public class PipeManagerTest {
             Assert.assertFalse(pipe.isRunnable());
 
             pipe.recovery();
-            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.LOADED).size());
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
             Assert.assertTrue(pipe.isRecovered());
             Assert.assertTrue(pipe.isRunnable());
         }

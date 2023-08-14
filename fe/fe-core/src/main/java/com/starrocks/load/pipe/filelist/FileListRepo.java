@@ -68,7 +68,7 @@ public abstract class FileListRepo {
     public enum PipeFileState {
         UNLOADED,
         LOADING,
-        LOADED,
+        FINISHED,
         SKIPPED,
         ERROR;
     }

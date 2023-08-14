@@ -20,6 +20,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.InsertStmt;
@@ -165,12 +166,16 @@ public class AstToSQLBuilder {
             } else {
                 for (SelectListItem item : stmt.getSelectList().getItems()) {
                     if (item.isStar()) {
-                        selectListString.add("*");
+                        if (item.getTblName() != null) {
+                            selectListString.add(item.getTblName() + ".*");
+                        } else {
+                            selectListString.add("*");
+                        }
                     } else if (item.getExpr() != null) {
                         Expr expr = item.getExpr();
                         String str = visit(expr);
                         if (StringUtils.isNotEmpty(item.getAlias())) {
-                            str += " AS " + item.getAlias();
+                            str += " AS " + ParseUtil.backquote(item.getAlias());
                         }
                         selectListString.add(str);
                     }

@@ -48,7 +48,7 @@ public class FileListTableRepo extends FileListRepo {
                     "staged_time datetime, " +
                     "start_load datetime, " +
                     "finish_load datetime, " +
-                    "error_info_json string, " +
+                    "error_info string, " +
                     "insert_label string" +
                     " ) PRIMARY KEY(pipe_id, file_name, file_version) " +
                     "DISTRIBUTED BY HASH(pipe_id, file_name) BUCKETS 8 " +
@@ -59,7 +59,7 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String ALL_COLUMNS =
             "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
-                    " `start_load`, `finish_load`, `error_info_json`, `insert_label`";
+                    " `start_load`, `finish_load`, `error_info`, `insert_label`";
 
     protected static final String SELECT_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME;
@@ -67,7 +67,7 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
     protected static final String UPDATE_FILE_STATE =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `error_info_json` = %s WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `error_info` = %s WHERE ";
 
     protected static final String UPDATE_FILE_STATE_START_LOAD =
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `start_load` = now(), `insert_label`=%s WHERE ";

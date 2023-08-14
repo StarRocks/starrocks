@@ -99,7 +99,7 @@ public class RepoAccessor {
                 case LOADING:
                     sql = buildSqlStartLoad(records, state, insertLabel);
                     break;
-                case LOADED:
+                case FINISHED:
                     sql = buildSqlFinishLoad(records, state);
                     break;
                 default:

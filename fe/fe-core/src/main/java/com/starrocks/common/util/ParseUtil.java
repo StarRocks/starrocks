@@ -20,6 +20,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
@@ -121,4 +122,10 @@ public class ParseUtil {
         return new String(hexChars, StandardCharsets.UTF_8);
     }
 
+    public static String backquote(String str) {
+        if (StringUtils.isEmpty(str)) {
+            return str;
+        }
+        return "`" + str + "`";
+    }
 }
