@@ -1192,7 +1192,7 @@ public class StmtExecutor {
             Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
                     analyzeJob.getTableId());
             tableNames.forEach(tableName ->
-                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
+                    checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
                         tableName.getTbl(), analyzeId)
             );
         }
