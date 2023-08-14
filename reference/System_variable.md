@@ -329,7 +329,7 @@ SELECT /*+ SET_VAR
 
   其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
 
-* `log_rejected_record_num`
+* `log_rejected_record_num`（3.1 及以后）
 
   指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。该参数自 3.1 版本起支持。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
   
