@@ -24,6 +24,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import javax.validation.constraints.NotNull;
 
 public class TabletFailInfo implements Writable {
 
@@ -44,6 +45,7 @@ public class TabletFailInfo implements Writable {
         return backendId;
     }
 
+    @NotNull
     public static List<TabletFailInfo> fromThrift(List<TTabletFailInfo> tTabletFailInfos) {
         List<TabletFailInfo> failInfos = Lists.newArrayList();
         if (tTabletFailInfos != null) {
