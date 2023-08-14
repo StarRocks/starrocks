@@ -1,7 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef USE_JEMALLOC
+#include "jemalloc/jemalloc.h"
+#else
 #include <gperftools/nallocx.h>
 #include <gperftools/tcmalloc.h>
+#endif
 
 #include <atomic>
 #include <iostream>
@@ -172,8 +176,31 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 }
 */
 
+#ifdef USE_JEMALLOC
+#define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
+#define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
+#define STARROCKS_MALLOC(size) je_malloc(size)
+#define STARROCKS_FREE(ptr) je_free(ptr)
+#define STARROCKS_REALLOC(ptr, size) je_realloc(ptr, size)
+#define STARROCKS_CALLOC(number, size) je_calloc(number, size)
+#define STARROCKS_ALIGNED_ALLOC(align, size) je_aligned_alloc(align, size)
+#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) je_posix_memalign(ptr, align, size)
+#define STARROCKS_CFREE(ptr) je_free(ptr)
+#define STARROCKS_VALLOC(size) je_valloc(size)
+#else
+#define STARROCKS_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
+#define STARROCKS_NALLOX(size, flags) tc_nallocx(size, flags)
+#define STARROCKS_MALLOC(size) tc_malloc(size)
+#define STARROCKS_FREE(ptr) tc_free(ptr)
+#define STARROCKS_REALLOC(ptr, size) tc_realloc(ptr, size)
+#define STARROCKS_CALLOC(number, size) tc_calloc(number, size)
+#define STARROCKS_ALIGNED_ALLOC(align, size) tc_memalign(align, size)
+#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) tc_posix_memalign(ptr, align, size)
+#define STARROCKS_CFREE(ptr) tc_cfree(ptr)
+#define STARROCKS_VALLOC(size) tc_valloc(size)
+#endif
+
 #ifndef BE_TEST
-#define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
 #define MEMORY_CONSUME_SIZE(size)                                      \
     do {                                                               \
         if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
@@ -190,8 +217,8 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
             starrocks::CurrentThread::mem_release_without_cache(size); \
         }                                                              \
     } while (0)
-#define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr))
-#define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(TC_MALLOC_SIZE(ptr))
+#define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr))
+#define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define TRY_MEM_CONSUME(size, err_ret)                                                                   \
     do {                                                                                                 \
         if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
@@ -205,11 +232,10 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
 #else
 std::atomic<int64_t> g_mem_usage(0);
-#define TC_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)
 #define MEMORY_RELEASE_SIZE(size) g_mem_usage.fetch_sub(size)
-#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(tc_malloc_size(ptr))
-#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(tc_malloc_size(ptr))
+#define MEMORY_CONSUME_PTR(ptr) g_mem_usage.fetch_add(STARROCKS_MALLOC_SIZE(ptr))
+#define MEMORY_RELEASE_PTR(ptr) g_mem_usage.fetch_sub(STARROCKS_MALLOC_SIZE(ptr))
 #define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
 #define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
@@ -221,19 +247,19 @@ void* my_malloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
-        TRY_MEM_CONSUME(tc_nallocx(size, 0), nullptr);
-        void* ptr = tc_malloc(size);
+        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
+        void* ptr = STARROCKS_MALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(tc_nallocx(size, 0));
+            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
         }
         return ptr;
     } else {
-        void* ptr = tc_malloc(size);
+        void* ptr = STARROCKS_MALLOC(size);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         if (LIKELY(ptr != nullptr)) {
-            MEMORY_CONSUME_SIZE(tc_nallocx(size, 0));
+            MEMORY_CONSUME_SIZE(STARROCKS_NALLOX(size, 0));
         }
         return ptr;
     }
@@ -242,7 +268,7 @@ void* my_malloc(size_t size) __THROW {
 // free
 void my_free(void* p) __THROW {
     MEMORY_RELEASE_PTR(p);
-    tc_free(p);
+    STARROCKS_FREE(p);
 }
 
 // realloc
@@ -253,20 +279,20 @@ void* my_realloc(void* p, size_t size) __THROW {
     if (UNLIKELY(size == 0)) {
         return nullptr;
     }
-    int64_t old_size = TC_MALLOC_SIZE(p);
+    int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
     if (IS_BAD_ALLOC_CATCHED()) {
-        TRY_MEM_CONSUME(tc_nallocx(size, 0) - old_size, nullptr);
-        void* ptr = tc_realloc(p, size);
+        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0) - old_size, nullptr);
+        void* ptr = STARROCKS_REALLOC(p, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(tc_nallocx(size, 0) - old_size);
+            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0) - old_size);
         }
         return ptr;
     } else {
-        void* ptr = tc_realloc(p, size);
+        void* ptr = STARROCKS_REALLOC(p, size);
         if (ptr != nullptr) {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - old_size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - old_size);
         } else {
             // nothing to do.
             // If tc_realloc() fails the original block is left untouched; it is not freed or moved
@@ -285,16 +311,16 @@ void* my_calloc(size_t n, size_t size) __THROW {
 
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(n * size, nullptr);
-        void* ptr = tc_calloc(n, size);
+        void* ptr = STARROCKS_CALLOC(n, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(n * size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - n * size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - n * size);
         }
         return ptr;
     } else {
-        void* ptr = tc_calloc(n, size);
+        void* ptr = STARROCKS_CALLOC(n, size);
         MEMORY_CONSUME_PTR(ptr);
         return ptr;
     }
@@ -302,23 +328,23 @@ void* my_calloc(size_t n, size_t size) __THROW {
 
 void my_cfree(void* ptr) __THROW {
     MEMORY_RELEASE_PTR(ptr);
-    tc_cfree(ptr);
+    STARROCKS_CFREE(ptr);
 }
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = tc_memalign(align, size);
+        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
         }
         return ptr;
     } else {
-        void* ptr = tc_memalign(align, size);
+        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         MEMORY_CONSUME_PTR(ptr);
         return ptr;
     }
@@ -328,16 +354,16 @@ void* my_memalign(size_t align, size_t size) __THROW {
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = tc_memalign(align, size);
+        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
         }
         return ptr;
     } else {
-        void* ptr = tc_memalign(align, size);
+        void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
         MEMORY_CONSUME_PTR(ptr);
         return ptr;
     }
@@ -347,16 +373,16 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 void* my_valloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = tc_valloc(size);
+        void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
         }
         return ptr;
     } else {
-        void* ptr = tc_valloc(size);
+        void* ptr = STARROCKS_VALLOC(size);
         MEMORY_CONSUME_PTR(ptr);
         return ptr;
     }
@@ -366,16 +392,16 @@ void* my_valloc(size_t size) __THROW {
 void* my_pvalloc(size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = tc_valloc(size);
+        void* ptr = STARROCKS_VALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(ptr) - size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
         }
         return ptr;
     } else {
-        void* ptr = tc_pvalloc(size);
+        void* ptr = STARROCKS_VALLOC(size);
         MEMORY_CONSUME_PTR(ptr);
         return ptr;
     }
@@ -385,21 +411,26 @@ void* my_pvalloc(size_t size) __THROW {
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, ENOMEM);
-        int ret = tc_posix_memalign(r, align, size);
+        int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (UNLIKELY(ret != 0)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
         } else {
-            MEMORY_CONSUME_SIZE(TC_MALLOC_SIZE(*r) - size);
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(*r) - size);
         }
         return ret;
     } else {
-        int ret = tc_posix_memalign(r, align, size);
+        int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (ret == 0) {
             MEMORY_CONSUME_PTR(*r);
         }
         return ret;
     }
+}
+
+size_t my_malloc_usebale_size(void* ptr) __THROW {
+    size_t ret = STARROCKS_MALLOC_SIZE(ptr);
+    return ret;
 }
 
 void* malloc(size_t size) __THROW ALIAS(my_malloc);
@@ -412,4 +443,7 @@ void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
 void* valloc(size_t size) __THROW ALIAS(my_valloc);
 void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
+#ifdef USE_JEMALLOC
+size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
+#endif
 }
