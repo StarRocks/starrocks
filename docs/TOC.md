@@ -331,6 +331,7 @@
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
     + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
+    + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
