@@ -727,6 +727,8 @@ private:
 
     size_t _get_tmp_l1_count();
 
+    bool _l0_is_full();
+
 protected:
     // prevent concurrent operations
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
