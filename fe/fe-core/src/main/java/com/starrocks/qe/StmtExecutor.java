@@ -463,7 +463,7 @@ public class StmtExecutor {
                 }
             }
 
-            if (context.shouldDumpQuery()) {
+            if (context.isHTTPQueryDump) {
                 return;
             }
             if (isForwardToLeader()) {
