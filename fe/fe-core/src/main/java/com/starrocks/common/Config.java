@@ -1503,4 +1503,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String ssl_truststore_password = "";
+
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_migration_task_sent_once = 1000;
 }
