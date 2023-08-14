@@ -129,16 +129,13 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) throws SQLException {
+    public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
         String partitionNamesQuery = "select PARTITION_DESCRIPTION from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
                 "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
-        PreparedStatement ps = null;
-        ResultSet rs = null;
-        try {
-            ps = connection.prepareStatement(partitionNamesQuery);
+        try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
-            rs = ps.executeQuery();
+            ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
@@ -152,25 +149,19 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
+        } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage());
-        } finally {
-            rs.close();
-            ps.close();
         }
     }
 
     @Override
-    public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) throws SQLException {
+    public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
         String partitionColumnsQuery = "select DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
                 "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
-        PreparedStatement ps = null;
-        ResultSet rs = null;
-        try {
-            ps = connection.prepareStatement(partitionColumnsQuery);
+        try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
-            rs = ps.executeQuery();
+            ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
@@ -182,25 +173,19 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
+        } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage());
-        } finally {
-            rs.close();
-            ps.close();
         }
     }
 
-    public List<Partition> getPartitions(Connection connection, Table table) throws SQLException {
+    public List<Partition> getPartitions(Connection connection, Table table) {
         JDBCTable jdbcTable = (JDBCTable) table;
         String partitionsQuery = "select PARTITION_DESCRIPTION, CREATE_TIME from INFORMATION_SCHEMA.PARTITIONS " +
                 "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
-        PreparedStatement ps = null;
-        ResultSet rs = null;
-        try {
-            ps = connection.prepareStatement(partitionsQuery);
+        try (PreparedStatement ps = connection.prepareStatement(partitionsQuery)) {
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
-            rs = ps.executeQuery();
+            ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {
                 while (rs.next()) {
@@ -215,11 +200,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
+        } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage());
-        } finally {
-            rs.close();
-            ps.close();
         }
     }
 }
