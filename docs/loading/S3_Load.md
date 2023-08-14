@@ -193,7 +193,7 @@ UserID|ItemID |CategoryID|BehaviorType|Timestamp          |
 CREATE DATABASE IF NOT EXISTS project;
 USE project;
 
-CREATE TABLE `user_behavior_inferred` ( AS
+CREATE TABLE `user_behavior_inferred` AS
 SELECT * FROM FILES(
     "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
     "format" = "parquet",
