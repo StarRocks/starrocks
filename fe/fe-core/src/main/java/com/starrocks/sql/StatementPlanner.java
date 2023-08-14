@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
@@ -132,7 +133,8 @@ public class StatementPlanner {
         LogicalPlan logicalPlan;
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+            logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
         OptExpression optimizedPlan;
@@ -184,7 +186,9 @@ public class StatementPlanner {
 
             LogicalPlan logicalPlan;
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+                // get a logicalPlan without inlining views
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+                logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
             OptExpression optimizedPlan;

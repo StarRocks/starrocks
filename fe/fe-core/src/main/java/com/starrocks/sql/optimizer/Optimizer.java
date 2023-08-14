@@ -27,9 +27,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -126,10 +128,10 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        prepare(connectContext, logicOperatorTree, columnRefFactory);
+        prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
         if (optimizerConfig.isRuleBased()) {
-            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+            return optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns);
         } else {
             return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         }
@@ -145,8 +147,7 @@ public class Optimizer {
 
     // Optimize by rule will return logical plan.
     // Used by materialized view query rewrite optimization.
-    private OptExpression optimizeByRule(ConnectContext connectContext,
-                                         OptExpression logicOperatorTree,
+    private OptExpression optimizeByRule(OptExpression logicOperatorTree,
                                          PhysicalPropertySet requiredProperty,
                                          ColumnRefSet requiredColumns) {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
@@ -186,6 +187,10 @@ public class Optimizer {
         }
 
         memo.init(logicOperatorTree);
+        if (context.getLogicalTreeWithView() != null) {
+            // LogicalTreeWithView is logically equivalent to logicOperatorTree
+            addViewBasedPlanIntoMemo();
+        }
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
 
         // Currently, we cache output columns in logic property.
@@ -235,8 +240,16 @@ public class Optimizer {
         }
     }
 
-    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree,
-                         ColumnRefFactory columnRefFactory) {
+    private void addViewBasedPlanIntoMemo() {
+        Memo memo = context.getMemo();
+        memo.copyIn(memo.getRootGroup(), context.getLogicalTreeWithView());
+    }
+
+    private void prepare(
+            ConnectContext connectContext,
+            OptExpression logicOperatorTree,
+            ColumnRefFactory columnRefFactory,
+            ColumnRefSet requiredColumns) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -255,7 +268,8 @@ public class Optimizer {
         context.setQueryTables(queryTables);
 
         // prepare related mvs if needed
-        new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
+        new MvRewritePreprocessor(connectContext, columnRefFactory,
+                context, logicOperatorTree, requiredColumns).prepare(logicOperatorTree);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -306,6 +320,7 @@ public class Optimizer {
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableLeftRightJoinEquivalenceDerive(false);
         }
+
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
@@ -424,6 +439,11 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
 
+        if (isEnableSingleViewMvRewrite()) {
+            // view based mv rewrite for single view
+            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        }
+
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
         // if this rule has applied before MV.
@@ -431,6 +451,43 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
         return tree.getInputs().get(0);
+    }
+
+    // for single scan node, to make sure we can rewrite
+    private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+        try {
+            OptExpression treeWithView = context.getLogicalTreeWithView();
+            // should add a LogicalTreeAnchorOperator for rewrite
+            treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
+            deriveLogicalProperty(treeWithView);
+            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            List<Operator> viewScanOperators = Lists.newArrayList();
+            MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
+            if (viewScanOperators.size() < context.getViewScans().size()) {
+                // replace original tree plan
+                tree.setChild(0, treeWithView.inputAt(0));
+                if (!viewScanOperators.isEmpty()) {
+                    // if there are view scan operator left, we should replace it back to original plans
+                    MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());
+                }
+            }
+        } catch (Exception e) {
+            OptimizerTraceUtil.logMVRewrite("VIEW_BASED_MV_REWRITE", "single table view based mv rule rewrite failed.", e);
+        } finally {
+            // reset logical tree with view
+            // no need to try view base rewrite in cost phase again
+            context.setLogicalTreeWithView(null);
+        }
+    }
+
+    private boolean isEnableSingleViewMvRewrite() {
+        return context.getLogicalTreeWithView() != null
+                && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && !context.getCandidateMvs().isEmpty()
+                && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable)
+                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite()
+                && Collections.disjoint(
+                        context.getAppliedMvRules(), RuleSet.getRewriteRulesByType(RuleSetType.SINGLE_TABLE_MV_REWRITE));
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
@@ -467,10 +524,10 @@ public class Optimizer {
         return true;
     }
 
-    private OptExpression rewriteAndValidatePlan(ConnectContext connectContext,
-                                                 OptExpression tree,
-                                                 TaskContext rootTaskContext) {
-        OptExpression result = logicalRuleRewrite(connectContext, tree, rootTaskContext);
+    private OptExpression rewriteAndValidatePlan(
+            OptExpression tree,
+            TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
         return result;

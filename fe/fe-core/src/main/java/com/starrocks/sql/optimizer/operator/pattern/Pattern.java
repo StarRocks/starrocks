@@ -39,6 +39,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
+            .add(OperatorType.LOGICAL_VIEW_SCAN)
             .build();
 
     private final OperatorType opType;

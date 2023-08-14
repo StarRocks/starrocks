@@ -209,6 +209,15 @@ public class OptimizerTraceUtil {
         LOG.info("[TRACE QUERY {}] {}", ctx.getQueryId(), message);
     }
 
+    public static void logMVRewrite(String ruleName, String format, Object... object) {
+        // Trace log if needed.
+        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("REWRITE GLOBAL");
+        if (tracer != null) {
+            FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
+            tracer.log(String.format("[%s] %s", ruleName, ft.getMessage()));
+        }
+    }
+
     public static void logApplyRule(SessionVariable sessionVariable,
                                     OptimizerTraceInfo traceInfo, Rule rule,
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {

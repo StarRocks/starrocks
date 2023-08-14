@@ -26,6 +26,8 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -48,11 +50,18 @@ public class OptimizerContext {
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
+    private final List<Rule> appliedMvRules;
 
     private Set<OlapTable>  queryTables;
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+
+    // used by view based mv rewrite
+    // query's logical plan with view
+    private OptExpression logicalTreeWithView;
+    // collect LogicalViewScanOperators
+    private List<LogicalViewScanOperator> viewScans;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -64,6 +73,7 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
+        this.appliedMvRules = Lists.newArrayList();
     }
 
     @VisibleForTesting
@@ -87,6 +97,7 @@ public class OptimizerContext {
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
         this.candidateMvs = Lists.newArrayList();
+        this.appliedMvRules = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -207,5 +218,33 @@ public class OptimizerContext {
                 "2. try query again, " +
                 "3. enlarge new_planner_optimize_timeout session variable",
                 ErrorType.INTERNAL_ERROR);
+    }
+
+    public OptExpression getLogicalTreeWithView() {
+        return logicalTreeWithView;
+    }
+
+    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
+        this.logicalTreeWithView = logicalTreeWithView;
+    }
+
+    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
+        this.viewScans = viewScans;
+    }
+
+    public List<LogicalViewScanOperator> getViewScans() {
+        return viewScans;
+    }
+
+    public List<LogicalViewScanOperator> getViewPlanMap() {
+        return viewScans;
+    }
+
+    public void addAppliedRule(Rule rule) {
+        appliedMvRules.add(rule);
+    }
+
+    public List<Rule> getAppliedMvRules() {
+        return appliedMvRules;
     }
 }

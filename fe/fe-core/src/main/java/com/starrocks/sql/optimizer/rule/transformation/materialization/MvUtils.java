@@ -58,6 +58,8 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -68,6 +70,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -77,6 +80,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -90,6 +95,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -368,11 +374,13 @@ public class MvUtils {
         return true;
     }
 
-    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
-                                                                               String sql,
-                                                                               ColumnRefFactory columnRefFactory,
-                                                                               ConnectContext connectContext,
-                                                                               OptimizerConfig optimizerConfig) {
+    public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
+            MaterializedView mv,
+            String sql,
+            ColumnRefFactory columnRefFactory,
+            ConnectContext connectContext,
+            OptimizerConfig optimizerConfig,
+            boolean inlineView) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -386,8 +394,9 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        TransformerContext transformerContext =
+                new TransformerContext(columnRefFactory, connectContext, inlineView);
+        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -992,7 +1001,6 @@ public class MvUtils {
     }
 
     /**
-     *
      * Compensate olap table's partition predicates from olap scan operator which may be pruned by optimizer before or not.
      *
      * @param olapScanOperator   : olap scan operator that needs to compensate partition predicates.
@@ -1106,6 +1114,7 @@ public class MvUtils {
 
         Column partitionColumn = partitionTableAndColumns.second;
         List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        Expr partitionExpr = mv.getFirstPartitionRefTableExpr();
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             Table scanTable = scanOperator.getTable();
@@ -1114,8 +1123,17 @@ public class MvUtils {
                     partitionTableAndColumns.first.getTableIdentifier())) {
                 continue;
             }
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            return convertPartitionKeysToPredicate(columnRef, latestBaseTableRanges);
+            final Optional<ColumnRefOperator> columnRefOption;
+            if (scanOperator instanceof LogicalViewScanOperator) {
+                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
+                columnRefOption = Optional.ofNullable(viewScanOperator.getExpressionMapping(partitionExpr));
+            } else {
+                columnRefOption = Optional.ofNullable(scanOperator.getColumnReference(partitionColumn));
+            }
+            if (!columnRefOption.isPresent()) {
+                continue;
+            }
+            return convertPartitionKeysToPredicate(columnRefOption.get(), latestBaseTableRanges);
         }
         return null;
     }
@@ -1317,5 +1335,72 @@ public class MvUtils {
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
+    }
+
+    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
+    }
+
+    public static OptExpression replaceLogicalViewScanOperator(
+            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+        if (viewScans == null) {
+            return queryExpression;
+        }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private static void doReplaceLogicalViewScanOperator(
+            OptExpression parent,
+            int index,
+            OptExpression queryExpression,
+            List<LogicalViewScanOperator> viewScans) {
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            LogicalViewScanOperator viewScanOperator = op.cast();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
+            parent.setChild(index, viewPlan);
+            return;
+        }
+        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
+        }
+    }
+
+    public static void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
+    public static OptExpression cloneExpression(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        for (OptExpression input : logicalTree.getInputs()) {
+            OptExpression clone = cloneExpression(input);
+            inputs.add(clone);
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
+        builder.withOperator(logicalTree.getOp());
+        Operator newOp = builder.build();
+        return OptExpression.create(newOp, inputs);
     }
 }

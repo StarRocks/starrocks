@@ -53,6 +53,11 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
+    // an operator logically equivalent to 'this' operator
+    // used by view based mv rewrite
+    // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
+    protected Operator equivalentOp;
+
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -133,6 +138,14 @@ public abstract class Operator {
         return salt;
     }
 
+    public Operator getEquivalentOp() {
+        return equivalentOp;
+    }
+
+    public void setEquivalentOp(Operator equivalentOp) {
+        this.equivalentOp = equivalentOp;
+    }
+
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
         if (rowOutputInfo == null) {
             rowOutputInfo = deriveRowOutputInfo(inputs);
@@ -201,6 +214,7 @@ public abstract class Operator {
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
             builder.salt = operator.salt;
+            builder.equivalentOp = operator.equivalentOp;
             return (B) this;
         }
 

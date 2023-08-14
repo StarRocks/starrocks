@@ -82,6 +82,13 @@ public class ExpressionMapping {
         this.fieldMappings = new ColumnRefOperator[fieldMappingSize];
     }
 
+    public ExpressionMapping(ExpressionMapping other) {
+        this.scope = other.scope;
+        this.fieldMappings = other.fieldMappings;
+        this.outerScopeRelationId = other.outerScopeRelationId;
+        this.expressionToColumns = other.expressionToColumns;
+    }
+
     public Scope getScope() {
         return scope;
     }
