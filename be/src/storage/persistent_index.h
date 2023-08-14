@@ -680,6 +680,8 @@ private:
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
+    bool _l0_is_full();
+
 protected:
     // prevent concurrent operations
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
