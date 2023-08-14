@@ -44,7 +44,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -875,11 +874,6 @@ public class ReportHandler extends Daemon {
                 tabletId, backendId, reason);
     }
 
-    private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
-                                           long tabletId, int schemaHash, String reason) {
-        addDropReplicaTask(batchTask, backendId, tabletId, schemaHash, reason, false);
-    }
-
     private static void deleteFromBackend(Map<Long, TTablet> backendTablets,
                                           Set<Long> foundTabletsWithValidSchema,
                                           Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
@@ -912,6 +906,7 @@ public class ReportHandler extends Daemon {
             TTablet backendTablet = backendTablets.get(tabletId);
             for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
                 boolean needDelete = false;
+                String errorMsgAddingReplica = null;
                 if (!foundTabletsWithValidSchema.contains(tabletId)) {
                     if (isBackendReplicaHealthy(backendTabletInfo)) {
                         // if this tablet is not in meta. try adding it.
@@ -930,6 +925,7 @@ public class ReportHandler extends Daemon {
                                 LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                         tabletId, backendId, e.getMessage());
                             }
+                            errorMsgAddingReplica = e.getMessage();
                             needDelete = true;
                         }
                     } else {
@@ -939,8 +935,10 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
-                    addDropReplicaTask(batchTask, backendId, tabletId,
-                            backendTabletInfo.getSchema_hash(), "not found in meta");
+                    addDropReplicaTask(batchTask, backendId, tabletId, backendTabletInfo.getSchema_hash(),
+                            "invalid meta, " +
+                                    (errorMsgAddingReplica != null ? errorMsgAddingReplica : "replica unhealthy"),
+                            true);
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }
@@ -951,7 +949,7 @@ public class ReportHandler extends Daemon {
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
                 addDropReplicaTask(batchTask, backendId, tabletId, schemaHash,
-                        "invalid schema hash: " + schemaHash);
+                        "invalid schema hash: " + schemaHash, true);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
             }
@@ -985,20 +983,6 @@ public class ReportHandler extends Daemon {
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
-                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
-                if (db == null) {
-                    continue;
-                }
-                db.readLock();
-                try {
-                    OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
-                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                        // Currently, primary key table doesn't support tablet migration between local disks.
-                        continue;
-                    }
-                } finally {
-                    db.readUnlock();
-                }
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,
@@ -1007,6 +991,7 @@ public class ReportHandler extends Daemon {
             }
         }
 
+        AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
 

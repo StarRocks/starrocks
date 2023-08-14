@@ -160,6 +160,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
      */
     private String storageVolume;
 
+    private PeriodDuration storageCoolDownTTL;
+
     // This property only applies to materialized views
     private String resourceGroup = null;
 
@@ -505,6 +507,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildStorageCoolDownTTL() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            storageCoolDownTTL = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL));
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -665,6 +675,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return dataCachePartitionDuration;
     }
 
+    public PeriodDuration getStorageCoolDownTTL() {
+        return storageCoolDownTTL;
+    }
+
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
@@ -700,6 +714,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildReplicationNum();
         buildInMemory();
         buildStorageVolume();
+        buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
         buildCompressionType();

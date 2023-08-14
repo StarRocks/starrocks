@@ -364,7 +364,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterJobMgr().replayModifyViewDef(info);
+                    globalStateMgr.getAlterJobMgr().alterView(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION:

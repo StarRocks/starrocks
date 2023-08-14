@@ -67,7 +67,7 @@
   + [Export data using EXPORT](./unloading/Export.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
-+ Query Data Sources
++ Query Data Lakes
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
@@ -82,6 +82,7 @@
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Data Cache](./data_source/data_cache.md)
+  + [Data lake-related FAQ](./data_source/datalake_faq.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
@@ -341,6 +342,9 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [corr](./sql-reference/sql-functions/aggregate-functions/corr.md)
+      + [covar_pop](./sql-reference/sql-functions/aggregate-functions/covar_pop.md)
+      + [covar_samp](./sql-reference/sql-functions/aggregate-functions/covar_samp.md)
       + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
@@ -680,8 +684,10 @@
       + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
       + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + Utility Functions
+      + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](./sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)

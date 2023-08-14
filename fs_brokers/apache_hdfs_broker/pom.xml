@@ -92,8 +92,8 @@ under the License.
                     <url>https://repository.cloudera.com/content/repositories/third-party/</url>
                 </repository>
                 <repository>
-                    <id>cloudera-public</id>
-                    <url>https://repository.cloudera.com/artifactory/public/</url>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
                 </repository>
                 <!-- for bdb je -->
                 <repository>
@@ -201,6 +201,13 @@ under the License.
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/log4j/log4j -->
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+            <version>1.2.17-cloudera6</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->

@@ -75,6 +75,7 @@ public class CreateTableAnalyzer {
 
     private static final String ELASTICSEARCH = "elasticsearch";
     private static final String ICEBERG = "iceberg";
+    private static final String HIVE = "hive";
 
     public enum CharsetType {
         UTF8,
@@ -95,7 +96,7 @@ public class CreateTableAnalyzer {
         } else {
             String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
             if (Strings.isNullOrEmpty(engineName)) {
-                if (!catalogType.equals("iceberg")) {
+                if (!catalogType.equalsIgnoreCase(ICEBERG) && !catalogType.equalsIgnoreCase(HIVE)) {
                     throw new SemanticException("Currently doesn't support creating tables of type " + catalogType);
                 }
                 return catalogType;
@@ -369,15 +370,9 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
-            } else if (engineName.equalsIgnoreCase(ICEBERG)) {
+            } else if (engineName.equalsIgnoreCase(ICEBERG) || engineName.equalsIgnoreCase(HIVE)) {
                 if (partitionDesc != null) {
-                    try {
-                        // Iceberg table must use ListPartitionDesc
-                        ((ListPartitionDesc) partitionDesc).analyzePartitionColumns(columnDefs);
-                        ((ListPartitionDesc) partitionDesc).checkPartitionColPos(columnDefs);
-                    } catch (AnalysisException e) {
-                        throw new SemanticException(e.getMessage());
-                    }
+                    ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(columnDefs, engineName);
                 }
             } else {
                 if (partitionDesc != null || distributionDesc != null) {

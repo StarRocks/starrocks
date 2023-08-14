@@ -49,3 +49,27 @@ select * from map_top_n order by c2["key1"] limit 4,10;
 select * from map_top_n order by c2["key1"] limit 5,10;
 -- result:
 -- !result
+select element_at(map{'a':1,'b':2},'a');
+-- result:
+1
+-- !result
+select map{'a':1,'b':2}['a'];
+-- result:
+1
+-- !result
+select map{'a':NULL,'b':2}['a'];
+-- result:
+None
+-- !result
+select map{}['a'];
+-- result:
+None
+-- !result
+select c2["key1"] from map_top_n;
+-- result:
+1
+5
+2
+12
+7
+-- !result

@@ -104,6 +104,7 @@ static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
+#ifndef BE_TEST
 static Cache* get_metacache() {
     auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
     return (mgr != nullptr) ? mgr->metacache() : nullptr;
@@ -121,6 +122,7 @@ static size_t get_metacache_usage(void*) {
 
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
+#endif
 
 static StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
                                            int64_t new_version, const int64_t* txns, int txns_size);

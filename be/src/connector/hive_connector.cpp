@@ -245,7 +245,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot) {
+        if (!single_slot || slot_ids.empty()) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             continue;
         }
@@ -308,6 +308,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
@@ -455,6 +459,8 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
+    SCOPED_TIMER(_profile.open_file_timer);
+
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
     if (_hive_table != nullptr && _hive_table->has_partition()) {
@@ -464,9 +470,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                     "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
                     scan_range.partition_id));
         }
-
-        SCOPED_TIMER(_profile.open_file_timer);
-
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();

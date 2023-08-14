@@ -688,6 +688,12 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * max num of thread to handle task for http sql.
+     */
+    @ConfField
+    public static int max_http_sql_service_task_threads_num = 4096;
+
+    /**
      * modifies the version string returned by following situations:
      * select version();
      * handshake packet version.
@@ -1039,6 +1045,12 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view = true;
 
     /**
+     * Control whether to enable spill for all materialized views in the refresh mv.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_materialized_view_spill = true;
+
+    /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
      * and he can ignore some metadata exceptions.
@@ -1205,7 +1217,7 @@ public class Config extends ConfigBase {
      * balance behavior.
      */
     @ConfField(mutable = true)
-    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+    public static boolean tablet_sched_disable_colocate_overall_balance = true;
 
     @ConfField(mutable = true)
     public static long[] tablet_sched_colocate_balance_high_prio_backends = {};
@@ -2436,4 +2448,11 @@ public class Config extends ConfigBase {
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    /**
+     * To prevent the external catalog from displaying too many entries in the grantsTo system table,
+     * you can use this variable to ignore the entries in the external catalog
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_show_external_catalog_privilege = true;
 }

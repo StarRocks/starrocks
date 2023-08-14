@@ -1123,6 +1123,16 @@ build_fiu() {
     cp $TP_SOURCE_DIR/$FIU_SOURCE/installed/lib/libfiu.a $TP_INSTALL_DIR/lib/
 }
 
+# libdeflate
+build_libdeflate() {
+    check_if_source_exist $LIBDEFLATE_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    cd $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE/build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1210,6 +1220,7 @@ build_fiu
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
+    build_libdeflate
 fi
 
 # strip unnecessary debug symbol for binaries in thirdparty
