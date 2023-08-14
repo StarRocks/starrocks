@@ -1591,4 +1591,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_migration_task_sent_once = 1000;
 }
