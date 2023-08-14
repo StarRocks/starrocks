@@ -286,9 +286,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             mvSessionVariable.setResourceGroup(rg);
         }
 
-        // enable spill by default for mv if spill is not set by default and `session.enable_spill` session variable
-        // is not set.
-        if (!mvSessionVariable.getEnableSpill() &&
+        // enable spill by default for mv if spill is not set by default and
+        // `session.enable_spill` session variable is not set.
+        if (mvSessionVariable.isEnableMaterializedViewSpill() &&
+                !mvSessionVariable.getEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
             mvSessionVariable.setEnableSpill(true);
         }
