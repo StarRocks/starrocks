@@ -18,13 +18,18 @@
   {% call statement('list_relations_without_caching', fetch_result=True) %}
     select
       null as "database",
-      table_name as name,
-      table_schema as "schema",
-      case when table_type = 'BASE TABLE' then 'table'
-           when table_type = 'VIEW' then 'view'
-           else table_type end as table_type
-    from information_schema.tables
-    where table_schema = '{{ schema_relation.schema }}'
+      tbl.table_name as name,
+      tbl.table_schema as "schema",
+      case when tbl.table_type = 'BASE TABLE' then 'table'
+           when tbl.table_type = 'VIEW' and mv.table_name is null then 'view'
+           when tbl.table_type = 'VIEW' and mv.table_name is not null then 'materialized_view'
+           when tbl.table_type = 'SYSTEM VIEW' then 'system_view'
+           else 'unknown' end as table_type
+    from information_schema.tables tbl
+    left join information_schema.materialized_views mv
+    on tbl.TABLE_SCHEMA = mv.TABLE_SCHEMA
+    and tbl.TABLE_NAME = mv.TABLE_NAME
+    where tbl.table_schema = '{{ schema_relation.schema }}'
   {% endcall %}
   {{ return(load_result('list_relations_without_caching').table) }}
 {%- endmacro %}

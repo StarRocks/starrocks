@@ -93,12 +93,11 @@ class StarRocksAdapter(SQLAdapter):
                     f"got {len(row)} values, expected 4"
                 )
             _database, name, schema, type_info = row
-            rel_type = RelationType.View if "view" in type_info else RelationType.Table
             relation = self.Relation.create(
                 database=None,
                 schema=schema,
                 identifier=name,
-                type=rel_type,
+                type=self.Relation.get_relation_type(type_info),
             )
             relations.append(relation)
 
