@@ -90,8 +90,8 @@ connector jar包的命名格式如下
 | starrocks.write.buffer.size                    | 否      | 104857600 | 数据攒批的内存大小，达到该阈值后数据批量发送给 StarRocks，支持带单位`k`, `m`, `g`。增大该值能提高导入性能，但会带来写入延迟。                                                                                                                                                              |
 | starrocks.write.flush.interval.ms              | 否      | 300000 | 数据攒批发送的间隔，用于控制数据写入StarRocks的延迟。                                                                                                                                                                                       |
 | starrocks.columns                              | 否      | 无 | 支持向 StarRocks 表中写入部分列，通过该参数指定列名，多个列名之间使用逗号 (,) 分隔，例如"c0,c1,c2"。                                                                                                                                                       |
-| starrocks.write.properties.*                   | 否      | 无 | 指定Stream Load 的参数，控制导入行为，例如使用starrocks.write.operties.format选择Stream load使用csv或json格式。支持的参数和说明，请参见[Stream Load](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD)。 |
-| starrocks.write.properties.format              | 否      | CSV | 指定stream load导入数据使用的格式，取值为CSV 和 JSON。connector会将每批数据转换成相应的格式发送给StarRocks。                                                                                                                                             |
+| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD)。 |
+| starrocks.write.properties.format              | 否      | CSV | 指定导入数据的格式，取值为 CSV 和 JSON。connector 会将每批数据转换成相应的格式发送给 StarRocks。                                                                                                                                             |
 | starrocks.write.properties.row_delimiter       | 否      | \n | 使用CSV格式导入时，用于指定行分隔符。                                                                                                                                                                                                  |
 | starrocks.write.properties.column_separator    | 否      | \t | 使用CSV格式导入时，用于指定列分隔符。                                                                                                                                                                                                  |
 | starrocks.write.num.partitions                 | 否      | 无 | Spark用于并行写入的分区数，数据量小时可以通过减少分区数降低导入并发和频率，默认分区数由Spark决定。使用该功能可能会引入 Spark Shuffle cost。                                                                                                                                  |
@@ -148,7 +148,7 @@ PROPERTIES (
 
 #### Spark 环境
 
-示例基于 Spark 3.2.4，使用 `spark-shell` 和 `spark-sql` 进行演示，运行前请将 connector jar放置在 `$SPARK_HOME/jars` 目录下。
+示例基于 Spark 3.2.4，使用 `spark-shell`，`pyspark` 和 `spark-sql` 进行演示，运行前请将 connector jar放置在 `$SPARK_HOME/jars` 目录下。
 
 ### 使用 Spark DataFrame 写入数据
 
@@ -158,26 +158,55 @@ PROPERTIES (
 
 该例子演示了在内存中构造数据并写入 StarRocks 表。
 
-1. 在 `spark-shell` 中运行示例
+1. 您可以使用 Scala 或者 Python 语言编写 Spark 应用程序。
 
-   ```scala
-   // 1. create a DataFrame from a sequence
-   val data = Seq((1, "starrocks", 100), (2, "spark", 100))
-   val df = data.toDF("id", "name", "score")
+   如果是使用 Scala 语言，则在 `spark-shell` 中可以运行如下代码：
 
-   // 2. write to starrocks with the format "starrocks",
-   // and replace the options with your own
-   df.write.format("starrocks")
-      .option("starrocks.fe.http.url", "127.0.0.1:8038")
-      .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
-      .option("starrocks.table.identifier", "test.score_board")
-      .option("starrocks.user", "root")
-      .option("starrocks.password", "")
-      .mode("append")
-      .save()
-   ```
+      ```scala
+      // 1. Create a DataFrame from CSV.
+      val data = Seq((1, "starrocks", 100), (2, "spark", 100))
+      val df = data.toDF("id", "name", "score")
 
-2. 在 StarRocks中查询结果
+      // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+      // You need to modify the options according your own environment.
+      df.write.format("starrocks")
+         .option("starrocks.fe.http.url", "127.0.0.1:8030")
+         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
+         .option("starrocks.table.identifier", "test.score_board")
+         .option("starrocks.user", "root")
+         .option("starrocks.password", "")
+         .mode("append")
+         .save()
+      ```
+
+   如果是使用 python 语言，则在 `pyspark` 中可以运行如下代码：
+
+   ```python
+   from pyspark.sql import SparkSession
+
+   spark = SparkSession \
+        .builder \
+        .appName("StarRocks Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from a sequence.
+    data = [(1, "starrocks", 100), (2, "spark", 100)]
+    df = spark.sparkContext.parallelize(data) \
+            .toDF(["id", "name", "score"])
+
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
+    df.write.format("starrocks") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
+        .option("starrocks.table.identifier", "test.score_board") \
+        .option("starrocks.user", "root") \
+        .option("starrocks.password", "") \
+        .mode("append") \
+        .save()
+    ```
+
+2. 在 StarRocks 中查询结果。
 
 ```SQL
 MySQL [test]> SELECT * FROM `score_board`;
@@ -201,7 +230,9 @@ MySQL [test]> SELECT * FROM `score_board`;
    4,spark,100
    ```
 
-2. 在 `spark-shell` 中运行示例
+2. 您可以使用 Scala 或者 Python 语言编写 Spark 应用程序。
+
+   如果是使用 Scala 语言，则在 `spark-shell` 中可以运行如下代码：
 
    ```scala
    import org.apache.spark.sql.types.StructType
@@ -222,8 +253,8 @@ MySQL [test]> SELECT * FROM `score_board`;
 
    // 2. write to starrocks with the format "starrocks", and replace the options with your own
    val query = (df.writeStream.format("starrocks")
-         .option("starrocks.fe.http.url", "127.0.0.1:8038")
-         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
+         .option("starrocks.fe.http.url", "127.0.0.1:8030")
+         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
          .option("starrocks.table.identifier", "test.score_board")
          .option("starrocks.user", "root")
          .option("starrocks.password", "")
@@ -234,7 +265,46 @@ MySQL [test]> SELECT * FROM `score_board`;
       )
    ```
 
-3. 在 StarRocks中查询结果
+   如果是使用 Python 语言，则在 `pyspark` 中可以运行如下代码：
+
+   ```python
+   from pyspark.sql import SparkSession
+   from pyspark.sql.types import IntegerType, StringType, StructType, StructField
+
+   spark = SparkSession \
+        .builder \
+        .appName("StarRocks SS Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from CSV.
+    schema = StructType([ \
+            StructField("id", IntegerType()), \
+            StructField("name", StringType()), \
+            StructField("score", IntegerType()) \
+        ])
+    df = spark.readStream \
+            .option("sep", ",") \
+            .schema(schema) \
+            .format("csv") \
+            # Replace it with your path to the directory "csv-data".
+            .load("/path/to/csv-data")
+
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
+    query = df.writeStream.format("starrocks") \
+            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
+            .option("starrocks.table.identifier", "test.score_board") \
+            .option("starrocks.user", "root") \
+            .option("starrocks.password", "") \
+            # replace it with your checkpoint directory
+            .option("checkpointLocation", "/path/to/checkpoint") \
+            .outputMode("append") \
+            .start()
+        )
+    ```
+
+3. 在 StarRocks 中查询结果。
 
 ```SQL
 MySQL [test]> select * from score_board;
@@ -254,12 +324,13 @@ MySQL [test]> select * from score_board;
 1. 在 `spark-sql` 中运行示例
 
    ```SQL
-   -- 1. create a table using datasource "starrocks", and replace the options with your own
+   -- 1. Create a table by configuring the data source as  `starrocks` and the following options. 
+   -- You need to modify the options according your own environment
    CREATE TABLE `score_board`
    USING starrocks
    OPTIONS(
-      "starrocks.fe.http.url"="127.0.0.1:8038",
-      "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9038",
+      "starrocks.fe.http.url"="127.0.0.1:8030",
+      "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
       "starrocks.table.identifier"="test.score_board",
       "starrocks.user"="root",
       "starrocks.password"=""
