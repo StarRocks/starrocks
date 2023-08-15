@@ -10,12 +10,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
-- Metastore like Hive metastore, AWS Glue, or REST
+- Metastore like Hive metastore, AWS Glue, or Tabular
 
   > **NOTE**
   >
   > - If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
-  > - If you use Tabular Iceberg Catalog, you must choose REST as metastore.
+  > - If you choose Tabular as metastore, you need to use the Iceberg REST catalog.
 
 ## Usage notes
 
@@ -166,9 +166,9 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-##### REST
+##### Tabular
 
-If you use Tabular Iceberg Catalog, you must choose REST as metastore and configure `MetastoreParams` as follows:
+If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
 
 ```SQL
 "iceberg.catalog.type" = "rest",
@@ -182,11 +182,11 @@ The following table describes the parameters you need to configure in `Metastore
 | Parameter                  | Required | Description                                                         |
 | -------------------------- | -------- | ------------------------------------------------------------------- |
 | iceberg.catalog.type       | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.           |
-| iceberg.catalog.uri        | Yes      | The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`.      |
+| iceberg.catalog.uri        | Yes      | The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      |
 | iceberg.catalog.credential | Yes      | The authentication information of the Tabular service.                                        |
 | iceberg.catalog.warehouse  | No       | The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. |
 
-The following example creates an Iceberg catalog named `tabular` that uses REST as metastore:
+The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
 ```SQL
 CREATE EXTERNAL CATALOG tabular
@@ -204,9 +204,11 @@ PROPERTIES
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
+Note the following points:
 
-If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+- If you use HDFS as storage, you do not need to configure `StorageCredentialParams` and can skip this section. If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must configure `StorageCredentialParams`.
+
+- If you use Tabular as metastore, you do not need to configure `StorageCredentialParams` and can skip this section. If you use HMS or AWS Glue as metastore, you must configure `StorageCredentialParams`.
 
 ##### AWS S3
 
