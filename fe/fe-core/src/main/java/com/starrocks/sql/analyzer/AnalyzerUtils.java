@@ -114,6 +114,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+
 public class AnalyzerUtils {
 
     public static final Set<String> SUPPORTED_PARTITION_FORMAT = ImmutableSet.of("hour", "day", "month", "year");
@@ -226,6 +228,11 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    public static boolean isStatisticsJob(ConnectContext context, StatementBase stmt) {
+        Map<String, Database> dbs = collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     public static CallOperator getCallOperator(ScalarOperator operator) {

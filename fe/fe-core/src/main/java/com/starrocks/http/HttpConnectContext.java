@@ -32,7 +32,6 @@
 package com.starrocks.http;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
@@ -156,7 +155,6 @@ public class HttpConnectContext extends ConnectContext {
         if (killConnection) {
             isKilled = true;
         }
-        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }

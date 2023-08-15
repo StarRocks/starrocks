@@ -60,6 +60,7 @@ public class JobSpec {
     private final boolean enablePipeline;
     private final boolean enableStreamPipeline;
     private final boolean isBlockQuery;
+    private final boolean isStatisticsJob;
 
     /**
      * Why we use query global?
@@ -320,6 +321,7 @@ public class JobSpec {
         this.enablePipeline = builder.enablePipeline;
         this.enableStreamPipeline = builder.enableStreamPipeline;
         this.isBlockQuery = builder.isBlockQuery;
+        this.isStatisticsJob = builder.isStatisticsJob;
 
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
@@ -410,6 +412,10 @@ public class JobSpec {
         return isBlockQuery;
     }
 
+    public boolean isStatisticsJob() {
+        return isStatisticsJob;
+    }
+
     public boolean isStreamLoad() {
         return queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD;
     }
@@ -429,6 +435,7 @@ public class JobSpec {
         private boolean enablePipeline;
         private boolean enableStreamPipeline;
         private boolean isBlockQuery;
+        private boolean isStatisticsJob;
 
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
@@ -441,8 +448,10 @@ public class JobSpec {
         public Builder commonProperties(ConnectContext context) {
             TWorkGroup newResourceGroup = prepareResourceGroup(
                     context, ResourceGroupClassifier.QueryType.fromTQueryType(queryOptions.getQuery_type()));
-            this.enablePipeline(isEnablePipeline(context, fragments))
-                    .resourceGroup(newResourceGroup);
+            this.resourceGroup(newResourceGroup);
+
+            this.enablePipeline(isEnablePipeline(context, fragments));
+            this.isStatisticsJob = context.isStatisticsJob();
 
             return this;
         }

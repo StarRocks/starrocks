@@ -186,6 +186,7 @@ public class ConnectContext {
     protected boolean isHTTPQueryDump = false;
 
     protected boolean isStatisticsConnection = false;
+    protected boolean isStatisticsJob = false;
 
     protected DumpInfo dumpInfo;
 
@@ -632,6 +633,14 @@ public class ConnectContext {
         isStatisticsConnection = statisticsConnection;
     }
 
+    public boolean isStatisticsJob() {
+        return isStatisticsJob;
+    }
+
+    public void setStatisticsJob(boolean statisticsJob) {
+        isStatisticsJob = statisticsJob;
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -653,7 +662,6 @@ public class ConnectContext {
         if (killConnection) {
             isKilled = true;
         }
-        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }
@@ -697,9 +705,6 @@ public class ConnectContext {
             }
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
-            if (isPending) {
-                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
-            }
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());

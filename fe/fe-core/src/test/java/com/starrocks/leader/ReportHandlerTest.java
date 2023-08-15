@@ -21,7 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -144,7 +144,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleResourceUsageReport() {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
@@ -162,9 +162,9 @@ public class ReportHandlerTest {
             }
         };
 
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };
@@ -220,7 +220,6 @@ public class ReportHandlerTest {
                 return null;
             }
         };
-
 
         ReportHandler handler = new ReportHandler();
         TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
