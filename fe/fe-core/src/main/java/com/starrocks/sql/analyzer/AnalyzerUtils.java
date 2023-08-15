@@ -103,6 +103,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+
 public class AnalyzerUtils {
 
     public static final Set<String> SUPPORTED_PARTITION_FORMAT = ImmutableSet.of("hour", "day", "month", "year");
@@ -225,6 +227,11 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    public static boolean isStatisticsJob(ConnectContext context, StatementBase stmt) {
+        Map<String, Database> dbs = collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {
@@ -727,8 +734,6 @@ public class AnalyzerUtils {
         }
     }
 
-
-
     public static PartitionMeasure checkAndGetPartitionMeasure(ExpressionRangePartitionInfo expressionRangePartitionInfo)
             throws AnalysisException {
         long interval = 1;
@@ -829,7 +834,7 @@ public class AnalyzerUtils {
             char ch = value.charAt(i);
             if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
                 sb.append(ch);
-            }  else if (ch == '-' || ch == ':' || ch == ' ') {
+            } else if (ch == '-' || ch == ':' || ch == ' ') {
                 // Main user remove characters in time
             } else {
                 int unicodeValue = value.codePointAt(i);

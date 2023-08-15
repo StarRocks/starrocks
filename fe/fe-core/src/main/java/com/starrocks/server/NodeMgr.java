@@ -71,13 +71,10 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TUpdateResourceUsageRequest;
-import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,6 +90,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class NodeMgr {
     private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
@@ -102,11 +101,11 @@ public class NodeMgr {
      * LeaderInfo
      */
     @SerializedName(value = "r")
-    private int leaderRpcPort;
+    private volatile int leaderRpcPort;
     @SerializedName(value = "h")
-    private int leaderHttpPort;
+    private volatile int leaderHttpPort;
     @SerializedName(value = "ip")
-    private String leaderIp;
+    private volatile String leaderIp;
 
     /**
      * Frontends
@@ -148,6 +147,9 @@ public class NodeMgr {
 
     private final Map<Integer, SystemInfoService> systemInfoMap = new ConcurrentHashMap<>();
 
+    private final AtomicInteger leaderChangeListenerIndex = new AtomicInteger();
+    private final Map<Integer, Consumer<LeaderInfo>> leaderChangeListeners = new ConcurrentHashMap<>();
+
     public NodeMgr() {
         this.role = FrontendNodeType.UNKNOWN;
         this.leaderRpcPort = 0;
@@ -169,6 +171,11 @@ public class NodeMgr {
 
     private void unlock() {
         GlobalStateMgr.getCurrentState().unlock();
+    }
+
+    public void registerLeaderChangeListener(Consumer<LeaderInfo> listener) {
+        Integer index = leaderChangeListenerIndex.getAndIncrement();
+        leaderChangeListeners.put(index, listener);
     }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -423,7 +430,6 @@ public class NodeMgr {
             LOG.error("cluster id is not equal with config item cluster_id. will exit.");
             System.exit(-1);
         }
-
 
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
@@ -841,8 +847,9 @@ public class NodeMgr {
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
+        Frontend fe = null;
         try {
-            Frontend fe = unprotectCheckFeExist(host, port);
+            fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
@@ -862,6 +869,10 @@ public class NodeMgr {
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
         } finally {
             unlock();
+
+            if (fe != null) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+            }
         }
     }
 
@@ -913,8 +924,9 @@ public class NodeMgr {
 
     public void replayDropFrontend(Frontend frontend) {
         tryLock(true);
+        Frontend removedFe = null;
         try {
-            Frontend removedFe = frontends.remove(frontend.getNodeName());
+            removedFe = frontends.remove(frontend.getNodeName());
             if (removedFe == null) {
                 LOG.error(frontend.toString() + " does not exist.");
                 return;
@@ -926,6 +938,10 @@ public class NodeMgr {
             removedFrontends.add(removedFe.getNodeName());
         } finally {
             unlock();
+
+            if (removedFe != null) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(removedFe.getNodeName());
+            }
         }
     }
 
@@ -1018,12 +1034,7 @@ public class NodeMgr {
     }
 
     public Frontend getFeByName(String name) {
-        for (Frontend fe : frontends.values()) {
-            if (fe.getNodeName().equals(name)) {
-                return fe;
-            }
-        }
-        return null;
+        return frontends.get(name);
     }
 
     public int getFollowerCnt() {
@@ -1056,6 +1067,10 @@ public class NodeMgr {
         return this.selfNode;
     }
 
+    public Pair<String, Integer> getSelfIpAndRpcPort() {
+        return Pair.create(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
+    }
+
     public String getNodeName() {
         return this.nodeName;
     }
@@ -1068,6 +1083,11 @@ public class NodeMgr {
             Frontend frontend = frontends.get(leaderNodeName);
             return new Pair<>(frontend.getHost(), frontend.getRpcPort());
         }
+    }
+
+    public TNetworkAddress getLeaderRpcEndpoint() {
+        Pair<String, Integer> ipAndRpcPort = getLeaderIpAndRpcPort();
+        return new TNetworkAddress(ipAndRpcPort.first, ipAndRpcPort.second);
     }
 
     public Pair<String, Integer> getLeaderIpAndHttpPort() {
@@ -1093,32 +1113,8 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
-    }
 
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        List<Frontend> allFrontends = getFrontends(null);
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TUpdateResourceUsageRequest request = new TUpdateResourceUsageRequest();
-            request.setBackend_id(backendId);
-            request.setResource_usage(usage);
-
-            try {
-                TUpdateResourceUsageResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.updateResourceUsage(request));
-                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
-                    LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost());
-                }
-            } catch (Exception e) {
-                LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost(), e);
-            }
-        }
+        leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
@@ -1224,6 +1220,9 @@ public class NodeMgr {
         leaderHttpPort = dis.readInt();
         newChecksum ^= leaderHttpPort;
 
+        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
+        leaderChangeListeners.values().forEach(listener -> listener.accept(info));
+
         LOG.info("finished replay masterInfo from image");
         return newChecksum;
     }
@@ -1261,6 +1260,8 @@ public class NodeMgr {
         this.leaderHttpPort = Config.http_port;
         LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
         GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
+
+        leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
     public boolean isFirstTimeStartUp() {

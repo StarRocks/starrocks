@@ -165,7 +165,7 @@ public class CoordinatorPreprocessor {
     private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
 
     // Resource group
-    private TWorkGroup resourceGroup = null;
+    private final TWorkGroup resourceGroup;
 
     public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
                                    List<ScanNode> scanNodes, TDescriptorTable descriptorTable,
@@ -178,6 +178,11 @@ public class CoordinatorPreprocessor {
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+
+        // prepare workgroup
+        resourceGroup = prepareResourceGroup(connectContext,
+                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
+                        : ResourceGroupClassifier.QueryType.SELECT);
     }
 
     @VisibleForTesting
@@ -206,6 +211,11 @@ public class CoordinatorPreprocessor {
             }
             fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
         }
+
+        // prepare workgroup
+        resourceGroup = prepareResourceGroup(connectContext,
+                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
+                        : ResourceGroupClassifier.QueryType.SELECT);
     }
 
     public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
@@ -365,11 +375,6 @@ public class CoordinatorPreprocessor {
         // prepare information
         resetFragmentState();
         prepareFragments();
-
-        // prepare workgroup
-        resourceGroup = prepareResourceGroup(connectContext,
-                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
-                        : ResourceGroupClassifier.QueryType.SELECT);
 
         computeScanRangeAssignment();
         computeFragmentExecParams();

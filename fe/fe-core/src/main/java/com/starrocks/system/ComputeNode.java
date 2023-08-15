@@ -23,6 +23,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -522,8 +523,9 @@ public class ComputeNode implements IComputable, Writable {
             }
         }
 
-        if (becomeDead) {
+        if (becomeDead && !GlobalStateMgr.isCheckpointThread()) {
             CoordinatorMonitor.getInstance().addDeadBackend(id);
+            GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         }
 
         return isChanged;
@@ -538,11 +540,6 @@ public class ComputeNode implements IComputable, Writable {
         if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
             // The resource usage is not fresh enough to decide whether it is overloaded.
             return false;
-        }
-
-        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
-                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
-            return true;
         }
 
         if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&

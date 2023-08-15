@@ -1199,6 +1199,41 @@ struct TUpdateResourceUsageResponse {
     1: optional Status.TStatus status
 }
 
+struct TResourceLogicalSlot {
+    1: optional Types.TUniqueId slot_id
+    2: optional string request_fe_name
+    3: optional i64 group_id
+    4: optional i32 num_slots
+    5: optional i64 expired_pending_time_ms
+    6: optional i64 expired_allocated_time_ms
+    7: optional i64 fe_start_time_ms
+}
+
+struct TRequireSlotRequest {
+    1: optional TResourceLogicalSlot slot
+}
+
+struct TRequireSlotResponse {
+    
+}
+
+struct TFinishSlotRequirementRequest {
+    1: optional Status.TStatus status
+    2: optional Types.TUniqueId slot_id
+}
+
+struct TFinishSlotRequirementResponse {
+    1: optional Status.TStatus status
+}
+
+struct TReleaseSlotRequest {
+    1: optional Types.TUniqueId slot_id
+}
+
+struct TReleaseSlotResponse {
+    1: optional Status.TStatus status
+}
+
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1350,5 +1385,9 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+
+    TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
+    TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
+    TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
 }
 

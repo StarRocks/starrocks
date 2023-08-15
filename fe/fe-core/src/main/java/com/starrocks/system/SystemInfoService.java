@@ -452,6 +452,19 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend;
     }
 
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateResourceUsage receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+
+        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+
+        GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyResourceUsageUpdate();
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();

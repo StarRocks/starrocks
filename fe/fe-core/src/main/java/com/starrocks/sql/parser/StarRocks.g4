@@ -193,6 +193,7 @@ statement
     | showProcedureStatement
     | showProcStatement
     | showProcesslistStatement
+    | showRunningQueriesStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -1202,6 +1203,10 @@ showProcStatement
 
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
+    ;
+
+showRunningQueriesStatement
+    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement

@@ -24,7 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
@@ -82,7 +82,7 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testUpdateResourceUsage() throws TException {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
@@ -100,9 +100,9 @@ public class FrontendServiceImplTest {
                 return null;
             }
         };
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };

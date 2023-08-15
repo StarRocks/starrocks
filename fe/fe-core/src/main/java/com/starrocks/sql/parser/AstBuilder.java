@@ -333,6 +333,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -2739,6 +2740,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitShowRunningQueriesStatement(StarRocksParser.ShowRunningQueriesStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowRunningQueriesStmt(limit);
+    }
+
+    @Override
     public ParseNode visitShowTransactionStatement(StarRocksParser.ShowTransactionStatementContext context) {
 
         String database = null;
@@ -4156,6 +4163,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new PartitionNames(false, new ArrayList<>(), partitionColNames, partitionColValues);
     }
+
     @Override
     public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
