@@ -112,16 +112,18 @@ public class SemiReorderRule extends TransformationRule {
                 // like expression mapping.
                 boolean isProjectToColumnRef = entry.getValue().isColumnRef() &&
                         entry.getKey().getName().equals(((ColumnRefOperator) entry.getValue()).getName());
-                if (!isProjectToColumnRef &&
-                        leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    semiExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    // left child projection produce
-                    semiExpression.put(entry.getKey(), entry.getValue());
+
+                if (!isProjectToColumnRef) {
+                    if (entry.getValue().getUsedColumns().isEmpty()) {
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    } else if (leftChildJoinRightChildOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        rightExpression.put(entry.getKey(), entry.getValue());
+                    } else if (newSemiOutputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    } else if (leftChildInputColumns.containsAll(entry.getValue().getUsedColumns())) {
+                        // left child projection produce
+                        semiExpression.put(entry.getKey(), entry.getValue());
+                    }
                 }
             }
         }
