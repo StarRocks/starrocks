@@ -1891,7 +1891,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "                \"storage_format\" = \"DEFAULT\",\n" +
                 "                \"enable_persistent_index\" = \"false\"\n" +
                 "                );");
-        cluster.runSql("test",  "insert into sync_tbl_t1 values ('2022-05-01',1,2,3), " +
+        cluster.runSql("test", "insert into sync_tbl_t1 values ('2022-05-01',1,2,3), " +
                 "('2022-05-01',2,2,2), ('2022-05-01',3,2,3);");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW sync_mv1 AS " +
                 "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;");
@@ -1899,5 +1899,92 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "sync_mv1");
+    }
+
+    @Test
+    public void testMapArrayRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_map_array (\n" +
+                "                            k1 date,\n" +
+                "                            k2 varchar(20),\n" +
+                "                            v1 map<string, string>,\n" +
+                "                            v2 array<int>, \n" +
+                "                            v3 int)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        DISTRIBUTED BY HASH(k1);");
+
+        // MV1: MAP MV
+        {
+            String mvName = "mv_test_map_element";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
+                            "FROM test_map_array\n" +
+                            "GROUP BY k1, element_at(v1, 'k1') ");
+
+            // query1: exactly-same aggregation
+            {
+                String query = "SELECT k1, element_at(v1, 'k1'), sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by k1, element_at(v1, 'k1')";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+            // query2: rollup aggregation
+            {
+                String query = "SELECT element_at(v1, 'k1'), sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by element_at(v1, 'k1')";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+            dropMv("test", mvName);
+        }
+
+        // MV2: Array Element MV
+        {
+            String mvName = "mv_test_array_element";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
+                            "FROM test_map_array\n" +
+                            "GROUP BY k1, element_at(v2, 1) ");
+
+            // query1: exactly-same aggregation
+            {
+                String query = "SELECT k1, element_at(v2, 1), sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by k1, element_at(v2, 1)";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+            // query2: rollup aggregation
+            {
+                String query = "SELECT element_at(v2, 1), sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by element_at(v2, 1)";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+            dropMv("test", mvName);
+        }
+        // MV3: Array Slice MV
+        {
+            String mvName = "mv_test_array_slice";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
+                            "FROM test_map_array\n" +
+                            "GROUP BY k1, array_slice(v2, 1, 1) ");
+
+            // query1: exactly-same aggregation
+            {
+                String query = "SELECT k1, array_slice(v2, 1, 1), sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by k1, array_slice(v2, 1, 1)";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
     }
 }
