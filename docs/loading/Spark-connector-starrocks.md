@@ -192,8 +192,8 @@ Construct data in memory and load data into the StarRocks table.
     # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
     # You need to modify the options according your own environment.
     df.write.format("starrocks") \
-        .option("starrocks.fe.http.url", "127.0.0.1:8038") \
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
         .option("starrocks.table.identifier", "test.score_board") \
         .option("starrocks.user", "root") \
         .option("starrocks.password", "") \
