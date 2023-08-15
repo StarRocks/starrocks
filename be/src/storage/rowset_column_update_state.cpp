@@ -525,7 +525,7 @@ Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& sta
     return Status::OK();
 }
 
-static void padding_char_columns(const Schema& schema, const TabletSchema& tschema, Chunk* chunk) {
+static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
@@ -678,7 +678,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         uint64_t segment_file_size = 0;
         uint64_t index_size = 0;
         uint64_t footer_position = 0;
-        padding_char_columns(partial_schema, *partial_tschema, source_chunk_ptr.get());
+        padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
         RETURN_IF_ERROR(delta_column_group_writer[each.first]->append_chunk(*source_chunk_ptr));
         RETURN_IF_ERROR(
                 delta_column_group_writer[each.first]->finalize(&segment_file_size, &index_size, &footer_position));
