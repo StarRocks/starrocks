@@ -609,10 +609,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
 }
 
 bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
-    if (!config::late_materialization_subfield) {
-        return false;
-    }
-
     if (field->type()->type() != LogicalType::TYPE_STRUCT) {
         // @Todo: support json/map/array when support flat-column,
         // the performance improvement scenarios are too few now

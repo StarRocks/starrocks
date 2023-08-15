@@ -605,9 +605,6 @@ CONF_Int32(late_materialization_ratio, "10");
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Whether to late materialization struct's subfield
-CONF_Bool(late_materialization_subfield, "true");
-
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
 
