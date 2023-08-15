@@ -2819,7 +2819,7 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         if (!showStmt.getPattern().isEmpty()) {
             matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.TABLE.getCaseSensibility());
+                    CaseSensibility.STORAGEVOLUME.getCaseSensibility());
         }
         PatternMatcher finalMatcher = matcher;
         storageVolumeNames = storageVolumeNames.stream()
