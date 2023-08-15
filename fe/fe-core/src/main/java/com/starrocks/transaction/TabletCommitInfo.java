@@ -43,6 +43,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import javax.validation.constraints.NotNull;
 
 public class TabletCommitInfo implements Writable {
 
@@ -89,6 +90,7 @@ public class TabletCommitInfo implements Writable {
         return validDictCollectedVersions;
     }
 
+    @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
