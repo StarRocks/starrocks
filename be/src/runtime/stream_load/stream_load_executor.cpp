@@ -248,9 +248,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
                                 client->getLoadTxnStatus(v_result, v_request);
                             },
                             config::txn_commit_rpc_timeout_ms);
-                    if (visiable_st.is_thrift_rpc_error()) {
-                        return status;
-                    } else if (!visiable_st.ok()) {
+                    if (!visiable_st.ok()) {
                         return status;
                     } else {
                         if (v_result.status == TTransactionStatus::VISIBLE) {
