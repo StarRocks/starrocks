@@ -18,19 +18,13 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.Set;
 import java.util.regex.Pattern;
 
 // Wrap for Java pattern and matcher
 public class PatternMatcher {
     private Pattern pattern;
-
-    private static final Set<Character> SPECIAL_CHARS = Sets.newHashSet('<', '(', '[', '{', '^', '=',
-            '$', '!', '|', ']', '}', ')',
-            '?', '*', '+', '>', '@');
 
     public boolean match(String candidate) {
         if (pattern == null || candidate == null) {
@@ -132,11 +126,7 @@ public class PatternMatcher {
                     sb.append('\\').append('\\');
                     break;
                 default:
-                    if (SPECIAL_CHARS.contains(ch)) {
-                        sb.append('\\').append(ch);
-                    } else {
-                        sb.append(ch);
-                    }
+                    sb.append(ch);
                     break;
             }
         }
@@ -162,4 +152,17 @@ public class PatternMatcher {
         }
         return matcher;
     }
+
+    public static boolean matchPattern(String pattern, String tableName, PatternMatcher matcher,
+                                        boolean caseSensitive) {
+        if (matcher != null && !matcher.match(tableName)) {
+            if (caseSensitive && !tableName.equals(pattern)) {
+                return false;
+            } else if (!caseSensitive && !tableName.equalsIgnoreCase(pattern)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 }
