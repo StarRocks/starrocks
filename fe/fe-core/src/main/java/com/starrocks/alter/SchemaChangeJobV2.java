@@ -73,6 +73,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.Pair;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -706,7 +707,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
             // Before schema change, collect modified columns and drop columns.
-            Set<String> modifiedColumns = collectDropAndModifiedColumns(tbl);
+            Pair<Set<String>, Set<String>> dropModifiedColumns = collectDropAndModifiedColumns(tbl);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
@@ -750,8 +751,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMv(modifiedColumns, tbl);
-            inactiveViews(modifiedColumns, tbl);
+            Set<String> allModifiedColumns = Sets.newHashSet();
+            allModifiedColumns.addAll(dropModifiedColumns.first);
+            allModifiedColumns.addAll(dropModifiedColumns.second);
+            inactiveRelatedMv(allModifiedColumns, tbl);
+            inactiveViews(dropModifiedColumns.second, tbl);
 
             pruneMeta();
             this.jobState = JobState.FINISHED;
@@ -796,8 +800,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
-    private Set<String> collectDropAndModifiedColumns(OlapTable tbl) {
+    // drop columns && modified column
+    private Pair<Set<String>, Set<String>> collectDropAndModifiedColumns(OlapTable tbl) {
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        Set<String> dropColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
         for (Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
             Long shadowIdxId = entry.getKey();
@@ -817,12 +823,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         !shadowSchema.contains(element)).collect(Collectors.toList());
                 // can just drop one column one time, so just one element in differences
                 Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
-                modifiedColumns.add(originSchema.get(dropIdx).getName());
+                dropColumns.add(originSchema.get(dropIdx).getName());
             } else {
                 // add column should not affect old mv, just ignore.
             }
         }
-        return modifiedColumns;
+        return new Pair<>(dropColumns, modifiedColumns);
     }
 
     private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
