@@ -80,7 +80,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
@@ -267,7 +267,17 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
-                        "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+                        "`hive0`.`partitioned_db`.`t1_par` using (par_col)")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`jdbc_parttbl_mv`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`d`)\n" +
+                        "DISTRIBUTED BY HASH(`a`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -1153,6 +1163,22 @@ public class PartitionBasedMvRefreshProcessorTest {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(plan.contains("PARTITION PREDICATES: 5: par_date >= '2020-01-01', 5: par_date < '2020-01-03'"));
         Assert.assertTrue(plan.contains("partitions=3/7"));
+    }
+
+    @Test
+    public void testRangePartitionRefreshWithJDBCTable() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(5, partitions.size());
     }
 
     @Test
