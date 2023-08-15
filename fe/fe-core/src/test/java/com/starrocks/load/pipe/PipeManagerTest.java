@@ -38,6 +38,7 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -49,11 +50,14 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.thrift.TException;
@@ -61,7 +65,6 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -118,6 +121,13 @@ public class PipeManagerTest {
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
+    }
+
+    private void dropPipe(String name) throws Exception {
+        String sql = "drop pipe " + name;
+        DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.dropPipe(dropStmt);
     }
 
     private Pipe getPipe(String name) {
@@ -241,15 +251,17 @@ public class PipeManagerTest {
             private List<PipeFileRecord> records = new ArrayList<>();
 
             @Mock
-            public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state) {
+            public void updateFileState(List<PipeFileRecord> files, FileListRepo.PipeFileState state, String label) {
                 for (PipeFileRecord file : files) {
-                    records.stream().filter(x -> x.equals(file)).findFirst().get().loadState = state;
+                    PipeFileRecord record = records.stream().filter(x -> x.equals(file)).findFirst().get();
+                    record.loadState = state;
+                    record.insertLabel = label;
                 }
             }
 
             @Mock
-            public List<PipeFileRecord> listUnloadedFiles() {
-                return records.stream().filter(x -> x.getLoadState().equals(FileListRepo.PipeFileState.UNLOADED))
+            public List<PipeFileRecord> listFilesByState(FileListRepo.PipeFileState state) {
+                return records.stream().filter(x -> x.getLoadState().equals(state))
                         .collect(Collectors.toList());
             }
 
@@ -282,6 +294,7 @@ public class PipeManagerTest {
 
     @Test
     public void executePipe() throws Exception {
+        mockRepoExecutor();
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
@@ -293,17 +306,11 @@ public class PipeManagerTest {
         p1.schedule();
         p1.schedule();
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
-        /*
-        FileListRepoInMemory repo = source.getFileListRepo();
-        Assert.assertEquals(1, repo.size());
-        List<PipeFile> files = repo.listFiles();
-        Assert.assertEquals(
-                Lists.newArrayList(new PipeFile("file1", 1024, FileListRepo.PipeFileState.LOADED)),
-                files);
-         */
+
+        FileListRepo repo = source.getFileListRepo();
+        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
     }
 
-    @Ignore("flaky")
     @Test
     public void executeError() throws Exception {
         mockRepoExecutor();
@@ -354,6 +361,15 @@ public class PipeManagerTest {
         p3.schedule();
         Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+
+        // retry all
+        {
+            AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser("alter pipe p3 retry all", ctx);
+            p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
+            List<PipeFileRecord> unloadedFiles =
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+            Assert.assertEquals(1, unloadedFiles.size());
+        }
     }
 
     @Test
@@ -500,10 +516,12 @@ public class PipeManagerTest {
         ShowExecutor showExecutor = new ShowExecutor(ctx, showPipeStmt);
         ShowResultSet result = showExecutor.execute();
         Assert.assertEquals(
-                Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING", "0", "0", "0"),
+                Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(0).subList(2, result.numColumns() - 1));
         Assert.assertEquals(
-                Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING", "0", "0", "0"),
+                Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(1).subList(2, result.numColumns() - 1));
 
         // desc
@@ -513,7 +531,7 @@ public class PipeManagerTest {
         result = showExecutor.execute();
         Assert.assertEquals(
                 Arrays.asList("show_1", "FILE", "pipe_test_db.tbl1", "FILE_SOURCE(path=fake://pipe)",
-                        "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')"),
+                        "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')", ""),
                 result.getResultRows().get(0).subList(2, result.numColumns())
         );
     }
@@ -581,4 +599,120 @@ public class PipeManagerTest {
         Assert.assertFalse(result.pipe_files.isEmpty());
     }
 
+    @Test
+    public void testProperty() throws Exception {
+        createPipe("create pipe p_batch_size properties('batch_size'='10GB') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_poll_interval properties('poll_interval'='100') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_auto_ingest properties('auto_ingest'='false') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+    }
+
+    @Test
+    public void testInsertSql() throws Exception {
+        mockRepoExecutor();
+        String pipeName = "p_insert_sql";
+
+        // select *
+        {
+            createPipe("create pipe p_insert_sql properties('batch_size'='10GB') " +
+                    " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+            Pipe pipe = getPipe(pipeName);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT *\n" +
+                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            dropPipe(pipeName);
+        }
+
+        // select col
+        {
+            createPipe("create pipe p_insert_sql properties('batch_size'='10GB') " +
+                    " as insert into tbl1 select col_int, col_string from files('path'='fake://pipe', 'format'='parquet')");
+            Pipe pipe = getPipe(pipeName);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            Assert.assertEquals("INSERT INTO `tbl1` WITH LABEL `insert_label` SELECT `col_int`, `col_string`\n" +
+                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            dropPipe(pipeName);
+        }
+    }
+
+    @Test
+    public void testRecovery() throws Exception {
+        mockRepoExecutor();
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        pm.clear();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+        pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
+
+        // create pipe 1
+        String sql =
+                "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        createPipe(sql);
+        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
+        pm.getRepo().saveImage(image1.getDataOutputStream(), 123);
+
+        // loading file and crash
+        String name = "p_crash";
+        Pipe pipe = getPipe(name);
+        pipe.poll();
+        pipe.schedule();
+        Assert.assertEquals(1, pipe.getRunningTasks().size());
+        Assert.assertTrue(StringUtils.isNotEmpty(pipe.getRunningTasks().get(0).getUniqueTaskName()));
+
+        // recover when transaction failed
+        {
+            PipeManager pm1 = new PipeManager();
+            FileListRepo repo = pipe.getPipeSource().getFileListRepo();
+            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
+            Assert.assertFalse(pipe.isRecovered());
+            Assert.assertFalse(pipe.isRunnable());
+
+            pipe.recovery();
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR).size());
+            Assert.assertTrue(pipe.isRecovered());
+            Assert.assertTrue(pipe.isRunnable());
+        }
+
+        // recover when transaction committed
+        {
+            FileListRepo repo = pipe.getPipeSource().getFileListRepo();
+            repo.updateFileState(repo.listFilesByState(FileListRepo.PipeFileState.ERROR),
+                    FileListRepo.PipeFileState.LOADING, "insert-label");
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public TransactionStatus getLabelStatus(long dbId, String label) {
+                    return TransactionStatus.COMMITTED;
+                }
+            };
+
+            PipeManager pm1 = new PipeManager();
+            pm1.getRepo().loadImage(image1.getDataInputStream(), 123);
+            Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
+            pipe = pm1.mayGetPipe(new PipeName(PIPE_TEST_DB, name)).get();
+            Assert.assertFalse(pipe.isRecovered());
+            Assert.assertFalse(pipe.isRunnable());
+
+            pipe.recovery();
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
+            Assert.assertTrue(pipe.isRecovered());
+            Assert.assertTrue(pipe.isRunnable());
+        }
+    }
+
+    @Test
+    public void testRetry() {
+
+    }
 }
