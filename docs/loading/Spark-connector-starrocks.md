@@ -65,7 +65,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
       sh build.sh 3.2
       ```
 
-3. Go to the `target/`  directory to find the Spark connector JAR file, such as `starrocks-spark-connector-3.2_2.12-1.1.0-SNAPSHOT.jar` , generated upon compilation.
+3. Go to the `target/` directory to find the Spark connector JAR file, such as `starrocks-spark-connector-3.2_2.12-1.1.0-SNAPSHOT.jar` , generated upon compilation.
 
 > **NOTE**
 >
@@ -143,7 +143,7 @@ PROPERTIES (
 
 #### Set up your Spark environment
 
-Note that the following examples are run in Spark 3.2.4 and use `spark-shell` and `spark-sql`.  Before running the examples, make sure to place the Spark connector JAR file in the `$SPARK_HOME/jars` directory.
+Note that the following examples are run in Spark 3.2.4 and use `spark-shell`, `pyspark` and `spark-sql`.  Before running the examples, make sure to place the Spark connector JAR file in the `$SPARK_HOME/jars` directory.
 
 ### Load data with Spark DataFrames
 
@@ -153,22 +153,51 @@ The following two examples explain how to load data with Spark DataFrames Batch 
 
 Construct data in memory and load data into the StarRocks table.
 
-1. Write the following scala code snippet in `spark-shell`:
+1. You can write the spark application using Scala or Python.
+
+   For Scala, run the following code snippet in `spark-shell`:
 
     ```Scala
     // 1. Create a DataFrame from a sequence.
     val data = Seq((1, "starrocks", 100), (2, "spark", 100))
     val df = data.toDF("id", "name", "score")
 
-    // 2. Write to starrocks with the format "starrocks",
-    // and replace the options with your own.
+    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    // You need to modify the options according your own environment.
     df.write.format("starrocks")
-        .option("starrocks.fe.http.url", "127.0.0.1:8038")
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
+        .option("starrocks.fe.http.url", "127.0.0.1:8030")
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
         .option("starrocks.table.identifier", "test.score_board")
         .option("starrocks.user", "root")
         .option("starrocks.password", "")
         .mode("append")
+        .save()
+    ```
+
+    For Python, run the following code snippet in `pyspark`:
+
+    ```python
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession \
+        .builder \
+        .appName("StarRocks Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from a sequence.
+    data = [(1, "starrocks", 100), (2, "spark", 100)]
+    df = spark.sparkContext.parallelize(data) \
+            .toDF(["id", "name", "score"])
+
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
+    df.write.format("starrocks") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
+        .option("starrocks.table.identifier", "test.score_board") \
+        .option("starrocks.user", "root") \
+        .option("starrocks.password", "") \
+        .mode("append") \
         .save()
     ```
 
@@ -196,7 +225,9 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
     4,spark,100
     ```
 
-2. Write the following scala code snippet in the `spark-shell`:
+2. You can write the Spark application using Scala or Python. 
+
+   For Scala, run the following code snippet in `spark-shell`:
 
     ```Scala
     import org.apache.spark.sql.types.StructType
@@ -215,16 +246,56 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
             .load("/path/to/csv-data")
         )
 
-    // 2. Write to starrocks with the format "starrocks", and replace the options with your own.
+    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    // You need to modify the options according your own environment.
     val query = (df.writeStream.format("starrocks")
-            .option("starrocks.fe.http.url", "127.0.0.1:8038")
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038")
+            .option("starrocks.fe.http.url", "127.0.0.1:8030")
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
             .option("starrocks.table.identifier", "test.score_board")
             .option("starrocks.user", "root")
             .option("starrocks.password", "")
             // replace it with your checkpoint directory
             .option("checkpointLocation", "/path/to/checkpoint")
             .outputMode("append")
+            .start()
+        )
+    ```
+
+   For Python, run the following code snippet in `pyspark`:
+
+   ```python
+   from pyspark.sql import SparkSession
+   from pyspark.sql.types import IntegerType, StringType, StructType, StructField
+
+   spark = SparkSession \
+        .builder \
+        .appName("StarRocks SS Example") \
+        .getOrCreate()
+
+    # 1. Create a DataFrame from CSV.
+    schema = StructType([ \
+            StructField("id", IntegerType()), \
+            StructField("name", StringType()), \
+            StructField("score", IntegerType()) \
+        ])
+    df = spark.readStream \
+            .option("sep", ",") \
+            .schema(schema) \
+            .format("csv") \
+            # Replace it with your path to the directory "csv-data".
+            .load("/path/to/csv-data")
+
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
+    query = df.writeStream.format("starrocks") \
+            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
+            .option("starrocks.table.identifier", "test.score_board") \
+            .option("starrocks.user", "root") \
+            .option("starrocks.password", "") \
+            # replace it with your checkpoint directory
+            .option("checkpointLocation", "/path/to/checkpoint") \
+            .outputMode("append") \
             .start()
         )
     ```
@@ -249,18 +320,19 @@ The following example explains how to load data with Spark SQL by using the `INS
 1. Execute the following SQL statement in the `spark-sql`:
 
     ```SQL
-    -- 1. create a table using datasource "starrocks", and replace the options with your own
+    -- 1. Create a table by configuring the data source as  `starrocks` and the following options. 
+    -- You need to modify the options according your own environment.
     CREATE TABLE `score_board`
     USING starrocks
     OPTIONS(
-    "starrocks.fe.http.url"="127.0.0.1:8038",
-    "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9038",
+    "starrocks.fe.http.url"="127.0.0.1:8030",
+    "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
     "starrocks.table.identifier"="test.score_board",
     "starrocks.user"="root",
     "starrocks.password"=""
     );
 
-    -- 2. insert two rows into the table
+    -- 2. Insert two rows into the table.
     INSERT INTO `score_board` VALUES (5, "starrocks", 100), (6, "spark", 100);
     ```
 
