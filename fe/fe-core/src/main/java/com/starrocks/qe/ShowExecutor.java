@@ -2820,6 +2820,7 @@ public class ShowExecutor {
                     LOG.warn(errMsg);
                     throw new AnalysisException(errMsg);
                 }
+                Preconditions.checkNotNull(result);
                 for (PFailPointInfo failPointInfo : result.failPoints) {
                     String name = failPointInfo.name;
                     PFailPointTriggerMode triggerMode = failPointInfo.triggerMode;
