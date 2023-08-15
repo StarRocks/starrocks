@@ -994,7 +994,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
-                    QueryRelation queryRelation = queryStatement.getQueryRelation();
                     List<SlotRef> slots = Lists.newArrayList();
                     partitionPredicates.collect(SlotRef.class, slots);
 
@@ -1005,8 +1004,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
 
                     // try to push down into query relation so can push down filter into both sides
-                    Scope queryScope = queryRelation.getScope();
-                    if (queryRelation instanceof SelectRelation && canResolveSlotsInTheScope(slots, queryScope)) {
+                    // NOTE: it's safe here to push the partition predicate into query relation directly because
+                    // partition predicates always belong to the relation output expressions and can be resolved
+                    // by the query analyzer.
+                    QueryRelation queryRelation = queryStatement.getQueryRelation();
+                    if (queryRelation instanceof SelectRelation) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
                         selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(selectRelation.getWhereClause(),
                                 partitionPredicates)));
@@ -1027,6 +1029,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return slots.stream().allMatch(s -> scope.tryResolveField(s).isPresent());
     }
 
+    /**
+     * Generate partition predicates to refresh the materialized view so can be refreshed by the incremental partitions.
+     *
+     * @param tablePartitionNames           : the need pruned partition tables of the ref base table
+     * @param queryStatement                : the materialized view's defined query statement
+     * @param mvPartitionInfo               : the materialized view's partition information
+     * @return
+     * @throws AnalysisException
+     */
     private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
                                             PartitionInfo mvPartitionInfo)
             throws AnalysisException {
