@@ -1,0 +1,92 @@
+-- name: test_partial_update_char_padding
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      v1 CHAR(20),
+      v2 VARCHAR(20),
+      v3 CHAR(20)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+set partial_update_mode = "column";
+-- result:
+-- !result
+insert into tab1 values (1, 'aaa', 'aaa', 'aaa'), 
+(2, 'aaa', 'aaa', 'aaa'), 
+(3, 'aaa', 'aaa', 'aaa'), 
+(4, 'aaa', 'aaa', 'aaa');
+-- result:
+-- !result
+select * from tab1;
+-- result:
+2	aaa	aaa	aaa
+1	aaa	aaa	aaa
+4	aaa	aaa	aaa
+3	aaa	aaa	aaa
+-- !result
+update tab1 set v1 = 'bbb' where k1 = 2;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	aaa	aaa	aaa
+4	aaa	aaa	aaa
+3	aaa	aaa	aaa
+2	bbb	aaa	aaa
+-- !result
+select * from tab1 where v1 = 'bbb';
+-- result:
+2	bbb	aaa	aaa
+-- !result
+select * from tab1 where v1 <> 'bbb';
+-- result:
+4	aaa	aaa	aaa
+1	aaa	aaa	aaa
+3	aaa	aaa	aaa
+-- !result
+update tab1 set v2 = 'bbb' where k1 = 3;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	aaa	aaa	aaa
+3	aaa	bbb	aaa
+2	bbb	aaa	aaa
+4	aaa	aaa	aaa
+-- !result
+select * from tab1 where v2 = 'bbb';
+-- result:
+3	aaa	bbb	aaa
+-- !result
+select * from tab1 where v2 <> 'bbb';
+-- result:
+2	bbb	aaa	aaa
+4	aaa	aaa	aaa
+1	aaa	aaa	aaa
+-- !result
+update tab1 set v3 = 'bbb' where k1 = 4;
+-- result:
+-- !result
+select * from tab1;
+-- result:
+1	aaa	aaa	aaa
+2	bbb	aaa	aaa
+3	aaa	bbb	aaa
+4	aaa	aaa	bbb
+-- !result
+select * from tab1 where v3 = 'bbb';
+-- result:
+4	aaa	aaa	bbb
+-- !result
+select * from tab1 where v3 <> 'bbb';
+-- result:
+1	aaa	aaa	aaa
+2	bbb	aaa	aaa
+3	aaa	bbb	aaa
+-- !result
