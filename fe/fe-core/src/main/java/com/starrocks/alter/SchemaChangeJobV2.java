@@ -37,6 +37,7 @@ package com.starrocks.alter;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -68,7 +69,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -84,6 +84,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -778,26 +779,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return;
         }
 
-        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
-        List<View> views = Lists.newArrayList();
-        for (Long viewDbId : allDbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(viewDbId);
-            if (null == db) {
-                continue;
-            }
-            db.getTables().stream().filter(v -> v instanceof View).forEach(v -> views.add((View) v));
-        }
-
+        String error = "column [" + String.join(", ", modifiedColumns) + "] on table [" + tbl.getName() + "] "
+                + "has been modified";
         Database db = MetaUtils.getDatabase(dbId);
-        for (View view : views) {
-            Map<TableName, com.starrocks.catalog.Table> usedTable =
-                    AnalyzerUtils.collectAllTableAndView(view.getQueryStatement());
-            if (usedTable.containsKey(new TableName(db.getOriginName(), tbl.getName()))) {
-                String error = "column [" + String.join(", ", modifiedColumns) + "] on table [" + tbl.getName() + "] "
-                        + "has been modified";
-                view.setInvalid(error);
-            }
-        }
+        TableName tn = new TableName(db.getOriginName(), tbl.getName());
+        MetadataMgr.inactiveViews(ImmutableList.of(tn), error);
     }
 
     // drop columns && modified column
