@@ -126,6 +126,7 @@ import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
 import com.starrocks.proto.PListFailPointResponse;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.RpcException;
@@ -196,6 +197,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -298,6 +300,8 @@ public class ShowExecutor {
             handleShowProcesslist();
         } else if (stmt instanceof ShowProfilelistStmt) {
             handleShowProfilelist();
+        } else if (stmt instanceof ShowRunningQueriesStmt) {
+            handleShowRunningQueries();
         } else if (stmt instanceof ShowEnginesStmt) {
             handleShowEngines();
         } else if (stmt instanceof ShowFunctionsStmt) {
@@ -714,6 +718,28 @@ public class ShowExecutor {
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
+    private void handleShowRunningQueries() {
+        ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+
+        List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
+        slots.sort(
+                Comparator.comparingLong(LogicalSlot::getStartTimeMs).thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
+
+        for (LogicalSlot slot : slots) {
+            List<String> row =
+                    ShowRunningQueriesStmt.getColumnSuppliers().stream().map(columnSupplier -> columnSupplier.apply(slot))
+                            .collect(Collectors.toList());
+            rows.add(row);
+
+            if (showStmt.getLimit() >= 0 && rows.size() >= showStmt.getLimit()) {
+                break;
+            }
+        }
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     // Handle show authors

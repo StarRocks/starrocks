@@ -190,6 +190,7 @@ statement
     | showProcStatement
     | showProcesslistStatement
     | showProfilelistStatement
+    | showRunningQueriesStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -1375,6 +1376,10 @@ showProcesslistStatement
 
 showProfilelistStatement
     : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    ;
+
+showRunningQueriesStatement
+    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement
