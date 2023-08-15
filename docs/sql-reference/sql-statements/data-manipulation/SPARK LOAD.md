@@ -1,5 +1,7 @@
 # SPARK LOAD
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 ## Description
 
 Spark load preprocesses the imported data through external spark resources, improves the import performance of a large amount of StarRocks data, and saves the computing resources of StarRocks cluster. It is mainly used in the scenario of initial migration and large amount of data import into StarRocks.

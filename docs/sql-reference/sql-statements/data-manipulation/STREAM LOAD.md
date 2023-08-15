@@ -1,5 +1,7 @@
 # STREAM LOAD
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 ## Description
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Load data from a local file system or a streaming data source using HTTP PUT](../../../loading/StreamLoad.md).
