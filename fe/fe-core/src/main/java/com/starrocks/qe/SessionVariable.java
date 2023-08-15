@@ -288,6 +288,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_rewrite_groupingsets_to_union_all";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+    public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
 
     // --------  New planner session variables end --------
 
@@ -1247,6 +1248,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
     }
@@ -1254,6 +1258,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
         this.hiveTempStagingDir = hiveTempStagingDir;
         return this;
+    }
+
+    public boolean isCboPredicateSubfieldPath() {
+        return cboPredicateSubfieldPath;
     }
 
     public int getExprChildrenLimit() {

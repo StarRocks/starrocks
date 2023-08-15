@@ -658,7 +658,11 @@ public class PlanFragmentBuilder {
         }
 
         // get all column access path, and mark paths which one is predicate used
-        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan) {
+        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan, ExecPlan context) {
+            if (!context.getConnectContext().getSessionVariable().isCboPredicateSubfieldPath()) {
+                return scan.getColumnAccessPaths();
+            }
+
             if (scan.getPredicate() == null) {
                 return scan.getColumnAccessPaths();
             }
@@ -761,7 +765,7 @@ public class PlanFragmentBuilder {
             }
 
             // set column access path
-            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node));
+            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
