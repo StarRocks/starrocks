@@ -53,8 +53,8 @@ public class Partition implements PartitionInfo {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        Partition partition = (Partition) o;
 
+        Partition partition = (Partition) o;
         return Objects.equals(partitionName, partition.partitionName) &&
                 Objects.equals(modifiedTime, partition.modifiedTime);
     }
