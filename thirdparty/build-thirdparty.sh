@@ -226,6 +226,51 @@ build_llvm() {
         LLVM_TARGET="AArch64"
     fi
 
+    LLVM_TARGETS_TO_BUILD=(
+        "LLVMBitstreamReader"
+        "LLVMRuntimeDyld" 
+        "LLVMOption"
+        "LLVMAsmPrinter"
+        "LLVMProfileData"
+        "LLVMAsmParser"
+        "LLVMOrcTargetProcess"
+        "LLVMExecutionEngine"
+        "LLVMBinaryFormat"
+        "LLVMDebugInfoDWARF"
+        "LLVMObjCARCOpts"
+        "LLVMCodeGen"
+        "LLVMMCDisassembler"
+        "LLVMSupport"
+        "LLVMJITLink"
+        "LLVMCFGuard"
+        "LLVMInstrumentation"
+        "LLVMIRReader"
+        "LLVMCore"
+        "LLVMTarget"
+        "LLVMMC"
+        "LLVMAnalysis"
+        "LLVMGlobalISel"
+        "LLVMScalarOpts"
+        "LLVMTargetParser"
+        "LLVMDemangle"
+        "LLVMRemarks"
+        "LLVMDebugInfoCodeView"
+        "LLVMOrcShared"
+        "LLVMOrcJIT"
+        "LLVMTextAPI"
+        "LLVMBitWriter"
+        "LLVMBitReader"
+        "LLVMObject"
+        "LLVMTransformUtils"
+        "LLVMSelectionDAG"
+        "LLVMMCParser"
+    )
+    if [ LLVM_TARGET == "X86" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
+    elif [ LLVM_TARGET == "AArch64" ]; then
+        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
+    fi
+
     check_if_source_exist $LLVM_SOURCE
 
     cd $TP_SOURCE_DIR
@@ -252,9 +297,11 @@ build_llvm() {
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 LLVMOrcJIT
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD}
     ${BUILD_SYSTEM} install-llvm-headers
-    ${BUILD_SYSTEM} install-LLVMOrcJIT
+    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
+        ${BUILD_SYSTEM} install-${target} 
+    done
 }
 
 # protobuf
