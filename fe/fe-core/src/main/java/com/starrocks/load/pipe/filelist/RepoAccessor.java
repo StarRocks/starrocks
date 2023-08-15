@@ -18,6 +18,7 @@ package com.starrocks.load.pipe.filelist;
 import com.google.common.base.Preconditions;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.thrift.TResultBatch;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -48,10 +49,10 @@ public class RepoAccessor {
         }
     }
 
-    public List<PipeFileRecord> listUnloadedFiles(long pipeId) {
+    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state) {
         List<PipeFileRecord> res = null;
         try {
-            String sql = buildListUnloadedFile(pipeId);
+            String sql = buildListFileByState(pipeId, state);
             List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
@@ -86,7 +87,7 @@ public class RepoAccessor {
     /**
      * pipe_id, file_name, file_version are required to locate unique file
      */
-    public void updateFilesState(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+    public void updateFilesState(List<PipeFileRecord> records, FileListRepo.PipeFileState state, String insertLabel) {
         try {
             String sql = null;
             switch (state) {
@@ -96,9 +97,9 @@ public class RepoAccessor {
                     sql = buildSqlUpdateState(records, state);
                     break;
                 case LOADING:
-                    sql = buildSqlStartLoad(records, state);
+                    sql = buildSqlStartLoad(records, state, insertLabel);
                     break;
-                case LOADED:
+                case FINISHED:
                     sql = buildSqlFinishLoad(records, state);
                     break;
                 default:
@@ -129,9 +130,9 @@ public class RepoAccessor {
         return FileListTableRepo.SELECTED_STAGED_FILES + where;
     }
 
-    protected String buildListUnloadedFile(long pipeId) {
+    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state) {
         String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
-                pipeId, Strings.quote(FileListRepo.PipeFileState.UNLOADED.toString()));
+                pipeId, Strings.quote(state.toString()));
         return sql;
     }
 
@@ -147,15 +148,22 @@ public class RepoAccessor {
     }
 
     protected String buildSqlUpdateState(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+        // FIXME: update error message for each file, use partial update capability
+        String errorMessage = records.stream()
+                .filter(x -> StringUtils.isNotEmpty(x.getErrorMessage()))
+                .findFirst()
+                .map(PipeFileRecord::toErrorInfo).orElse("");
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE, Strings.quote(state.toString())));
+        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE,
+                Strings.quote(state.toString()), Strings.quote(errorMessage)));
         sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
         return sb.toString();
     }
 
-    public String buildSqlStartLoad(List<PipeFileRecord> records, FileListRepo.PipeFileState state) {
+    public String buildSqlStartLoad(List<PipeFileRecord> records, FileListRepo.PipeFileState state, String label) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE_START_LOAD, Strings.quote(state.toString())));
+        sb.append(String.format(FileListTableRepo.UPDATE_FILE_STATE_START_LOAD,
+                Strings.quote(state.toString()), Strings.quote(label)));
         sb.append(records.stream().map(PipeFileRecord::toUniqueLocator).collect(Collectors.joining(" OR ")));
         return sb.toString();
     }

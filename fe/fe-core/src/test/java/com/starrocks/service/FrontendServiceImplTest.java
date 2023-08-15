@@ -24,7 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
@@ -39,6 +39,7 @@ import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
@@ -85,7 +86,7 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testUpdateResourceUsage() throws TException {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
@@ -103,9 +104,9 @@ public class FrontendServiceImplTest {
                 return null;
             }
         };
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };
@@ -695,6 +696,41 @@ public class FrontendServiceImplTest {
         Assert.assertEquals(2, testDefaultValue.size());
         Assert.assertEquals("CURRENT_TIMESTAMP", testDefaultValue.get(0).getColumnDesc().getColumnDefault());
         Assert.assertEquals("2", testDefaultValue.get(1).getColumnDesc().getColumnDefault());
+    }
+
+    @Test
+    public void testGetSpecialColumn() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `ye$test` (\n" +
+                        "event_day DATE,\n" +
+                        "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(event_day, department_id)\n" +
+                        "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\"\n" +
+                        ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test3";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.ye$test TO USER `test3`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test3");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("ye$test");
+        request.setDb("test_table");
+        TGetTablesResult response = impl.getTableNames(request);
+        Assert.assertEquals(1, response.tables.size());
     }
 
 }

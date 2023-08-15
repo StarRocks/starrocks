@@ -79,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 
@@ -108,6 +109,7 @@ public class GlobalTransactionMgr implements Writable {
         return callbackFactory;
     }
 
+    @NotNull
     public DatabaseTransactionMgr getDatabaseTransactionMgr(long dbId) throws AnalysisException {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (dbTransactionMgr == null) {
@@ -359,19 +361,25 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), null);
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
@@ -386,9 +394,10 @@ public class GlobalTransactionMgr implements Writable {
      * @note callers should get db.write lock before call this api
      */
     @NotNull
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos,
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
