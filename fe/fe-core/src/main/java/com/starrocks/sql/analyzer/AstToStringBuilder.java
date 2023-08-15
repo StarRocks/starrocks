@@ -709,7 +709,7 @@ public class AstToStringBuilder {
                 if (sortClause != null) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
                 }
-                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
                     sb.append(" SEPARATOR ");
                     sb.append(visit(node.getChild(end)));
                 }
