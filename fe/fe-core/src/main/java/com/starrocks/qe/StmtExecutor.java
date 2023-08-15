@@ -470,7 +470,8 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
-                final boolean isStatisticsJob = isStatisticsJob(parsedStmt);
+                context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+                final boolean isStatisticsJob = context.isStatisticsJob();
                 if (!isStatisticsJob) {
                     WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
                 }
@@ -1142,7 +1143,7 @@ public class StmtExecutor {
     }
 
     private void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
-                                                            String tableName, long analyzeId) {
+                                                     String tableName, long analyzeId) {
         MetaUtils.getDatabase(catalogName, dbName);
         MetaUtils.getTable(catalogName, dbName, tableName);
 
@@ -1634,8 +1635,7 @@ public class StmtExecutor {
             }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
-                    execPlan.getDescTbl().toThrift());
-            coord.setQueryType(TQueryType.LOAD);
+                    execPlan.getDescTbl().toThrift(), TQueryType.LOAD);
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
@@ -1657,6 +1657,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
+            context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             if (!targetTable.isIcebergTable()) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
@@ -1668,7 +1669,7 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         context.getCurrentWarehouse(),
-                        isStatisticsJob(parsedStmt));
+                        context.isStatisticsJob());
             }
 
             coord.setJobId(jobId);
@@ -1803,8 +1804,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
-                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                                context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);

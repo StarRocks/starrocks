@@ -17,7 +17,9 @@ package com.starrocks.system;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -26,13 +28,20 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResourceGroupUsage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * This class extends the primary identifier of a compute node with computing capabilities
@@ -103,6 +112,7 @@ public class ComputeNode implements IComputable, Writable {
     private volatile long memUsedBytes = 0;
     private volatile int cpuUsedPermille = 0;
     private volatile long lastUpdateResourceUsageMs = 0;
+    private final AtomicReference<Map<Long, ResourceGroupUsage>> groupIdToUsage = new AtomicReference<>(new HashMap<>());
 
     public ComputeNode() {
         this.host = "";
@@ -346,6 +356,14 @@ public class ComputeNode implements IComputable, Writable {
         this.lastUpdateResourceUsageMs = System.currentTimeMillis();
     }
 
+    public void updateResourceGroupUsage(List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages) {
+        Map<Long, ResourceGroupUsage> newGroupIdToUsage = groupAndUsages.stream().collect(Collectors.toMap(
+                groupAndUsage -> groupAndUsage.first.getId(),
+                groupAndUsage -> ResourceGroupUsage.fromThrift(groupAndUsage.second, groupAndUsage.first)
+        ));
+        groupIdToUsage.set(newGroupIdToUsage);
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String s = GsonUtils.GSON.toJson(this);
@@ -537,27 +555,27 @@ public class ComputeNode implements IComputable, Writable {
             }
         }
 
-        if (becomeDead) {
+        if (becomeDead && !GlobalStateMgr.isCheckpointThread()) {
             CoordinatorMonitor.getInstance().addDeadBackend(id);
+            GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         }
 
         return isChanged;
     }
 
-    public boolean isResourceOverloaded() {
+    public boolean isResourceUsageFresh() {
         if (!isAvailable()) {
             return false;
         }
 
         long currentMs = System.currentTimeMillis();
-        if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
-            // The resource usage is not fresh enough to decide whether it is overloaded.
-            return false;
-        }
+        // The resource usage is not fresh enough to decide whether it is overloaded.
+        return currentMs - lastUpdateResourceUsageMs <= GlobalVariable.getQueryQueueResourceUsageIntervalMs();
+    }
 
-        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
-                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
-            return true;
+    public boolean isResourceOverloaded() {
+        if (!isResourceUsageFresh()) {
+            return false;
         }
 
         if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&
@@ -567,5 +585,64 @@ public class ComputeNode implements IComputable, Writable {
 
         return GlobalVariable.isQueryQueueMemUsedPctLimitEffective() &&
                 getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
+    }
+
+    public Collection<ResourceGroupUsage> getResourceGroupUsages() {
+        return groupIdToUsage.get().values();
+    }
+
+    public boolean isResourceGroupOverloaded(long groupId) {
+        if (!isResourceUsageFresh()) {
+            return false;
+        }
+
+        Map<Long, ResourceGroupUsage> currGroupIdToUsage = groupIdToUsage.get();
+
+        if (!currGroupIdToUsage.containsKey(groupId)) {
+            return false;
+        }
+
+        ResourceGroupUsage usage = currGroupIdToUsage.get(groupId);
+        return usage.group.isMaxCpuCoresEffective() && usage.isCpuCoreUsagePermilleEffective() &&
+                usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 1000;
+    }
+
+    public static class ResourceGroupUsage {
+        private final ResourceGroup group;
+        private final int cpuCoreUsagePermille;
+        private final long memUsageBytes;
+        private final int numRunningQueries;
+
+        private ResourceGroupUsage(ResourceGroup group, int cpuCoreUsagePermille, long memUsageBytes, int numRunningQueries) {
+            this.group = group;
+            this.cpuCoreUsagePermille = cpuCoreUsagePermille;
+            this.memUsageBytes = memUsageBytes;
+            this.numRunningQueries = numRunningQueries;
+        }
+
+        private static ResourceGroupUsage fromThrift(TResourceGroupUsage tUsage, ResourceGroup group) {
+            return new ResourceGroupUsage(group, tUsage.getCpu_core_used_permille(), tUsage.getMem_used_bytes(),
+                    tUsage.getNum_running_queries());
+        }
+
+        public boolean isCpuCoreUsagePermilleEffective() {
+            return cpuCoreUsagePermille > 0;
+        }
+
+        public ResourceGroup getGroup() {
+            return group;
+        }
+
+        public int getCpuCoreUsagePermille() {
+            return cpuCoreUsagePermille;
+        }
+
+        public long getMemUsageBytes() {
+            return memUsageBytes;
+        }
+
+        public int getNumRunningQueries() {
+            return numRunningQueries;
+        }
     }
 }

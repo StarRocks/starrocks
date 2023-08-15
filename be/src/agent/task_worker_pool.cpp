@@ -47,8 +47,8 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
+#include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
-#include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
@@ -755,6 +755,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
     TReportRequest request;
     AgentStatus status = STARROCKS_SUCCESS;
 
+    ResourceGroupUsageRecorder group_usage_recorder;
+
     while ((!worker_pool_this->_stopped)) {
         auto master_address = get_master_address();
         if (master_address.port == 0) {
@@ -774,8 +776,10 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
-        request.__set_resource_usage(std::move(resource_usage));
 
+        resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
+
+        request.__set_resource_usage(std::move(resource_usage));
         TMasterResult result;
         status = report_task(request, &result);
 

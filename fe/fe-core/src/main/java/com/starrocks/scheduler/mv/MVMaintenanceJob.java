@@ -232,6 +232,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         // TODO(murphy) fill current user
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();
+        this.connectContext.setNeedQueued(false);
         Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         if (db != null) {

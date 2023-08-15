@@ -25,12 +25,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -59,9 +55,6 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.AfterClass;
@@ -92,66 +85,6 @@ public class FrontendServiceImplTest {
         request.setBackend_id(backendId);
 
         return request;
-    }
-
-    @Test
-    public void testUpdateResourceUsage() throws TException {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-
-        Backend backend = new Backend(0, "127.0.0.1", 80);
-        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backend.getId()) {
-                    return backend;
-                }
-                if (id == computeNode.getId()) {
-                    return computeNode;
-                }
-                return null;
-            }
-        };
-        new Expectations(queryQueueManager) {
-            {
-                queryQueueManager.maybeNotifyAfterLock();
-                times = 2;
-            }
-        };
-
-        long backendId = 0;
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
-        TUpdateResourceUsageRequest request = genUpdateResourceUsageRequest(
-                backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-
-        // For backend, notify pending queries.
-        impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-
-        // For compute node, notify pending queries.
-        numRunningQueries = 10;
-        memLimitBytes = 30;
-        memUsedBytes = 20;
-        cpuUsedPermille = 310;
-        request = genUpdateResourceUsageRequest(
-                backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-
-        // Don't notify, because this BE doesn't exist.
-        request.setBackend_id(/* Not Exist */ 1);
-        impl.updateResourceUsage(request);
     }
 
     private static ConnectContext connectContext;

@@ -11,24 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-namespace cpp starrocks
-namespace java com.starrocks.thrift
 
+package com.starrocks.qe.scheduler;
 
-struct TResourceGroupUsage {
-    1: optional i64 group_id
+import com.starrocks.common.UserException;
 
-    2: optional i32 cpu_core_used_permille
-    3: optional i64 mem_used_bytes;
-    4: optional i32 num_running_queries;
-}
-
-struct TResourceUsage {
-    1: optional i32 num_running_queries
-    2: optional i64 mem_limit_bytes
-    3: optional i64 mem_used_bytes
-    4: optional i32 cpu_used_permille
-
-    100: optional list<TResourceGroupUsage> group_usages;
+public class SchedulerException extends UserException {
+    public SchedulerException(String msg) {
+        super(msg);
+    }
 }

@@ -29,4 +29,5 @@ add_library(Agent STATIC
         report_task.cpp
         agent_task.cpp
         task_signatures_manager.cpp
+        resource_group_usage_recorder.cpp
         )

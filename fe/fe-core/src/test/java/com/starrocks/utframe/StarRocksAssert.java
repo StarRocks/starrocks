@@ -37,6 +37,7 @@ package com.starrocks.utframe;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -90,6 +91,7 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupUsageStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -107,6 +109,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
@@ -193,7 +196,6 @@ public class StarRocksAssert {
         }
         return this;
     }
-
 
     // When you want use this func, you need write mock method 'getAllKafkaPartitions' before call this func.
     // example:
@@ -402,7 +404,7 @@ public class StarRocksAssert {
             }
         }
     }
-    
+
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -447,6 +449,21 @@ public class StarRocksAssert {
         Analyzer.analyze(stmt, ctx);
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
         return showExecutor.execute().getResultRows();
+    }
+
+    public String executeShowResourceUsageSql(String sql) throws DdlException, AnalysisException {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(stmt, ctx);
+
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowResourceGroupUsageStmt) stmt);
+        ShowResultSet res = showExecutor.execute();
+        String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
+        String body = res.getResultRows().stream()
+                .map(row -> String.join("|", row))
+                .collect(Collectors.joining("\n"));
+        return header + "\n" + body;
     }
 
     private void checkAlterJob() throws InterruptedException {

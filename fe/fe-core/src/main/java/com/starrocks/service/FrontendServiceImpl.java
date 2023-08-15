@@ -76,6 +76,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
@@ -110,9 +111,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -153,6 +154,8 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishSlotRequirementRequest;
+import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
@@ -210,12 +213,15 @@ import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TReleaseSlotRequest;
+import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
-import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TRequireSlotRequest;
+import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -1121,7 +1127,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             result.setTimeout(0);
         }
-        
+
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
@@ -2008,13 +2014,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
+    /**
+     * This RPC method does nothing. It is just for compatibility.
+     * From the version 3.2, the resource usage is only maintained in the master FE, and isn't synchronized between FEs anymore.
+     */
     @Override
-    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
-        TResourceUsage usage = request.getResource_usage();
-        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
-                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
-                usage.getCpu_used_permille());
-
+    @Deprecated
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws
+            TException {
         TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
         TStatus status = new TStatus(TStatusCode.OK);
         res.setStatus(status);
@@ -2061,11 +2068,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, request.getLabel(), true).stream()
+                                    dbId, request.getLabel(), true).stream()
                             .map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, null, false).stream().map(LoadJob::toThrift)
+                                    dbId, null, false).stream().map(LoadJob::toThrift)
                             .collect(Collectors.toList()));
                 }
             } else {
@@ -2100,5 +2107,35 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
         return GrantsTo.getGrantsTo(request);
+    }
+
+    public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
+        LogicalSlot slot = LogicalSlot.fromThrift(request.getSlot());
+        GlobalStateMgr.getCurrentState().getSlotManager().requireSlotAsync(slot);
+
+        return new TRequireSlotResponse();
+    }
+
+    @Override
+    public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
+
+        Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
+                .finishSlotRequirement(request.getSlot_id(), new Status(request.getStatus()));
+
+        TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
+        res.setStatus(status.toThrift());
+
+        return res;
+    }
+
+    @Override
+    public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
+        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(request.getSlot_id());
+
+        TStatus tstatus = new TStatus(TStatusCode.OK);
+        TReleaseSlotResponse res = new TReleaseSlotResponse();
+        res.setStatus(tstatus);
+
+        return res;
     }
 }
