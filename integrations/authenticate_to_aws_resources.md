@@ -8,11 +8,15 @@
 
 ### 基于 Assumed Role 认证鉴权
 
-与 Instance Profile 的模式不同，Assumed Role 是一种 Catalog 级的数据源访问控制解决方案，支持通过担任 AWS IAM Role 来实现认证。参见 AWS 官网文档“[代入角色](https://docs.aws.amazon.com/zh_cn/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html)”。 具体来说，您可以创建多个不同的 Catalog，并为每个 Catalog 配置特定的 Assume Role 来进行鉴权，从而拥有特定 AWS 资源（例如 S3 Bucket）的访问权限。作为管理员，您还可以向不同的用户授予不同 Catalog 的操作权限，从而实现同一集群内不同用户对不同外部数据的访问控制。
+与 Instance Profile 的模式不同，Assumed Role 支持通过担任 AWS IAM Role 来实现对外部数据源的访问认证和鉴权。参见 AWS 官网文档[代入角色](https://docs.aws.amazon.com/zh_cn/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html)。
+
+<!--您可以为不同的 Catalog 配置不同的 Assume Role，从而拥有特定 AWS 资源（例如 S3 Bucket）的访问权限。作为管理员，您还可以向不同的用户授予不同 Catalog 的操作权限，从而实现同一集群内不同用户对不同外部数据的访问控制。-->
 
 ### 基于 IAM User 认证鉴权
 
-IAM User 也是一种 Catalog 级的数据源访问控制解决方案，支持通过 IAM User 来实现认证和鉴权。您可以在不同 Catalog 里指定不同的 IAM User 的 Access Key 和 Secret Key，从而实现同一集群内不同用户对不同外部数据的访问控制。
+IAM User 支持通过 AWS IAM User 来实现对外部数据源的访问认证和鉴权。参见 AWS 官网文档 [IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users.html)。
+
+<!--您可以在不同 Catalog 里指定不同的 IAM User 的 Access Key 和 Secret Key，从而实现同一集群内不同用户对不同外部数据的访问控制。-->
 
 ## 准备工作
 
