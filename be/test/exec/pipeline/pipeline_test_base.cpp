@@ -43,7 +43,7 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
         auto pseudo_plan_node_id = -200;
-        auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(config::vector_chunk_size,
+        auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(_vector_chunk_size,
                                                                   config::local_exchange_buffer_mem_limit_per_driver);
         auto local_exchange_source =
                 std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
@@ -95,7 +95,7 @@ void PipelineTestBase::_prepare() {
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
-    _runtime_state->set_chunk_size(config::vector_chunk_size);
+    _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);

@@ -36,6 +36,7 @@ public:
     virtual void TearDown() final;
 
 protected:
+    int32_t _vector_chunk_size = 4096;
     ExecEnv* _exec_env = nullptr;
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;

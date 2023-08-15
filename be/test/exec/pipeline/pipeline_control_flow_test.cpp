@@ -22,22 +22,38 @@
 #include "util/defer_op.h"
 #include "util/thrift_util.h"
 
-#define ASSERT_COUNTER_CHUNK_NUM(counter, expected_push_chunk_num, expected_pull_chunk_num) \
-    do {                                                                                    \
-        ASSERT_EQ(expected_push_chunk_num, counter->push_chunk_num());                      \
-        ASSERT_EQ(expected_pull_chunk_num, counter->pull_chunk_num());                      \
+#define ASSERT_COUNTER_LIFETIME(counter, dop)       \
+    do {                                            \
+        ASSERT_EQ(dop, counter->prepare_times());   \
+        ASSERT_EQ(dop, counter->finishing_times()); \
+        ASSERT_EQ(dop, counter->finished_times());  \
+        ASSERT_EQ(dop, counter->closed_times());    \
+        ASSERT_EQ(0, counter->wrong_times());       \
     } while (false)
 
-#define ASSERT_COUNTER_CHUNK_ROW_NUM(counter, expected_push_chunk_row_num, expected_pull_chunk_row_num) \
-    do {                                                                                                \
-        ASSERT_EQ(expected_push_chunk_row_num, counter->push_chunk_row_num());                          \
-        ASSERT_EQ(expected_pull_chunk_row_num, counter->pull_chunk_row_num());                          \
+#define ASSERT_COUNTER_CHUNK_NUM(counter, dop, expected_push_chunk_num, expected_pull_chunk_num) \
+    do {                                                                                         \
+        ASSERT_COUNTER_LIFETIME(counter, dop);                                                   \
+        ASSERT_EQ(expected_push_chunk_num, counter->push_chunk_num());                           \
+        ASSERT_EQ(expected_pull_chunk_num, counter->pull_chunk_num());                           \
+    } while (false)
+
+#define ASSERT_COUNTER_CHUNK_ROW_NUM(counter, dop, expected_push_chunk_row_num, expected_pull_chunk_row_num) \
+    do {                                                                                                     \
+        ASSERT_COUNTER_LIFETIME(counter, dop);                                                               \
+        ASSERT_EQ(expected_push_chunk_row_num, counter->push_chunk_row_num());                               \
+        ASSERT_EQ(expected_pull_chunk_row_num, counter->pull_chunk_row_num());                               \
     } while (false)
 
 namespace starrocks::pipeline {
 
 class Counter {
 public:
+    void process_prepare() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _prepare_times++;
+    }
+
     void process_push(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_push_chunk_num;
@@ -48,6 +64,46 @@ public:
         std::lock_guard<std::mutex> l(_mutex);
         ++_pull_chunk_num;
         _pull_chunk_row_num += chunk->num_rows();
+    }
+
+    void process_finishing() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _finishing_times++;
+    }
+
+    void process_finished() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _finished_times++;
+    }
+
+    void process_closed() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _closed_times++;
+    }
+
+    void process_wrong() {
+        std::lock_guard<std::mutex> l(_mutex);
+        _wrong_state_times++;
+    }
+
+    size_t prepare_times() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _prepare_times;
+    }
+
+    size_t finishing_times() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _finishing_times;
+    }
+
+    size_t finished_times() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _finished_times;
+    }
+
+    size_t closed_times() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _closed_times;
     }
 
     size_t push_chunk_num() {
@@ -70,21 +126,30 @@ public:
         return _pull_chunk_row_num;
     }
 
+    size_t wrong_times() {
+        std::lock_guard<std::mutex> l(_mutex);
+        return _wrong_state_times;
+    }
+
 private:
     std::mutex _mutex;
     size_t _push_chunk_num = 0;
     size_t _pull_chunk_num = 0;
     size_t _push_chunk_row_num = 0;
     size_t _pull_chunk_row_num = 0;
+    size_t _prepare_times = 0;
+    size_t _finishing_times = 0;
+    size_t _finished_times = 0;
+    size_t _closed_times = 0;
+    size_t _wrong_state_times = 0;
 };
 
 using CounterPtr = std::shared_ptr<Counter>;
 
-std::atomic<size_t> lifecycle_error_num;
-
 class TestOperator : public Operator {
 public:
     TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+<<<<<<< HEAD
                  int32_t driver_sequence)
             : Operator(factory, id, name, plan_node_id, false, driver_sequence) {}
     ~TestOperator() override {
@@ -101,45 +166,38 @@ public:
             ++lifecycle_error_num;
         }
     }
+=======
+                 int32_t driver_sequence, CounterPtr counter)
+            : Operator(factory, id, name, plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+    ~TestOperator() override = default;
+>>>>>>> 21271dc6a7 ([UT] Fix wrong pipeline test uts when using gtest-parallel (#29048))
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(Operator::prepare(state));
-        if (_is_prepared) {
-            ++lifecycle_error_num;
-        }
-        _is_prepared = true;
+        _counter->process_prepare();
         return Status::OK();
     }
 
     Status set_finishing(RuntimeState* state) override {
-        if (_is_finishing) {
-            ++lifecycle_error_num;
-        }
-        _is_finishing = true;
+        _counter->process_finishing();
         return Status::OK();
     }
 
     Status set_finished(RuntimeState* state) override {
-        if (_is_finished) {
-            ++lifecycle_error_num;
+        if (!is_finished()) {
+            _counter->process_wrong();
         }
-        _is_finished = true;
+        _counter->process_finished();
         return Status::OK();
     }
 
     void close(RuntimeState* state) override {
-        if (_is_closed) {
-            ++lifecycle_error_num;
-        }
-        _is_closed = true;
+        _counter->process_closed();
         return Operator::close(state);
     }
 
-private:
-    bool _is_prepared = false;
-    bool _is_finishing = false;
-    bool _is_finished = false;
-    bool _is_closed = false;
+protected:
+    CounterPtr _counter = nullptr;
 };
 
 class TestSourceOperator : public SourceOperator {
@@ -153,54 +211,27 @@ public:
             _chunks.push_back(PipelineTestBase::_create_and_fill_chunk(chunk_size));
         }
     }
-    ~TestSourceOperator() override {
-        if (!_is_prepared) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_finishing) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_finished) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_closed) {
-            ++lifecycle_error_num;
-        }
-    }
+    ~TestSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(SourceOperator::prepare(state));
-        if (_is_prepared) {
-            ++lifecycle_error_num;
-        }
-        _is_prepared = true;
+        _counter->process_prepare();
         return Status::OK();
     }
 
     Status set_finishing(RuntimeState* state) override {
-        if (_is_finishing) {
-            ++lifecycle_error_num;
-        }
-        _is_finishing = true;
+        _counter->process_finishing();
         return Status::OK();
     }
 
     Status set_finished(RuntimeState* state) override {
-        if (_is_finished) {
-            ++lifecycle_error_num;
-        }
-        _is_finished = true;
+        _counter->process_finished();
         return Status::OK();
     }
 
     void close(RuntimeState* state) override {
-        if (_pending_finish_cnt >= 0) {
-            ++lifecycle_error_num;
-        }
-        if (_is_closed) {
-            ++lifecycle_error_num;
-        }
-        _is_closed = true;
+        ASSERT_LT(_pending_finish_cnt, 0);
+        _counter->process_closed();
         return SourceOperator::close(state);
     }
 
@@ -216,11 +247,6 @@ private:
     std::vector<ChunkPtr> _chunks;
     size_t _index = 0;
     mutable std::atomic<int32_t> _pending_finish_cnt;
-
-    bool _is_prepared = false;
-    bool _is_finishing = false;
-    bool _is_finished = false;
-    bool _is_closed = false;
 };
 
 Status TestSourceOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -263,7 +289,7 @@ class TestNormalOperator : public TestOperator {
 public:
     TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        CounterPtr counter)
-            : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence, std::move(counter)) {}
     ~TestNormalOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -279,21 +305,20 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    CounterPtr _counter;
     bool _is_finished = false;
-    ChunkPtr _chunk = nullptr;
+    ChunkPtr _chunk;
 };
 
 Status TestNormalOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    _counter->process_push(chunk);
     _chunk = chunk;
+    _counter->process_push(chunk);
     return Status::OK();
 }
 
 StatusOr<ChunkPtr> TestNormalOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr chunk = _chunk;
-    _chunk = nullptr;
     _counter->process_pull(chunk);
+    _chunk = nullptr;
     return chunk;
 }
 
@@ -316,7 +341,7 @@ class TestSinkOperator : public TestOperator {
 public:
     TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                      CounterPtr counter)
-            : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence, std::move(counter)) {}
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -332,7 +357,6 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    CounterPtr _counter;
     bool _is_finished = false;
 };
 
@@ -365,7 +389,7 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
     std::default_random_engine e;
     std::uniform_int_distribution<int32_t> u32(0, 100);
     size_t chunk_num = 1;
-    size_t chunk_size = 1;
+    _vector_chunk_size = 1;
     CounterPtr sourceCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
 
@@ -373,7 +397,7 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
-                next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e)));
+                next_operator_id(), next_plan_node_id(), chunk_num, _vector_chunk_size, sourceCounter, u32(e)));
         op_factories.push_back(
                 std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
@@ -383,16 +407,15 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
     start_test();
 
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-    ASSERT_EQ(lifecycle_error_num, 0);
+    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 1, 0, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, 1, chunk_num, 0);
 }
 
 TEST_F(TestPipelineControlFlow, test_three_operatories) {
     std::default_random_engine e;
     std::uniform_int_distribution<int32_t> u32(0, 100);
     size_t chunk_num = 1;
-    size_t chunk_size = 1;
+    _vector_chunk_size = 1;
     CounterPtr sourceCounter = std::make_shared<Counter>();
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
@@ -401,7 +424,7 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
-                next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e)));
+                next_operator_id(), next_plan_node_id(), chunk_num, _vector_chunk_size, sourceCounter, u32(e)));
         op_factories.push_back(
                 std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(), normalCounter));
         op_factories.push_back(
@@ -413,10 +436,9 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
     start_test();
 
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-    ASSERT_EQ(lifecycle_error_num, 0);
+    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 1, 0, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(normalCounter, 1, chunk_num, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, 1, chunk_num, 0);
 }
 
 TEST_F(TestPipelineControlFlow, test_multi_operators) {
@@ -424,7 +446,7 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
     std::uniform_int_distribution<int32_t> u32(0, 100);
     size_t max_mid_operator_num = 128;
     size_t chunk_num = 1;
-    size_t chunk_size = 1;
+    _vector_chunk_size = 1;
 
     for (size_t i = 1; i <= max_mid_operator_num; ++i) {
         CounterPtr sourceCounter = std::make_shared<Counter>();
@@ -438,7 +460,7 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
             OpFactories op_factories;
 
             op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
-                    next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e)));
+                    next_operator_id(), next_plan_node_id(), chunk_num, _vector_chunk_size, sourceCounter, u32(e)));
             for (size_t j = 0; j < i; ++j) {
                 op_factories.push_back(std::make_shared<TestNormalOperatorFactory>(
                         next_operator_id(), next_plan_node_id(), normalCounters[j]));
@@ -452,12 +474,11 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
         start_test();
 
         ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-        ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
+        ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 1, 0, chunk_num);
         for (size_t j = 0; j < i; ++j) {
-            ASSERT_COUNTER_CHUNK_NUM(normalCounters[j], chunk_num, chunk_num);
+            ASSERT_COUNTER_CHUNK_NUM(normalCounters[j], 1, chunk_num, chunk_num);
         }
-        ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-        ASSERT_EQ(lifecycle_error_num, 0);
+        ASSERT_COUNTER_CHUNK_NUM(sinkCounter, 1, chunk_num, 0);
     }
 }
 
@@ -465,7 +486,6 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
     std::default_random_engine e;
     std::uniform_int_distribution<int32_t> u32(0, 100);
     size_t chunk_num = 1;
-    size_t chunk_size = config::vector_chunk_size;
     CounterPtr sourceCounter = std::make_shared<Counter>();
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
@@ -474,7 +494,7 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
-                next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e)));
+                next_operator_id(), next_plan_node_id(), chunk_num, _vector_chunk_size, sourceCounter, u32(e)));
         op_factories.push_back(
                 std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(), normalCounter));
         op_factories.push_back(
@@ -486,17 +506,16 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
     start_test();
 
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-    ASSERT_EQ(lifecycle_error_num, 0);
+    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 1, 0, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(normalCounter, 1, chunk_num, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, 1, chunk_num, 0);
 }
 
 TEST_F(TestPipelineControlFlow, test_multi_chunks) {
     std::default_random_engine e;
     std::uniform_int_distribution<int32_t> u32(0, 100);
     size_t chunk_num = 1000;
-    size_t chunk_size = 1;
+    _vector_chunk_size = 1;
     CounterPtr sourceCounter = std::make_shared<Counter>();
     CounterPtr normalCounter = std::make_shared<Counter>();
     CounterPtr sinkCounter = std::make_shared<Counter>();
@@ -505,7 +524,7 @@ TEST_F(TestPipelineControlFlow, test_multi_chunks) {
         OpFactories op_factories;
 
         op_factories.push_back(std::make_shared<TestSourceOperatorFactory>(
-                next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e)));
+                next_operator_id(), next_plan_node_id(), chunk_num, _vector_chunk_size, sourceCounter, u32(e)));
         op_factories.push_back(
                 std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(), normalCounter));
         op_factories.push_back(
@@ -517,99 +536,8 @@ TEST_F(TestPipelineControlFlow, test_multi_chunks) {
     start_test();
 
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
-    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-    ASSERT_EQ(lifecycle_error_num, 0);
-}
-
-TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_non_full_chunk) {
-    std::default_random_engine e;
-    std::uniform_int_distribution<int32_t> u32(0, 100);
-    size_t max_degree_of_parallelism = 16;
-    size_t chunk_num = 128;
-    size_t chunk_size = 1;
-
-    for (size_t i = 1; i <= max_degree_of_parallelism; ++i) {
-        CounterPtr sourceCounter = std::make_shared<Counter>();
-        CounterPtr normalCounter = std::make_shared<Counter>();
-        CounterPtr sinkCounter = std::make_shared<Counter>();
-
-        _pipeline_builder = [&](RuntimeState* state) {
-            OpFactories op_factories;
-
-            auto source_op_factory = std::make_shared<TestSourceOperatorFactory>(
-                    next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e));
-            source_op_factory->set_degree_of_parallelism(i);
-            op_factories.push_back(source_op_factory);
-
-            op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
-
-            op_factories.push_back(std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(),
-                                                                               normalCounter));
-            op_factories.push_back(
-                    std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
-
-            _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
-        };
-
-        start_test();
-
-        ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-        ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num * i);
-        if (i == 1) {
-            // Without local exchange sink/source operator
-            ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num, chunk_num);
-            ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num, 0);
-        } else {
-            // With local exchagne sink/source operator
-            // Why 2? becaluse local exchange source has two buffer chunks called _full_chunk and _partial_chunk
-            // and all the data can be put into these two chunks (data total size < config::vector_chunk_size)
-            ASSERT_COUNTER_CHUNK_ROW_NUM(normalCounter, chunk_num * chunk_size * i, chunk_num * chunk_size * i);
-            ASSERT_COUNTER_CHUNK_ROW_NUM(sinkCounter, chunk_num * chunk_size * i, 0);
-        }
-        ASSERT_EQ(lifecycle_error_num, 0);
-    }
-}
-
-TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
-    std::default_random_engine e;
-    std::uniform_int_distribution<int32_t> u32(0, 100);
-    size_t max_degree_of_parallelism = 16;
-    size_t chunk_num = 128;
-    size_t original_chunk_size = config::vector_chunk_size;
-    config::vector_chunk_size = 16;
-    size_t chunk_size = config::vector_chunk_size;
-    DeferOp op([=]() { config::vector_chunk_size = original_chunk_size; });
-
-    for (size_t i = 1; i <= max_degree_of_parallelism; ++i) {
-        CounterPtr sourceCounter = std::make_shared<Counter>();
-        CounterPtr normalCounter = std::make_shared<Counter>();
-        CounterPtr sinkCounter = std::make_shared<Counter>();
-
-        _pipeline_builder = [&](RuntimeState* state) {
-            OpFactories op_factories;
-
-            auto source_op_factory = std::make_shared<TestSourceOperatorFactory>(
-                    next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter, u32(e));
-            source_op_factory->set_degree_of_parallelism(i);
-            op_factories.push_back(source_op_factory);
-            op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
-            op_factories.push_back(std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(),
-                                                                               normalCounter));
-            op_factories.push_back(
-                    std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
-
-            _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
-        };
-
-        start_test();
-
-        ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
-        ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 0, chunk_num * i);
-        ASSERT_COUNTER_CHUNK_NUM(normalCounter, chunk_num * i, chunk_num * i);
-        ASSERT_COUNTER_CHUNK_NUM(sinkCounter, chunk_num * i, 0);
-        ASSERT_EQ(lifecycle_error_num, 0);
-    }
+    ASSERT_COUNTER_CHUNK_NUM(sourceCounter, 1, 0, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(normalCounter, 1, chunk_num, chunk_num);
+    ASSERT_COUNTER_CHUNK_NUM(sinkCounter, 1, chunk_num, 0);
 }
 } // namespace starrocks::pipeline
