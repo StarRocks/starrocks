@@ -307,7 +307,9 @@ public class OlapTable extends Table {
         olapTable.partitionInfo = new PartitionInfo();
         if (this.partitionInfo instanceof RangePartitionInfo) {
             olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
-        } else if (this.partitionInfo instanceof SinglePartitionInfo) {
+        } else if (this.partitionInfo instanceof ListPartitionInfo) {
+            olapTable.partitionInfo = new ListPartitionInfo((ListPartitionInfo) this.partitionInfo);
+        } else {
             olapTable.partitionInfo = this.partitionInfo;
         }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;

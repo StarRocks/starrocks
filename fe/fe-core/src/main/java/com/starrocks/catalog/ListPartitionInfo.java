@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -90,6 +91,17 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.partitionColumns = new ArrayList<>();
         this.idToIsTempPartition = new HashMap<>();
+    }
+
+    public ListPartitionInfo(ListPartitionInfo other) {
+        super(other.type);
+        this.partitionColumns = Lists.newArrayList(other.partitionColumns);
+        this.idToMultiValues = Maps.newHashMap(other.idToMultiValues);
+        this.idToMultiLiteralExprValues = Maps.newHashMap(other.idToMultiLiteralExprValues);
+        this.idToValues = Maps.newHashMap(other.idToValues);
+        this.idToLiteralExprValues = Maps.newHashMap(other.idToLiteralExprValues);
+        this.idToIsTempPartition = Maps.newHashMap(other.idToIsTempPartition);
+        this.automaticPartition = other.automaticPartition;
     }
 
     public void setValues(long partitionId, List<String> values) {
