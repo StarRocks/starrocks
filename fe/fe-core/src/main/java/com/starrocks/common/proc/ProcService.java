@@ -71,6 +71,7 @@ public final class ProcService {
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
         root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentWarehouseMgr()));
+        root.register("compaction_num", new CompactionProcDir(GlobalStateMgr.getCurrentSystemInfo()));
     }
 
     // Get the corresponding PROC Node by the specified path

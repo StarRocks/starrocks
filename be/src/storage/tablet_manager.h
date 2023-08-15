@@ -183,6 +183,8 @@ public:
 
     Status delete_shutdown_tablet_before_clone(int64_t tablet_id);
 
+    void get_all_tablets(std::vector<TabletSharedPtr>* tablets);
+
     // return true if all tablets visited
     bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
 

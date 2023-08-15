@@ -1613,6 +1613,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     int64_t input_row_num = 0;
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
+    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
+            _tablet.num_columns(), config::vertical_compaction_max_columns_per_group, input_rowsets.size());
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         std::lock_guard<std::mutex> rl(_compaction_metric_lock);
@@ -1620,6 +1622,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
         _current_compaction_task_info = std::make_unique<CompactionMetric>();
         _current_compaction_task_info->start_time = UnixMillis();
         _current_compaction_task_info->input_rowsets_num = info->inputs.size();
+        _current_compaction_task_info->input_rowset_ids = info->inputs;
+        _current_compaction_task_info->algorithm = algorithm;
 
         for (size_t i = 0; i < info->inputs.size(); i++) {
             auto itr = _rowsets.find(info->inputs[i]);
@@ -1639,9 +1643,6 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
         }
         _current_compaction_task_info->input_data_size = input_rowsets_size;
     }
-
-    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
-            _tablet.num_columns(), config::vertical_compaction_max_columns_per_group, input_rowsets.size());
 
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -2557,6 +2558,48 @@ StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> TabletUpdates::list_rowsets
         }
     }
     return ret;
+}
+
+bool TabletUpdates::get_running_task_status(CompactionManager::RunningCompactionMetric& update_metric) {
+    // add metric lock to prevent _current_compaction_task_info to prevent it from being set to nullptr by compaction thread while reading it
+    std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+    if (!_current_compaction_task_info) {
+        // no compaction task running
+        return false;
+    }
+
+    float divided = 1024 * 1024;
+
+    update_metric.type = "update";
+    update_metric.partition_id = _tablet.partition_id();
+    update_metric.tablet_id = _tablet.tablet_id();
+    update_metric.start_time = ToStringFromUnixMillis(_current_compaction_task_info->start_time);
+    update_metric.algorithm =
+            _current_compaction_task_info->algorithm == HORIZONTAL_COMPACTION ? "horizontal" : "vertical";
+    update_metric.input_rowset_num = _current_compaction_task_info->input_rowset_ids.size();
+    update_metric.input_segment_num = _current_compaction_task_info->input_segments_num;
+    update_metric.input_data_size = std::to_string(_current_compaction_task_info->input_data_size / divided) + "MB";
+    update_metric.progress = "N/A%";
+
+    // get input rowsets info of current compaction task
+    std::lock_guard l1(_rowsets_lock);
+    std::vector<uint32_t> input_rowset_ids = _current_compaction_task_info->input_rowset_ids;
+    for (auto rowset_id : input_rowset_ids) {
+        auto it = _rowsets.find(rowset_id);
+        std::string rowset_str;
+        if (it != _rowsets.end()) {
+            const Version& ver = it->second->version();
+            bool delete_flag = this->_tablet.version_for_delete_predicate(it->second->version());
+            rowset_str = strings::Substitute("id:$0 version:[$1-$2] seg_num:$3 $4 $5 $6MB", rowset_id, ver.first,
+                                             ver.second, it->second->num_segments(), (delete_flag ? "DELETE" : "DATA"),
+                                             SegmentsOverlapPB_Name(it->second->rowset_meta()->segments_overlap()),
+                                             it->second->data_disk_size() / divided);
+        } else {
+            rowset_str = strings::Substitute("id:$0/NA", rowset_id);
+        }
+        update_metric.input_rowsets.push_back(rowset_str);
+    }
+    return true;
 }
 
 void TabletUpdates::get_compaction_status(std::string* json_result) {

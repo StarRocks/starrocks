@@ -91,6 +91,139 @@ void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* 
     (*output) << "</pre>";
 }
 
+void add_running_compaction_output(std::vector<CompactionManager::RunningCompactionMetric> compaction_metrics,
+                                   std::stringstream* output, CompactionType type) {
+    std::string type_str;
+    if (type == BASE_COMPACTION) {
+        type_str = "Base";
+    } else if (type == CUMULATIVE_COMPACTION) {
+        type_str = "Cumulative";
+    } else {
+        type_str = "Update";
+    }
+    (*output) << strings::Substitute("<h4>$0 Compaction Task, num : $1</h4>\n", type_str, compaction_metrics.size());
+    (*output) << "<table data-toggle='table' "
+                 "       data-pagination='true' "
+                 "       data-search='true' "
+                 "       class='table table-striped'>\n";
+    (*output) << "<thead><tr>"
+                 "<th>id</th>"
+                 "<th>task_id</th>"
+                 "<th>type</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">partition_id</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">tablet_id</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 "h>progress</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">start_time</th>"
+                 "<th>algorithm</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">input_rowset_num</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">input_segment_num</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">input_data_size</th>"
+                 "<th>compaction_score</th>"
+                 "<th>input_rowsets</th>";
+    (*output) << "<tbody>\n";
+
+    int i = 1;
+    for (const auto& item : compaction_metrics) {
+        std::string input_rowsets_str;
+        for (std::string rowset_str : item.input_rowsets) {
+            input_rowsets_str += rowset_str + " ; ";
+        }
+
+        std::string str = strings::Substitute(
+                                  "<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td><td>$6</"
+                                  "td><td>$7</td><td>$8</td><td>$9</td>",
+                                  i++, item.task_id, item.type, item.partition_id, item.tablet_id, item.progress,
+                                  item.start_time, item.algorithm, item.input_rowset_num, item.input_segment_num) +
+                          strings::Substitute("<td>$0</td><td>$1</td><td>$2</td></tr>\n", item.input_data_size,
+                                              item.compaction_score, input_rowsets_str);
+        (*output) << str;
+    }
+    (*output) << "</tbody></table>\n";
+}
+
+void add_waiting_compaction_output(std::vector<CompactionManager::WaitingCompactionMetric> compaction_metrics,
+                                   std::stringstream* output, CompactionType type) {
+    std::string type_str;
+    if (type == BASE_COMPACTION) {
+        type_str = "Base";
+    } else {
+        type_str = "Cumulative";
+    }
+    (*output) << strings::Substitute("<h4>$0 Compaction Task, num : $1</h4>\n", type_str, compaction_metrics.size());
+    (*output) << "<table data-toggle='table' "
+                 "       data-pagination='true' "
+                 "       data-search='true' "
+                 "       class='table table-striped'>\n";
+    (*output) << "<thead><tr>"
+                 "<th>id</th>"
+                 "<th>type</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">partition_id</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">tablet_id</th>"
+                 "<th data-sorter='bytesSorter' "
+                 "    data-sortable='true' "
+                 ">start_time</th>"
+                 "<th>compaction_score</th>";
+    (*output) << "<tbody>\n";
+
+    int i = 1;
+    for (const auto& item : compaction_metrics) {
+        std::string str = strings::Substitute(
+                "<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n", i++, item.type,
+                item.partition_id, item.tablet_id, item.start_time, item.compaction_score);
+        (*output) << str;
+    }
+    (*output) << "</tbody></table>\n";
+}
+
+void running_compaction_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+    if (!config::enable_event_based_compaction_framework) {
+        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use size "
+                     "tiered compaction framework instead.\n";
+        return;
+    }
+
+    std::vector<CompactionManager::RunningCompactionMetric> base_metrics;
+    std::vector<CompactionManager::RunningCompactionMetric> cumu_metrics;
+    std::vector<CompactionManager::RunningCompactionMetric> update_metrics;
+    StorageEngine::instance()->compaction_manager()->get_running_task_status(base_metrics, cumu_metrics,
+                                                                             update_metrics);
+    add_running_compaction_output(base_metrics, output, BASE_COMPACTION);
+    add_running_compaction_output(cumu_metrics, output, CUMULATIVE_COMPACTION);
+    add_running_compaction_output(update_metrics, output, UPDATE_COMPACTION);
+}
+
+void waiting_compaction_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+    if (!config::enable_event_based_compaction_framework) {
+        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use size "
+                     "tiered compaction framework instead.\n";
+        return;
+    }
+
+    std::vector<CompactionManager::WaitingCompactionMetric> base_metrics;
+    std::vector<CompactionManager::WaitingCompactionMetric> cumu_metrics;
+    StorageEngine::instance()->compaction_manager()->get_waiting_tasks_status(base_metrics, cumu_metrics);
+    add_waiting_compaction_output(base_metrics, output, BASE_COMPACTION);
+    add_waiting_compaction_output(cumu_metrics, output, CUMULATIVE_COMPACTION);
+}
+
 void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
@@ -257,6 +390,10 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
                                            std::forward<decltype(PH2)>(PH2));
             },
             true);
+    web_page_handler->register_page("/api/compaction/running/show", "RunningCompactionTasks",
+                                    running_compaction_handler, true);
+    web_page_handler->register_page("/api/compaction/waiting/show", "WaitingCompactionTasks",
+                                    waiting_compaction_handler, true);
 }
 
 } // namespace starrocks

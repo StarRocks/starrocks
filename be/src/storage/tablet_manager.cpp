@@ -567,6 +567,19 @@ void TabletManager::get_tablet_stat(TTabletStatResult* result) {
     result->__set_tablets_stats(_tablet_stat_cache);
 }
 
+void TabletManager::get_all_tablets(std::vector<TabletSharedPtr>* tablets) {
+    DCHECK(tablets);
+
+    size_t shard_idx = 0;
+    for (; shard_idx < _tablets_shards.size(); shard_idx++) {
+        const auto& tablets_shard = _tablets_shards[shard_idx];
+        std::shared_lock rlock(tablets_shard.lock);
+        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            tablets->push_back(tablet_ptr);
+        }
+    }
+}
+
 // return true if all tablets have been visited
 bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets) {
     DCHECK(tablets);

@@ -183,6 +183,8 @@ public:
 
     double compaction_score() { return _task_info.compaction_score; }
 
+    CompactionAlgorithm get_compaction_algorithm() { return _task_info.algorithm; }
+
     void set_segment_iterator_num(size_t segment_iterator_num) {
         _task_info.segment_iterator_num = segment_iterator_num;
     }
