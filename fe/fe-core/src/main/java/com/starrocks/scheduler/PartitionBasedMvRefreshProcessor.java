@@ -70,6 +70,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -916,7 +917,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
-                    tableRelation.setPartitionPredicate(partitionPredicates);
+                    List<SlotRef> slots = Lists.newArrayList();
+                    partitionPredicates.collect(SlotRef.class, slots);
+
+                    // try to push down into table relation
+                    Scope tableRelationScope = tableRelation.getScope();
+                    if (canResolveSlotsInTheScope(slots, tableRelationScope)) {
+                        tableRelation.setPartitionPredicate(partitionPredicates);
+                    }
+
+                    // try to push down into query relation so can push down filter into both sides
+                    // NOTE: it's safe here to push the partition predicate into query relation directly because
+                    // partition predicates always belong to the relation output expressions and can be resolved
+                    // by the query analyzer.
                     QueryRelation queryRelation = queryStatement.getQueryRelation();
                     if (queryRelation instanceof SelectRelation) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
@@ -929,6 +942,25 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return insertStmt;
     }
 
+    /**
+     * Check whether to push down predicate expr with the slot refs into the scope.
+     * @param slots : slot refs that are contained in the predicate expr
+     * @param scope : scope that try to push down into.
+     * @return
+     */
+    private boolean canResolveSlotsInTheScope(List<SlotRef> slots, Scope scope) {
+        return slots.stream().allMatch(s -> scope.tryResolveField(s).isPresent());
+    }
+
+    /**
+     * Generate partition predicates to refresh the materialized view so can be refreshed by the incremental partitions.
+     *
+     * @param tablePartitionNames           : the need pruned partition tables of the ref base table
+     * @param queryStatement                : the materialized view's defined query statement
+     * @param mvPartitionInfo               : the materialized view's partition information
+     * @return
+     * @throws AnalysisException
+     */
     private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
                                             PartitionInfo mvPartitionInfo)
             throws AnalysisException {
