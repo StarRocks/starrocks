@@ -80,6 +80,9 @@ public class SecurityPolicyRewriteRule {
 
         Map<String, MaskingPolicyContext> maskingPolicyApply = tableAppliedPolicyInfo.getMaskingPolicyApply();
         for (Column column : columns) {
+            if (column.getType().isUnknown()) {
+                continue;
+            }
             MaskingPolicyContext maskingPolicyContext = maskingPolicyApply.get(column.getName());
             if (maskingPolicyContext != null) {
                 Policy maskingPolicy = policyManager.getPolicyById(maskingPolicyContext.getPolicyId());
