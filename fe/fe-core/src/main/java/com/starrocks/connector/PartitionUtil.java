@@ -370,9 +370,9 @@ public class PartitionUtil {
             partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(hiveTable.getCatalogName(), table, partitionNames);
         } else if (table.isJDBCTable()) {
-            JDBCTable hiveTable = (JDBCTable) table;
+            JDBCTable jdbcTable = (JDBCTable) table;
             partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), table, partitionNames);
+                    getPartitions(jdbcTable.getCatalogName(), table, partitionNames);
         } else {
             LOG.warn("Only support get partition for hive table and jdbc table type");
             return null;
