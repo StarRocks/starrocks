@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.validation.constraints.NotNull;
 
 /**
  * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
@@ -83,6 +84,7 @@ public class MVEpoch implements Writable {
         return epoch;
     }
 
+    @NotNull
     public List<TabletCommitInfo> getCommitInfos() {
         return commitInfos;
     }
