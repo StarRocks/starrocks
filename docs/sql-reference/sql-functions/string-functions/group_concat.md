@@ -86,6 +86,19 @@ select group_concat(distinct name) as res from ss where id < 0;
 +------+
 | NULL |
 +------+
+ 
+set group_concat_max_len = 6;
+
+select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
++------+--------+
+| id   | res    |
++------+--------+
+| NULL | TiPhy  |
+|    1 | TomMat |
+|    2 | NULL   |
+|    3 | TiEngl |
+|    4 | NULL   |
++------+--------+
 ```
 
 ## keyword
