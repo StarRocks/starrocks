@@ -1234,6 +1234,9 @@ public class ExpressionAnalyzer {
                     break;
                 case FunctionSet.GROUP_CONCAT:
                 case FunctionSet.ARRAY_AGG: {
+                    if (node.getChildren().size() == 0) {
+                        throw new SemanticException(fnName + " should have at least one inputs", node.getPos());
+                    }
                     int start = 1;
                     if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
                         start = argumentTypes.length - node.getParams().getOrderByElemNum();
