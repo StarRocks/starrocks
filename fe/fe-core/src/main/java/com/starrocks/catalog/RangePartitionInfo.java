@@ -558,5 +558,15 @@ public class RangePartitionInfo extends PartitionInfo {
     public boolean isPartitionedBy(PrimitiveType type) {
         return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
     }
+
+    @Override
+    protected Object clone() {
+        RangePartitionInfo info = (RangePartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToRange.putAll(this.idToRange);
+        info.idToTempRange.putAll(this.idToTempRange);
+        info.isMultiColumnPartition = partitionColumns.size() > 1;
+        return info;
+    }
 }
 

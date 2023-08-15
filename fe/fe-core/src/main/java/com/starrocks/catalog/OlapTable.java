@@ -304,14 +304,7 @@ public class OlapTable extends Table {
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
-        olapTable.partitionInfo = new PartitionInfo();
-        if (this.partitionInfo instanceof RangePartitionInfo) {
-            olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
-        } else if (this.partitionInfo instanceof ListPartitionInfo) {
-            olapTable.partitionInfo = new ListPartitionInfo((ListPartitionInfo) this.partitionInfo);
-        } else {
-            olapTable.partitionInfo = this.partitionInfo;
-        }
+        olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);

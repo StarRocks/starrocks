@@ -93,17 +93,6 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToIsTempPartition = new HashMap<>();
     }
 
-    public ListPartitionInfo(ListPartitionInfo other) {
-        super(other.type);
-        this.partitionColumns = Lists.newArrayList(other.partitionColumns);
-        this.idToMultiValues = Maps.newHashMap(other.idToMultiValues);
-        this.idToMultiLiteralExprValues = Maps.newHashMap(other.idToMultiLiteralExprValues);
-        this.idToValues = Maps.newHashMap(other.idToValues);
-        this.idToLiteralExprValues = Maps.newHashMap(other.idToLiteralExprValues);
-        this.idToIsTempPartition = Maps.newHashMap(other.idToIsTempPartition);
-        this.automaticPartition = other.automaticPartition;
-    }
-
     public void setValues(long partitionId, List<String> values) {
         this.idToValues.put(partitionId, values);
     }
@@ -474,5 +463,18 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
         idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public Object clone() {
+        ListPartitionInfo info = (ListPartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToMultiValues = Maps.newHashMap(this.idToMultiValues);
+        info.idToMultiLiteralExprValues = Maps.newHashMap(this.idToMultiLiteralExprValues);
+        info.idToValues = Maps.newHashMap(this.idToValues);
+        info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
+        info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
+        info.automaticPartition = this.automaticPartition;
+        return info;
     }
 }
