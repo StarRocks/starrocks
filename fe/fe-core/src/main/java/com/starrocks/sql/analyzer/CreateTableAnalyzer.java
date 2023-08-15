@@ -357,16 +357,10 @@ public class CreateTableAnalyzer {
                     distributionDesc = new RandomDistributionDesc();
                 }
             }
-<<<<<<< HEAD
 
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-                throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
-=======
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
-                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !hasReplace)) {
-                throw new SemanticException(keysDesc.getKeysType().toSql() + (hasReplace ? " with replace " : "")
+                throw new SemanticException(keysDesc.getKeysType().toSql()
                         + " must use hash distribution", distributionDesc.getPos());
->>>>>>> 7a5f997964 ([Refactor] Update create random distribution error message (#29205))
             }
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);
