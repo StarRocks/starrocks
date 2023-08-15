@@ -652,6 +652,7 @@
       + [space](./sql-reference/sql-functions/string-functions/space.md)
       + [split](./sql-reference/sql-functions/string-functions/split.md)
       + [split_part](./sql-reference/sql-functions/string-functions/split_part.md)
+      + [substring_index](./sql-reference/sql-functions/string-functions/substring_index.md)
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
