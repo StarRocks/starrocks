@@ -197,6 +197,9 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -257,7 +260,6 @@ import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -464,6 +466,10 @@ public class GlobalStateMgr {
     private CompactionManager compactionManager;
 
     private ConfigRefreshDaemon configRefreshDaemon;
+
+    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final SlotProvider slotProvider = new SlotProvider();
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -673,6 +679,8 @@ public class GlobalStateMgr {
                 LOG.warn("check config failed", e);
             }
         });
+
+        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
     public static void destroyCheckpoint() {
@@ -1137,8 +1145,8 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExpr.create("true", Type.BOOLEAN)),
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
         } catch (UserException e) {
@@ -1243,6 +1251,8 @@ public class GlobalStateMgr {
             compactionManager.start();
         }
         configRefreshDaemon.start();
+
+        slotManager.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1780,7 +1790,6 @@ public class GlobalStateMgr {
         };
     }
 
-
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1903,7 +1912,6 @@ public class GlobalStateMgr {
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
-
 
         } finally {
             if (cursor != null) {
@@ -2908,7 +2916,7 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
-            List<Integer> sortKeyIdxes)
+                                                List<Integer> sortKeyIdxes)
             throws DdlException {
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
@@ -3018,6 +3026,7 @@ public class GlobalStateMgr {
     public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
         this.alter.replayAlterMaterializedViewProperties(opCode, log);
     }
+
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -3123,11 +3132,9 @@ public class GlobalStateMgr {
         localMetastore.replayModifyTableProperty(opCode, info);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alter.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling AlterClusterStmt
@@ -3396,10 +3403,6 @@ public class GlobalStateMgr {
         localMetastore.replayTruncateTable(info);
     }
 
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        nodeMgr.updateResourceUsage(backendId, usage);
-    }
-
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         nodeMgr.setConfig(stmt);
     }
@@ -3628,5 +3631,17 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public SlotManager getSlotManager() {
+        return slotManager;
+    }
+
+    public SlotProvider getSlotProvider() {
+        return slotProvider;
+    }
+
+    public ResourceUsageMonitor getResourceUsageMonitor() {
+        return resourceUsageMonitor;
     }
 }

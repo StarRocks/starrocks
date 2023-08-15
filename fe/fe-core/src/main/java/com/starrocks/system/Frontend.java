@@ -124,6 +124,8 @@ public class Frontend implements Writable {
      */
     public boolean handleHbResponse(FrontendHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
+        boolean prevIsAlive = isAlive;
+        long prevStartTime = startTime;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive && !isReplay) {
                 if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
@@ -159,7 +161,7 @@ public class Frontend implements Writable {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,
@@ -168,6 +170,15 @@ public class Frontend implements Writable {
                 heartbeatRetryTimes = 0;
             }
         }
+
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            if (prevIsAlive && !isAlive) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(nodeName);
+            } else if (prevStartTime != 0 && prevStartTime != startTime) {
+                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendRestartAsync(nodeName, startTime);
+            }
+        }
+
         return isChanged;
     }
 

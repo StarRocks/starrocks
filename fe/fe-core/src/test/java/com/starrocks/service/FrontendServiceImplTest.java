@@ -2,11 +2,11 @@
 
 package com.starrocks.service;
 
-
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
@@ -28,7 +28,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-
 
 public class FrontendServiceImplTest {
 
@@ -64,7 +63,7 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testUpdateResourceUsage() throws TException {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
@@ -80,9 +79,9 @@ public class FrontendServiceImplTest {
                 return null;
             }
         };
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 1;
             }
         };

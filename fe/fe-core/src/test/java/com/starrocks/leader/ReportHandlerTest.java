@@ -7,7 +7,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -83,7 +83,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleResourceUsageReport() {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
@@ -101,10 +101,9 @@ public class ReportHandlerTest {
             }
         };
 
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
-                times = 1;
+                resourceUsageMonitor.notifyResourceUsageUpdate();
             }
         };
 

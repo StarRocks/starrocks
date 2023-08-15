@@ -10,6 +10,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -287,6 +288,7 @@ public class ComputeNode implements IComputable, Writable {
     public long getMemUsedBytes() {
         return memUsedBytes;
     }
+
     public long getMemLimitBytes() {
         return memLimitBytes;
     }
@@ -303,7 +305,7 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                       int cpuUsedPermille) {
+                                    int cpuUsedPermille) {
 
         this.numRunningQueries = numRunningQueries;
         this.memLimitBytes = memLimitBytes;
@@ -432,7 +434,7 @@ public class ComputeNode implements IComputable, Writable {
                 isChanged = true;
                 // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
                 // This line to set 'lastStartTime' will be removed in due time
-                this.lastStartTime = hbResponse.getHbTime(); 
+                this.lastStartTime = hbResponse.getHbTime();
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
@@ -476,7 +478,7 @@ public class ComputeNode implements IComputable, Writable {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive.get() ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,
@@ -490,8 +492,9 @@ public class ComputeNode implements IComputable, Writable {
             }
         }
 
-        if (becomeDead) {
+        if (becomeDead && !GlobalStateMgr.isCheckpointThread()) {
             CoordinatorMonitor.getInstance().addDeadBackend(id);
+            GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         }
 
         return isChanged;
@@ -506,11 +509,6 @@ public class ComputeNode implements IComputable, Writable {
         if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
             // The resource usage is not fresh enough to decide whether it is overloaded.
             return false;
-        }
-
-        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
-                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
-            return true;
         }
 
         if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&

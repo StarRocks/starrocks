@@ -24,7 +24,9 @@ package com.starrocks.common;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.Collections;
 import java.util.Optional;
 
 public class Status {
@@ -61,6 +63,18 @@ public class Status {
         if (status.isSetError_msgs()) {
             this.errorMsg = status.error_msgs.get(0);
         }
+    }
+
+    public static Status internalError(String errorMsg) {
+        return new Status(TStatusCode.INTERNAL_ERROR, errorMsg);
+    }
+
+    public TStatus toThrift() {
+        TStatus tstatus = new TStatus(errorCode);
+        if (!StringUtils.isEmpty(errorMsg)) {
+            tstatus.setError_msgs(Collections.singletonList(errorMsg));
+        }
+        return tstatus;
     }
 
     public boolean ok() {

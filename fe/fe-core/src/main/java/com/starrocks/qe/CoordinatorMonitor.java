@@ -6,7 +6,6 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Queues;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,9 +40,6 @@ public class CoordinatorMonitor {
     }
 
     public boolean addDeadBackend(Long backendID) {
-        if (GlobalStateMgr.isCheckpointThread()) {
-            return false;
-        }
         LOG.info("add backend {} to dead backend queue", backendID);
         return comingDeadBackendIDQueue.offer(backendID);
     }
@@ -87,8 +83,6 @@ public class CoordinatorMonitor {
                 }
 
                 deadBackendIDs.clear();
-
-                QueryQueueManager.getInstance().maybeNotify();
             }
         }
     }

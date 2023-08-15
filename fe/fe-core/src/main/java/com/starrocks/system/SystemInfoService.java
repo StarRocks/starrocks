@@ -76,6 +76,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class SystemInfoService {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
@@ -433,6 +434,27 @@ public class SystemInfoService {
         return idToComputeNodeRef.get(computeNodeId);
     }
 
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
+        if (backend == null) {
+            backend = idToComputeNodeRef.get(nodeId);
+        }
+        return backend;
+    }
+
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateResourceUsage receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+
+        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+
+        GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyResourceUsageUpdate();
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -742,6 +764,10 @@ public class SystemInfoService {
             computeNodes.add(idToComputeNode.get(computeNodeId));
         }
         return ImmutableList.copyOf(computeNodes);
+    }
+
+    public Stream<ComputeNode> backendAndComputeNodeStream() {
+        return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 
     public ImmutableCollection<ComputeNode> getBackends(boolean needAlive) {

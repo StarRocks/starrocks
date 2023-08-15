@@ -47,6 +47,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
@@ -71,8 +72,8 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -101,6 +102,8 @@ import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishSlotRequirementRequest;
+import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
@@ -137,9 +140,13 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TReleaseSlotRequest;
+import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TRequireSlotRequest;
+import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1430,7 +1437,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
         TResourceUsage usage = request.getResource_usage();
-        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(request.getBackend_id(),
                 usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille());
 
@@ -1445,5 +1452,36 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
         return response;
+    }
+
+    @Override
+    public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
+        LogicalSlot slot = LogicalSlot.fromThrift(request.getSlot());
+        GlobalStateMgr.getCurrentState().getSlotManager().requireSlotAsync(slot);
+
+        return new TRequireSlotResponse();
+    }
+
+    @Override
+    public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
+
+        Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
+                .finishSlotRequirement(request.getSlot_id(), new Status(request.getStatus()));
+
+        TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
+        res.setStatus(status.toThrift());
+
+        return res;
+    }
+
+    @Override
+    public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
+        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(request.getSlot_id());
+
+        TStatus tstatus = new TStatus(TStatusCode.OK);
+        TReleaseSlotResponse res = new TReleaseSlotResponse();
+        res.setStatus(tstatus);
+
+        return res;
     }
 }

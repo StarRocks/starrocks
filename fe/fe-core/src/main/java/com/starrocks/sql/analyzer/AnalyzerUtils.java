@@ -66,6 +66,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+
 public class AnalyzerUtils {
 
     public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
@@ -164,6 +166,11 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, session).visit(statementBase);
         return dbs;
+    }
+
+    public static boolean isStatisticsJob(ConnectContext context, StatementBase stmt) {
+        Map<String, Database> dbs = collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {
@@ -365,7 +372,6 @@ public class AnalyzerUtils {
         new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
         return tables;
     }
-
 
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();

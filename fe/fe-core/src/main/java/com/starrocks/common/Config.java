@@ -1148,7 +1148,6 @@ public class Config extends ConfigBase {
      *
      * <p>For more discussion on this issue, see
      * <a href="https://github.com/StarRocks/starrocks-kubernetes-operator/issues/49">issue49</a>
-     *
      */
     @ConfField(mutable = true)
     public static long tablet_sched_be_down_tolerate_time_s = 900; // 15 min
@@ -1511,6 +1510,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int statistic_cache_thread_pool_size = 10;
+
+    @ConfField
+    public static int slot_manager_response_thread_pool_size = 16;
 
     @ConfField
     public static long statistic_dict_columns = 100000;

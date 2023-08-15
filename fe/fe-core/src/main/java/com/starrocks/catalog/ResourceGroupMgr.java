@@ -245,6 +245,15 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+    public ResourceGroup getResourceGroup(long id) {
+        readLock();
+        try {
+            return id2ResourceGroupMap.getOrDefault(id, null);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
@@ -476,7 +485,7 @@ public class ResourceGroupMgr implements Writable {
             if (shortQueryResourceGroup != null) {
                 List<ResourceGroupClassifier> shortQueryClassifierList =
                         shortQueryResourceGroup.classifiers.stream().filter(
-                                f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                                        f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
                                 .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                                 .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {

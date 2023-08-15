@@ -78,6 +78,7 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -262,6 +263,9 @@ public class Coordinator {
 
     private boolean thriftServerHighLoad;
 
+    private final boolean isStatisticsJob;
+    private LogicalSlot slot = null;
+
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                        TDescriptorTable descTable) {
@@ -295,6 +299,7 @@ public class Coordinator {
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
 
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.isStatisticsJob = context.isStatisticsJob();
     }
 
     // Used for broker export task coordinator
@@ -334,6 +339,7 @@ public class Coordinator {
         nextInstanceId.setLo(queryId.lo + 1);
 
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.isStatisticsJob = false;
     }
 
     // Used for broker load task coordinator
@@ -368,6 +374,7 @@ public class Coordinator {
         nextInstanceId.setLo(queryId.lo + 1);
 
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.isStatisticsJob = context != null && context.isStatisticsJob();
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -427,6 +434,32 @@ public class Coordinator {
         nextInstanceId.setLo(queryId.lo + 1);
 
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.isStatisticsJob = context.isStatisticsJob();
+    }
+
+    public LogicalSlot getSlot() {
+        return slot;
+    }
+
+    public void setSlot(LogicalSlot slot) {
+        this.slot = slot;
+    }
+
+    public TWorkGroup getResourceGroup() {
+        return resourceGroup;
+    }
+
+    public TQueryOptions getQueryOptions() {
+        return queryOptions;
+    }
+
+    public boolean isStatisticsJob() {
+        return isStatisticsJob;
+    }
+
+    public void onFinished() {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
     }
 
     public long getJobId() {
@@ -623,11 +656,6 @@ public class Coordinator {
         // prepare information
         prepare();
 
-        // prepare workgroup
-        this.resourceGroup = prepareResourceGroup(connectContext,
-                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
-                        : ResourceGroupClassifier.QueryType.SELECT);
-
         // compute Fragment Instance
         computeScanRangeAssignment();
 
@@ -674,12 +702,20 @@ public class Coordinator {
     }
 
     public void exec() throws Exception {
-        QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        // prepare workgroup
+        this.resourceGroup = prepareResourceGroup(connectContext,
+                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
+                        : ResourceGroupClassifier.QueryType.SELECT);
+
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+            QueryQueueManager.getInstance().maybeWait(connectContext, this);
+        }
+
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
             deliverExecFragments();
         }
     }
@@ -1632,6 +1668,7 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         if (connectContext.getState().getErrorMessage().isEmpty()) {
             connectContext.getState().setError(cancelReason.toString());
         }

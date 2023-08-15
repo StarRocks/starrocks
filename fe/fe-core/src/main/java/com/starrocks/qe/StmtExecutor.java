@@ -83,6 +83,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -425,6 +426,9 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
+
+                final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
+                context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
@@ -1420,6 +1424,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
+            context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
                     label,
                     database.getFullName(),
@@ -1509,7 +1514,6 @@ public class StmtExecutor {
                     return;
                 }
             }
-
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;

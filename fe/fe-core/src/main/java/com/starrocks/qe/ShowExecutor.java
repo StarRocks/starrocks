@@ -96,6 +96,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -148,6 +149,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -225,6 +227,8 @@ public class ShowExecutor {
             handleShowCreateDb();
         } else if (stmt instanceof ShowProcesslistStmt) {
             handleShowProcesslist();
+        } else if (stmt instanceof ShowRunningQueriesStmt) {
+            handleShowRunningQueries();
         } else if (stmt instanceof ShowEnginesStmt) {
             handleShowEngines();
         } else if (stmt instanceof ShowFunctionsStmt) {
@@ -435,6 +439,28 @@ public class ShowExecutor {
         row.add(ctx.getQualifiedUser());
         rowSet.add(row);
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSet);
+    }
+
+    private void handleShowRunningQueries() {
+        ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+
+        List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
+        slots.sort(Comparator.comparingLong(LogicalSlot::getStartTimeMs)
+                .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
+
+        for (LogicalSlot slot : slots) {
+            List<String> row = ShowRunningQueriesStmt.getColumnSuppliers().stream()
+                    .map(columnSupplier -> columnSupplier.apply(slot))
+                    .collect(Collectors.toList());
+            rows.add(row);
+
+            if (showStmt.getLimit() >= 0 && rows.size() >= showStmt.getLimit()) {
+                break;
+            }
+        }
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     // Handle show authors
@@ -1881,7 +1907,7 @@ public class ShowExecutor {
     private void handleShowCreateExternalCatalog() {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog =  ctx.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        Catalog catalog = ctx.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);
