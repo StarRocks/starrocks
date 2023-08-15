@@ -36,6 +36,7 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
@@ -652,5 +653,40 @@ public class FrontendServiceImplTest {
         List<TTableInfo> tablesInfos = response.getTables_infos();
         Assert.assertEquals(1, tablesInfos.size());
         Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
+    }
+
+    @Test
+    public void testGetSpecialColumn() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `ye$test` (\n" +
+                        "event_day DATE,\n" +
+                        "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(event_day, department_id)\n" +
+                        "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\"\n" +
+                        ");");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test3";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.ye$test TO USER `test3`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test3");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("ye$test");
+        request.setDb("test_table");
+        TGetTablesResult response = impl.getTableNames(request);
+        Assert.assertEquals(1, response.tables.size());
     }
 }
