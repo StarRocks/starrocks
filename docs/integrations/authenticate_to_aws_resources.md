@@ -10,7 +10,7 @@ However, this authentication method still can be seen as a cluster-level safe ac
 
 ### Assumed role-based authentication
 
-Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to again access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
+Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to gain access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
 
 For Integration with external catalogs and with the internal catalog `default_catalog` that allows file external tables, you can bind multiple catalogs each to a specific assumed role, so that these catalogs each can connect to specific AWS resources (for example, a specific S3 bucket). This means you can access a different data source by changing the catalog of the current SQL session. Further, if the cluster administrator grants privileges on different catalogs to different users, this will achieve an access control solution just like allowing different users within the same cluster to access different data sources.
 
