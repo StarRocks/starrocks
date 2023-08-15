@@ -265,11 +265,16 @@ build_llvm() {
         "LLVMSelectionDAG"
         "LLVMMCParser"
     )
-    if [ LLVM_TARGET == "X86" ]; then
+    if [ "${LLVM_TARGET}" == "X86" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
-    elif [ LLVM_TARGET == "AArch64" ]; then
+    elif [ "${LLVM_TARGET}" == "AArch64" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
     fi
+
+    LLVM_TARGETS_TO_INSTALL=()
+    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
+        LLVM_TARGETS_TO_INSTALL+=("install-${target}")
+    done
 
     check_if_source_exist $LLVM_SOURCE
 
@@ -297,11 +302,9 @@ build_llvm() {
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD}
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
-    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
-        ${BUILD_SYSTEM} install-${target} 
-    done
+    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 }
 
 # protobuf
