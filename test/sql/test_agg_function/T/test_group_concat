@@ -179,6 +179,7 @@ select group_concat( 3.1323,subject order by 1,-20) from ss order by 1;
 
 select group_concat();
 select group_concat() from ss;
+select group_concat(',');
 select group_concat("中国",name) from ss;
 select group_concat("中国",name separator NULL) from ss;
 select group_concat("中国",name order by "第一") from ss;
