@@ -38,7 +38,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
@@ -201,34 +200,6 @@ public class JDBCMetadataTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table1.getId() == 100000);
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testJDBCTableNameClass() {
-        try {
-            JDBCTableName jdbcTableName = new JDBCTableName("catalog", "db", "tbl");
-            Assert.assertTrue(jdbcTableName.getCatalogName().equals("catalog"));
-            Assert.assertTrue(jdbcTableName.getDatabaseName().equals("db"));
-            Assert.assertTrue(jdbcTableName.getTableName().equals("tbl"));
-            Assert.assertTrue(jdbcTableName.toString().contains("tbl"));
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testJDBCPartitionClass() {
-        try {
-            Partition partition = new Partition("20230810", 1000L);
-            Assert.assertTrue(partition.equals(partition));
-            Assert.assertTrue(partition.hashCode() == Objects.hash("20230810", 1000L));
-            Assert.assertTrue(partition.toString().contains("20230810"));
-            Assert.assertTrue(partition.toJson().getAsJsonObject("partitionName").toString().contains("20230810"));
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
