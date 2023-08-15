@@ -148,15 +148,16 @@ public class SlotManager {
         Frontend frontend = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
         if (frontend == null) {
             slot.onCancel();
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(
-                    Collections.singletonList(String.format("Unknown frontend [feName=%s]", slot.getRequestFeName())));
-            finishSlotRequirementToEndpoint(slot, status);
             LOG.warn("[Slot] SlotManager receives a slot requirement with unknown FE [slot={}]", slot);
             return;
         }
         if (slot.getFeStartTimeMs() < frontend.getStartTime()) {
-            LOG.warn("[Slot] SlotManager receives a slot requirement with old feStartTime [slot={}] [newFeStartMs={}]",
+            slot.onCancel();
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Collections.singletonList(String.format("FeStartTime is not the latest [val=%s] [latest=%s]",
+                            slot.getFeStartTimeMs(), frontend.getStartTime())));
+            finishSlotRequirementToEndpoint(slot, status);
+            LOG.warn("[Slot] SlotManager receives a slot requirement with old FeStartTime [slot={}] [newFeStartMs={}]",
                     slot, frontend.getStartTime());
             return;
         }

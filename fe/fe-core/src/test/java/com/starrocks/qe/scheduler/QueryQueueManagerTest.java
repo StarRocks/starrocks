@@ -912,6 +912,28 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     }
 
     @Test
+    public void testSlotRequirementFromOldFeStartTime() throws Exception {
+        final int concurrencyLimit = 3;
+
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+
+        mockFrontendService(new MockFrontendServiceClient() {
+            @Override
+            public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
+                // Mock FE restarting between creating slot requirement and sending RPC.
+                handleHbResponse(LOCAL_FRONTEND, System.currentTimeMillis(), true);
+                return super.requireSlotAsync(request);
+            }
+        });
+
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        Assert.assertThrows("FeStartTime is not the latest", UserException.class, () -> manager.maybeWait(connectContext, coord));
+        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
+    }
+
+    @Test
     public void testSlotRequirementFromUnknownFe() throws Exception {
         GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
