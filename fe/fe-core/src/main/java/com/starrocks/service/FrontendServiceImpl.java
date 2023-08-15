@@ -559,7 +559,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             continue;
                         }
 
-                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()), matcher, caseSensitive)) {
+                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                                matcher, caseSensitive)) {
                             continue;
                         }
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
