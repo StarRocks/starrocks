@@ -321,7 +321,8 @@ The following example explains how to load data with Spark SQL by using the `INS
 1. Execute the following SQL statement in the `spark-sql`:
 
     ```SQL
-    -- 1. create a table using datasource "starrocks", and replace the options with your own
+    -- 1. Create a table by configuring the data source as  `starrocks` and the following options. 
+    -- You need to modify the options according your own environment.
     CREATE TABLE `score_board`
     USING starrocks
     OPTIONS(
@@ -332,7 +333,7 @@ The following example explains how to load data with Spark SQL by using the `INS
     "starrocks.password"=""
     );
 
-    -- 2. insert two rows into the table
+    -- 2. Insert two rows into the table.
     INSERT INTO `score_board` VALUES (5, "starrocks", 100), (6, "spark", 100);
     ```
 
