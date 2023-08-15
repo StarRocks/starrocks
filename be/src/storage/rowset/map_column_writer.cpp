@@ -115,8 +115,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         null_options.meta->set_compression(opts.meta->compression());
         null_options.meta->set_is_nullable(false);
 
-        TypeInfoPtr bool_type_info = get_type_info(TYPE_TINYINT);
-        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
+        TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
+        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(tinyint_type_info), wfile);
     }
 
     std::unique_ptr<ScalarColumnWriter> offsets_writer;
