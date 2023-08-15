@@ -269,10 +269,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         List<String> dbs = Lists.newArrayList();
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
-                matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
+                matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
             } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
@@ -282,7 +282,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
@@ -300,7 +300,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
@@ -317,6 +317,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> tablesResult = Lists.newArrayList();
         result.setTables(tablesResult);
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
@@ -328,7 +329,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // database privs should be checked in analysis phrase
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
@@ -349,9 +350,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
 
-                if (matcher != null && !matcher.match(tableName)) {
+                if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
                     continue;
                 }
+
                 tablesResult.add(tableName);
             }
         }
@@ -365,10 +367,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTableStatus> tablesResult = Lists.newArrayList();
         result.setTables(tablesResult);
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
-                matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                        CaseSensibility.TABLE.getCaseSensibility());
+                matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
             } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
@@ -376,7 +378,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
@@ -397,9 +399,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             table.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
+<<<<<<< HEAD
                     if (matcher != null && !matcher.match(table.getName())) {
+=======
+
+                    if (!PatternMatcher.matchPattern(params.getPattern(), table.getName(), matcher, caseSensitive)) {
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
                         continue;
                     }
+
                     TTableStatus status = new TTableStatus();
                     status.setName(table.getName());
                     status.setType(table.getMysqlType());
@@ -459,36 +467,37 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get list table request: {}", params);
 
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
-            matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                    CaseSensibility.TABLE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
         }
 
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
-        return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+        return listMaterializedViewStatus(limit, matcher, currentUser, params);
     }
 
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
-                                                                         UserIdentity currentUser, String dbName) {
+                                                                         UserIdentity currentUser, TGetTablesParams params) {
         TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
+        String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
             return result;
         }
 
-        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, dbName);
+        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, params);
         for (List<String> rowSet : rowSets) {
             TMaterializedViewStatus status = new TMaterializedViewStatus();
             status.setId(rowSet.get(0));
@@ -520,10 +529,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private List<List<String>> listMaterializedViews(long limit, PatternMatcher matcher,
-                                                     UserIdentity currentUser, String dbName) {
+                                                     UserIdentity currentUser, TGetTablesParams params) {
+        String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
+<<<<<<< HEAD
         List<Pair<OlapTable, MaterializedIndex>> singleTableMVs = Lists.newArrayList();
+=======
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
         db.readLock();
         try {
             for (Table table : db.getTables()) {
@@ -538,6 +553,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         continue;
                     }
                     if (matcher != null && !matcher.match(mvTable.getName())) {
+                        continue;
+                    }
+
+                    if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
                         continue;
                     }
 
