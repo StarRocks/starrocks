@@ -21,7 +21,7 @@ DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "ae92f1d2groupaa1",
 "in_memory" = "false",
 "storage_format" = "DEFAULT"
@@ -42,7 +42,7 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "ae92f1d2groupaa2",
 "in_memory" = "false",
 "storage_format" = "DEFAULT"
@@ -72,7 +72,7 @@ DUPLICATE KEY(`d_datekey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "in_memory" = "false",
 "colocate_with" = "ae92f1d2groupaa3",
 "storage_format" = "DEFAULT"
@@ -91,7 +91,7 @@ DUPLICATE KEY(`s_suppkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "ae92f1d2groupaa4",
 "in_memory" = "false",
 "storage_format" = "DEFAULT"
@@ -112,7 +112,7 @@ DUPLICATE KEY(`p_partkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "ae92f1d2groupaa5",
 "in_memory" = "false",
 "storage_format" = "DEFAULT"
