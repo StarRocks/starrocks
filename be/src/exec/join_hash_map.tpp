@@ -71,6 +71,7 @@ void JoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             table_items->first[bucket_num] = i;
         }
     }
+    table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
 template <LogicalType LT>
@@ -116,6 +117,7 @@ void DirectMappingJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, J
             table_items->first[buckets] = i;
         }
     }
+    table_items->calculate_ht_info(table_items->key_columns[0]->byte_size());
 }
 
 template <LogicalType LT>
@@ -165,6 +167,7 @@ void FixedSizeJoinBuildFunc<LT>::construct_hash_table(RuntimeState* state, JoinH
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem);
     }
+    table_items->calculate_ht_info(table_items->build_key_column->byte_size());
 }
 
 template <LogicalType LT>
@@ -808,28 +811,32 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     _probe_state->count = match_count;
 }
 
-#define DO_PROBE(X, Y)                                                          \
-    if (enable_interleaving) {                                                  \
-        if constexpr (first_probe) {                                            \
-            auto group_size = state->query_options().experimental_interleaving; \
-            _probe_state->cur_probe_index = 0;                                  \
-            _probe_state->handles.clear();                                      \
-            for (int i = 0; i < group_size; ++i) {                              \
-                _probe_state->handles.insert(X(state, build_data, data));       \
-            }                                                                   \
-            _probe_state->active_coroutines = group_size;                       \
-        }                                                                       \
-        _probe_coroutine<first_probe, Y>(state, build_data, data);              \
-    } else {                                                                    \
-        X<first_probe>(state, build_data, data);                                \
+#define DO_PROBE(X, Y)                                                                    \
+    if (enable_interleaving) {                                                            \
+        if constexpr (first_probe) {                                                      \
+            auto group_size = std::abs(state->query_options().experimental_interleaving); \
+            _probe_state->cur_probe_index = 0;                                            \
+            _probe_state->handles.clear();                                                \
+            for (int i = 0; i < group_size; ++i) {                                        \
+                _probe_state->handles.insert(X(state, build_data, data));                 \
+            }                                                                             \
+            _probe_state->active_coroutines = group_size;                                 \
+        }                                                                                 \
+        _probe_coroutine<first_probe, Y>(state, build_data, data);                        \
+    } else {                                                                              \
+        X<first_probe>(state, build_data, data);                                          \
     }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
                                                             const Buffer<CppType>& data) {
-    bool enable_interleaving = _table_items->get_keys_per_bucket() > 1.5 && _table_items->row_count > (1 << 20) &&
-                               state->query_options().experimental_interleaving > 0;
+    bool enable_interleaving = state->query_options().experimental_interleaving < 0; // force enable
+    if (state->query_options().experimental_interleaving > 0) {
+        enable_interleaving = ((_table_items->probe_bytes > (1UL << 25) && _table_items->keys_per_bucket > 1.5) ||
+                               _table_items->probe_bytes > (1UL << 26)) &&
+                              _table_items->row_count > (1UL << 18);
+    }
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:

@@ -82,6 +82,7 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
         }
         _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * quo, rem, &ptr);
     }
+    table_items->calculate_ht_info(serialize_size);
 }
 
 void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,

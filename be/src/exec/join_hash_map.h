@@ -114,7 +114,7 @@ struct JoinHashTableItems {
     Buffer<uint32_t> first;
     Buffer<uint32_t> next;
     Buffer<Slice> build_slice;
-    ColumnPtr build_key_column;
+    ColumnPtr build_key_column = nullptr;
     uint32_t bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
@@ -124,17 +124,20 @@ struct JoinHashTableItems {
     bool left_to_nullable = false;
     bool right_to_nullable = false;
     bool has_large_column = false;
-    mutable float keys_per_bucket = 0;
-    mutable size_t used_buckets = 0;
+    float keys_per_bucket = 0;
+    size_t used_buckets = 0;
+    size_t probe_bytes = 0; // random access data during searching hash table.
 
-    float get_keys_per_bucket() const {
-        if (used_buckets == 0) {
+    float get_keys_per_bucket() const { return keys_per_bucket; }
+
+    void calculate_ht_info(size_t key_bytes) {
+        if (used_buckets == 0) { // to avoid redo
             for (const auto value : first) {
                 used_buckets += value != 0;
             }
             keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
+            probe_bytes = key_bytes + row_count * sizeof(uint32_t);
         }
-        return keys_per_bucket;
     }
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
