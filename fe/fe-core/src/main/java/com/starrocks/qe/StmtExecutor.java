@@ -201,7 +201,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
 import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
-import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -476,10 +475,11 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
-                final boolean isStatisticsJob = isStatisticsJob(parsedStmt);
+                final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 if (!isStatisticsJob) {
                     WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
                 }
+                context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
@@ -695,11 +695,6 @@ public class StmtExecutor {
 
             context.setSessionVariable(sessionVariableBackup);
         }
-    }
-
-    private boolean isStatisticsJob(StatementBase stmt) {
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(context, stmt);
-        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
@@ -1693,6 +1688,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
+            context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             if (!targetTable.isIcebergTable()) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
@@ -1704,7 +1700,7 @@ public class StmtExecutor {
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                         context.getCurrentWarehouse(),
-                        isStatisticsJob(parsedStmt));
+                        context.isStatisticsJob());
             }
 
             coord.setLoadJobId(jobId);

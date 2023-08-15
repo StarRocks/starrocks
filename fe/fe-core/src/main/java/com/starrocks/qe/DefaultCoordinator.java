@@ -71,6 +71,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -169,6 +170,8 @@ public class DefaultCoordinator extends Coordinator {
     private Supplier<RuntimeProfile> topProfileSupplier;
     private Supplier<ExecPlan> execPlanSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
+
+    private LogicalSlot slot = null;
 
     public static class Factory implements Coordinator.Factory {
 
@@ -285,6 +288,15 @@ public class DefaultCoordinator extends Coordinator {
 
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
+    }
+
+    @Override
+    public LogicalSlot getSlot() {
+        return slot;
+    }
+
+    public void setSlot(LogicalSlot slot) {
+        this.slot = slot;
     }
 
     @Override
@@ -444,7 +456,8 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
-        // Do nothing.
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -466,13 +479,15 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling() throws Exception {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+            QueryQueueManager.getInstance().maybeWait(connectContext, this);
+        }
 
-        QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
             deliverExecFragments();
         }
     }
@@ -898,6 +913,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
