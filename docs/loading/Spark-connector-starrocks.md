@@ -180,27 +180,26 @@ Construct data in memory and load data into the StarRocks table.
     from pyspark.sql import SparkSession
 
     spark = SparkSession \
-            .builder \
-            .appName("StarRocks Example") \
-            .getOrCreate()
+        .builder \
+        .appName("StarRocks Example") \
+        .getOrCreate()
 
-        # 1. Create a DataFrame from a sequence.
-        data = [(1, "starrocks", 100), (2, "spark", 100)]
-        df = spark.sparkContext.parallelize(data) \
-                .toDF(["id", "name", "score"])
+    # 1. Create a DataFrame from a sequence.
+    data = [(1, "starrocks", 100), (2, "spark", 100)]
+    df = spark.sparkContext.parallelize(data) \
+            .toDF(["id", "name", "score"])
 
-        # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
-        # You need to modify the options according your own environment.
-
-        df.write.format("starrocks") \
-            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
-            .option("starrocks.table.identifier", "test.score_board") \
-            .option("starrocks.user", "root") \
-            .option("starrocks.password", "") \
-            .mode("append") \
-            .save()
-        ```
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
+    df.write.format("starrocks") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8038") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+        .option("starrocks.table.identifier", "test.score_board") \
+        .option("starrocks.user", "root") \
+        .option("starrocks.password", "") \
+        .mode("append") \
+        .save()
+    ```
 
 2. Query data in the StarRocks table.
 
