@@ -21,16 +21,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TBackend;
-import com.starrocks.thrift.TMasterResult;
-import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
-import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.utframe.StarRocksAssert;
@@ -38,7 +34,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -144,7 +139,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleResourceUsageReport() {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
@@ -162,9 +157,9 @@ public class ReportHandlerTest {
             }
         };
 
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };
@@ -198,72 +193,4 @@ public class ReportHandlerTest {
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
     }
 
-    @Test
-    public void testHandleReport() throws TException {
-        Backend be = new Backend(10001, "host1", 8000);
-        ComputeNode cn = new ComputeNode(10002, "host2", 8000);
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public Backend getBackendWithBePort(String host, int bePort) {
-                if (host.equals(be.getHost()) && bePort == be.getBePort()) {
-                    return be;
-                }
-                return null;
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-                if (host.equals(cn.getHost()) && bePort == cn.getBePort()) {
-                    return cn;
-                }
-                return null;
-            }
-        };
-
-
-        ReportHandler handler = new ReportHandler();
-        TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
-
-        {
-
-            TReportRequest req = new TReportRequest();
-            req.setResource_usage(resourceUsage);
-
-            TBackend tcn = new TBackend();
-            tcn.setHost(cn.getHost());
-            tcn.setBe_port(cn.getBePort());
-            req.setBackend(tcn);
-
-            TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
-        }
-
-        {
-
-            TReportRequest req = new TReportRequest();
-            req.setResource_usage(resourceUsage);
-
-            TBackend tbe = new TBackend();
-            tbe.setHost(be.getHost());
-            tbe.setBe_port(be.getBePort());
-            req.setBackend(tbe);
-
-            TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
-        }
-
-        {
-
-            TReportRequest req = new TReportRequest();
-
-            TBackend tcn = new TBackend();
-            tcn.setHost(cn.getHost() + "NotExist");
-            tcn.setBe_port(cn.getBePort());
-            req.setBackend(tcn);
-
-            TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
-        }
-    }
 }

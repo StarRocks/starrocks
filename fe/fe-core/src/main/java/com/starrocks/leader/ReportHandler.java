@@ -69,7 +69,6 @@ import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
@@ -533,10 +532,9 @@ public class ReportHandler extends Daemon {
     private static void resourceUsageReport(long backendId, TResourceUsage usage) {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        QueryQueueManager.getInstance().updateResourceUsage(
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(
                 backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
-                usage.getCpu_used_permille());
-        GlobalStateMgr.getCurrentState().updateResourceUsage(backendId, usage);
+                usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
     }
