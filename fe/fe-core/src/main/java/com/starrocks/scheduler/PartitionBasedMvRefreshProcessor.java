@@ -74,6 +74,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -993,9 +994,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
                         materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
-                    tableRelation.setPartitionPredicate(partitionPredicates);
                     QueryRelation queryRelation = queryStatement.getQueryRelation();
-                    if (queryRelation instanceof SelectRelation) {
+                    List<SlotRef> slots = Lists.newArrayList();
+                    partitionPredicates.collect(SlotRef.class, slots);
+
+                    // try to push down into table relation
+                    Scope tableRelationScope = tableRelation.getScope();
+                    if (canResolveSlotsInTheScope(slots, tableRelationScope)) {
+                        tableRelation.setPartitionPredicate(partitionPredicates);
+                    }
+
+                    // try to push down into query relation so can push down filter into both sides
+                    Scope queryScope = queryRelation.getScope();
+                    if (queryRelation instanceof SelectRelation && canResolveSlotsInTheScope(slots, queryScope)) {
                         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
                         selectRelation.setWhereClause(Expr.compoundOr(Lists.newArrayList(selectRelation.getWhereClause(),
                                 partitionPredicates)));
@@ -1004,6 +1015,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         return insertStmt;
+    }
+
+    /**
+     * Check whether to push down predicate expr with the slot refs into the scope.
+     * @param slots : slot refs that are contained in the predicate expr
+     * @param scope : scope that try to push down into.
+     * @return
+     */
+    private boolean canResolveSlotsInTheScope(List<SlotRef> slots, Scope scope) {
+        return slots.stream().allMatch(s -> scope.tryResolveField(s).isPresent());
     }
 
     private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
