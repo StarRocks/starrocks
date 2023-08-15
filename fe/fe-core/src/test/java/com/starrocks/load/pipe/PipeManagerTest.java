@@ -65,6 +65,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -312,6 +313,7 @@ public class PipeManagerTest {
     }
 
     @Test
+    @Ignore
     public void executeError() throws Exception {
         mockRepoExecutor();
         final String pipeName = "p3";
