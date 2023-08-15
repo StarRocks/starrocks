@@ -663,9 +663,6 @@ private:
                            const NullColumn::Container* null_map_targets) {
         using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn>, uint8_t,
                                              typename ElementColumn::ValueType>;
-        [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-        [[maybe_unused]] auto targets_ptr = (const ValueType*)(targets.raw_data());
-
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
         };
@@ -707,6 +704,8 @@ private:
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
+                    auto elements_ptr = (const ValueType*)(elements.raw_data());
+                    auto targets_ptr = (const ValueType*)(targets.raw_data());
                     found = (elements_ptr[j] == targets_ptr[i]);
                 }
                 if (found) {
