@@ -164,6 +164,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
 |min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
 |max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
+|tablet_sched_max_not_being_scheduled_interval_ms|15 \* 60 \* 100|克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。|
 
 #### 其他动态参数
 
