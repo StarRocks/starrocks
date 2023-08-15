@@ -102,6 +102,7 @@ public class PatternMatcherTest {
             Assert.fail(e.getMessage());
         }
     }
+<<<<<<< HEAD
 
     @Test
     public void testAbnormal() {
@@ -126,4 +127,6 @@ public class PatternMatcherTest {
             System.out.println(e.getMessage());
         }
     }
+=======
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
 }

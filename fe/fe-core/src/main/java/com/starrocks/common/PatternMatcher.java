@@ -18,18 +18,17 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
 
-import java.util.Set;
 import java.util.regex.Pattern;
 
 // Wrap for Java pattern and matcher
 public class PatternMatcher {
     private Pattern pattern;
-
-    private static final Set<Character> FORBIDDEN_CHARS = Sets.newHashSet('<', '(', '[', '{', '^', '=',
-            '$', '!', '|', ']', '}', ')',
-            '?', '*', '+', '>', '@');
 
     public boolean match(String candidate) {
         if (pattern == null || candidate == null) {
@@ -70,7 +69,10 @@ public class PatternMatcher {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < newMysqlPattern.length(); ++i) {
             char ch = newMysqlPattern.charAt(i);
+<<<<<<< HEAD
             checkPermittedCharactor(ch);
+=======
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
             switch (ch) {
                 case '%':
                     sb.append(".*");
@@ -141,6 +143,7 @@ public class PatternMatcher {
         return sb.toString();
     }
 
+<<<<<<< HEAD
     private static void checkPermittedCharactor(char c) throws AnalysisException {
         if (FORBIDDEN_CHARS.contains(c)) {
             throw new AnalysisException("Forbidden charactor: '" + c + "'");
@@ -149,6 +152,9 @@ public class PatternMatcher {
 
     public static PatternMatcher createMysqlPattern(String mysqlPattern, boolean caseSensitive)
             throws AnalysisException {
+=======
+    public static PatternMatcher createMysqlPattern(String mysqlPattern, boolean caseSensitive) {
+>>>>>>> d05479094d ([BugFix] Fix bug can not query information_schema when table name contains spe… (#29184))
         PatternMatcher matcher = new PatternMatcher();
 
         // Match nothing
@@ -166,4 +172,17 @@ public class PatternMatcher {
         }
         return matcher;
     }
+
+    public static boolean matchPattern(String pattern, String tableName, PatternMatcher matcher,
+                                        boolean caseSensitive) {
+        if (matcher != null && !matcher.match(tableName)) {
+            if (caseSensitive && !tableName.equals(pattern)) {
+                return false;
+            } else if (!caseSensitive && !tableName.equalsIgnoreCase(pattern)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 }
