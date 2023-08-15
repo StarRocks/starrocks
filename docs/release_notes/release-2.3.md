@@ -29,10 +29,10 @@ Fixed the following issues:
 - An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
 - The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
 - Partitions cannot be automatically created after the table is recovered by using [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
-- The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading.
+- The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading. [#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
-- In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled.
-- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only accurate to the hour, not to minute and second, for example, `2023-7-21 22`.
+- In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled. [#26594](https://github.com/StarRocks/starrocks/pull/26594)
+- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only accurate to the hour, not to minute and second, for example, `2023-7-21 22`. [#27780](https://github.com/StarRocks/starrocks/pull/27780)
 
 ## 2.3.14
 
