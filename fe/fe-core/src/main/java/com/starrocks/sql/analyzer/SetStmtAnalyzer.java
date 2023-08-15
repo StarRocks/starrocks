@@ -130,7 +130,7 @@ public class SetStmtAnalyzer {
 
             if (variable.equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
                 resolvedExpression = new StringLiteral(
-                        Long.toString(ParseUtil.analyzeDataVolumn(resolvedExpression.getStringValue())));
+                        Long.toString(ParseUtil.analyzeDataVolume(resolvedExpression.getStringValue())));
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }

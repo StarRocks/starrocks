@@ -508,6 +508,10 @@ public class TaskManager {
         return taskRunManager;
     }
 
+    public TaskRunHistory getTaskRunHistory() {
+        return taskRunManager.getTaskRunHistory();
+    }
+
     public ShowResultSet handleSubmitTaskStmt(SubmitTaskStmt submitTaskStmt) throws DdlException {
         Task task = TaskBuilder.buildTask(submitTaskStmt, ConnectContext.get());
         String taskName = task.getName();

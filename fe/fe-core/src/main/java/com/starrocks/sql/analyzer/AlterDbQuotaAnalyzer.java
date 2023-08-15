@@ -34,7 +34,7 @@ public class AlterDbQuotaAnalyzer {
         AlterDatabaseQuotaStmt.QuotaType quotaType = statement.getQuotaType();
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
             try {
-                statement.setQuota(ParseUtil.analyzeDataVolumn(statement.getQuotaValue()));
+                statement.setQuota(ParseUtil.analyzeDataVolume(statement.getQuotaValue()));
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

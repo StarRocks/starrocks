@@ -23,6 +23,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -31,6 +33,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,17 +137,23 @@ public class PipeManager {
 
     public void alterPipe(AlterPipeStmt stmt) throws DdlException {
         LOG.info("alter pipe " + stmt.toString());
-        AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
+        AlterPipeClause alterClause = stmt.getAlterPipeClause();
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            if (alterClause.isSuspend()) {
-                pipe.suspend();
-            } else if (alterClause.isResume()) {
-                pipe.resume();
+            if (alterClause instanceof AlterPipePauseResume) {
+                AlterPipePauseResume pauseResume = (AlterPipePauseResume) alterClause;
+                if (pauseResume.isSuspend()) {
+                    pipe.suspend();
+                } else if (pauseResume.isResume()) {
+                    pipe.resume();
+                }
+            } else if (alterClause instanceof AlterPipeClauseRetry) {
+                AlterPipeClauseRetry retry = (AlterPipeClauseRetry) alterClause;
+                pipe.retry(retry);
             }
 
             // persistence
@@ -183,6 +192,15 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return pipeMap.values().stream().filter(Pipe::isRunnable).collect(Collectors.toList());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public List<Pipe> getAllPipes() {
+        try {
+            lock.readLock().lock();
+            return new ArrayList<>(pipeMap.values());
         } finally {
             lock.readLock().unlock();
         }

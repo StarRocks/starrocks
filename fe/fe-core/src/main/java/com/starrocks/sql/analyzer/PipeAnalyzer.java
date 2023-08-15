@@ -25,6 +25,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -51,7 +52,7 @@ public class PipeAnalyzer {
     public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
 
-    private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
+    public static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
                     .add(PROPERTY_POLL_INTERVAL)
@@ -95,14 +96,13 @@ public class PipeAnalyzer {
                     break;
                 }
                 case PROPERTY_BATCH_SIZE: {
-                    int value = -1;
+                    long value = -1;
                     try {
-                        value = Integer.parseInt(valueStr);
-                    } catch (NumberFormatException ignored) {
+                        value = ParseUtil.parseDataVolumeStr(valueStr);
+                    } catch (Exception ignored) {
                     }
                     if (value < 0) {
-                        ErrorReport.reportSemanticException(
-                                ErrorCode.ERR_INVALID_PARAMETER,
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                                 PROPERTY_BATCH_SIZE + " should in [0, +oo)");
                     }
                     break;

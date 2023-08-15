@@ -14,7 +14,12 @@
 
 package com.starrocks.common.util;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializer;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -60,6 +65,15 @@ public class DateUtils {
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
     public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
 
+    private static final JsonSerializer<LocalDateTime> LOCAL_DATETIME_PRINTER =
+            (dateTime, type, cx) -> new JsonPrimitive(dateTime.format(DATE_TIME_FORMATTER_UNIX));
+
+    public static final Gson GSON_PRINTER = new GsonBuilder()
+            .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
+            .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
+            .enableComplexMapKeySerialization()
+            .registerTypeAdapter(LocalDateTime.class, LOCAL_DATETIME_PRINTER)
+            .create();
     /*
      * Dates containing two-digit year values are ambiguous because the century is unknown.
      * MySQL interprets two-digit year values using these rules:

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast.pipe;
 
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -38,6 +39,7 @@ public class DescPipeStmt extends ShowStmt {
                     .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
                     .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
+                    .addColumn(new Column("PROPERTIES", ScalarType.createVarchar(512)))
                     .build();
 
     private final PipeName name;
@@ -55,6 +57,7 @@ public class DescPipeStmt extends ShowStmt {
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(pipe.getPipeSource().toString());
         row.add(pipe.getOriginSql());
+        row.add(pipe.getPropertiesJson());
     }
 
     public PipeName getName() {
@@ -64,6 +67,11 @@ public class DescPipeStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

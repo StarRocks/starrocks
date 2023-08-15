@@ -20,7 +20,11 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Map;
 
 public class FileTableFunctionRelation extends TableRelation {
+
+    public static final String IDENTIFIER = "FILES";
+
     private Map<String, String> properties;
+
     public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
         super(new TableName("", "table_function_table"));
         this.properties = properties;
@@ -32,6 +36,6 @@ public class FileTableFunctionRelation extends TableRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitTable(this, context);
+        return visitor.visitFileTableFunction(this, context);
     }
 }

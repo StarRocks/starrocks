@@ -20,6 +20,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
@@ -44,17 +45,25 @@ public class ParseUtil {
 
     private static Pattern dataVolumnPattern = Pattern.compile("(\\d+)(\\D*)");
 
-    public static long analyzeDataVolumn(String dataVolumnStr) throws AnalysisException {
+    public static long parseDataVolumeStr(String dataVolumeStr) {
+        try {
+            return analyzeDataVolume(dataVolumeStr);
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static long analyzeDataVolume(String dataVolumeStr) throws AnalysisException {
         long dataVolumn = 0;
-        Matcher m = dataVolumnPattern.matcher(dataVolumnStr);
+        Matcher m = dataVolumnPattern.matcher(dataVolumeStr);
         if (m.matches()) {
             try {
                 dataVolumn = Long.parseLong(m.group(1));
             } catch (NumberFormatException nfe) {
-                throw new AnalysisException("invalid data volumn:" + m.group(1));
+                throw new AnalysisException("invalid data volume:" + m.group(1));
             }
             if (dataVolumn <= 0L) {
-                throw new AnalysisException("Data volumn must larger than 0");
+                throw new AnalysisException("Data volume must larger than 0");
             }
 
             String unit = "B";
@@ -68,7 +77,7 @@ public class ParseUtil {
                 throw new AnalysisException("invalid unit:" + tmpUnit);
             }
         } else {
-            throw new AnalysisException("invalid data volumn expression:" + dataVolumnStr);
+            throw new AnalysisException("invalid data volume expression:" + dataVolumeStr);
         }
         return dataVolumn;
     }
@@ -113,4 +122,10 @@ public class ParseUtil {
         return new String(hexChars, StandardCharsets.UTF_8);
     }
 
+    public static String backquote(String str) {
+        if (StringUtils.isEmpty(str)) {
+            return str;
+        }
+        return "`" + str + "`";
+    }
 }

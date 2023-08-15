@@ -48,6 +48,10 @@ public class FilePipePiece {
         this.files.add(file);
     }
 
+    public long getNumFiles() {
+        return files.size();
+    }
+
     public long getTotalBytes() {
         return ListUtils.emptyIfNull(files).stream().map(PipeFileRecord::getFileSize).reduce(0L, Long::sum);
     }

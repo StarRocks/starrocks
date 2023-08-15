@@ -18,10 +18,20 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
@@ -29,6 +39,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,7 +81,7 @@ public class FilePipeSource implements GsonPostProcessable {
         if (eos) {
             return;
         }
-        if (CollectionUtils.isEmpty(fileListRepo.listUnloadedFiles())) {
+        if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED))) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             try {
                 List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc);
@@ -102,10 +113,19 @@ public class FilePipeSource implements GsonPostProcessable {
         return eos;
     }
 
+    public boolean allLoaded() {
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        if (CollectionUtils.isNotEmpty(errorFiles)) {
+            return false;
+        }
+        List<PipeFileRecord> unloadedFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+        return CollectionUtils.isEmpty(unloadedFiles);
+    }
+
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
-        List<PipeFileRecord> unloadFiles = fileListRepo.listUnloadedFiles();
+        List<PipeFileRecord> unloadFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
@@ -118,16 +138,31 @@ public class FilePipeSource implements GsonPostProcessable {
                 break;
             }
         }
-        fileListRepo.updateFileState(piece.getFiles(), FileListRepo.PipeFileState.LOADING);
 
         return piece;
     }
 
-    public void finishPiece(FilePipePiece piece, PipeTaskDesc.PipeTaskState taskState) {
-        FileListRepo.PipeFileState state =
-                taskState == PipeTaskDesc.PipeTaskState.ERROR ?
-                        FileListRepo.PipeFileState.ERROR : FileListRepo.PipeFileState.LOADED;
-        fileListRepo.updateFileState(piece.getFiles(), state);
+    public void finishPiece(PipeTaskDesc taskDesc) {
+        FilePipePiece piece = taskDesc.getPiece();
+        PipeTaskDesc.PipeTaskState taskState = taskDesc.getState();
+        FileListRepo.PipeFileState state = taskState == PipeTaskDesc.PipeTaskState.ERROR ?
+                FileListRepo.PipeFileState.ERROR : FileListRepo.PipeFileState.FINISHED;
+        // TODO: distinguish file granular error message
+        String errorMsg = taskDesc.getErrorMsg();
+        piece.getFiles().forEach(file -> file.errorMessage = errorMsg);
+        fileListRepo.updateFileState(piece.getFiles(), state, null);
+    }
+
+    public void retryErrorFiles() {
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        if (CollectionUtils.isNotEmpty(errorFiles)) {
+            fileListRepo.updateFileState(errorFiles, FileListRepo.PipeFileState.UNLOADED, null);
+            LOG.info("pipe {} retry error files: {}", pipeId, errorFiles);
+        }
+    }
+
+    public void retryFailedFile(String fileName) {
+        throw new UnsupportedOperationException("retry file not supported");
     }
 
     public void setAutoIngest(boolean autoIngest) {
@@ -164,6 +199,33 @@ public class FilePipeSource implements GsonPostProcessable {
 
     public FileListRepo getFileListRepo() {
         return fileListRepo;
+    }
+
+    /**
+     * Build insert sql from original pipe statement
+     * Example: original sql: insert into tbl select * from files('path'='xxx')
+     */
+    public static String buildInsertSql(Pipe pipe, FilePipePiece piece, String label) {
+        String originalSql = pipe.getOriginSql();
+        Map<String, String> originalProperties = pipe.getProperties();
+        StatementBase sqlStmt = SqlParser.parse(originalSql, new SessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(originalSql, 0));
+        Preconditions.checkState(sqlStmt instanceof InsertStmt);
+        InsertStmt insertStmt = (InsertStmt) sqlStmt;
+        SelectRelation select = (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
+        FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) select.getRelation();
+
+        // replace with a new Files table function
+        Map<String, String> properties = new HashMap<>(tableFunctionRelation.getProperties());
+        String files =
+                piece.getFiles().stream().map(PipeFileRecord::getFileName).collect(Collectors.joining(","));
+        properties.put(TableFunctionTable.PROPERTY_PATH, files);
+        // replace with an insert label
+        insertStmt.setLabel(label);
+
+        FileTableFunctionRelation fileRelation = new FileTableFunctionRelation(properties, NodePosition.ZERO);
+        select.setRelation(fileRelation);
+        return AstToSQLBuilder.toSQL(sqlStmt);
     }
 
     @Override

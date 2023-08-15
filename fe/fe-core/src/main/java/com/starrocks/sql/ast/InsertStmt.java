@@ -155,6 +155,10 @@ public class InsertStmt extends DmlStmt {
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public boolean isSystem() {
         return isSystem;
     }

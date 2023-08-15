@@ -524,9 +524,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             row.setPipe_name(pipe.getName());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
-            row.setLoaded_files(pipe.getLoadStatus().loadFiles);
+            row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
             row.setLoaded_rows(pipe.getLoadStatus().loadRows);
-            row.setLoaded_bytes(pipe.getLoadStatus().loadBytes);
+            row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);
 
             result.addToPipes(row);
         }
@@ -573,10 +573,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             file.setStart_load(DateUtils.formatDateTimeUnix(record.startLoadTime));
             file.setFinish_load(DateUtils.formatDateTimeUnix(record.finishLoadTime));
 
-            // TODO(murphy
-            file.setFirst_error_msg("");
-            file.setError_count(0L);
-            file.setError_line(0L);
+            file.setFirst_error_msg(record.getErrorMessage());
+            file.setError_count(record.getErrorCount());
+            file.setError_line(record.getErrorLine());
 
             result.addToPipe_files(file);
         }
