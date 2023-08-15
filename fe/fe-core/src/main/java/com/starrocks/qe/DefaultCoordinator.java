@@ -55,7 +55,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
-import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -223,7 +222,6 @@ public class DefaultCoordinator extends Coordinator {
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             context.getSessionVariable().setEnablePipelineEngine(true);
             context.getSessionVariable().setPipelineDop(0);
-            context.getSessionVariable().setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
 
             JobSpec jobSpec = JobSpec.Factory.fromBrokerExportSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
@@ -235,10 +233,13 @@ public class DefaultCoordinator extends Coordinator {
         @Override
         public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
                                                                        DescriptorTable descTable,
-                                                                       List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                                                                       List<PlanFragment> fragments,
+                                                                       List<ScanNode> scanNodes,
                                                                        String timezone,
-                                                                       long startTime, Map<String, String> sessionVariables,
-                                                                       ConnectContext context, long execMemLimit) {
+                                                                       long startTime,
+                                                                       Map<String, String> sessionVariables,
+                                                                       ConnectContext context, long execMemLimit,
+                                                                       String warehouse) {
             JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit);

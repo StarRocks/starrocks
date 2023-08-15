@@ -1281,7 +1281,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (warehouse == null) {
             throw new UserException("Warehouse " + warehouseName + " not exist");
         }
-        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
         // just use default value of session variable
         // as there is no connectContext for sync stream load
@@ -1290,7 +1289,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
-                    timeoutSecond, resp, false, workerGroupId);
+                    timeoutSecond, resp, false, warehouseName);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1303,6 +1302,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             return task.getTxnId();
         }
+
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),

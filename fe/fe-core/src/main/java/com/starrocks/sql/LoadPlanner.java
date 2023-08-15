@@ -42,7 +42,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
-import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -56,6 +55,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -131,6 +131,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -223,6 +225,14 @@ public class LoadPlanner {
         if (Config.enable_pipeline_load) {
             this.context.getSessionVariable().setEnablePipelineEngine(true);
         }
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
@@ -379,7 +389,7 @@ public class LoadPlanner {
                     "FileScanNode", fileStatusesList, filesAdded);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
-            fileScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
+            fileScanNode.setWarehouse(warehouse);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
@@ -389,7 +399,7 @@ public class LoadPlanner {
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
             streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.setWarehouse(sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
+            streamScanNode.setWarehouse(warehouse);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
             scanNode = streamScanNode;
@@ -434,8 +444,7 @@ public class LoadPlanner {
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition,
-                    sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE));
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouse);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

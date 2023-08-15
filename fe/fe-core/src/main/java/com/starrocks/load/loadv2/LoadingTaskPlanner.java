@@ -69,6 +69,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -123,6 +124,8 @@ public class LoadingTaskPlanner {
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
@@ -147,6 +150,14 @@ public class LoadingTaskPlanner {
 
     public void setConnectContext(ConnectContext context) {
         this.context = context;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     private boolean checkNullExprInAutoIncrement() {
@@ -228,8 +239,6 @@ public class LoadingTaskPlanner {
             throws UserException {
         // Generate plan trees
         // 1. Broker scan node
-        String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
-
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(nextNodeId++), tupleDesc, "FileScanNode",
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
@@ -292,8 +301,6 @@ public class LoadingTaskPlanner {
             throws UserException {
         // Generate plan trees
         // 1. Broker scan node
-        String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
-
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(nextNodeId++), tupleDesc, "FileScanNode",
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);

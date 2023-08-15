@@ -37,7 +37,6 @@ package com.starrocks.load.loadv2;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -65,7 +64,6 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -98,20 +96,18 @@ public class BrokerLoadJob extends BulkLoadJob {
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
 
-    @SerializedName("wh")
-    private String warehouse;
-
     // only for log replay
     public BrokerLoadJob() {
         super();
         this.jobType = EtlJobType.BROKER;
-        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     @VisibleForTesting
     public void setConnectContext(ConnectContext context) {
         this.context = context;
-        this.warehouse = context == null ? WarehouseManager.DEFAULT_WAREHOUSE_NAME : context.getCurrentWarehouse();
+        if (context != null) {
+            this.warehouse = context.getCurrentWarehouse();
+        }
     }
 
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
@@ -121,19 +117,15 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
-        this.warehouse = context == null ? WarehouseManager.DEFAULT_WAREHOUSE_NAME : context.getCurrentWarehouse();
-    }
-
-    @Override
-    public String getCurrentWarehouse() {
-        return warehouse;
+        if (context != null) {
+            this.warehouse = context.getCurrentWarehouse();
+        }
     }
 
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
         Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
         if (currentWh == null) {
             throw new BeginTransactionException("warehouse " + warehouse + " not exist.");

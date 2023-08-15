@@ -44,7 +44,6 @@ import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -63,6 +62,7 @@ import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -147,8 +147,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
-    @SerializedName(value = "workerGroupId")
-    private long workerGroupId;
+    @SerializedName(value = "warehouse")
+    private String warehouse;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -183,13 +183,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         lock.readLock().unlock();
     }
 
-    public void setWorkerGroupId(long workerGroupId) {
-        this.workerGroupId = workerGroupId;
-    }
-
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad) {
-        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, String warehouse) {
+        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs, warehouse);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -199,7 +195,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs) {
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, String warehouse) {
         this.id = id;
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
@@ -222,6 +218,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
+        this.warehouse = warehouse;
 
         init();
     }
@@ -243,8 +240,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     @Override
     public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        return warehouse;
     }
 
     @Override
@@ -769,6 +765,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
+        loadPlanner.setWarehouse(streamLoadInfo.getWarehouse());
+
         loadPlanner.plan();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
@@ -902,6 +900,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void unprotectedBeginTxn(boolean replay) throws UserException {
+        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        if (currentWh == null) {
+            throw new UserException("Warehouse " + warehouse + " not exist");
+        }
+        long workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
         this.txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),

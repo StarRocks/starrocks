@@ -314,7 +314,7 @@ public class JobSpecTest extends SchedulerTestBase {
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
                 connectContext,
-                execMemLimit);
+                execMemLimit, connectContext.getCurrentWarehouse());
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -340,7 +340,7 @@ public class JobSpecTest extends SchedulerTestBase {
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
                 connectContext,
-                execMemLimit);
+                execMemLimit, connectContext.getCurrentWarehouse());
         jobSpec = coordinator.getJobSpec();
         Assert.assertEquals(TCompressionType.LZ4, jobSpec.getQueryOptions().getLoad_transmission_compression_type());
         Assert.assertEquals(10L, jobSpec.getQueryOptions().getLog_rejected_record_num());

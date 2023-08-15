@@ -393,11 +393,11 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
 
         private long getNumLoadJobsSupportWh() {
-            return numBrokerLoadJobs + numInsertLoadJobs;
+            return numBrokerLoadJobs + numInsertLoadJobs + numSparkLoadJobs + numRoutineLoadJobs + numStreamLoadJobs;
         }
 
         private long getNumLoadJobsNonSupportWh() {
-            return numSparkLoadJobs + numRoutineLoadJobs + numStreamLoadJobs;
+            return 0L;
         }
     }
 
@@ -443,7 +443,6 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         whInfo.increaseNumUnfinishedRestoreJobs(jobInfo.numRestoreJobs * deltaFactor);
         if (!isFinished) {
             whInfo.increaseNumUnfinishedLoadJobs(jobInfo.getNumLoadJobsSupportWh());
-            defaultWhInfo.increaseNumUnfinishedLoadJobs(jobInfo.getNumLoadJobsNonSupportWh());
         }
 
         // Add job info to metric and manager.
@@ -464,12 +463,18 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     private SparkLoadJob genSparkLoadJob(String wh) throws MetaNotFoundException {
-        return new SparkLoadJob(TEST_DB_ID, "spark-load-" + NEXT_INDEX.getAndIncrement(), null, null);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setCurrentWarehouse(wh);
+        return new SparkLoadJob(TEST_DB_ID, "spark-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
     }
 
     private RoutineLoadJob genRoutineLoadJob(String wh) {
-        return new KafkaRoutineLoadJob(NEXT_INDEX.getAndIncrement(), "routine-load-" + NEXT_INDEX.getAndIncrement(),
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(NEXT_INDEX.getAndIncrement(),
+                "routine-load-" + NEXT_INDEX.getAndIncrement(),
                 TEST_DB_ID, TEST_TABLE_ID, "brokerList", "topic");
+        job.setWarehouse(wh);
+        return job;
+
     }
 
     private StreamLoadTask genStreamLoadJob(String wh) {
@@ -480,7 +485,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 (OlapTable) table,
                 "stream-load-" + NEXT_INDEX.getAndIncrement(),
                 0L, System.currentTimeMillis(),
-                false);
+                false,
+                wh);
     }
 
     @FunctionalInterface

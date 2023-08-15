@@ -29,13 +29,13 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
@@ -102,11 +102,12 @@ public class StreamLoadMgr {
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
                               int channelNum, int channelId, TransactionResult resp) throws UserException {
-        beginLoadTask(dbName, tableName, label, timeoutMillis, channelNum, channelId, resp, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        beginLoadTask(dbName, tableName, label, timeoutMillis, channelNum, channelId, resp,
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
     }
 
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              int channelNum, int channelId, TransactionResult resp, long workerGroupId) throws UserException {
+                              int channelNum, int channelId, TransactionResult resp, String warehouse) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -132,8 +133,7 @@ public class StreamLoadMgr {
                 task.beginTxn(channelId, channelNum, resp);
                 return;
             }
-            task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId);
-            task.setWorkerGroupId(workerGroupId);
+            task = createLoadTask(db, tableName, label, timeoutMillis, channelNum, channelId, warehouse);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
             addLoadTask(task);
@@ -149,15 +149,14 @@ public class StreamLoadMgr {
 
     // for sync stream load task
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              TransactionResult resp, boolean isRoutineLoad, long workerGroupId) throws UserException {
+                              TransactionResult resp, boolean isRoutineLoad, String warehouse) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
 
         writeLock();
         try {
-            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad);
-            task.setWorkerGroupId(workerGroupId);
+            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad, warehouse);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -169,7 +168,8 @@ public class StreamLoadMgr {
     }
 
     // for sync stream load
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
+                                         boolean isRoutineLoad, String warehouse)
             throws UserException {
         Table table;
         db.readLock();
@@ -183,12 +183,12 @@ public class StreamLoadMgr {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad);
+                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad, warehouse);
         return streamLoadTask;
     }
 
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
-                                         int channelNum, int channelId) throws UserException {
+                                         int channelNum, int channelId, String warehouse) throws UserException {
         Table table;
         db.readLock();
         try {
@@ -201,7 +201,7 @@ public class StreamLoadMgr {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, channelNum, channelId, System.currentTimeMillis());
+                label, timeoutMillis, channelNum, channelId, System.currentTimeMillis(), warehouse);
         return streamLoadTask;
     }
 

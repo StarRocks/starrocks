@@ -50,7 +50,6 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import org.apache.logging.log4j.LogManager;
@@ -74,9 +73,6 @@ public class InsertLoadJob extends LoadJob {
     private long estimateScanRow;
     private TLoadJobType loadType;
 
-    @SerializedName("wh")
-    private String warehouse;
-
     @SerializedName("isj")
     private boolean isStatisticsJob;
 
@@ -84,7 +80,6 @@ public class InsertLoadJob extends LoadJob {
     public InsertLoadJob() {
         super();
         this.jobType = EtlJobType.INSERT;
-        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         this.isStatisticsJob = false;
     }
 
@@ -125,13 +120,7 @@ public class InsertLoadJob extends LoadJob {
         this.authorizationInfo = gatherAuthInfo();
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
-        this.warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         this.isStatisticsJob = false;
-    }
-
-    @Override
-    public String getCurrentWarehouse() {
-        return warehouse;
     }
 
     @Override

@@ -70,6 +70,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.statistic.StatisticUtils;
@@ -171,6 +172,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("pg")
     protected int progress;
 
+    @SerializedName("wh")
+    protected String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     public int getProgress() {
         return this.progress;
     }
@@ -220,6 +224,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
+    }
+
+    @Override
+    public String getCurrentWarehouse() {
+        return warehouse;
     }
 
     @Override

@@ -108,7 +108,7 @@ public class CoordinatorPreprocessor {
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), context.getCurrentWarehouse());
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), jobSpec.getWarehouseName());
     }
 
     @VisibleForTesting
@@ -122,7 +122,7 @@ public class CoordinatorPreprocessor {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                connectContext.getCurrentWarehouse());
+                jobSpec.getWarehouseName());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -212,7 +212,7 @@ public class CoordinatorPreprocessor {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                connectContext.getCurrentWarehouse());
+                jobSpec.getWarehouseName());
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }

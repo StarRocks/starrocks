@@ -40,6 +40,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
@@ -105,11 +106,14 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
+    private String warehouse;
+
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
+        this.warehouse = streamLoadInfo.getWarehouse();
     }
 
     private void resetAnalyzer() {
@@ -124,6 +128,10 @@ public class StreamLoadPlanner {
 
     public ConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'

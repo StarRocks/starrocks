@@ -35,13 +35,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
@@ -124,7 +122,6 @@ public class LoadPlannerTest {
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
-        sessionVariables.put(BulkLoadJob.CURRENT_WAREHOUSE, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
     }
 
     @After

@@ -337,8 +337,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     @Override
     public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        return warehouse;
     }
 
     @Override
@@ -866,7 +865,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        taskTimeoutSecond, true);
+                        taskTimeoutSecond, true, warehouse);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);

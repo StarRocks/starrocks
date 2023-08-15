@@ -83,9 +83,9 @@ import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -180,6 +180,7 @@ public class SparkLoadJob extends BulkLoadJob {
         jobType = EtlJobType.SPARK;
     }
 
+    // only for ut
     public SparkLoadJob(long dbId, String label, ResourceDesc resourceDesc, OriginStatement originStmt)
             throws MetaNotFoundException {
         super(dbId, label, originStmt);
@@ -188,10 +189,12 @@ public class SparkLoadJob extends BulkLoadJob {
         jobType = EtlJobType.SPARK;
     }
 
-    @Override
-    public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    public SparkLoadJob(long dbId, String label, ResourceDesc resourceDesc, OriginStatement originStmt, ConnectContext context)
+            throws MetaNotFoundException {
+        this(dbId, label, resourceDesc, originStmt);
+        if (context != null) {
+            this.warehouse = context.getCurrentWarehouse();
+        }
     }
 
     @Override
@@ -235,7 +238,6 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
-        String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
         Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
         if (currentWh == null) {
             throw new BeginTransactionException("warehouse " + warehouse + " not exist.");
@@ -555,7 +557,6 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    String warehouse = sessionVariables.get(BulkLoadJob.CURRENT_WAREHOUSE);
                                     Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
                                     if (currentWh == null) {
                                         throw new LoadException("warehouse " + warehouse + " not exist.");

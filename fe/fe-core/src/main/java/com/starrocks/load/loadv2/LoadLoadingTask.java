@@ -56,6 +56,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -102,6 +103,8 @@ public class LoadLoadingTask extends LoadTask {
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
 
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
                            long jobDeadlineMs, long execMemLimit, boolean strictMode,
                            long txnId, LoadTaskCallback callback, String timezone,
@@ -132,6 +135,10 @@ public class LoadLoadingTask extends LoadTask {
         this.partialUpdateMode = partialUpdateMode;
     }
 
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         if (!Config.enable_pipeline_load) {
@@ -139,12 +146,14 @@ public class LoadLoadingTask extends LoadTask {
                     strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
                     partialUpdateMode);
             planner.setConnectContext(context);
+            planner.setWarehouse(warehouse);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                     timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                     brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.setPartialUpdateMode(partialUpdateMode);
+            loadPlanner.setWarehouse(warehouse);
             loadPlanner.plan();
         }
     }
@@ -177,7 +186,8 @@ public class LoadLoadingTask extends LoadTask {
                     callback.getCallbackId(), loadId,
                     planner.getDescTable(),
                     planner.getFragments(), planner.getScanNodes(),
-                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context, execMemLimit);
+                    planner.getTimezone(), planner.getStartTime(), sessionVariables,
+                    context, execMemLimit, planner.getWarehouse());
 
             curCoordinator.setTimeoutSecond((int) (getLeftTimeMs() / 1000));
         } else {
