@@ -18,7 +18,7 @@ Release date: July 31, 2023
 
 - Optimized tablet scheduling logic to prevent tablets remaining pending for a long period or an FE crashing under certain circumstances. [#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
 - Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
-- The partition metadata records visibleTxnId, which corresponds to the visible version. When versions of replicas for a tablet are not consistent, it is easier to trace the transaction that created this version . [#27924](https://github.com/StarRocks/starrocks/pull/27924)
+- The partition metadata records visibleTxnId, which corresponds to the visible version of tablet replicas. When the version of a replica is inconsistent with others, it is easier to trace the transaction that created this version. [#27924](https://github.com/StarRocks/starrocks/pull/27924)
 
 ### Bug Fixes
 
@@ -29,10 +29,10 @@ Fixed the following issues:
 - An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
 - The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
 - Partitions cannot be automatically created after the table is recovered by using [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
-- The loading transaction remains in a pending state and the DDL statements hang when the strict mode is enabled for loading data by using INSERT INTO, and data to be loaded do not satisfy the quality requirement.
+- The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading.
 - Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled.
-- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only premise to hour, not to minute and second, for example, `2023-7-21 22`.
+- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only accurate to the hour, not to minute and second, for example, `2023-7-21 22`.
 
 ## 2.3.14
 
