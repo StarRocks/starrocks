@@ -234,7 +234,7 @@ public class LeaderImpl {
 
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
                                              " error msg: " + taskStatus.getError_msgs().toString();
-                            pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
+                            pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId());
                             AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
                                                       task.getSignature());
                         }
