@@ -321,6 +321,10 @@ public class OlapTable extends Table {
         olapTable.idToPartition = idToPartitions;
         olapTable.nameToPartition = nameToPartitions;
         olapTable.physicalPartitionIdToPartitionId = this.physicalPartitionIdToPartitionId;
+        olapTable.tempPartitions = new TempPartitions();
+        for (Partition tempPartition : this.getTempPartitions()) {
+            olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
+        }
         olapTable.baseIndexId = this.baseIndexId;
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
