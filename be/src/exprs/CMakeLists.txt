@@ -96,6 +96,7 @@ set(EXPR_FILES
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
+  substring_index.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
