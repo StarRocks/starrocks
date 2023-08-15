@@ -10,15 +10,15 @@ However, this authentication method still can be seen as a cluster-level safe ac
 
 ### Assumed role-based authentication
 
-Unlike the instance profile-based authentication method, which is a cluster-level access control solution, the assumed role-based authentication method is a catalog-level data source access control solution that works based on the mechanism of assuming a role in AWS IAM. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
+Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to gain access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
 
-Specifically, you can create different catalogs which can access different AWS S3 resources, such as S3 buckets `S3-BUCKET-1` and `S3-BUCKET-2`. This means you can access a different data source by changing the catalog of the current SQL session.
-
-Further, if the cluster administrator grants privileges on different catalogs to different users, this will achieve an access control solution just like allowing different users within the same cluster to access different data sources.
+<!--Specifically, you can bind multiple catalogs each to a specific assumed role, so that these catalogs each can connect to specific AWS resources (for example, a specific S3 bucket). This means you can access a different data source by changing the catalog of the current SQL session. Further, if the cluster administrator grants privileges on different catalogs to different users, this will achieve an access control solution just like allowing different users within the same cluster to access different data sources.-->
 
 ### IAM user-based authentication
 
-The IAM user-based authentication method is also a catalog-level data source access control solution, which works based on the mechanism of IAM user. You can configure different catalogs to assume different IAM users.
+The IAM user-based authentication method supports using IAM user credentials to gain access to your AWS resources. For more information, see [IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users.html).
+
+<!--You can bind multiple catalogs each to the credentials (Access Key and Secret Key) of a specific IAM user, so that different users within the same cluster can access different data sources.-->
 
 ## Preparation for authentication in AWS IAM
 
