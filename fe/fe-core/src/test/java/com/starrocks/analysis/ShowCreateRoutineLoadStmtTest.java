@@ -50,7 +50,7 @@ public class ShowCreateRoutineLoadStmtTest {
 
     @Test
     public void testBackquote() throws SecurityException, IllegalArgumentException {
-        String sql = "SHOW CREATE ROUTINE LOAD FOR testDb.rl_test";
+        String sql = "SHOW CREATE ROUTINE LOAD testDb.rl_test";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable());
 
         ShowCreateRoutineLoadStmt stmt = (ShowCreateRoutineLoadStmt) stmts.get(0);

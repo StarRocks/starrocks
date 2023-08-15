@@ -1079,7 +1079,7 @@ showRoutineLoadTaskStatement
     ;
 
 showCreateRoutineLoadStatement
-    : SHOW CREATE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
     ;
 
 showStreamLoadStatement

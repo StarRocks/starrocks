@@ -37,6 +37,6 @@ FROM KAFKA (
 "kafka_offsets"="OFFSET_BEGINNING"
 );
 
-SHOW CREATE ROUTINE LOAD FOR testherbavro;
+SHOW CREATE ROUTINE LOAD testherbavro;
 
 STOP ROUTINE LOAD for testherbavro;

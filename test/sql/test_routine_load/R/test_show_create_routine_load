@@ -41,7 +41,7 @@ FROM KAFKA (
 );
 -- result:
 -- !result
-SHOW CREATE ROUTINE LOAD FOR testherbavro;
+SHOW CREATE ROUTINE LOAD testherbavro;
 -- result:
 testherbavro	CREATE ROUTINE LOAD test_show_create_routine_load.testherbavro on herbavro
  COLUMNS TERMINATED BY '\t',
