@@ -17,7 +17,7 @@ Release date: August 7, 2023
 
 - Supports accessing views created on tables within [Hive catalogs](../data_source/catalog/hive_catalog.md).
 - Supports accessing Parquet-formatted Iceberg v2 tables.
-- [Preview] Supports sinking data to Parquet-formatted Iceberg tables.
+- [Preview] Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
 - [Preview] Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
 - [Preview] Supports performing analytics on streaming data stored in Apache Paimon by using [Paimon catalogs](../data_source/catalog/paimon_catalog.md).
 
