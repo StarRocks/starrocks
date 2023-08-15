@@ -24,10 +24,12 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -179,6 +181,18 @@ public class EquationRewriter {
                 return tmp != null ? tmp : super.visitLikePredicateOperator(predicate, context);
             }
 
+            @Override
+            public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
+                ScalarOperator tmp = replace(array);
+                return tmp != null ? tmp : super.visitArraySlice(array, context);
+            }
+
+            @Override
+            public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+                ScalarOperator tmp = replace(collectionElementOp);
+                return tmp != null ? tmp : super.visitCollectionElement(collectionElementOp, context);
+            }
+
             ScalarOperator replace(ScalarOperator scalarOperator) {
                 if (equationMap.containsKey(scalarOperator)) {
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
@@ -220,6 +234,7 @@ public class EquationRewriter {
             }
 
         };
+
         return expr.accept(shuttle, null);
     }
 

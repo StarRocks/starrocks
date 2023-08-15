@@ -327,6 +327,7 @@ public class PseudoCluster {
                     System.out.println("retry execute " + sql);
                     continue;
                 }
+                LOG.error(e);
                 throw e;
             }
         }
