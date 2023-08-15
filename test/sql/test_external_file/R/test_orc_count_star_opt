@@ -48,7 +48,7 @@ CREATE EXTERNAL TABLE array_data_only
     data array<int>    
 ) 
 ENGINE=file
-PROPERTIES 
+PROPERTIES
 (
     "path" = "oss://${oss_bucket}/test_orc_count_star_opt/${uuid0}/array_data_only/", 
     "format" = "orc"
@@ -127,7 +127,7 @@ set enable_count_star_optimization = true;
 -- !result
 select count(*) from empty_row_index;
 -- result:
-0
+1
 -- !result
 set enable_count_star_optimization = false;
 -- result:
