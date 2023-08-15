@@ -25,7 +25,7 @@ import com.starrocks.thrift.TUniqueId;
  * <p> It contains multiple physical slots. A physical slot represents a part of resource from the cluster. There are a total of
  * {@link GlobalVariable#getQueryQueueConcurrencyLimit()} slots and {@link ResourceGroup#getConcurrencyLimit()} slots for a group.
  * <p> When the query queue is enabled by {@link GlobalVariable#isEnableQueryQueueSelect()},
- * {@link GlobalVariable#isEnableQueryQueueStatistic()}  or {@link GlobalVariable#isEnableQueryQueueLoad()}, a query must be
+ * {@link GlobalVariable#isEnableQueryQueueStatistic()} or {@link GlobalVariable#isEnableQueryQueueLoad()}, a query must be
  * required enough physical slots from the {@link SlotManager}.
  */
 public class LogicalSlot {

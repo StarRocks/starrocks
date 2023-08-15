@@ -55,9 +55,9 @@ import java.util.stream.Collectors;
  * or the resource usage (CPU and Memory) exceeds the limit, the coming query will be queued.
  * <p> The allocated slot to a query will be released, if any following condition occurs:
  * <ul>
- *     <li> The query is finished or cancelled and send the release RPC to the slot manager.
+ *     <li> The query is finished or cancelled and sends the release RPC to the slot manager.
  *     <li> The slot manager finds that the query is timeout.
- *     <li> The slot manager finds that the frontend where the query is started is dead.
+ *     <li> The slot manager finds that the frontend where the query is started is dead or restarted.
  * </ul>
  * <p> The slot manager is only running in the leader FE. The following diagram indicates the control flow.
  * <pre>{@code

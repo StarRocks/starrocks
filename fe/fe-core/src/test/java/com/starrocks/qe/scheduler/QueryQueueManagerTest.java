@@ -93,6 +93,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private int prevQueueConcurrencyHardLimit;
     private double prevQueueMemUsedPctHardLimit;
     private int prevQueuePendingTimeoutSecond;
+    private int prevQueueTimeoutSecond;
     private int prevQueueMaxQueuedQueries;
 
     @BeforeClass
@@ -108,7 +109,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         prevQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         prevQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
+        prevQueueTimeoutSecond = connectContext.getSessionVariable().getQueryTimeoutS();
         prevQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
+
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(1000_000);
+        connectContext.getSessionVariable().setQueryTimeoutS(1000_000);
 
         mockFrontends(FRONTENDS);
 
@@ -137,6 +142,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalVariable.setQueryQueueConcurrencyLimit(prevQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(prevQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
+        connectContext.getSessionVariable().setQueryTimeoutS(prevQueueTimeoutSecond);
         GlobalVariable.setQueryQueueMaxQueuedQueries(prevQueueMaxQueuedQueries);
     }
 
