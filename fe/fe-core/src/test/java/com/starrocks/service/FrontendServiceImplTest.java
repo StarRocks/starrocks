@@ -715,15 +715,15 @@ public class FrontendServiceImplTest {
                         ");");
 
         ConnectContext ctx = starRocksAssert.getCtx();
-        String createUserSql = "create user test2";
+        String createUserSql = "create user test3";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
-        String grantSql = "GRANT SELECT ON TABLE test_table.ye$test TO USER `test2`@`%`;";
+        String grantSql = "GRANT SELECT ON TABLE test_table.ye$test TO USER `test3`@`%`;";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesParams request = new TGetTablesParams();
         TUserIdentity userIdentity = new TUserIdentity();
-        userIdentity.setUsername("test2");
+        userIdentity.setUsername("test3");
         userIdentity.setHost("%");
         userIdentity.setIs_domain(false);
         request.setCurrent_user_ident(userIdentity);
