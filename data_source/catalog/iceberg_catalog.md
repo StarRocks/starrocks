@@ -10,12 +10,12 @@ Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支�
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、华为云 OBS、腾讯云 COS、火山引擎 TOS、金山云 KS3、MinIO、Ceph S3 等）。
 
-- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue、REST 服务。
+- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue、Tabular。
 
   > **说明**
   >
   > - 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
-  > - 如果您使用的是 Tabular Iceberg Catalog，请选择 REST 作为元数据服务。
+  > - 如果您使用 Tabular 作为元数据服务，则您需要使用 Iceberg 的 REST Catalog。
 
 ## 使用说明
 
@@ -163,9 +163,9 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-##### REST
+##### Tabular
 
-如果您使用的是 Tabular Iceberg Catalog，请选择 REST 作为 Iceberg 集群的元数据服务，并按如下配置 `MetastoreParams`：
+如果您使用 Tabular 作为元数据服务，则必须设置元数据服务的类型为 REST (`"iceberg.catalog.type" = "rest"`)，请按如下配置 `MetastoreParams`：
 
 ```SQL
 "iceberg.catalog.type" = "rest",
@@ -179,11 +179,11 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | 参数                       | 是否必须 | 说明                                                         |
 | -------------------------- | ------ | ------------------------------------------------------------ |
 | iceberg.catalog.type       | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `rest`。           |
-| iceberg.catalog.uri        | 是      | REST 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
+| iceberg.catalog.uri        | 是      | Tabular 服务 Endpoint 的 URI，如 `https://api.tabular.io/ws`。      |
 | iceberg.catalog.credential | 是      | Tabular 服务的认证信息。                                        |
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
 
-例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 REST 作为元数据服务：
+例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
 
 ```SQL
 CREATE EXTERNAL CATALOG tabular
@@ -201,9 +201,11 @@ PROPERTIES
 
 StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
-如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
+注意：
 
-如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
+- 如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、或 GCS，则必须配置 `StorageCredentialParams`。
+
+- 如果您使用 Tabular 作为元数据服务，则不需要配置 `StorageCredentialParams`，可以跳过本小节。如果您使用 HMS 或 AWS Glue 作为元数据服务，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
