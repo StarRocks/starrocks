@@ -115,7 +115,7 @@ public class StatementPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
         ExecPlan plan;
-        if (!isOnlyOlapTable) {
+        if (!isOnlyOlapTable || session.getSessionVariable().isCboUseDBLock()) {
             plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
         } else {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
