@@ -381,7 +381,7 @@
     + [cast函数](/sql-reference/sql-functions/cast.md)
     + [hash函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
     + 条件函数
-      + [case](/sql-reference/sql-functions/condition-functions/coalesce.md)
+      + [case](/sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](/sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](/sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](/sql-reference/sql-functions/condition-functions/ifnull.md)
