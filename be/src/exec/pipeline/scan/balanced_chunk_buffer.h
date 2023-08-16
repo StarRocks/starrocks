@@ -65,7 +65,7 @@ private:
 
     const int _output_operators;
     const BalanceStrategy _strategy;
-    std::vector<SubBuffer> _sub_buffers;
+    std::unique_ptr<SubBuffer[]> _sub_buffers;
     std::atomic_int64_t _output_index = 0;
 
     ChunkBufferLimiterPtr _limiter;
