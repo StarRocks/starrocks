@@ -2105,6 +2105,7 @@ public class Config extends ConfigBase {
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
+<<<<<<< HEAD
     @ConfField
     public static String azure_blob_tenant_id = "";
     @ConfField
@@ -2115,6 +2116,10 @@ public class Config extends ConfigBase {
     public static String azure_blob_client_certificate_path = "";
     @ConfField
     public static String azure_blob_authority_host = "";
+=======
+    @ConfField(mutable = true)
+    public static int starmgr_grpc_timeout_seconds = 5;
+>>>>>>> fc2437559c ([Refactor] remove unused config from fe (#29274))
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
