@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.MapExpr;
 
@@ -33,7 +34,8 @@ public class AstToViewBuilder {
         @Override
         public String visitArrayExpr(ArrayExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append(node.getType().toString());
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
             sb.append('[');
             sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
             sb.append(']');
@@ -43,7 +45,8 @@ public class AstToViewBuilder {
         @Override
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append(node.getType().toString());
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
             sb.append("{");
             for (int i = 0; i < node.getChildren().size(); i = i + 2) {
                 if (i > 0) {
