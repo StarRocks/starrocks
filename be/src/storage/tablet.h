@@ -202,6 +202,7 @@ public:
 
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
+    int64_t max_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
