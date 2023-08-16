@@ -789,9 +789,7 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                if (!isCompensate) {
-                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
-                } else {
+                if (isCompensate) {
                     // NOTE: It's not safe to get table's pruned partition predicates by
                     // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
                     //  - partitionPredicate is null if olap scan operator cannot prune partitions.
@@ -813,6 +811,10 @@ public class MvUtils {
                     // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
                     partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                             columnRefFactory);
+                }
+
+                if (!isCompensate || partitionPredicate == null || partitionPredicate.isEmpty()) {
+                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
                 }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
@@ -850,6 +852,11 @@ public class MvUtils {
         // compensate nothing if selected partitions are the same with the total partitions.
         if (olapScanOperator.getSelectedPartitionId() != null
                 && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+            return partitionPredicates;
+        }
+
+        // if no partitions are selected, return empty partition predicates.
+        if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
             return partitionPredicates;
         }
 

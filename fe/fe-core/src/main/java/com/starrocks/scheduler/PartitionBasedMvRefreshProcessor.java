@@ -873,13 +873,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
                         mvRangePartitionNames, force);
+
                 Set<String> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
                 // because the relation of partitions between materialized view and base partition table is n : m,
                 // should calculate the candidate partitions recursively.
                 LOG.debug("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                         " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
                 SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                        mvContext.refBaseTableMVIntersectedPartitions, mvContext.mvRefBaseTableIntersectedPartitions);
+                        mvContext.getRefBaseTableMVIntersectedPartitions(), mvContext.getMvRefBaseTableIntersectedPartitions());
                 LOG.debug("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                         " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
             }
@@ -912,34 +913,58 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return needRefreshMvPartitionNames;
     }
 
-    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table partitionTable,
+    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
                                                                                   Set<String> mvRangePartitionNames,
                                                                                   boolean force) {
-        if (force || unSupportRefreshByPartition(partitionTable)) {
+        if (force || unSupportRefreshByPartition(refBaseTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
-        // check if there is a load in the base table and add it to the refresh candidate
-        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(partitionTable, false);
+
+        // step1: check updated partition names in the ref base table and add it to the refresh candidate
+        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(refBaseTable, false);
         if (updatePartitionNames == null) {
             return mvRangePartitionNames;
         }
+
+        // step2: fetch the corresponding materialized view partition names as the need to refresh partitions
         Set<String> result = getMVPartitionNamesByBasePartitionNames(updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         return result;
     }
 
+    /**
+     *
+     * @param basePartitionNames : ref base table partition names to check.
+     * @return                   : Return mv corresponding partition names to the ref base table partition names.
+     */
     private Set<String> getMVPartitionNamesByBasePartitionNames(Set<String> basePartitionNames) {
         Set<String> result = Sets.newHashSet();
+        Map<String, Set<String>> refBaseTableMVPartitionMap = mvContext.getRefBaseTableMVIntersectedPartitions();
         for (String basePartitionName : basePartitionNames) {
-            result.addAll(mvContext.refBaseTableMVIntersectedPartitions.get(basePartitionName));
+            if (refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
+                result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
+            } else {
+                LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}",
+                        basePartitionName);
+            }
         }
         return result;
     }
 
+    /**
+     * @param mvPartitionNames : the need to refresh materialized view partition names
+     * @return                 : the corresponding ref base table partition names to the materialized view partition names
+     */
     private Set<String> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
+        Map<String, Set<String>> mvRefBaseTablePartitionMap = mvContext.getMvRefBaseTableIntersectedPartitions();
         for (String mvPartitionName : mvPartitionNames) {
-            result.addAll(mvContext.mvRefBaseTableIntersectedPartitions.get(mvPartitionName));
+            if (mvRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
+                result.addAll(mvRefBaseTablePartitionMap.get(mvPartitionName));
+            } else {
+                LOG.warn("Cannot find need refreshed mv table partition from synced partition info: {}",
+                        mvPartitionName);
+            }
         }
         return result;
     }
@@ -1230,6 +1255,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } catch (Exception e) {
+            e.printStackTrace();
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
             throw e;
         } finally {
