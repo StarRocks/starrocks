@@ -316,7 +316,6 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-    + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
     + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
@@ -661,6 +660,7 @@
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+  + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
