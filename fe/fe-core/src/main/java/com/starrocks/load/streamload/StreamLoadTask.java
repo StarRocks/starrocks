@@ -40,8 +40,16 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> 06eee4c1d8 ([Enhancement] Profile optimization(1) (#29201))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -1060,12 +1068,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
             summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
         }
+        ConnectContext session = ConnectContext.get();
+        if (session != null) {
+            SessionVariable variables = session.getSessionVariable();
+            if (variables != null) {
+                summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            }
+        }
 
         profile.addChild(summaryProfile);
         if (coord.getQueryProfile() != null) {
             if (!isSyncStreamLoad()) {
                 coord.endProfile();
-                profile.addChild(coord.buildMergedQueryProfile(null));
+                profile.addChild(coord.buildMergedQueryProfile());
             } else {
                 profile.addChild(coord.getQueryProfile());
             }
