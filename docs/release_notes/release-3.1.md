@@ -133,7 +133,8 @@ Fixed the following issues:
 
 - The `storage_cache_ttl` parameter is deleted from the table creation syntax used for StarRocks shared-data clusters. Now the data in the local cache is evicted based on the LRU algorithm.
 - The BE configuration items `disable_storage_page_cache` and `alter_tablet_worker_count` and the FE configuration item `lake_compaction_max_tasks` are changed from immutable parameters to mutable parameters.
-- The default values of the BE configuration items `block_cache_checksum_enable` and `enable_new_load_on_memory` are changed from `true` to `false`.
+- The default value of the BE configuration item `block_cache_checksum_enable` is changed from `true` to `false`.
+- The default value of the BE configuration item `enable_new_load_on_memory_limit_exceeded` is changed from `false` to `true`.
 - The default value of the FE configuration item `max_running_txn_num_per_db` is changed from `100` to `1000`.
 - The default value of the FE configuration item `http_max_header_size` is changed from `8192` to `32768`.
 - The default value of the FE configuration item `tablet_create_timeout_second` is changed from `1` to `10`.
