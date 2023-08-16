@@ -33,6 +33,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -363,6 +364,19 @@ public class ExplainAnalyzer {
                 appendSummaryLine(String.format("Progress (finished operator/all operator): %.2f%%",
                         100.0 * finishedCount / allNodeInfos.size()));
             }
+        }
+
+        // 7. Non default Variables
+        String sessionVariables = summaryProfile.getInfoString("NonDefaultSessionVariables");
+        Map<String, SessionVariable.NonDefaultValue> variables = Maps.newTreeMap();
+        variables.putAll(SessionVariable.NonDefaultValue.parseFrom(sessionVariables));
+        if (MapUtils.isNotEmpty(variables)) {
+            appendSummaryLine("NonDefaultVariables:");
+            pushIndent(GraphElement.LEAF_METRIC_INDENT);
+            variables.forEach((k, v) -> {
+                appendSummaryLine(k, ": ", v.defaultValue, " -> ", v.actualValue);
+            });
+            popIndent();
         }
 
         popIndent(); // metric indent

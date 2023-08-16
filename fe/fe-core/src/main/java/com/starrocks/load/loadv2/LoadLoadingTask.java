@@ -239,6 +239,8 @@ public class LoadLoadingTask extends LoadTask {
                     }
                     sb.deleteCharAt(sb.length() - 1);
                     summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+                    summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
                 }
 
                 profile.addChild(summaryProfile);
@@ -246,7 +248,7 @@ public class LoadLoadingTask extends LoadTask {
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.endProfile();
-                profile.addChild(curCoordinator.buildMergedQueryProfile(null));
+                profile.addChild(curCoordinator.buildMergedQueryProfile());
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");

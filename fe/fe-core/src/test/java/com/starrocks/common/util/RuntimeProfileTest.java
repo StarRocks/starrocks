@@ -639,7 +639,7 @@ public class RuntimeProfileTest {
         Counter count6 = child12.addCounter("time_ns", TUnit.TIME_NS, null);
         count6.setValue(1000000);
 
-        RuntimeProfile.JsonProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
+        RuntimeProfile.JsonProfileFormatter formater = new RuntimeProfile.JsonProfileFormatter();
         String jsonStr = formater.format(profile);
         JsonObject jsonObj = new Gson().fromJson(jsonStr, JsonElement.class).getAsJsonObject();
 

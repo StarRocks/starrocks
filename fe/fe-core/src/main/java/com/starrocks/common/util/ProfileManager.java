@@ -145,7 +145,7 @@ public class ProfileManager {
                 profileString = profile.toString();
                 break;
             case "json":
-                RuntimeProfile.ProfileFormatter formatter = new RuntimeProfile.JsonProfileFormater();
+                RuntimeProfile.ProfileFormatter formatter = new RuntimeProfile.JsonProfileFormatter();
                 profileString = formatter.format(profile, "");
                 break;
             default:
