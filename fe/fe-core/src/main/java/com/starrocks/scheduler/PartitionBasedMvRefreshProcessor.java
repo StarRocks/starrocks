@@ -1255,7 +1255,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } catch (Exception e) {
-            e.printStackTrace();
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
             throw e;
         } finally {
