@@ -13,13 +13,24 @@ Strict mode works as follows:
 - If strict mode is enabled, StarRocks loads only qualified rows. It filters out error rows and returns details about the error rows.
 - If strict mode is disabled, StarRocks loads qualified rows together with error rows.
 
+During data loading, if StarRocks finds data inconsistencies between the source columns and the destination columns, it converts the data in the source columns that are inconsistent with their mapping destination columns. Data conversions may fail due to various issues, for example, the data types of the source columns do not match the data types of the destination columns or the values in the source columns exceed their allowed lengths. Column values that fail to be properly converted are unqualified column values, and the source rows that contain such unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
+
+Strict mode works as follows:
+
+- If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns an `error_url` field with which you can view details about the unqualified rows.
+- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads the unqualified rows that contain unqualified column values together with the qualified rows.
+
+  > **NOTE**
+  >
+  > If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the unqualified rows that contain unqualified column values.
+
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
 - The source column value `\N` is processed into `NULL` upon conversion to TINYINT.
 
-  - > **NOTE**
-    >
-    > `\N` is always processed into `NULL` upon conversion regardless of the destination data type.
+  > **NOTE**
+  >
+  > `\N` is always processed into `NULL` upon conversion regardless of the destination data type.
 
 - The source column value `abc` is processed into `NULL`, because its data type is not TINYINT and the conversion fails.
 
