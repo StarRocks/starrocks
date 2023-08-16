@@ -62,13 +62,13 @@ SELECT * FROM mv2 ORDER BY event_day;
 -- !result
 DESC mv1;
 -- result:
-event_day	date	YES	true	None	
-count_pv	bigint	NO	true	None	
+event_day	date	YES	true	None	NONE
+count_pv	bigint	NO	true	None	NONE
 -- !result
 DESC mv2;
 -- result:
-event_day	date	YES	true	None	
-sum_pv	bigint	YES	true	None	
+event_day	date	YES	true	None	NONE
+sum_pv	bigint	YES	true	None	NONE
 -- !result
 INSERT INTO ss values('2020-01-15', 2);
 -- result:
