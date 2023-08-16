@@ -283,6 +283,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -719,6 +721,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
+    private boolean cboUseDBLock = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1301,6 +1306,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    public boolean isCboUseDBLock() {
+        return cboUseDBLock;
+    }
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
