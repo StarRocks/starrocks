@@ -94,7 +94,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
 
-    private boolean prevQueueEnable;
+    private boolean prevQueueEnableSelect;
+    private boolean prevQueueEnableStatistic;
+    private boolean prevQueueEnableLoad;
     private int prevQueueConcurrencyHardLimit;
     private double prevQueueMemUsedPctHardLimit;
     private int prevQueuePendingTimeoutSecond;
@@ -110,7 +112,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Before
     public void before() {
-        prevQueueEnable = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
+        prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
         prevQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         prevQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
@@ -139,7 +143,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     @After
     public void after() {
         // Reset query queue configs.
-        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnable);
+        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnableSelect);
+        GlobalVariable.setEnableQueryQueueStatistic(prevQueueEnableStatistic);
+        GlobalVariable.setEnableQueryQueueLoad(prevQueueEnableLoad);
         GlobalVariable.setQueryQueueConcurrencyLimit(prevQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(prevQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
