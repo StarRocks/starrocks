@@ -69,7 +69,6 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceClient;
@@ -1536,7 +1535,7 @@ public class Coordinator {
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
             ExecPlan plan = execPlanSupplier.get();
-            profile.addChild(buildMergedQueryProfile(null));
+            profile.addChild(buildMergedQueryProfile());
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
@@ -1699,7 +1698,7 @@ public class Coordinator {
         return false;
     }
 
-    public RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics) {
+    public RuntimeProfile buildMergedQueryProfile() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         if (!sessionVariable.isEnableProfile()) {
@@ -1870,11 +1869,9 @@ public class Coordinator {
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ?
-                maxQueryCumulativeCpuTime : statistics.cpuCostNs);
+        queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
-        queryPeakMemoryUsage.setValue(statistics == null || statistics.memCostBytes == null ?
-                maxQueryPeakMemoryUsage : statistics.memCostBytes);
+        queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
 
         return newQueryProfile;
     }
