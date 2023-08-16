@@ -935,7 +935,8 @@ public class TransactionState implements Writable {
                     traceParent,
                     txnSpan,
                     createTime,
-                    this);
+                    this,
+                    Config.enable_sync_publish);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

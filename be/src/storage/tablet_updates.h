@@ -130,6 +130,8 @@ public:
     // get latest version's version
     int64_t max_version() const;
 
+    int64_t max_readable_version() const;
+
     // get total number of committed and pending rowsets
     size_t version_count() const;
 

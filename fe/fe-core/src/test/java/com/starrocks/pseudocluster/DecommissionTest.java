@@ -51,6 +51,7 @@ public class DecommissionTest {
     @Test
     public void testDecommission() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
+        Config.statistic_collect_query_timeout = 3600;
         int numTable = 10;
         final String[] tableNames = new String[numTable];
         final String[] createTableSqls = new String[numTable];

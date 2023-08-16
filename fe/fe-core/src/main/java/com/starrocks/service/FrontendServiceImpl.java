@@ -175,6 +175,8 @@ import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TGetProfileRequest;
@@ -258,6 +260,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
@@ -1221,6 +1224,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
+        long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
+        if (Config.enable_sync_publish) {
+            result.setTimeout(timeoutSecond);
+        } else {
+            result.setTimeout(0);
+        }
+        
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
@@ -1423,6 +1433,42 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 break;
         }
+    }
+
+    @Override
+    public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
+        String clientAddr = getClientAddrAsString();
+        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+                request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
+        LOG.debug("get txn status request: {}", request);
+
+        TGetLoadTxnStatusResult result = new TGetLoadTxnStatusResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.warn("current fe is not leader");
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        // get database
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
+        if (db == null) {
+            LOG.warn("unknown database, database=" + dbName);
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        try {
+            TTransactionStatus status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), status);
+            result.setStatus(status);
+        } catch (Throwable e) {
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            LOG.warn("catch unknown result.", e);
+        }
+        return result;
     }
 
     @Override
