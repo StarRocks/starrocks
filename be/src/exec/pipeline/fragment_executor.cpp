@@ -856,7 +856,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             max_input_dop += source_operator->degree_of_parallelism();
 
             auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
-            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_input_dop);
+            auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(
+                    max_input_dop, config::local_exchange_buffer_mem_limit_per_driver);
             auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
             local_exchange_source->set_runtime_state(runtime_state);

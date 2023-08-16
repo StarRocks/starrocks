@@ -729,6 +729,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
+CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
@@ -972,7 +973,9 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000")                                 // 6s
+// pipeline streaming aggregate chunk buffer size
+CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+CONF_mInt64(wait_apply_time, "6000") // 6s
 
         // Max size of a binlog file. The default is 512MB.
         CONF_Int64(binlog_file_max_size, "536870912");

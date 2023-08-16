@@ -433,7 +433,8 @@ public class StmtExecutor {
                 }
             }
 
-            if (context.shouldDumpQuery()) {
+            // no need to execute http query dump request in BE
+            if (context.isHTTPQueryDump) {
                 return;
             }
             if (isForwardToLeader()) {
@@ -1352,14 +1353,13 @@ public class StmtExecutor {
                                          long beginTimeInNanoSecond) throws Exception {
         try {
             handleDMLStmt(execPlan, stmt);
-            // TODO: Support write profile even dml aborted.
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-            }
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
+            if (context.getSessionVariable().isEnableProfile()) {
+                writeProfile(beginTimeInNanoSecond);
+            }
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
     }

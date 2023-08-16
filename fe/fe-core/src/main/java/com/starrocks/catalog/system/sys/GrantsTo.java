@@ -24,7 +24,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
@@ -439,14 +438,14 @@ public class GrantsTo {
                 if (table == null) {
                     continue;
                 }
-                if (objectType.equals(ObjectType.VIEW) && !(table instanceof View)) {
-                    continue;
-                } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)
-                        && !table.isMaterializedView()) {
-                    continue;
-                }
 
-                objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                if (objectType.equals(ObjectType.VIEW) && table.isView()) {
+                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW) && table.isMaterializedView()) {
+                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                } else if (!table.isView() && !table.isMaterializedView()) {
+                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                }
             }
         } else {
             if (Config.enable_show_external_catalog_privilege) {
