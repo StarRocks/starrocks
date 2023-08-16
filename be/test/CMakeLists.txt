@@ -239,6 +239,7 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp

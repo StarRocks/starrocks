@@ -4,6 +4,7 @@ package com.starrocks.service;
 
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryQueueManager;
@@ -14,8 +15,12 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -28,7 +33,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-
 
 public class FrontendServiceImplTest {
 
@@ -154,5 +158,34 @@ public class FrontendServiceImplTest {
         List<TTableInfo> tablesInfos = response.getTables_infos();
         Assert.assertEquals(1, tablesInfos.size());
         Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
+    }
+
+    @Test
+    public void testGetLoadTxnStatus() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                             Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                             new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
+                             TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
+        request.setDb("non-exist-db");
+        request.setTbl("non-site_access_day-tbl");
+        request.setTxnId(100);
+        TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
+        request.setDb("test");
+        TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
+        request.setTxnId(transactionId);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
     }
 }

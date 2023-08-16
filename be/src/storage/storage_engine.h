@@ -61,6 +61,7 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -160,6 +161,8 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
+    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -200,6 +203,11 @@ public:
     void do_manual_compact(bool force_compact);
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
+
+    void wake_finish_publish_vesion_thread() {
+        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+        _finish_publish_version_cv.notify_one();
+    }
 
 protected:
     static StorageEngine* _s_instance;
@@ -258,6 +266,9 @@ private:
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
 
+    // finish publish version process function
+    void* _finish_publish_version_thread_callback(void* arg);
+
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
 
@@ -300,6 +311,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to check finish publish version task
+    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -328,6 +341,9 @@ private:
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
 
+    std::mutex _finish_publish_version_mutex;
+    std::condition_variable _finish_publish_version_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
@@ -352,6 +368,8 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
+
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

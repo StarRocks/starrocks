@@ -1435,6 +1435,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
             coord.exec();
 
+            long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
                 /*
@@ -1532,7 +1533,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
+                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
