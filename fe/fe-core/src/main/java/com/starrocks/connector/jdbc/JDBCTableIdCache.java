@@ -20,7 +20,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JDBCTableIdCache {
     private static ConcurrentHashMap<JDBCTableName, Integer> tableIdCache = new ConcurrentHashMap();
 
-    public static ConcurrentHashMap<JDBCTableName, Integer> getTableIdCache() {
-        return tableIdCache;
+    public static Boolean containsTableId(JDBCTableName tableKey) {
+        return tableIdCache.containsKey(tableKey);
+    }
+
+    public static void putTableId(JDBCTableName tableKey, Integer tableId) {
+        tableIdCache.put(tableKey, tableId);
+    }
+
+    public static Integer getTableId(JDBCTableName tableKey) {
+        return tableIdCache.get(tableKey);
     }
 }

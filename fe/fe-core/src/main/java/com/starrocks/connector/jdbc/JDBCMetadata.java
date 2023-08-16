@@ -35,6 +35,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -116,12 +118,12 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return null;
             }
             JDBCTableName tableKey = JDBCTableName.of(catalogName, dbName, tblName);
-            if (JDBCTableIdCache.getTableIdCache().containsKey(tableKey)) {
-                return schemaResolver.getTable(JDBCTableIdCache.getTableIdCache().get(tableKey),
+            if (JDBCTableIdCache.containsTableId(tableKey)) {
+                return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
                         tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             } else {
                 Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
-                JDBCTableIdCache.getTableIdCache().put(tableKey, tableId);
+                JDBCTableIdCache.putTableId(tableKey, tableId);
                 return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             }
         } catch (SQLException | DdlException e) {
@@ -141,17 +143,11 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
-            List<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName);
-            ImmutableList.Builder<Column> list = ImmutableList.builder();
+            Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
+                    .stream().map(columnName -> columnName.toLowerCase()).collect(Collectors.toSet());
             if (partitionColumnNames.size() > 0) {
-                for (String colName : partitionColumnNames) {
-                    for (Column col : fullSchema) {
-                        if (colName.equals(col.getName())) {
-                            list.add(col);
-                        }
-                    }
-                }
-                return list.build();
+                return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
+                        .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
             }

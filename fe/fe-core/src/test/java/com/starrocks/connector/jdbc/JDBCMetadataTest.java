@@ -38,7 +38,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
@@ -57,7 +56,6 @@ public class JDBCMetadataTest {
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
-    private Map<JDBCTableName, Integer> tableIdCache;
 
     @Before
     public void setUp() throws SQLException {
@@ -87,8 +85,7 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
-        tableIdCache = new ConcurrentHashMap<>();
-        tableIdCache.put(JDBCTableName.of("catalog", "test", "tbl1"), 100000);
+
 
         new Expectations() {
             {
@@ -109,8 +106,14 @@ public class JDBCMetadataTest {
                 result = columnResult;
                 minTimes = 0;
 
-                Deencapsulation.invoke(jdbcTableIdCache, "getTableIdCache");
-                result = tableIdCache;
+                JDBCTableName jdbcTablekey = JDBCTableName.of("catalog", "test", "tbl1");
+
+                Deencapsulation.invoke(jdbcTableIdCache, "containsTableId", jdbcTablekey);
+                result = true;
+                minTimes = 0;
+
+                Deencapsulation.invoke(jdbcTableIdCache, "getTableId", jdbcTablekey);
+                result = 100000;
                 minTimes = 0;
 
             }
