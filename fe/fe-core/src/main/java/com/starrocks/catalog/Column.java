@@ -568,7 +568,7 @@ public class Column implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.name, this.type);
+        return Objects.hash(this.name.toLowerCase(), this.type);
     }
 
     @Override
