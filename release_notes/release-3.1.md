@@ -133,7 +133,8 @@
 
 - 存算分离架构下删除建表时的 `storage_cache_ttl` 参数，Cache 写满后按 LRU 算法进行淘汰。
 - BE 配置项 `disable_storage_page_cache`、`alter_tablet_worker_count` 和 FE 配置项 `lake_compaction_max_tasks` 由静态参数改为动态参数。
-- BE 配置项 `block_cache_checksum_enable`、`enable_new_load_on_memory` 默认值由 `true` 改为 `false`。
+- BE 配置项 `block_cache_checksum_enable` 默认值由 `true` 改为 `false`。
+- BE 配置项 `enable_new_load_on_memory_limit_exceeded` 默认值由 `false` 改为 `true`。
 - FE 配置项 `max_running_txn_num_per_db` 默认值由 `100` 改为 `1000`。
 - FE 配置项 `http_max_header_size` 默认值由 `8192` 改为 `32768`。
 - FE 配置项 `tablet_create_timeout_second` 默认值由 `1` 改为 `10`。
