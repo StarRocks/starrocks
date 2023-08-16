@@ -673,9 +673,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     } catch (AccessDeniedException e) {
                         continue;
                     }
-                    if (matcher != null && !matcher.match(mvTable.getName())) {
-                        continue;
-                    }
 
                     if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
                         continue;
@@ -690,9 +687,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (baseIdx == mvMeta.getIndexId()) {
                             continue;
                         }
-                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
+
+                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                                matcher, caseSensitive)) {
                             continue;
                         }
+
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
                 }
