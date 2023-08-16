@@ -315,6 +315,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -1878,6 +1879,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CreateRoutineLoadStmt(createLabelName(context.db, context.name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName,
                 dataSourceProperties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateRoutineLoadStatement(StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
+        return new ShowCreateRoutineLoadStmt(createLabelName(context.db, context.name));
     }
 
     @Override
