@@ -52,6 +52,7 @@ namespace starrocks {
 
 class SortedChunksMerger;
 class CascadeChunkMerger;
+class ChunkMerger;
 
 class DataStreamMgr;
 class MemTracker;
@@ -187,7 +188,7 @@ private:
 
     // SortedChunksMerger merges chunks from different senders.
     std::unique_ptr<SortedChunksMerger> _chunks_merger;
-    std::unique_ptr<CascadeChunkMerger> _cascade_merger;
+    std::unique_ptr<ChunkMerger> _cascade_merger;
 
     // Pool of sender queues.
     ObjectPool _sender_queue_pool;

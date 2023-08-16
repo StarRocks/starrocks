@@ -92,30 +92,62 @@ private:
     bool _wait_for_data = false;
 };
 
+class ChunkMerger {
+public:
+    ChunkMerger(RuntimeState* state) : _state(state) {}
+    ~ChunkMerger() = default;
+
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const SortDescs& _sort_desc) = 0;
+    virtual Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                        const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) = 0;
+
+    virtual bool is_data_ready() = 0;
+    virtual Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) = 0;
+
+protected:
+    RuntimeState* _state;
+};
+
 // TODO(murphy) refactor it with MergeCursorsCascade
 // Merge sorted chunks in cascade style
-class CascadeChunkMerger {
+class CascadeChunkMerger : public ChunkMerger {
 public:
     CascadeChunkMerger(RuntimeState* state);
     ~CascadeChunkMerger() = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
-                const SortDescs& _sort_desc);
+                const SortDescs& _sort_desc) override;
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
-                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) override;
 
-    bool is_data_ready();
-    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit);
+    bool is_data_ready() override;
+    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
 
 private:
-    RuntimeState* _state;
-
     const std::vector<ExprContext*>* _sort_exprs;
     SortDescs _sort_desc;
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;
+};
+
+class ConstChunkMerger : public ChunkMerger {
+public:
+    ConstChunkMerger(RuntimeState* state);
+    ~ConstChunkMerger() = default;
+
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const SortDescs& _sort_desc) override;
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) override;
+
+    bool is_data_ready() override;
+    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
+
+private:
+    std::vector<ChunkProvider> _providers;
 };
 
 } // namespace starrocks

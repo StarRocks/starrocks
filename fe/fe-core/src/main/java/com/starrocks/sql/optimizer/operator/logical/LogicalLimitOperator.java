@@ -37,7 +37,7 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     private Phase phase;
 
-    public LogicalLimitOperator(long limit, long offset, Phase phase) {
+    private LogicalLimitOperator(long limit, long offset, Phase phase) {
         super(OperatorType.LOGICAL_LIMIT);
         Preconditions.checkState(limit < 0 || limit + offset >= 0,
                 String.format("limit(%d) + offset(%d) is too large and yields an overflow result(%d)", limit, offset,
@@ -59,20 +59,12 @@ public class LogicalLimitOperator extends LogicalOperator {
         return new LogicalLimitOperator(limit, offset, Phase.INIT);
     }
 
-    public static LogicalLimitOperator global(long limit) {
-        return global(limit, DEFAULT_OFFSET);
-    }
-
     public static LogicalLimitOperator global(long limit, long offset) {
         return new LogicalLimitOperator(limit, offset, Phase.GLOBAL);
     }
 
     public static LogicalLimitOperator local(long limit) {
-        return local(limit, DEFAULT_OFFSET);
-    }
-
-    public static LogicalLimitOperator local(long limit, long offset) {
-        return new LogicalLimitOperator(limit, offset, Phase.LOCAL);
+        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.LOCAL);
     }
 
     public boolean hasOffset() {

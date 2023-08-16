@@ -124,6 +124,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFun
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
@@ -197,6 +198,7 @@ public class RuleSet {
 
     static {
         REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
+                new PushDownProjectLimitRule(),
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
