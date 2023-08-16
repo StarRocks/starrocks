@@ -101,12 +101,12 @@ public class QueryAnalyzer {
         this.metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
-    public void analyze(StatementBase node) {
-        new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    public Scope analyze(StatementBase node) {
+        return new Visitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
-    public void analyze(StatementBase node, Scope parent) {
-        new Visitor().process(node, parent);
+    public Scope analyze(StatementBase node, Scope parent) {
+        return new Visitor().process(node, parent);
     }
 
     private class Visitor extends AstVisitor<Scope, Scope> {

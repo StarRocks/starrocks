@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -225,7 +226,7 @@ public class MaterializedViewAnalyzer {
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
-            Analyzer.analyze(queryStatement, context);
+            Scope queryScope = new QueryAnalyzer(context).analyze(queryStatement);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
 
             // convert queryStatement to sql and set
@@ -267,6 +268,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                checkWindowFunctions(statement, columnExprMap, queryScope, context);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -772,6 +774,27 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        // if mv is partitioned, mv will be refreshed by partition.
+        // if mv has window functions, it should also be partitioned by and the partition by columns
+        // should contain the partition column of mv
+        private void checkWindowFunctions(
+                CreateMaterializedViewStatement statement,
+                Map<Column, Expr> columnExprMap,
+                Scope queryScope, ConnectContext context) {
+            AnalyzeState partitionExprState = new AnalyzeState();
+            ExpressionAnalyzer.analyzeExpression(statement.getPartitionRefTableExpr(), partitionExprState, queryScope, context);
+            for (Expr columnExpr : columnExprMap.values()) {
+                if (columnExpr instanceof AnalyticExpr) {
+                    AnalyticExpr analyticExpr = columnExpr.cast();
+                    if (analyticExpr.getPartitionExprs() == null
+                            || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
+                        throw new SemanticException("window function: %s should be partitioned by partition column: %s",
+                                analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
+                    }
+                }
+            }
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
