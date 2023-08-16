@@ -1188,8 +1188,10 @@ double StorageEngine::delete_unused_rowset() {
                 << rowset->version().second;
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
-        clear_rowset_delta_column_group_cache(*rowset.get());
-        status = rowset->remove_delta_column_group();
+        if (rowset->keys_type() != PRIMARY_KEYS) {
+            clear_rowset_delta_column_group_cache(*rowset.get());
+            status = rowset->remove_delta_column_group();
+        }
         LOG_IF(WARNING, !status.ok()) << "remove delta column group error rowset:" << rowset->rowset_id()
                                       << " finished. status:" << status;
     }
