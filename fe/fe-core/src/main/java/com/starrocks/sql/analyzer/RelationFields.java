@@ -8,6 +8,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.collect.ImmutableList.toImmutableList;
