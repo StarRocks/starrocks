@@ -426,19 +426,12 @@ public class MaterializedViewAnalyzer {
                 if (columnMap.putIfAbsent(col.getName(), col) != null) {
                     throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
                 }
-<<<<<<< HEAD
-
-                if (!column.getType().canBeMVKey()) {
-                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
-                }
-                column.setIsKey(true);
-                column.setAggregationType(null, false);
-=======
->>>>>>> b16f9298e8 ([BugFix] fix sort key of materialized view (#28800))
             }
             if (CollectionUtils.isEmpty(statement.getSortKeys())) {
                 for (String col : keyCols) {
-                    columnMap.get(col).setIsKey(true);
+                    Column column = columnMap.get(col);
+                    column.setIsKey(true);
+                    column.setAggregationType(null, false);
                 }
                 return mvColumns;
             }
