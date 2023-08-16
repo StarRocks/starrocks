@@ -77,6 +77,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -418,12 +419,6 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
-        Map<TableName, Table> tables = Maps.newHashMap();
-        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
-        return tables;
-    }
-
     public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
@@ -460,6 +455,15 @@ public class AnalyzerUtils {
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
+        return subQueryRelations;
+    }
+
+    /**
+     * Only collect one level table name and the corresponding sub query relation.
+     */
+    public static Map<TableName, SubqueryRelation> collectOneLevelSubQueryRelation(QueryStatement queryStatement) {
+        Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
+        new AnalyzerUtils.SubQueryOneLevelRelationCollector(subQueryRelations).visit(queryStatement);
         return subQueryRelations;
     }
 
@@ -661,6 +665,27 @@ public class AnalyzerUtils {
         public Void visitSubquery(SubqueryRelation node, Void context) {
             subQueryRelations.put(node.getResolveTableName(), node);
             return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            return null;
+        }
+    }
+
+    private static class SubQueryOneLevelRelationCollector extends TableCollector {
+        Map<TableName, SubqueryRelation> subQueryRelations;
+
+        public SubQueryOneLevelRelationCollector(Map<TableName, SubqueryRelation> subQueryRelations) {
+            super(null);
+            this.subQueryRelations = subQueryRelations;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            // no recursive
+            subQueryRelations.put(node.getResolveTableName(), node);
+            return null;
         }
 
         @Override
@@ -1094,16 +1119,36 @@ public class AnalyzerUtils {
             @Override
             public Expr visitSelect(SelectRelation node, Void context) {
                 for (SelectListItem selectListItem : node.getSelectList().getItems()) {
-                    if (selectListItem.getAlias() == null) {
-                        if (selectListItem.getExpr() instanceof SlotRef) {
-                            SlotRef slot = (SlotRef) selectListItem.getExpr();
-                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                return slot;
+                    if (selectListItem.isStar()) {
+                        // `select *` expr
+                        for (Expr expr : node.getOutputExpression()) {
+                            if (expr instanceof SlotRef) {
+                                SlotRef slot = (SlotRef) expr;
+                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return slot;
+                                }
+                            } else if (expr instanceof FieldReference) {
+                                FieldReference fieldReference = (FieldReference) expr;
+                                Field field = node.getScope().getRelationFields()
+                                        .getFieldByIndex(fieldReference.getFieldIndex());
+                                if (field.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return new SlotRef(field.getRelationAlias(), field.getName());
+                                }
                             }
                         }
+                        return null;
                     } else {
-                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
-                            return selectListItem.getExpr();
+                        if (selectListItem.getAlias() == null) {
+                            if (selectListItem.getExpr() instanceof SlotRef) {
+                                SlotRef slot = (SlotRef) selectListItem.getExpr();
+                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return slot;
+                                }
+                            }
+                        } else {
+                            if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return selectListItem.getExpr();
+                            }
                         }
                     }
                 }
