@@ -331,8 +331,6 @@
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
-    + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
-    + [生成列](/sql-reference/sql-statements/generated_columns.md)
   + 函数参考
     + [函数列表](/sql-reference/sql-functions/function-list.md)
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
@@ -696,6 +694,8 @@
       + [tan](/sql-reference/sql-functions/math-functions/tan.md)
       + [tanh](/sql-reference/sql-functions/math-functions/tanh.md)
       + [truncate](/sql-reference/sql-functions/math-functions/truncate.md)
+  + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
+  + [生成列](/sql-reference/sql-statements/generated_columns.md)
   + [系统变量](/reference/System_variable.md)
   + [用户自定义变量](/reference/user_defined_variables.md)
   + [错误码](/reference/Error_code.md)
