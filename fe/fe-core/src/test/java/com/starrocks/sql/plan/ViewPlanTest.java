@@ -1810,4 +1810,16 @@ public class ViewPlanTest extends PlanTestBase {
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan("select * from " + viewName));
         starRocksAssert.dropView(viewName);
     }
+
+    @Test
+    public void testArrayMapView() throws Exception {
+        String sql = "SELECT [1,2,3]";
+        testView(sql);
+        sql = "SELECT ARRAY<INT>[1,2,3]";
+        testView(sql);
+        sql = "SELECT Map<INT, INT>{1:10,2:20,3:30}";
+        testView(sql);
+        sql = "SELECT Map{1:10,2:20,3:30}";
+        testView(sql);
+    }
 }
