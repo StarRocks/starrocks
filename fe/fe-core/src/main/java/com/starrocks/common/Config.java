@@ -2105,16 +2105,6 @@ public class Config extends ConfigBase {
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
-    @ConfField
-    public static String azure_blob_tenant_id = "";
-    @ConfField
-    public static String azure_blob_client_id = "";
-    @ConfField
-    public static String azure_blob_client_secret = "";
-    @ConfField
-    public static String azure_blob_client_certificate_path = "";
-    @ConfField
-    public static String azure_blob_authority_host = "";
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
