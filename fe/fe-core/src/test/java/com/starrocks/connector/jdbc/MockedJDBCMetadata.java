@@ -36,6 +36,11 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME = "tbl0";
     private Map<String, String> properties;
 
+    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
+    private List<PartitionInfo> partitions = Arrays.asList(new Partition("d", 1690819200L),
+            new Partition("d", 1690819200L),
+            new Partition("d", 1690819200L));
+
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public MockedJDBCMetadata(Map<String, String> properties) {
@@ -103,7 +108,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tableName) {
         readLock();
         try {
-            return Arrays.asList("20230801", "20230802", "20230803", "20230804", "20230805");
+            return partitionNames;
         } finally {
             readUnlock();
         }
@@ -133,11 +138,20 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(com.starrocks.catalog.Table table, List<String> partitionNames) {
         readLock();
         try {
-            return Arrays.asList(new Partition("d", 1690819200L),
-                    new Partition("d", 1690819200L),
-                    new Partition("d", 1690819200L),
-                    new Partition("d", 1690819200L),
-                    new Partition("d", 1690819200L));
+            return partitions;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public void addPartitions() {
+        readLock();
+        try {
+            partitionNames = Arrays.asList("20230802", "20230803", "20230804", "20230805");
+            partitions = Arrays.asList(new Partition("d", 1690819200L),
+                            new Partition("d", 1690819200L),
+                            new Partition("d", 1690819200L),
+                            new Partition("d", 1690819200L));
         } finally {
             readUnlock();
         }

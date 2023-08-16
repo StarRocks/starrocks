@@ -34,7 +34,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
@@ -1178,7 +1180,22 @@ public class PartitionBasedMvRefreshProcessorTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
         Collection<Partition> partitions = materializedView.getPartitions();
-        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(3, partitions.size());
+        Assert.assertNotNull(materializedView.getPartition("P20230801"));
+        Assert.assertNotNull(materializedView.getPartition("P20230802"));
+        Assert.assertNotNull(materializedView.getPartition("P20230803"));
+
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.addPartitions();
+        taskRun.executeTaskRun();
+        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
+        Assert.assertEquals(4, incrementalPartitions.size());
+        Assert.assertNotNull(materializedView.getPartition("P20230802"));
+        Assert.assertNotNull(materializedView.getPartition("P20230803"));
+        Assert.assertNotNull(materializedView.getPartition("P20230804"));
+        Assert.assertNotNull(materializedView.getPartition("P20230805"));
     }
 
     @Test
