@@ -170,6 +170,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveTableName;
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return hiveProperties;
+    }
+
     public boolean isUseMetadataCache() {
         if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
             return true;

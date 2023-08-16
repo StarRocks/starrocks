@@ -133,6 +133,7 @@ public class HiveMetastoreApiConverter {
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
+                .setProperties(table.getParameters())
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();
     }
