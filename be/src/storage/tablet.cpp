@@ -1652,7 +1652,7 @@ std::string Tablet::debug_string() const {
 }
 
 const TabletSchemaCSPtr Tablet::tablet_schema() const {
-    std::shared_lock rdlock(_meta_lock);
+    std::shared_lock rdlock(_schema_lock);
     return _max_version_schema;
 }
 
@@ -1661,7 +1661,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
 }
 
 void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
-    std::lock_guard wrlock(_meta_lock);
+    std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         _max_version_schema = tablet_schema;
@@ -1669,7 +1669,7 @@ void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
-    std::shared_lock rdlock(_meta_lock);
+    std::shared_lock rdlock(_schema_lock);
     return *_max_version_schema;
 }
 } // namespace starrocks

@@ -361,6 +361,7 @@ private:
 
     // explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
+    mutable std::shared_mutex _schema_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map
     // and _inc_rs_version_map. Only the most recent rowsets are kept in _inc_rs_version_map to
     // reduce the amount of data that needs to be copied during the clone task.
