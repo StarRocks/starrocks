@@ -519,6 +519,17 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
+
+    // Copy all data source's metrics
+    auto* data_source_profile = merged_profile->get_child(connector::DataSource::PROFILE_NAME);
+    if (data_source_profile != nullptr) {
+        _unique_metrics->copy_all_info_strings_from(data_source_profile);
+        if (_unique_metrics->get_counter("IOTaskExecTime") != nullptr) {
+            _unique_metrics->copy_all_counters_from(data_source_profile, "IOTaskExecTime");
+        } else {
+            _unique_metrics->copy_all_counters_from(data_source_profile);
+        }
+    }
 }
 
 void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
