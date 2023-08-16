@@ -315,7 +315,7 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<RoleMapping> ROLE_MAPPING_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoleMapping.class, "clazz")
-                    .registerSubtype(LDAPRoleMapping.class, LDAPRoleMapping.class.getSimpleName());
+                    .registerSubtype(LDAPRoleMapping.class, "LDAPRoleMapping");
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
