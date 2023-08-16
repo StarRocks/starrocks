@@ -848,49 +848,61 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setInactiveAndReason("db not exists: " + dbId);
-            return;
-        }
-        if (baseTableInfos == null) {
-            baseTableInfos = Lists.newArrayList();
-            if (baseTableIds != null) {
-                // for compatibility
-                for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
-                }
-            } else {
-                active = false;
+        boolean desiredActive = active;
+        setInactiveAndReason("reloading");
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
+                setInactiveAndReason("db not exists: " + dbId);
                 return;
             }
-        }
-
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            // Do not set the active when table is null, it would be checked in MVActiveChecker
-            Table table = baseTableInfo.getTable();
-            if (table != null) {
-                if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
-                    LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                            baseTableInfo.getTableName(), id);
-                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
-                    continue;
-                }
-                MvId mvId = new MvId(db.getId(), id);
-                table.addRelatedMaterializedView(mvId);
-
-                if (!table.isNativeTableOrMaterializedView() && !table.isView()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
-                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
-                            baseTableInfo.getTableIdentifier(),
-                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                    Sets.newHashSet(mvId)).build()
-                    );
+            if (baseTableInfos == null) {
+                baseTableInfos = Lists.newArrayList();
+                if (baseTableIds != null) {
+                    // for compatibility
+                    for (long tableId : baseTableIds) {
+                        baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
+                    }
+                } else {
+                    active = false;
+                    return;
                 }
             }
+
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                // Do not set the active when table is null, it would be checked in MVActiveChecker
+                Table table = baseTableInfo.getTable();
+                if (table != null) {
+                    if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
+                        LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                                baseTableInfo.getTableName(), id);
+                        setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
+                        continue;
+                    }
+                    MvId mvId = new MvId(db.getId(), id);
+                    table.addRelatedMaterializedView(mvId);
+
+                    if (!table.isNativeTableOrMaterializedView() && !table.isView()) {
+                        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                                baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                                baseTableInfo.getTableIdentifier(),
+                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                        Sets.newHashSet(mvId)).build()
+                        );
+                    }
+                }
+            }
+            analyzePartitionInfo();
+
+            // normally reload
+            setActive(desiredActive);
+        } catch (Throwable e) {
+            LOG.error("reload materialized view failed: {}", this, e);
+        } finally {
+            // exceptional reload
+            setInactiveAndReason("reload failed");
         }
-        analyzePartitionInfo();
     }
 
     private void analyzePartitionInfo() {
@@ -1521,4 +1533,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
     }
+
+    @Override
+    public String toString() {
+        return "MaterializedView [id=" + id + ", name=" + name + "]";
+    }
+
 }

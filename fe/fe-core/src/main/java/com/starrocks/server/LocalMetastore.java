@@ -346,7 +346,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
