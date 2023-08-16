@@ -500,17 +500,14 @@ set (LLVM_LIBRARIES
     LLVMAsmParser
     LLVMOrcTargetProcess
     LLVMExecutionEngine
-    LLVMX86CodeGen
     LLVMBinaryFormat
     LLVMDebugInfoDWARF
     LLVMObjCARCOpts
     LLVMCodeGen
-    LLVMX86Info
     LLVMMCDisassembler
     LLVMSupport
     LLVMJITLink
     LLVMCFGuard
-    LLVMX86Desc
     LLVMInstrumentation
     LLVMIRReader
     LLVMCore
