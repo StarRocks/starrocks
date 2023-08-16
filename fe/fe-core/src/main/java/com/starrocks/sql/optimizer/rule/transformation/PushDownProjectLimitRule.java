@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -55,9 +54,7 @@ public class PushDownProjectLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression project, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) project.getInputs().get(0).getOp();
-        Preconditions.checkState(!limit.hasOffset());
-        LogicalLimitOperator newLimit = LogicalLimitOperator.global(limit.getLimit());
-        return Lists.newArrayList(OptExpression.create(newLimit,
+        return Lists.newArrayList(OptExpression.create(limit,
                 OptExpression.create(project.getOp(), project.getInputs().get(0).getInputs())));
     }
 }

@@ -301,7 +301,7 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : _state(state), _sort_exprs(nullptr) {}
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : ChunkMerger(state), _sort_exprs(nullptr) {}
 
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                 const std::vector<ExprContext*>* sort_exprs, const SortDescs& sort_desc) {
@@ -344,6 +344,53 @@ Status CascadeChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* e
     }
     *output = _current_chunk.cutoff(_state->chunk_size());
 
+    return Status::OK();
+}
+
+ConstChunkMerger::ConstChunkMerger(RuntimeState* state) : ChunkMerger(state) {}
+
+Status ConstChunkMerger::init(const std::vector<ChunkProvider>& providers, const std::vector<ExprContext*>* sort_exprs,
+                              const SortDescs& sort_desc) {
+    for (const auto& expr : *sort_exprs) {
+        DCHECK(expr->root()->is_constant());
+    }
+    _providers = providers;
+    return Status::OK();
+}
+Status ConstChunkMerger::init(const std::vector<ChunkProvider>& providers, const std::vector<ExprContext*>* sort_exprs,
+                              const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts) {
+    for (const auto& expr : *sort_exprs) {
+        DCHECK(expr->root()->is_constant());
+    }
+    _providers = providers;
+    return Status::OK();
+}
+
+bool ConstChunkMerger::is_data_ready() {
+    for (const auto& p : _providers) {
+        if (p(nullptr, nullptr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Status ConstChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* eos, bool* should_exit) {
+    bool all = true;
+    bool c = false;
+    for (const auto& p : _providers) {
+        c = false;
+        if (p(output, &c)) {
+            *eos = false;
+            return Status::OK();
+        }
+        all &= c;
+    }
+
+    *eos = all;
+    if (*eos) {
+        *should_exit = true;
+    }
     return Status::OK();
 }
 

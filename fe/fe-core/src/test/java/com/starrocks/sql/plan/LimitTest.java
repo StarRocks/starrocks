@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.LocalTablet;
@@ -787,6 +786,67 @@ public class LimitTest extends PlanTestBase {
     public void testConstantOrderByLimit() throws Exception {
         String sql = "select * from t0 order by 'abc' limit 100, 100 ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "limit: 100");
+        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+                "     offset: 100\n" +
+                "     limit: 100");
+    }
+
+    @Test
+    public void testOrderByConstant() throws Exception {
+        String sql = "select * from t0 limit 100, 100";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+                "     offset: 100\n" +
+                "     limit: 100");
+    }
+
+    @Test
+    public void testMergeLimit() throws Exception {
+        String sql = "select * from (select * from t0 limit 100, 100) x limit 1, 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+                "     offset: 101\n" +
+                "     limit: 2");
+
+        sql = "select * from (select * from t0 limit 1, 2) x limit 100, 100";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EMPTYSET");
+
+        sql = "select * from (select * from t0 limit 1, 5) x limit 1, 100";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+                "     offset: 2\n" +
+                "     limit: 4");
+
+        sql = "select * from (select * from t0 limit 1, 5) x limit 3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+                "     offset: 1\n" +
+                "     limit: 3");
+
+        sql = "select * from (select * from t0 limit 100) x limit 5";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:EXCHANGE\n" +
+                "     limit: 5");
+    }
+
+    @Test
+    public void testLimitAgg() throws Exception {
+        String sql = "select count(*) from (select * from t0 limit 50, 20) xx;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:MERGING-EXCHANGE\n" +
+                "     offset: 50\n" +
+                "     limit: 20");
+    }
+
+
+    @Test
+    public void testLimitValues() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String sql = "select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 50000, 10) x;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:MERGING-EXCHANGE\n" +
+                "     offset: 50000\n" +
+                "     limit: 10");
     }
 }
