@@ -2157,16 +2157,60 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateMvWithSortCols() throws Exception {
-        String sql = "create materialized view mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
-                "order by (`k1`, `s2`)\n" +
-                "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
-                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
-        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(0).isKey());
-        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(1).isKey());
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k1`, `s2`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
+            Assert.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`s2`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("s2"), keyColumns);
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k1`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("k1"), keyColumns);
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k3`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`c_1_7`)\n" +
+                    "as select * from t1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
     }
 
     @Test
