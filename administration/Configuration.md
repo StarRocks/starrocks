@@ -123,6 +123,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |export_running_job_num_limit|5|导出作业最大的运行数目。|
 |export_task_default_timeout_second|7200|导出作业的超时时长，单位为秒。|
 |empty_load_as_error|TRUE|导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。|
+| external_table_commit_timeout_ms|10000|发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。 |
 
 #### 存储
 
@@ -148,6 +149,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_sched_repair_delay_factor_second|60|FE 进行副本修复的间隔，单位为秒。参数别名 `tablet_repair_delay_factor_second`。|
 |tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
 |tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。参数别名 `max_clone_task_timeout_sec`。|
+|tablet_sched_max_not_being_scheduled_interval_ms|15 \* 60 \* 100|克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。|
 
 #### 其他动态参数
 
@@ -366,7 +368,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
-| tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
+| tablet_max_pending_versions                           | 1000        | N/A    | Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。    |
+| tablet_max_versions                           | 1000        | N/A    | 每个 tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。     |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
 | storage_page_cache_limit                              | 20%         | N/A    | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
