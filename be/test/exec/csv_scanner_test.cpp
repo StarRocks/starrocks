@@ -134,7 +134,8 @@ TEST_P(CSVScannerV2Test, test_trim_space) {
 }
 
 TEST_P(CSVScannerV2Test, test_enclose) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
