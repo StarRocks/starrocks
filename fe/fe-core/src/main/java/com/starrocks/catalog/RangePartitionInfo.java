@@ -60,9 +60,9 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
