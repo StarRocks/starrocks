@@ -6,23 +6,16 @@ This topic introduces what strict mode is and how to set strict mode.
 
 ## Understand strict mode
 
-If the original data type of a source column, or the new data type of a source column upon function computation, differs from the data type of the matching destination column, StarRocks converts the source column values to the destination data type during loading. Source column values that fail to be converted are processed into `NULL` values, which are called "error data." Rows that contain such error data are called "error rows."
-
-Strict mode works as follows:
-
-- If strict mode is enabled, StarRocks loads only qualified rows. It filters out error rows and returns details about the error rows.
-- If strict mode is disabled, StarRocks loads qualified rows together with error rows.
-
-During data loading, if StarRocks finds data inconsistencies between the source columns and the destination columns, it converts the data in the source columns that are inconsistent with their mapping destination columns. Data conversions may fail due to various issues, for example, the data types of the source columns do not match the data types of the destination columns or the values in the source columns exceed their allowed lengths. Column values that fail to be properly converted are unqualified column values, and the source rows that contain such unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
+During data loading, if StarRocks detects data inconsistencies between the source columns and the destination columns, it converts the data in the source columns that are inconsistent with their mapping destination columns. Data conversions may fail due to various issues, for example, the data types of the source columns do not match the data types of the destination columns or the values in the source columns exceed their allowed lengths. Column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
 
 Strict mode works as follows:
 
 - If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns an `error_url` field with which you can view details about the unqualified rows.
-- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads the unqualified rows that contain unqualified column values together with the qualified rows.
+- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain `NULL` values together with qualified rows.
 
   > **NOTE**
   >
-  > If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the unqualified rows that contain unqualified column values.
+  > If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out unqualified rows that contain `NULL` values.
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
