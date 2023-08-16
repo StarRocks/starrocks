@@ -81,12 +81,12 @@ TEST_F(HashFunctionsTest, hashTest) {
     }
 }
 
-TEST_F(HashFunctionsTest, xxhash3Test) {
+TEST_F(HashFunctionsTest, test_xx_hash3_64) {
     {
         Columns columns;
         auto tc1 = BinaryColumn::create();
         tc1->append("hello");
-
+        tc1->append("starrocks");
         columns.emplace_back(tc1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -94,15 +94,18 @@ TEST_F(HashFunctionsTest, xxhash3Test) {
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
         ASSERT_EQ(-7685981735718036227, v->get_data()[0]);
+        ASSERT_EQ(6573472450560322992, v->get_data()[1]);
     }
 
     {
         Columns columns;
         auto tc1 = BinaryColumn::create();
         tc1->append("hello");
+        tc1->append("hello");
 
         auto tc2 = BinaryColumn::create();
         tc2->append("world");
+        tc2->append("starrocks");
 
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
@@ -112,6 +115,7 @@ TEST_F(HashFunctionsTest, xxhash3Test) {
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
         ASSERT_EQ(7001965798170371843, v->get_data()[0]);
+        ASSERT_EQ(2803320466222626098, v->get_data()[1]);
     }
 
     {
@@ -119,10 +123,10 @@ TEST_F(HashFunctionsTest, xxhash3Test) {
         auto tc1 = BinaryColumn::create();
         tc1->append("hello");
 
-        auto tc2 = BinaryColumn::create();
-        tc2->append("world");
+        auto tc2 = ColumnHelper::create_const_null_column(1);
 
-        auto tc3 = ColumnHelper::create_const_null_column(1);
+        auto tc3 = BinaryColumn::create();
+        tc3->append("world");
 
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);

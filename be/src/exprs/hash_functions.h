@@ -65,29 +65,39 @@ inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* conte
 }
 
 inline StatusOr<ColumnPtr> HashFunctions::xx_hash3_64(FunctionContext* context, const starrocks::Columns& columns) {
-    std::vector<ColumnViewer<TYPE_VARCHAR>> viewers;
+    std::vector<ColumnViewer<TYPE_VARCHAR>> column_viewers;
 
-    viewers.reserve(columns.size());
+    column_viewers.reserve(columns.size());
     for (const auto& column : columns) {
-        viewers.emplace_back(column);
+        column_viewers.emplace_back(column);
     }
 
-    size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
-    for (int row = 0; row < size; ++row) {
-        uint64_t seed = HashUtil::XXHASH3_64_SEED;
-        bool has_null = false;
-        for (const auto& viewer : viewers) {
+    const uint64_t default_xxhash_seed = HashUtil::XXHASH3_64_SEED;
+
+    size_t row_size = columns[0]->size();
+    std::vector<uint64_t> seeds_vec(row_size, default_xxhash_seed);
+    std::vector<bool> is_null_vec(row_size, false);
+
+    for (const auto& viewer : column_viewers) {
+        for (size_t row = 0; row < row_size; ++row) {
+            if (is_null_vec[row]) {
+                continue;
+            }
+
             if (viewer.is_null(row)) {
-                has_null = true;
-                break;
+                is_null_vec[row] = true;
+                continue;
             }
 
             auto slice = viewer.value(row);
-            seed = HashUtil::xx_hash3_64(slice.data, slice.size, seed);
+            uint64_t seed = seeds_vec[row];
+            seeds_vec[row] = HashUtil::xx_hash3_64(slice.data, slice.size, seed);
         }
+    }
 
-        builder.append(seed, has_null);
+    ColumnBuilder<TYPE_BIGINT> builder(row_size);
+    for (int row = 0; row < row_size; ++row) {
+        builder.append(seeds_vec[row], is_null_vec[row]);
     }
 
     return builder.build(ColumnHelper::is_all_const(columns));
