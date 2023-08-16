@@ -52,6 +52,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -450,6 +451,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
         return distributionSpec;
+    }
+
+    @Override
+    public LogicalPlan visitFileTableFunction(FileTableFunctionRelation node, ExpressionMapping context) {
+        return visitTable(node, context);
     }
 
     @Override

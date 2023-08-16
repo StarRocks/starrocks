@@ -16,8 +16,8 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,6 +37,7 @@ public class PipeScheduler extends FrontendDaemon {
 
     private final Map<Long, Integer> beSlotMap = new HashMap<>();
     private final ReentrantLock slotLock = new ReentrantLock();
+    private boolean recovered = false;
 
     public PipeScheduler(PipeManager pm) {
         super("PipeScheduler", Config.pipe_scheduler_interval_millis);
@@ -52,13 +53,28 @@ public class PipeScheduler extends FrontendDaemon {
         }
     }
 
-    private void process() throws DdlException {
+    private void process() {
+        if (!recovered) {
+            for (Pipe pipe : CollectionUtils.emptyIfNull(pipeManager.getAllPipes())) {
+                try {
+                    pipe.recovery();
+                } catch (Throwable e) {
+                    LOG.warn("Failed to recover pipe {} due to ", pipe, e);
+                }
+            }
+
+            recovered = pipeManager.getAllPipes().stream().allMatch(Pipe::isRecovered);
+            if (recovered) {
+                LOG.warn("Successfully recover all pipes");
+            }
+        }
+
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
             try {
                 pipe.schedule();
             } catch (Throwable e) {
-                LOG.warn("Failed to execute due to ", e);
+                LOG.warn("Failed to execute pipe {} due to ", pipe, e);
             }
         }
     }

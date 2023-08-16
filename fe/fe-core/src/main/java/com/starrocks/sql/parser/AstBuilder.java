@@ -391,6 +391,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -3908,6 +3909,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AlterPipePauseResume(createPos(context), true);
         } else if (context.RESUME() != null) {
             return new AlterPipePauseResume(createPos(context), false);
+        } else if (context.RETRY() != null) {
+            if (context.ALL() != null) {
+                return new AlterPipeClauseRetry(createPos(context), true);
+            } else {
+                String fileName = ((StringLiteral) visitString(context.fileName)).getStringValue();
+                return new AlterPipeClauseRetry(createPos(context), false, fileName);
+            }
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo(context.toString()));
         }

@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -761,6 +762,25 @@ public class AstToStringBuilder {
             }
 
             return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(FileTableFunctionRelation.IDENTIFIER);
+            sb.append("(");
+            boolean first = true;
+            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
+                if (!first) {
+                    sb.append(",");
+                }
+                first = false;
+                sb.append("'").append(entry.getKey()).append("'");
+                sb.append("=");
+                sb.append("'").append((entry.getValue())).append("'");
+            }
+            sb.append(")");
+            return sb.toString();
         }
 
         // ---------------------------------- Expression --------------------------------

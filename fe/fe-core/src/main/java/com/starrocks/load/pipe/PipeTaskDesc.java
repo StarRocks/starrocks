@@ -65,8 +65,10 @@ public class PipeTaskDesc {
 
     public void onError(String errorMsg) {
         this.state = PipeTaskState.ERROR;
-        this.errorMsg = errorMsg;
         this.errorCount++;
+        if (errorMsg != null) {
+            this.errorMsg = errorMsg;
+        }
     }
 
     public void onRetry() {
