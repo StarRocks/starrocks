@@ -100,9 +100,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                 if (index_meta.l2_versions_size() > 0) {
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
-                        std::string l2_file_name =
-                                strings::Substitute("index.l2.$0.$1$2", l2_version.major(), l2_version.minor(),
-                                                    index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
                         Status st = FileSystem::Default()->delete_file(l2_file_name);
                         LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
                     }
