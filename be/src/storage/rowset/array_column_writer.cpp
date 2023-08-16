@@ -85,14 +85,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnW
         null_options.meta = opts.meta->add_children_columns();
         null_options.meta->set_column_id(opts.meta->column_id());
         null_options.meta->set_unique_id(opts.meta->unique_id());
-        null_options.meta->set_type(TYPE_BOOLEAN);
+        null_options.meta->set_type(TYPE_TINYINT);
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
         null_options.meta->set_is_nullable(false);
 
-        TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
+        TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
+        null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(tinyint_type_info), wfile);
     }
 
     ColumnWriterOptions array_size_options;
