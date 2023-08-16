@@ -148,3 +148,11 @@ select any_value([9,2,3]), any_value(map{1:row(19, [119, 229, 339]), 2:row(22, [
 -- result:
 [9,2,3]	{1:{"col1":19,"col2":[119,229,339]},2:{"col1":22,"col2":[229,229,339]}}	{"col1":1,"col2":[{"col1":1,"col2":9},{"col1":2,"col2":9}],"col3":{1:19,2:29},"col4":{"col1":1,"col2":9}}
 -- !result
+select any_value(distinct v1) from t0;
+-- result:
+[REGEX].*Getting syntax error at line.*
+-- !result
+select v1, v3, any_value(v2) over (partition by v3) from t0;
+-- result:
+[REGEX].*not supported with OVER clause.*
+-- !result
