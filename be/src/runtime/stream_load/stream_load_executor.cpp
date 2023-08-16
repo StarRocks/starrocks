@@ -201,7 +201,12 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.commitInfos = std::move(ctx->commit_infos);
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
-    request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -216,7 +221,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            config::txn_commit_rpc_timeout_ms);
+            rpc_timeout_ms);
     if (st.is_thrift_rpc_error()) {
         return Status::ServiceUnavailable(fmt::format(
                 "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
@@ -284,7 +289,12 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.commitInfos = std::move(ctx->commit_infos);
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
-    request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -299,7 +309,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnPrepare(result, request); },
-            config::txn_commit_rpc_timeout_ms));
+            rpc_timeout_ms));
 #else
     result = k_stream_load_commit_result;
 #endif
