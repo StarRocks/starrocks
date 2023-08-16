@@ -63,7 +63,6 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -81,7 +80,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -120,8 +118,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * The desireTaskConcurrentNum means that user expect the number of concurrent stream load
  * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
-public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
-        implements Writable, GsonPostProcessable, LoadJobWithWarehouse {
+public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
 
     public static final long DEFAULT_MAX_ERROR_NUM = 0;
@@ -129,6 +126,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
+
 
     protected static final String STAR_STRING = "*";
 
@@ -330,22 +328,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(SessionVariable.DEFAULT_EXEC_MEM_LIMIT));
         }
-    }
-
-    @Override
-    public String getCurrentWarehouse() {
-        // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-    }
-
-    @Override
-    public boolean isFinal() {
-        return state.isFinalState();
-    }
-
-    @Override
-    public long getFinishTimestampMs() {
-        return getEndTimestamp();
     }
 
     protected void setOptional(CreateRoutineLoadStmt stmt) throws UserException {
@@ -1574,6 +1556,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             return true;
         }
         return false;
+    }
+
+    public boolean isFinal() {
+        return state.isFinalState();
     }
 
     public static RoutineLoadJob read(DataInput in) throws IOException {
