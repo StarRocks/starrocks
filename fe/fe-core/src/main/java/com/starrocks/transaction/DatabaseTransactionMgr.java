@@ -69,6 +69,11 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TTransactionStatus;
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -1738,4 +1743,81 @@ public class DatabaseTransactionMgr {
         }
         return transactionState.getPublishTimeoutDebugInfo();
     }
+<<<<<<< HEAD
+=======
+
+    private void ensureTableIdListIsPresent(@NotNull TransactionState transactionState,
+                                            @NotNull List<TabletCommitInfo> tabletCommitInfos) {
+        if (!transactionState.getTableIdList().isEmpty()) {
+            return;
+        }
+        Set<Long> tableSet = Sets.newHashSet();
+        List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<TabletMeta> tabletMetaList = globalStateMgr.getTabletInvertedIndex().getTabletMetaList(tabletIds);
+        for (TabletMeta meta : tabletMetaList) {
+            if (meta != TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                tableSet.add(meta.getTableId());
+            }
+        }
+        transactionState.setTableIdList(Lists.newArrayList(tableSet));
+    }
+
+    @NotNull
+    private List<TransactionStateListener> populateTransactionStateListeners(@NotNull TransactionState transactionState,
+                                                                             @NotNull Database database)
+            throws TransactionException {
+        List<TransactionStateListener> stateListeners = Lists.newArrayList();
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = database.getTable(tableId);
+            if (table == null) {
+                // this can happen when tableId == -1 (tablet being dropping)
+                // or table really not exist.
+                continue;
+            }
+            TransactionStateListener listener = stateListenerFactory.create(this, table);
+            if (listener == null) {
+                throw new TransactionCommitFailedException(table.getName() + " does not support write");
+            }
+            stateListeners.add(listener);
+        }
+        return stateListeners;
+    }
+    
+    public TTransactionStatus getTxnStatus(long txnId) {
+        TransactionState transactionState;
+        readLock();
+        try {
+            transactionState = unprotectedGetTransactionState(txnId);
+        } finally {
+            readUnlock();
+        }
+        if (transactionState == null) {
+            return TTransactionStatus.UNKNOWN;
+        }
+        TransactionStatus status = transactionState.getTransactionStatus();
+
+        switch (status.value()) {
+            //UNKNOWN
+            case 0:
+                return TTransactionStatus.UNKNOWN;
+            //PREPARE
+            case 1:
+                return TTransactionStatus.PREPARE;
+            //COMMITTED
+            case 2:
+                return TTransactionStatus.COMMITTED;
+            //VISIBLE
+            case 3:
+                return TTransactionStatus.VISIBLE;
+            //ABORTED
+            case 4:
+                return TTransactionStatus.ABORTED;
+            //PREPARED
+            case 5:
+                return TTransactionStatus.PREPARED;
+            default:
+                return TTransactionStatus.UNKNOWN;
+        }
+    }
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 }
