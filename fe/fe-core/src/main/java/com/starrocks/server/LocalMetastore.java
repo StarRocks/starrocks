@@ -2027,6 +2027,8 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             db.registerTableUnlocked(table);
             table.onReload();
+        } catch (Throwable e) {
+            LOG.error("replay create table failed: {}", table, e);
         } finally {
             db.writeUnlock();
         }
