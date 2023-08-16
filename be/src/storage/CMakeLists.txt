@@ -40,6 +40,11 @@ add_library(Storage STATIC
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+<<<<<<< HEAD
+=======
+    local_tablet_reader.cpp
+    publish_version_manager.cpp
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
     olap_common.cpp
     olap_server.cpp
     options.cpp

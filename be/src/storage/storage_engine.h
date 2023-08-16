@@ -61,6 +61,7 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -160,6 +161,8 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
+    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -201,6 +204,32 @@ public:
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
 
+<<<<<<< HEAD
+=======
+    Status get_next_increment_id_interval(int64_t tableid, size_t num_row, std::vector<int64_t>& ids);
+
+    void remove_increment_map_by_table_id(int64_t table_id);
+
+    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
+    size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
+
+    void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                               DeltaColumnGroupList* dcgs);
+
+    Status get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                  int64_t version, DeltaColumnGroupList* dcgs);
+
+    void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
+
+    void clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
+    void wake_finish_publish_vesion_thread() {
+        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+        _finish_publish_version_cv.notify_one();
+    }
+
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 protected:
     static StorageEngine* _s_instance;
 
@@ -258,6 +287,9 @@ private:
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
 
+    // finish publish version process function
+    void* _finish_publish_version_thread_callback(void* arg);
+
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
 
@@ -300,6 +332,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to check finish publish version task
+    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -328,6 +362,9 @@ private:
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
 
+    std::mutex _finish_publish_version_mutex;
+    std::condition_variable _finish_publish_version_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
@@ -353,7 +390,15 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
+<<<<<<< HEAD
     HeartbeatFlags* _heartbeat_flags = nullptr;
+=======
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
+
+    HeartbeatFlags* _heartbeat_flags = nullptr;
+
+    std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;

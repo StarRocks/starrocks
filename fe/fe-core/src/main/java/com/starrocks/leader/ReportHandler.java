@@ -586,7 +586,11 @@ public class ReportHandler extends Daemon {
                             // just select the dest schema hash
                             for (TTabletInfo tabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
                                 if (tabletInfo.getSchema_hash() == schemaHash) {
-                                    backendVersion = tabletInfo.getVersion();
+                                    if (Config.enable_sync_publish) {
+                                        backendVersion = tabletInfo.getMax_readable_version();
+                                    } else {
+                                        backendVersion = tabletInfo.getVersion();
+                                    }
                                     backendMinReadableVersion = tabletInfo.getMin_readable_version();
                                     rowCount = tabletInfo.getRow_count();
                                     dataSize = tabletInfo.getData_size();
@@ -973,8 +977,15 @@ public class ReportHandler extends Daemon {
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 PublishVersionTask task =
+<<<<<<< HEAD
                         new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null, null,
                                 createPublishVersionTaskTime, null);
+=======
+                        new PublishVersionTask(backendId, txnId, dbId, commitTime,
+                                map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
+                                createPublishVersionTaskTime, null,
+                                Config.enable_sync_publish);
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
