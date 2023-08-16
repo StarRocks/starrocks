@@ -129,6 +129,10 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
+    static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() {
+        return std::make_shared<AnyValueSemiAggregateFunction>();
+    }
+
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function);
