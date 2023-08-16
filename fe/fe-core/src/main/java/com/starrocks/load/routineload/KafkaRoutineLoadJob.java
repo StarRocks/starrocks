@@ -83,6 +83,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -116,6 +118,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
     private String confluentSchemaRegistryUrl = null;
+    @SerializedName("ckpo")
+    private List<Pair<Integer, Long>> customeKafkaPartitionOffsets = null;
+    boolean useDefaultGroupId = true;
 
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
@@ -505,6 +510,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     // this is a unprotected method which is called in the initialization function
     private void setCustomKafkaPartitions(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws LoadException {
+        if (kafkaPartitionOffsets != null) {
+            customeKafkaPartitionOffsets = kafkaPartitionOffsets;
+        }
         for (Pair<Integer, Long> partitionOffset : kafkaPartitionOffsets) {
             this.customKafkaPartitions.add(partitionOffset.first);
             ((KafkaProgress) progress).addPartitionOffset(partitionOffset);
@@ -517,17 +525,84 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private void setDefaultKafkaGroupID() {
         if (this.customProperties.containsKey(PROPERTY_KAFKA_GROUP_ID)) {
+            useDefaultGroupId = false;
             return;
         }
         this.customProperties.put(PROPERTY_KAFKA_GROUP_ID, name + "_" + UUID.randomUUID());
     }
 
-    @VisibleForTesting
     @Override
-    protected String dataSourcePropertiesJsonToString() {
-        Map<String, String> dataSourceProperties = Maps.newHashMap();
-        dataSourceProperties.put("brokerList", brokerList);
-        dataSourceProperties.put("topic", topic);
+    public String dataSourcePropertiesToSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(\n");
+        sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY).append("\"=\"");
+        sb.append(brokerList).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY).append("\"=\"");
+        sb.append(topic).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
+        if (customeKafkaPartitionOffsets == null) {
+            List<Integer> sortedPartitions = Lists.newArrayList(currentKafkaPartitions);
+            Collections.sort(sortedPartitions);
+            sb.append(Joiner.on(",").join(sortedPartitions)).append("\",\n");
+        } else {
+            class PairComparator implements Comparator<Pair<Integer, Long>> {
+                @Override
+                public int compare(Pair<Integer, Long> p1, Pair<Integer, Long> p2) {
+                    return Integer.compare(p1.first, p2.first);
+                }
+            }
+            Collections.sort(customeKafkaPartitionOffsets, new PairComparator());
+            List<Integer> customeKafkaPartitions = new ArrayList<>();
+            List<Long> customeKakfaOffsets = new ArrayList<>();
+            for (Pair<Integer, Long> partitionOffset : customeKafkaPartitionOffsets) {
+                customeKafkaPartitions.add(partitionOffset.first);
+                customeKakfaOffsets.add(partitionOffset.second);
+            }
+            sb.append(Joiner.on(",").join(customeKafkaPartitions)).append("\",\n");
+
+            sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY).append("\"=\"");
+            for (int i = 0; i < customeKakfaOffsets.size(); i++) {
+                if (customeKakfaOffsets.get(i) == KafkaProgress.OFFSET_BEGINNING_VAL) {
+                    sb.append("OFFSET_BEGINNING");
+                } else if (customeKakfaOffsets.get(i) == KafkaProgress.OFFSET_END_VAL) {
+                    sb.append("OFFSET_END");
+                } else {
+                    sb.append(Long.toString(customeKakfaOffsets.get(i)));
+                }
+                if (i != customeKakfaOffsets.size() - 1) {
+                    sb.append(",");
+                }
+            }
+            sb.append("\",\n");
+        }
+        if (confluentSchemaRegistryUrl != null) {
+            sb.append("\"").append(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL).append("\"=\"");
+            sb.append(getPrintableConfluentSchemaRegistryUrl()).append("\",\n");
+        }
+
+        Map<String, String> maskedProperties = getMaskedCustomProperties();
+        if (useDefaultGroupId) {
+            maskedProperties.remove(PROPERTY_KAFKA_GROUP_ID);
+        }
+        Iterator<Map.Entry<String, String>> iterator = maskedProperties.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, String> entry = iterator.next();
+            String key = entry.getKey();
+            String value = entry.getValue();
+            sb.append("\"").append("property.").append(key).append("\"=\"");
+            sb.append(value).append("\",\n");
+        }
+        if (sb.length() >= 2) {
+            sb.delete(sb.length() - 2, sb.length());
+            sb.append("\n");
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
+    private String getPrintableConfluentSchemaRegistryUrl() {
         String confluentSchemaRegistryUrl = getConfluentSchemaRegistryUrl();
         if (confluentSchemaRegistryUrl != null) {
             // confluentSchemaRegistryUrl have three patterns:
@@ -538,21 +613,35 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             String[] fragments = confluentSchemaRegistryUrl.split("@");
             if (fragments.length != 2) {
                 // case 1
-                dataSourceProperties.put("confluent.schema.registry.url", confluentSchemaRegistryUrl);
+                return confluentSchemaRegistryUrl;
             } else {
                 if (fragments[0].length() < 5) {
-                    dataSourceProperties.put("confluent.schema.registry.url", "wrong confluent.schema.registry.url");
+                    return confluentSchemaRegistryUrl;
                 } else {
                     // case 2
+                    String addr;
                     if ("https".equals(fragments[0].substring(0, 5))) {
-                        String addr = "https://" + fragments[1];
-                        dataSourceProperties.put("confluent.schema.registry.url", addr);
+                        addr = "https://" + fragments[1];
                     } else {
-                        String addr = "http://" + fragments[1];
-                        dataSourceProperties.put("confluent.schema.registry.url", addr);
+                        addr = "http://" + fragments[1];
                     }
+                    return addr;
                 }
             }
+        } else {
+            return null;
+        }
+    }
+
+    @VisibleForTesting
+    @Override
+    protected String dataSourcePropertiesJsonToString() {
+        Map<String, String> dataSourceProperties = Maps.newHashMap();
+        dataSourceProperties.put("brokerList", brokerList);
+        dataSourceProperties.put("topic", topic);
+        String confluentSchemaRegistryUrl = getConfluentSchemaRegistryUrl();
+        if (confluentSchemaRegistryUrl != null) {
+            dataSourceProperties.put("confluent.schema.registry.url", getPrintableConfluentSchemaRegistryUrl());
         }
         List<Integer> sortedPartitions = Lists.newArrayList(currentKafkaPartitions);
         Collections.sort(sortedPartitions);
@@ -561,9 +650,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(dataSourceProperties);
     }
 
-    @Override
-    protected String customPropertiesJsonToString() {
-        Gson gson = new GsonBuilder().disableHtmlEscaping().create();
+    protected Map<String, String> getMaskedCustomProperties() {
         Map<String, String> maskedProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : customProperties.entrySet()) {
             if (entry.getKey().contains("password") || entry.getKey().contains("secret")) {
@@ -572,6 +659,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 maskedProperties.put(entry.getKey(), entry.getValue());
             }
         }
+        return maskedProperties;
+    }
+
+    @Override
+    protected String customPropertiesJsonToString() {
+        Gson gson = new GsonBuilder().disableHtmlEscaping().create();
+        Map<String, String> maskedProperties = getMaskedCustomProperties();
         return gson.toJson(maskedProperties);
     }
 
