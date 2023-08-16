@@ -312,9 +312,28 @@ public class QueryAnalyzer {
                 if (baseSchema.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
+<<<<<<< HEAD
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
+=======
+                    columns.put(field, column);
+                    fields.add(field);
+                }
+            } else {
+                List<Column> fullSchema = node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
+                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
+                for (Column column : fullSchema) {
+                    // TODO: avoid analyze visible or not each time, cache it in schema
+                    boolean visible = baseSchema.contains(column);
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+>>>>>>> 569853e770 ([Enhancement]  optimize performance in the case that table has thousands of columns (#29282))
                 }
                 columns.put(field, column);
                 fields.add(field);
