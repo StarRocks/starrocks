@@ -43,8 +43,8 @@ option java_package = "com.starrocks.proto";
 //   FE's publish will increase major by 1
 //   internal compaction will increase minor by 1
 message EditVersionPB {
-    optional int64 major = 1;
-    optional int64 minor = 2;
+    optional int64 major_number = 1;
+    optional int64 minor_number = 2;
 }
 
 // used in partial update for primary key tablet

@@ -803,7 +803,7 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
         }
     }
     // pending rowset may exists or not, but delete it anyway
-    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
+    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major_number()));
     return store->get_meta()->write_batch(&batch);
 }
 
@@ -871,8 +871,8 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     auto ops = log.add_ops();
     ops->set_type(TabletMetaOpType::OP_APPLY);
     auto version_pb = ops->mutable_apply();
-    version_pb->set_major(version.major());
-    version_pb->set_minor(version.minor());
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
@@ -885,7 +885,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     int64_t total_bytes = 0;
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
-        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dv_value = rssid_delvec.second->save();
         total_bytes += dv_value.size();
         st = batch.Put(handle, dv_key, dv_value);
@@ -936,8 +936,8 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     auto ops = log.add_ops();
     ops->set_type(TabletMetaOpType::OP_APPLY);
     auto version_pb = ops->mutable_apply();
-    version_pb->set_major(version.major());
-    version_pb->set_minor(version.minor());
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
@@ -951,7 +951,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     int64_t total_bytes = 0;
     for (const auto& delta_column : delta_column_groups) {
         tsid.segment_id = delta_column.first;
-        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dcg_value = delta_column.second->save();
         total_bytes += dcg_value.size();
         st = batch.Put(handle, dcg_key, dcg_value);

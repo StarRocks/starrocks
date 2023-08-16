@@ -70,7 +70,7 @@ T pad(T v, P p) {
 }
 
 static std::string get_l0_index_file_name(std::string& dir, const EditVersion& version) {
-    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
+    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major_number(), version.minor_number());
 }
 
 struct IndexHash {
@@ -1880,7 +1880,7 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
     auto writer = std::make_unique<ImmutableIndexWriter>();
     std::string idx_file_path;
     if (!write_tmp_l1) {
-        idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major(), version.minor());
+        idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major_number(), version.minor_number());
     } else {
         idx_file_path = path;
     }
@@ -2422,7 +2422,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             // so we use index file size as the _usage and the _usage will be adjusted in subsequent compaction.
             if (index_meta.has_l1_version()) {
                 EditVersion version = index_meta.l1_version();
-                auto l1_file_path = strings::Substitute("$0/index.l1.$1.$2", _path, version.major(), version.minor());
+                auto l1_file_path =
+                        strings::Substitute("$0/index.l1.$1.$2", _path, version.major_number(), version.minor_number());
                 auto l1_st = _fs->get_file_size(l1_file_path);
                 if (!l1_st.ok()) {
                     return l1_st.status();
@@ -2459,7 +2460,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     }
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
-        auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+        auto l1_block_path =
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         ASSIGN_OR_RETURN(auto l1_rfile, _fs->new_random_access_file(l1_block_path));
         auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
         if (!l1_st.ok()) {
@@ -2700,14 +2702,14 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                 if (index_meta.has_l0_meta()) {
                     EditVersion l0_version = index_meta.l0_meta().snapshot().version();
                     std::string l0_file_name =
-                            strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l0_file_name);
                     LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
                 }
                 if (index_meta.has_l1_version()) {
                     EditVersion l1_version = index_meta.l1_version();
                     std::string l1_file_name =
-                            strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l1_file_name);
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
@@ -3395,8 +3397,8 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
 Status PersistentIndex::flush_advance() {
     // flush l0 into _l1_vec
     int idx = _l1_vec.size();
-    std::string l1_tmp_file =
-            strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), idx);
+    std::string l1_tmp_file = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                  _version.minor_number(), idx);
     std::map<size_t, std::unique_ptr<BloomFilter>> bf_map;
     if (_need_bloom_filter) {
         RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, &bf_map));
@@ -3491,8 +3493,10 @@ static StatusOr<EditVersion> parse_l2_filename(const std::string& filename) {
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                                    const EditVersion& min_l2_version) {
-    std::string l0_file_name = strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
-    std::string l1_file_name = strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+    std::string l0_file_name =
+            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+    std::string l1_file_name =
+            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
     std::string l0_prefix("index.l0");
     std::string l1_prefix("index.l1");
     std::string l2_prefix("index.l2");
@@ -4036,14 +4040,14 @@ Status PersistentIndex::_merge_compaction() {
     if (_l0->size() == 0) {
         if (!_has_l1 && _l1_vec.size() == 1) {
             const std::string idx_file_path =
-                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
             const std::string idx_file_path_tmp = _l1_vec[0]->_file->filename();
             return FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path);
         }
     }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
-            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
     RETURN_IF_ERROR(
             _merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length, false, nullptr));
@@ -4059,8 +4063,8 @@ Status PersistentIndex::_merge_compaction() {
 Status PersistentIndex::_merge_compaction_advance() {
     DCHECK(_l1_vec.size() >= config::max_tmp_l1_num);
     auto writer = std::make_unique<ImmutableIndexWriter>();
-    const std::string idx_file_path_tmp =
-            strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), _l1_vec.size());
+    const std::string idx_file_path_tmp = strings::Substitute(
+            "$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(), _version.minor_number(), _l1_vec.size());
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
@@ -4124,8 +4128,8 @@ Status PersistentIndex::_merge_compaction_advance() {
         }
     }
 
-    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
-                                                          _version.minor(), new_l1_vec.size());
+    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                          _version.minor_number(), new_l1_vec.size());
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path));
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));

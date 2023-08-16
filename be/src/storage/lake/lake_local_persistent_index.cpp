@@ -61,9 +61,9 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         EditVersion version = index_meta.version();
 
         // Compaction of Lake tablet also generate a new version
-        // here just use version.major so that PersistentIndexMetaPB need't to be modified,
-        // the minor is meaningless
-        if (version.major() == base_version) {
+        // here just use version.major_number so that PersistentIndexMetaPB need't to be modified,
+        // the minor_number is meaningless
+        if (version.major_number() == base_version) {
             // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
             // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
@@ -86,14 +86,14 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                 if (index_meta.has_l0_meta()) {
                     EditVersion l0_version = index_meta.l0_meta().snapshot().version();
                     std::string l0_file_name =
-                            strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l0_file_name);
                     LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
                 }
                 if (index_meta.has_l1_version()) {
                     EditVersion l1_version = index_meta.l1_version();
                     std::string l1_file_name =
-                            strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l1_file_name);
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }

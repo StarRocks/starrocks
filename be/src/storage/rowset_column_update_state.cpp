@@ -634,8 +634,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // prepare delta column writers by the way
             if (delta_column_group_writer.count(rssid) == 0) {
                 // we can generate delta column group by new version
-                ASSIGN_OR_RETURN(auto writer, _prepare_delta_column_group_writer(rowset, partial_tschema, rssid,
-                                                                                 latest_applied_version.major() + 1));
+                ASSIGN_OR_RETURN(auto writer,
+                                 _prepare_delta_column_group_writer(rowset, partial_tschema, rssid,
+                                                                    latest_applied_version.major_number() + 1));
                 delta_column_group_writer[rssid] = std::move(writer);
             }
         }
@@ -664,7 +665,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         // 4.1 read from source segment
         ASSIGN_OR_RETURN(auto source_chunk_ptr,
                          read_from_source_segment(rowset, partial_schema, tablet, &stats,
-                                                  latest_applied_version.major(), rowsetid_segid, seg_path));
+                                                  latest_applied_version.major_number(), rowsetid_segid, seg_path));
         // 4.2 read from update segment
         int64_t t2 = MonotonicMillis();
         std::vector<uint32_t> rowids;
@@ -692,7 +693,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         // must record unique column id in delta column group
         std::vector<std::vector<uint32_t>> dcg_column_ids{unique_update_column_ids};
         std::vector<std::string> dcg_column_files{file_name(delta_column_group_writer[each.first]->segment_path())};
-        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, dcg_column_ids,
+        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1, dcg_column_ids,
                                                        dcg_column_files);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
