@@ -491,7 +491,7 @@ CONF_Bool(thrift_rpc_strict_mode, "true");
 CONF_Int32(thrift_rpc_max_body_size, "0");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
