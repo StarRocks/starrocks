@@ -1,4 +1,4 @@
--- name: test_low_card_table
+-- name: test_split_or
 CREATE TABLE `low_card_duplicate` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(500) NULL COMMENT "",
