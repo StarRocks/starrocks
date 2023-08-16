@@ -580,6 +580,14 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
+     * When obtaining hardware information, some sensitive commands will be executed indirectly through
+     * the oshi library, such as: getent passwd
+     * If you have higher requirements for security, you can turn off the acquisition of this information
+     */
+    @ConfField(mutable = true)
+    public static boolean http_web_page_display_hardware = true;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
