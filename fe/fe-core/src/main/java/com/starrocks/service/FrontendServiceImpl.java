@@ -266,7 +266,6 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
-import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -274,8 +273,6 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.WarehouseInfosBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2134,16 +2131,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
+    /**
+     * Returns the empty warehouse info.
+     * Maintaining this method is just to avoid problems at grayscale upgrading.
+     */
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
-        Map<String, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
-        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
-                .map(WarehouseInfo::toThrift)
-                .collect(Collectors.toList());
-
         TGetWarehousesResponse res = new TGetWarehousesResponse();
         res.setStatus(new TStatus(OK));
-        res.setWarehouse_infos(warehouseInfos);
+        res.setWarehouse_infos(Collections.emptyList());
 
         return res;
     }

@@ -87,7 +87,6 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
-import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
@@ -478,9 +477,6 @@ public class StmtExecutor {
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
-                if (!isStatisticsJob) {
-                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
-                }
                 context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
@@ -595,9 +591,6 @@ public class StmtExecutor {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
                                             ProfilingExecPlan.buildFrom(execPlan), profile, null));
                                 }
-                            }
-                            if (!isStatisticsJob) {
-                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -835,7 +828,6 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
-        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -1703,9 +1695,7 @@ public class StmtExecutor {
                         createTime,
                         estimateScanRows,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
-                        context.getCurrentWarehouse(),
-                        context.isStatisticsJob());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             }
 
             coord.setLoadJobId(jobId);
