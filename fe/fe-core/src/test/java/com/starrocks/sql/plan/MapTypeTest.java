@@ -54,4 +54,14 @@ public class MapTypeTest extends PlanTestBase {
                     "MAP<TINYINT,MAP<TINYINT,TINYINT>> to MAP<INT,VARCHAR(65533)>.");
         }
     }
+
+    @Test
+    public void testComplexAnyValue() throws Exception {
+        String sql = "select any_value(c2) from test_map limit 1";
+        String plan = getFragmentPlan(sql);
+        assertContains("1:AGGREGATE (update finalize)\n" +
+                "  |  output: any_value(3: c2)\n" +
+                "  |  group by: \n" +
+                "  |  limit: 1");
+    }
 }
