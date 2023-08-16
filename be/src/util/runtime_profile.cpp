@@ -487,6 +487,16 @@ RuntimeProfile::ThreadCounters* RuntimeProfile::add_thread_counters(const std::s
     return counter;
 }
 
+std::pair<RuntimeProfile::Counter*, std::string> RuntimeProfile::get_counter_pair(const std::string& name) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+
+    if (_counter_map.find(name) != _counter_map.end()) {
+        return _counter_map[name];
+    }
+
+    return {nullptr, ROOT_COUNTER};
+}
+
 RuntimeProfile::Counter* RuntimeProfile::get_counter(const std::string& name) {
     std::lock_guard<std::mutex> l(_counter_lock);
 
@@ -497,7 +507,7 @@ RuntimeProfile::Counter* RuntimeProfile::get_counter(const std::string& name) {
     return nullptr;
 }
 
-void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
+void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const std::string& attached_counter_name) {
     DCHECK(src_profile != nullptr);
     if (this == src_profile) {
         return;
@@ -517,6 +527,10 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
         if (name != ROOT_COUNTER) {
             auto* src_counter = src_profile->_counter_map[name].first;
             DCHECK(src_counter != nullptr);
+            if (attached_counter_name != ROOT_COUNTER && parent_name == ROOT_COUNTER &&
+                this->_counter_map.find(attached_counter_name) != this->_counter_map.end()) {
+                parent_name = attached_counter_name;
+            }
             auto* new_counter = add_counter_unlock(name, src_counter->type(), src_counter->strategy(), parent_name);
             new_counter->set(src_counter->value());
         }
