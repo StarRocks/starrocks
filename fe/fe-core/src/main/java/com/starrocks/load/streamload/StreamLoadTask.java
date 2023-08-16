@@ -40,16 +40,10 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
-=======
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.scheduler.Coordinator;
->>>>>>> 06eee4c1d8 ([Enhancement] Profile optimization(1) (#29201))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
