@@ -72,7 +72,9 @@ public class QueryDetailQueueTest {
                 + "\"scanBytes\":10001,"
                 + "\"returnRows\":1,"
                 + "\"cpuCostNs\":1002,"
-                + "\"memCostBytes\":100003}]";
+                + "\"memCostBytes\":100003,"
+                + "\"spillBytes\":-1"
+                + "}]";
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());

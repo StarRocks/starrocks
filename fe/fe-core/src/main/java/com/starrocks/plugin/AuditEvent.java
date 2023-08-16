@@ -123,6 +123,8 @@ public class AuditEvent {
     public long bigQueryLogScanBytesThreshold = -1;
     @AuditField(value = "BigQueryLogScanRowsThreshold")
     public long bigQueryLogScanRowsThreshold = -1;
+    @AuditField(value = "SpilledBytes", ignore_zero = true)
+    public long spilledBytes = -1;
 
     public static class AuditEventBuilder {
 
@@ -215,6 +217,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setMemCostBytes(long memCostBytes) {
             auditEvent.memCostBytes = memCostBytes;
+            return this;
+        }
+
+        public AuditEventBuilder setSpilledBytes(long spilledBytes) {
+            auditEvent.spilledBytes = spilledBytes;
             return this;
         }
 
