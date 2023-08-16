@@ -283,6 +283,7 @@ set(EXEC_FILES
         ./storage/binlog_reader_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp

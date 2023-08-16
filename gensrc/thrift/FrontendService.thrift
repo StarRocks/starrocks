@@ -661,6 +661,7 @@ struct TLoadTxnBeginResult {
     1: required Status.TStatus status
     2: optional i64 txnId
     3: optional string job_status // if label already used, set status of existing job
+    4: optional i64 timeout
 }
 
 // StreamLoad request, used to load a streaming to engine
@@ -804,6 +805,21 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+}
+
+struct TGetLoadTxnStatusResult {
+    1: required Status.TTransactionStatus status
+}
+
+struct TGetLoadTxnStatusRequest {
+    1: optional string cluster
+    2: required string user
+    3: required string passwd
+    4: required string db
+    5: required string tbl
+    6: optional string user_ip
+    7: optional i64 auth_code
+    8: required i64 txnId
 }
 
 struct TLoadTxnRollbackResult {
@@ -1379,5 +1395,14 @@ service FrontendService {
 
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
+<<<<<<< HEAD
+=======
+
+    TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
+    TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
+    TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
+    
+    TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 }
 

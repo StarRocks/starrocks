@@ -34,6 +34,7 @@ add_library(Storage STATIC
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
+    publish_version_manager.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
