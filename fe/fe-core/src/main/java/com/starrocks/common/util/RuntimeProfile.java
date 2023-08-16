@@ -846,10 +846,10 @@ public class RuntimeProfile {
         }
     }
 
-    static class JsonProfileFormater implements ProfileFormatter {
+    static class JsonProfileFormatter implements ProfileFormatter {
         private final JsonObject builder;
 
-        JsonProfileFormater() {
+        JsonProfileFormatter() {
             this.builder = new JsonObject();
         }
 

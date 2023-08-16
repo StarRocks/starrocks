@@ -1,11 +1,11 @@
 #!/bin/bash
 
-function test_explain_analyze() {
+function test_non_default_variables() {
     analyze_output=$(${mysql_cmd} -e "$1")
-    if grep -q "Summary" <<< "${analyze_output}"; then
-        echo "Analyze profile succeeded"
+    if grep -q "pipeline_dop: 0 -> 2" <<< "${analyze_output}"; then
+        echo "NonDefaultSessionVariables contains 'pipeline_dop'"
     else
-        echo "Analyze profile failed"
+        echo "NonDefaultSessionVariables not contains 'pipeline_dop'"
         exit 1
     fi
 }
@@ -37,6 +37,8 @@ limit 100;
 EOF
 )
 
-test_explain_analyze "${sql}"
-test_explain_analyze "set enable_runtime_adaptive_dop = true; ${sql}"
-test_explain_analyze "set enable_spill = true; set spill_mode = 'force'; ${sql}"
+test_non_default_variables "set pipeline_dop=2; ${sql}"
+
+sql="explain analyze insert into reason select * from reason;"
+
+test_non_default_variables "set pipeline_dop=2; ${sql}"
