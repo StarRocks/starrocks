@@ -672,8 +672,8 @@ public class MaterializedViewAnalyzer {
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
             } else {
-                throw new SemanticException("Materialized view related base table partition type:" +
-                        partitionInfo.getType().name() + "not supports");
+                throw new SemanticException("Materialized view related base table partition type: " +
+                        partitionInfo.getType().name() + " not supports");
             }
         }
 
