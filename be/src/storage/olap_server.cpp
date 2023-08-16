@@ -34,6 +34,11 @@
 #include "storage/compaction_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+<<<<<<< HEAD
+=======
+#include "storage/persistent_index_compaction_manager.h"
+#include "storage/publish_version_manager.h"
+>>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
@@ -76,6 +81,10 @@ Status StorageEngine::start_bg_threads() {
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
+
+    // start thread for check finish publish version
+    _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
+    Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -541,6 +550,27 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        int32_t interval = config::finish_publish_version_internal;
+        {
+            std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+            while (!_publish_version_manager->has_pending_task() &&
+                   !_bg_worker_stopped.load(std::memory_order_consume)) {
+                _finish_publish_version_cv.wait(wl);
+            }
+            _publish_version_manager->finish_publish_version_task();
+            if (interval <= 0) {
+                LOG(WARNING) << "finish_publish_version_internal config is illegal: " << interval << ", force set to 1";
+                interval = 1000;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
     }
 
     return nullptr;

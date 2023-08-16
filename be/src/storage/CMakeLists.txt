@@ -40,6 +40,7 @@ add_library(Storage STATIC
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+    publish_version_manager.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
