@@ -81,9 +81,8 @@ public class BackendCoreStat {
             if (numOfHardwareCoresPerBe.isEmpty()) {
                 return DEFAULT_CORES_OF_BE;
             }
-            int avg = numOfHardwareCoresPerBe.values().stream().reduce(Integer::sum).orElse(0)
-                    / numOfHardwareCoresPerBe.size();
-            avg = Math.max(DEFAULT_CORES_OF_BE, avg);
+            int sum = numOfHardwareCoresPerBe.values().stream().reduce(Integer::sum).get();
+            int avg = sum / numOfHardwareCoresPerBe.size();
             cachedAvgNumOfHardwareCores.set(avg);
             LOG.info("update avgNumOfHardwareCoresOfBe to {}, current cpuCores stats: {}", avg,
                     numOfHardwareCoresPerBe);
