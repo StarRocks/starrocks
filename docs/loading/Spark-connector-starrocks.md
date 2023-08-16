@@ -225,7 +225,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
     4,spark,100
     ```
 
-2. You can write the Spark application using Scala or Python. 
+2. You can write the Spark application using Scala or Python.
 
    For Scala, run the following code snippet in `spark-shell`:
 

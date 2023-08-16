@@ -1,12 +1,12 @@
 # BROKER LOAD
 
+import InsertPrivNote from '../../../assets/commonMarkdown/insertPrivNote.md'
+
 ## Description
 
 StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
 
-> **NOTICE**
->
-> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+<InsertPrivNote />
 
 ## Syntax
 
