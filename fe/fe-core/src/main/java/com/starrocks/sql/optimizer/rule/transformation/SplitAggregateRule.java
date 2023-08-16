@@ -562,7 +562,7 @@ public class SplitAggregateRule extends TransformationRule {
                             Lists.newArrayList(newChildren), fn);
                 }
                 // Remove distinct
-                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(),
+                callOperator = new CallOperator(aggregation.getFnName(), getIntermediateType(aggregation),
                         aggregation.getChildren(), aggregation.getFunction());
             }
             newAggregationMap.put(column, callOperator);
