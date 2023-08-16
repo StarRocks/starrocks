@@ -90,11 +90,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-<<<<<<< HEAD
-import org.apache.commons.collections.CollectionUtils;
-=======
 import org.apache.commons.collections4.CollectionUtils;
->>>>>>> b16f9298e8 ([BugFix] fix sort key of materialized view (#28800))
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
@@ -510,19 +506,12 @@ public class MaterializedViewAnalyzer {
                 if (columnMap.putIfAbsent(col.getName(), col) != null) {
                     throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
                 }
-<<<<<<< HEAD
-
-                if (!column.getType().canBeMVKey()) {
-                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
-                }
-                column.setIsKey(true);
-                column.setAggregationType(null, false);
-=======
->>>>>>> b16f9298e8 ([BugFix] fix sort key of materialized view (#28800))
             }
             if (CollectionUtils.isEmpty(statement.getSortKeys())) {
                 for (String col : keyCols) {
-                    columnMap.get(col).setIsKey(true);
+                    Column column = columnMap.get(col);
+                    column.setIsKey(true);
+                    column.setAggregationType(null, false);
                 }
                 return mvColumns;
             }
