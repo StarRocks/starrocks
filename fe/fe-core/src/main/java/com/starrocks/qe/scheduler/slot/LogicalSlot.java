@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
@@ -44,6 +45,11 @@ public class LogicalSlot {
 
     private final long feStartTimeMs;
 
+    /**
+     * Set when creating this slot. It is just used in {@code show running queries} and not accurate enough.
+     */
+    private final long startTimeMs;
+
     private State state = State.CREATED;
 
     public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
@@ -55,6 +61,7 @@ public class LogicalSlot {
         this.expiredPendingTimeMs = expiredPendingTimeMs;
         this.expiredAllocatedTimeMs = expiredAllocatedTimeMs;
         this.feStartTimeMs = feStartTimeMs;
+        this.startTimeMs = System.currentTimeMillis();
     }
 
     public State getState() {
@@ -135,6 +142,10 @@ public class LogicalSlot {
         return feStartTimeMs;
     }
 
+    public long getStartTimeMs() {
+        return startTimeMs;
+    }
+
     @Override
     public String toString() {
         return "LogicalSlot{" +
@@ -142,9 +153,10 @@ public class LogicalSlot {
                 ", requestFeName='" + requestFeName + '\'' +
                 ", groupId=" + groupId +
                 ", numPhysicalSlots=" + numPhysicalSlots +
-                ", expiredPendingTimeMs=" + expiredPendingTimeMs +
-                ", expiredAllocatedTimeMs=" + expiredAllocatedTimeMs +
-                ", feStartTimeMs=" + feStartTimeMs +
+                ", expiredPendingTimeMs=" + TimeUtils.longToTimeString(expiredPendingTimeMs) +
+                ", expiredAllocatedTimeMs=" + TimeUtils.longToTimeString(expiredAllocatedTimeMs) +
+                ", feStartTimeMs=" + TimeUtils.longToTimeString(feStartTimeMs) +
+                ", startTimeMs=" + TimeUtils.longToTimeString(startTimeMs) +
                 ", state=" + state +
                 '}';
     }
@@ -164,6 +176,22 @@ public class LogicalSlot {
 
         boolean isTerminal() {
             return this == RELEASED || this == CANCELLED;
+        }
+
+        public String toQueryStateString() {
+            switch (this) {
+                case CREATED:
+                    return "CREATED";
+                case REQUIRING:
+                    return "PENDING";
+                case ALLOCATED:
+                    return "RUNNING";
+                case RELEASED:
+                case CANCELLED:
+                    return "FINISHED";
+                default:
+                    return "UNKNOWN";
+            }
         }
     }
 }
