@@ -504,7 +504,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchema& tablet
         // record delvec
         auto delvec = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
-        delvec->init(edit_version.major(), del_ids.data(), del_ids.size());
+        delvec->init(edit_version.major_number(), del_ids.data(), del_ids.size());
         delvecs.emplace_back(new_delete.first, delvec);
     }
     return Status::OK();
@@ -701,8 +701,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // generate segment file for insert data
     if (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE) {
         // ignore insert missing rows if partial_update_mode == COLUMN_UPDATE_MODE
-        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major() + 1, 0), rowset,
-                                         rowset_id, index_meta, delvecs, index));
+        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major_number() + 1, 0),
+                                         rowset, rowset_id, index_meta, delvecs, index));
         cost_str << " [insert missing rows] " << watch.elapsed_time();
         watch.reset();
     }

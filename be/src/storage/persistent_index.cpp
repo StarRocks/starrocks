@@ -2482,9 +2482,9 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     }
     if (index_meta.l2_versions_size() > 0) {
         for (int i = 0; i < index_meta.l2_versions_size(); i++) {
-            auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
-                                                     index_meta.l2_versions(i).minor(),
-                                                     index_meta.l2_version_merged(i) ? MergeSuffix : "");
+            auto l2_block_path = strings::Substitute(
+                    "$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                    index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
             {
@@ -2716,9 +2716,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                 if (index_meta.l2_versions_size() > 0) {
                     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
                         EditVersion l2_version = index_meta.l2_versions(i);
-                        std::string l2_file_name =
-                                strings::Substitute("index.l2.$0.$1$2", l2_version.major(), l2_version.minor(),
-                                                    index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
                         Status st = FileSystem::Default()->delete_file(l2_file_name);
                         LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
                     }
@@ -3968,7 +3968,7 @@ size_t PersistentIndex::_get_tmp_l1_count() {
 Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     // 1. flush l0 to l1
     const std::string new_l1_filename =
-            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
     const size_t tmp_l1_cnt = _get_tmp_l1_count();
     // maybe need to append wal in 1.a
     bool need_append_wal = false;
@@ -4013,9 +4013,9 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     if (_has_l1) {
         // just link old l1 file to l2
         const std::string l2_file_path =
-                strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+                strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         const std::string old_l1_file_path =
-                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
         LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
         RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
         _l1_version.to_pb(index_meta->add_l2_versions());
@@ -4184,8 +4184,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     auto writer = std::make_unique<ImmutableIndexWriter>();
     // use latest l2 edit version as new l2 edit version
     EditVersion new_l2_version = l2_versions.back();
-    const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major(),
-                                                          new_l2_version.minor(), MergeSuffix);
+    const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major_number(),
+                                                          new_l2_version.minor_number(), MergeSuffix);
     RETURN_IF_ERROR(writer->init(idx_file_path, new_l2_version, true));
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     _get_l2_stat(l2_vec, usage_and_size_stat);
@@ -4304,8 +4304,8 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
-        auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major(),
-                                                 index_meta.l2_versions(i).minor(),
+        auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                                                 index_meta.l2_versions(i).minor_number(),
                                                  index_meta.l2_version_merged(i) ? MergeSuffix : "");
         ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
@@ -4340,9 +4340,9 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));
-        auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major(),
-                                                 prev_index_meta.l2_versions(i).minor(),
-                                                 prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
+        auto l2_block_path = strings::Substitute(
+                "$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major_number(),
+                prev_index_meta.l2_versions(i).minor_number(), prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
         ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
         ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile)));
         l2_vec.emplace_back(std::move(l2_index));

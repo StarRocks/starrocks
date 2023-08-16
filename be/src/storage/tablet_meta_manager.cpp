@@ -966,7 +966,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     span->AddEvent("delvec_start");
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
-        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dv_value = rssid_delvec.second->save();
         st = batch.Put(handle, dv_key, dv_value);
         if (!st.ok()) {
