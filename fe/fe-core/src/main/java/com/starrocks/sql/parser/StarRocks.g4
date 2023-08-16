@@ -115,6 +115,7 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+    | showCreateRoutineLoadStatement
 
     // StreamLoad Statement
     | showStreamLoadStatement
@@ -1138,6 +1139,10 @@ showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
         (FROM db=qualifiedName)?
         WHERE expression
+    ;
+
+showCreateRoutineLoadStatement
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
     ;
 
 showStreamLoadStatement
