@@ -365,17 +365,14 @@ public class QueryAnalyzer {
             } else {
                 List<Column> fullSchema = node.isBinlogQuery()
                         ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                List<Column> baseSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
                 for (Column column : fullSchema) {
-                    Field field;
-                    if (baseSchema.contains(column)) {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
-                    } else {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
-                    }
+                    // TODO: avoid analyze visible or not each time, cache it in schema
+                    boolean visible = baseSchema.contains(column);
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
+                            column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
                 }
