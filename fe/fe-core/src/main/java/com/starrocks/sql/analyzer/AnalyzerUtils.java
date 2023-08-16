@@ -419,6 +419,12 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        return tables;
+    }
+
     public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
