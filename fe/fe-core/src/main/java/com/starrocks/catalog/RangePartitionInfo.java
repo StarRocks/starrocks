@@ -72,9 +72,9 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     protected List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    protected Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    protected Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -102,8 +102,8 @@ public class RangePartitionInfo extends PartitionInfo {
     public RangePartitionInfo(RangePartitionInfo other) {
         super(other.type);
         this.partitionColumns = Lists.newArrayList(other.partitionColumns);
-        this.idToRange = Maps.newHashMap(other.idToRange);
-        this.idToTempRange = Maps.newHashMap(other.idToTempRange);
+        this.idToRange.putAll(other.idToRange);
+        this.idToTempRange.putAll(other.idToTempRange);
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
@@ -557,6 +557,16 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public boolean isPartitionedBy(PrimitiveType type) {
         return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
+    }
+
+    @Override
+    protected Object clone() {
+        RangePartitionInfo info = (RangePartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToRange.putAll(this.idToRange);
+        info.idToTempRange.putAll(this.idToTempRange);
+        info.isMultiColumnPartition = partitionColumns.size() > 1;
+        return info;
     }
 }
 
