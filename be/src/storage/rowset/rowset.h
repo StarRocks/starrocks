@@ -221,6 +221,7 @@ public:
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
+    KeysType keys_type() const { return _keys_type; }
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
