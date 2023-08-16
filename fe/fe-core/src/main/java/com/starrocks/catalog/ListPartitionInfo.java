@@ -2,6 +2,12 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+>>>>>>> eba980601b ([BugFix] Fix ConcurrentModificationException error on query (#29000))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -339,4 +345,79 @@ public class ListPartitionInfo extends PartitionInfo {
             this.setLiteralExprValues(partitionId, values);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public void dropPartition(long partitionId) {
+        super.dropPartition(partitionId);
+        idToValues.remove(partitionId);
+        idToLiteralExprValues.remove(partitionId);
+        idToMultiValues.remove(partitionId);
+        idToMultiLiteralExprValues.remove(partitionId);
+        idToIsTempPartition.remove(partitionId);
+        idToStorageCacheInfo.remove(partitionId);
+    }
+
+    @Override
+    public void moveRangeFromTempToFormal(long tempPartitionId) {
+        super.moveRangeFromTempToFormal(tempPartitionId);
+        idToIsTempPartition.computeIfPresent(tempPartitionId, (k, v) -> false);
+    }
+
+    public void addPartition(long partitionId, DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                             DataCacheInfo dataCacheInfo, List<String> values,
+                             List<List<String>> multiValues) throws AnalysisException {
+        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+        if (multiValues != null && multiValues.size() > 0) {
+            this.idToMultiValues.put(partitionId, multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
+        }
+        if (values != null && values.size() > 0) {
+            this.idToValues.put(partitionId, values);
+            this.setLiteralExprValues(partitionId, values);
+        }
+        this.idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) {
+        idToValues.put(partitionId, Collections.emptyList());
+        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
+        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToInMemory.put(partitionId, false);
+        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
+    }
+
+    public static int compareByValue(List<List<String>> left, List<List<String>> right) {
+        int valueSize = left.size();
+        for (int i = 0; i < valueSize; i++) {
+            int partitionSize = left.get(i).size();
+            for (int j = 0; j < partitionSize; j++) {
+                int compareResult = left.get(i).get(j).compareTo(right.get(i).get(j));
+                if (compareResult != 0) {
+                    return compareResult;
+                }
+            }
+        }
+        return 0;
+    }
+
+    public void setStorageCacheInfo(long partitionId, DataCacheInfo dataCacheInfo) {
+        idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+    }
+
+    @Override
+    public Object clone() {
+        ListPartitionInfo info = (ListPartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToMultiValues = Maps.newHashMap(this.idToMultiValues);
+        info.idToMultiLiteralExprValues = Maps.newHashMap(this.idToMultiLiteralExprValues);
+        info.idToValues = Maps.newHashMap(this.idToValues);
+        info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
+        info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
+        info.automaticPartition = this.automaticPartition;
+        return info;
+    }
+>>>>>>> eba980601b ([BugFix] Fix ConcurrentModificationException error on query (#29000))
 }
