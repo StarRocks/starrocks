@@ -391,7 +391,7 @@ BE dynamic parameters are as follows.
 | tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
 | result_buffer_cancelled_interval_time | 300 | Second | The wait time before BufferControlBlock release data. |
 | thrift_rpc_timeout_ms | 5000 | ms | The timeout for a thrift RPC. |
-| txn_commit_rpc_timeout_ms | 20000 | ms | The timeout for a transaction commit RPC. |
+| txn_commit_rpc_timeout_ms | 60000 | ms | The timeout for a transaction commit RPC. |
 | max_consumer_num_per_group | 3 | N/A | The maximum number of consumers in a consumer group of Routine Load. |
 | max_memory_sink_batch_count | 20 | N/A | The maximum number of Scan Cache batches. |
 | scan_context_gc_interval_min | 5 | Minute | The time interval at which to clean the Scan Context. |
