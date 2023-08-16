@@ -811,9 +811,7 @@ public class MvUtils {
                     // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
                     partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                             columnRefFactory);
-                }
-
-                if (!isCompensate || partitionPredicate == null || partitionPredicate.isEmpty()) {
+                } else {
                     partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
                 }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
@@ -855,9 +853,9 @@ public class MvUtils {
             return partitionPredicates;
         }
 
-        // if no partitions are selected, return empty partition predicates.
+        // if no partitions are selected, return pruned partition predicates directly.
         if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
-            return partitionPredicates;
+            return olapScanOperator.getPrunedPartitionPredicates();
         }
 
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
