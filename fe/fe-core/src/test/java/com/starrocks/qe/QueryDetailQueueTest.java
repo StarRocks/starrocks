@@ -62,7 +62,18 @@ public class QueryDetailQueueTest {
                 + "\"startTime\":" + startQueryDetail.getStartTime() + ",\"endTime\":-1,\"latency\":-1,"
                 + "\"state\":\"RUNNING\",\"database\":\"testDb\","
                 + "\"sql\":\"select * from table1 limit 1\","
+<<<<<<< HEAD
                 + "\"user\":\"root\"}]";
+=======
+                + "\"user\":\"root\","
+                + "\"scanRows\":100,"
+                + "\"scanBytes\":10001,"
+                + "\"returnRows\":1,"
+                + "\"cpuCostNs\":1002,"
+                + "\"memCostBytes\":100003,"
+                + "\"spillBytes\":-1"
+                + "}]";
+>>>>>>> 7cb1f75c35 ([Enhancement] add spillbytes in audit log and profile header (#29287))
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());

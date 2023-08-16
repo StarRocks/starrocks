@@ -1315,6 +1315,9 @@ public class StmtExecutor {
         if (statisticsForAuditLog.memCostBytes == null) {
             statisticsForAuditLog.memCostBytes = 0L;
         }
+        if (statisticsForAuditLog.spillBytes == null) {
+            statisticsForAuditLog.spillBytes = 0L;
+        }
         return statisticsForAuditLog;
     }
 

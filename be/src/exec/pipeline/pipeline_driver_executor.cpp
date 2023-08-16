@@ -230,9 +230,33 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+<<<<<<< HEAD
                                              const Status& status, bool done) {
     _update_profile_by_level(query_ctx, fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
+=======
+                                             const Status& status, bool done, bool attach_profile) {
+    auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+    if (attach_profile) {
+        profile = _build_merged_instance_profile(query_ctx, fragment_ctx);
+
+        // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
+        auto* query_peak_memory = profile->add_counter(
+                "QueryPeakMemoryUsage", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_peak_memory->set(query_ctx->mem_cost_bytes());
+        auto* query_cumulative_cpu = profile->add_counter(
+                "QueryCumulativeCpuTime", TUnit::TIME_NS,
+                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_cumulative_cpu->set(query_ctx->cpu_cost());
+        auto* query_spill_bytes = profile->add_counter(
+                "QuerySpillBytes", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_spill_bytes->set(query_ctx->get_spill_bytes());
+    }
+
+    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);
+>>>>>>> 7cb1f75c35 ([Enhancement] add spillbytes in audit log and profile header (#29287))
     auto fe_addr = fragment_ctx->fe_addr();
     if (fe_addr.hostname.empty()) {
         // query executed by external connectors, like spark and flink connector,
