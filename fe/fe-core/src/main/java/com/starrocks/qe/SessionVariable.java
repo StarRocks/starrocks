@@ -269,8 +269,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
+<<<<<<< HEAD
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
+=======
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+>>>>>>> eba980601b ([BugFix] Fix ConcurrentModificationException error on query (#29000))
 
     // --------  New planner session variables end --------
 
@@ -668,6 +672,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
+    private boolean cboUseDBLock = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1208,6 +1215,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableShowAllVariables = enableShowAllVariables;
     }
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
+
+    public boolean isCboUseDBLock() {
+        return cboUseDBLock;
+    }
+
+>>>>>>> eba980601b ([BugFix] Fix ConcurrentModificationException error on query (#29000))
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
