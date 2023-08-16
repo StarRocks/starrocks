@@ -271,6 +271,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
 
     // --------  New planner session variables end --------
 
@@ -668,6 +669,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
+    private boolean cboUseDBLock = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1206,6 +1210,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
+    }
+
+    public boolean isCboUseDBLock() {
+        return cboUseDBLock;
     }
 
     public int getStatisticCollectParallelism() {

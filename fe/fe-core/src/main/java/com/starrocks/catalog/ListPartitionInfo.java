@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -438,5 +439,18 @@ public class ListPartitionInfo extends PartitionInfo {
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
+    }
+
+    @Override
+    public Object clone() {
+        ListPartitionInfo info = (ListPartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToMultiValues = Maps.newHashMap(this.idToMultiValues);
+        info.idToMultiLiteralExprValues = Maps.newHashMap(this.idToMultiLiteralExprValues);
+        info.idToValues = Maps.newHashMap(this.idToValues);
+        info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
+        info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
+        info.automaticPartition = this.automaticPartition;
+        return info;
     }
 }
