@@ -395,6 +395,10 @@ public:
 
     // Gets the counter object with 'name'.  Returns NULL if there is no counter with
     // that name.
+    std::pair<Counter*, std::string> get_counter_pair(const std::string& name);
+
+    // Gets the counter object with 'name'.  Returns NULL if there is no counter with
+    // that name.
     Counter* get_counter(const std::string& name);
 
     // Adds all counters with 'name' that are registered either in this or
@@ -402,7 +406,7 @@ public:
     void get_counters(const std::string& name, std::vector<Counter*>* counters);
 
     // Copy all but the bucket counters from src profile
-    void copy_all_counters_from(RuntimeProfile* src_profile);
+    void copy_all_counters_from(RuntimeProfile* src_profile, const std::string& attached_counter_name = ROOT_COUNTER);
 
     // Remove the counter object with 'name', and it will remove all the child counters recursively
     void remove_counter(const std::string& name);
