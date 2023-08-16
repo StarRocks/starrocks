@@ -483,7 +483,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setActive(boolean active) {
         this.active = active;
-        this.inactiveReason = null;
+        if (active) {
+            this.inactiveReason = null;
+        }
     }
 
     public void setInactiveAndReason(String reason) {
@@ -899,7 +901,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             setActive(desiredActive);
         } catch (Throwable e) {
             LOG.error("reload materialized view failed: {}", this, e);
-        } finally {
             // exceptional reload
             setInactiveAndReason("reload failed");
         }
