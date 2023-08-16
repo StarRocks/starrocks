@@ -21,6 +21,7 @@ import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -70,6 +71,11 @@ public class WarehouseAnalyzer {
             if (Strings.isNullOrEmpty(whName)) {
                 throw new SemanticException("warehouse name can not be null or empty");
             }
+
+            if (whName.equals(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                throw new SemanticException("Can't drop the default_warehouse");
+            }
+
             return null;
         }
 
