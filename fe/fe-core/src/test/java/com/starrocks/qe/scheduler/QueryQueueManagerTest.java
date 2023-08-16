@@ -142,6 +142,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @After
     public void after() {
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
+
         // Reset query queue configs.
         GlobalVariable.setEnableQueryQueueSelect(prevQueueEnableSelect);
         GlobalVariable.setEnableQueryQueueStatistic(prevQueueEnableStatistic);
