@@ -395,10 +395,9 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
+        assertContains(plan, "1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 25> : CAST(49 AS DOUBLE)\n" +
                 "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -656,7 +655,7 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "9:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 21> : 37\n" +
+                "  |  <slot 21> : 21: expr\n" +
                 "  |  <slot 22> : 22: P_PARTKEY\n" +
                 "  |  <slot 23> : 23: P_NAME\n" +
                 "  |  <slot 24> : 24: P_MFGR\n" +
@@ -667,7 +666,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  <slot 29> : 29: P_RETAILPRICE\n" +
                 "  |  <slot 30> : 30: P_COMMENT\n" +
                 "  |  <slot 31> : 31: PAD\n" +
-                "  |  <slot 40> : CAST(37 AS INT)");
+                "  |  <slot 40> : CAST(21: expr AS INT)");
     }
 
     @Test
@@ -2751,5 +2750,28 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: LEFT SEMI JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 19: v4 = CAST(1 AS BIGINT)");
+    }
+
+    @Test
+    public void testProjectionInBotJoin() throws Exception {
+        String sql = "select * from (select coalesce(v1, v4), v2, v3 , v4 from t0 join t1) t " +
+                "where v2 in (select v7 from t2 where t.v3 = t2.v8)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "7:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 8: v7\n" +
+                "  |  equal join conjunct: 3: v3 = 9: v8\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 7> : coalesce(1: v1, 4: v4)\n" +
+                "  |  \n" +
+                "  3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN");
     }
 }
