@@ -15,7 +15,7 @@
 #include "publish_version_manager.h"
 
 #include "agent/finish_task.h"
-#include "agent/task_signatures_manager.h"
+#include "agent/task_singatures_manager.h"
 #include "common/config.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
