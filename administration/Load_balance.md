@@ -29,7 +29,7 @@ StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可
 2. 下载并解压 ProxySQL 安装包。
 
     ```shell
-    wget https://github.com/sysown/proxysql/releases/download/v2.0.14/proxysql-2.0.14-1-centos7.x86\_64.rpm
+    wget https://github.com/sysown/proxysql/releases/download/v2.0.14/proxysql-2.0.14-1-centos7.x86_64.rpm
     rpm2cpio proxysql-2.0.14-1-centos7.x86_64.rpm | cpio -ivdm
     ```
 
