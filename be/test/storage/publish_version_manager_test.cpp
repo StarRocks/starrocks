@@ -42,7 +42,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 class PublishVersionManagerTest : public testing::Test {
 public:
