@@ -2,20 +2,26 @@
 
 package com.starrocks.service;
 
-
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.TransactionState;
@@ -33,6 +39,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.UUID;
 
 public class FrontendServiceImplTest {
 
@@ -166,8 +173,10 @@ public class FrontendServiceImplTest {
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        List<Long> tableIdList = Lists.newArrayList();
+        tableIdList.add(table.getId());
         long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                             Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                             tableIdList, "1jdc689-xd232", requestId,
                              new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                              TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
