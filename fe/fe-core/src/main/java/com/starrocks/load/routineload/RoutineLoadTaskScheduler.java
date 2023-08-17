@@ -357,22 +357,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     // return true if allocate successfully. return false if failed.
     // throw exception if unrecoverable errors happen.
     private boolean allocateTaskToBe(RoutineLoadTaskInfo routineLoadTaskInfo) {
-        if (routineLoadTaskInfo.getPreviousBeId() != -1L) {
-            if (routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId()) != -1L) {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
-                            .add("job_id", routineLoadTaskInfo.getJobId())
-                            .add("previous_be_id", routineLoadTaskInfo.getPreviousBeId())
-                            .add("msg", "task use the previous be id")
-                            .build());
-                }
-                routineLoadTaskInfo.setBeId(routineLoadTaskInfo.getPreviousBeId());
-                return true;
-            }
-        }
-
-        // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot();
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getPreviousBeId());
         if (beId < 0) {
             return false;
         }

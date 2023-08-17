@@ -316,7 +316,7 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
-        routineLoadManager.takeBeTaskSlot();
+        routineLoadManager.takeBeTaskSlot(-1);
 
         Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
@@ -344,8 +344,8 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
 
         // take tow slots
-        long beId1 = routineLoadManager.takeBeTaskSlot();
-        long beId2 = routineLoadManager.takeBeTaskSlot();
+        long beId1 = routineLoadManager.takeBeTaskSlot(-1);
+        long beId2 = routineLoadManager.takeBeTaskSlot(-1);
         Assert.assertTrue(beId1 != beId2);
         Assert.assertTrue(beId1 != -1L);
         Assert.assertTrue(beId2 != -1L);
@@ -353,12 +353,12 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot() > 0));
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(-1) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot());
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(-1));
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
 

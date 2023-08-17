@@ -83,6 +83,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -92,6 +93,11 @@ public class RoutineLoadMgr implements Writable {
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
+
+    // beTasksNeedBalance would be set true when there's new BE added,
+    // and would be set false when the tasks of every BE is balanced.
+    private AtomicBoolean beTasksNeedBalance;
+
     private ReentrantLock slotLock = new ReentrantLock();
 
     // routine load job meta
@@ -122,38 +128,42 @@ public class RoutineLoadMgr implements Writable {
     public RoutineLoadMgr() {
     }
 
-    // returns -1 if there is no available be
-    public long takeBeTaskSlot() {
+    public long takeBeTaskSlot(long beId) {
         slotLock.lock();
         try {
-            long beId = -1L;
+            // if beId is set, and the be tasks need no balance.
+            if (beId != -1L && !beTasksNeedBalance.get()) {
+                Integer taskNum = beTasksNum.get(beId);
+                if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
+                    beTasksNum.put(beId, taskNum + 1);
+                    return beId;
+                } else {
+                    // the task numbers of all BEs are beyond limit.
+                    return -1L;
+                }
+            }
             int minTasksNum = Integer.MAX_VALUE;
+            boolean balanced = true;
             for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
+                int taskNum = entry.getValue();
+
+                // check whether the task numbers of all BEs are balanced.
+                int d = taskNum - minTasksNum;
+                if (d > 1 || d < -1) {
+                    balanced = false;
+                }
+
                 if (entry.getValue() < Config.max_routine_load_task_num_per_be
                         && entry.getValue() < minTasksNum) {
                     beId = entry.getKey();
-                    minTasksNum = entry.getValue();
+                    minTasksNum = taskNum;
                 }
             }
+            beTasksNeedBalance.set(!balanced);
             if (beId != -1) {
                 beTasksNum.put(beId, minTasksNum + 1);
             }
             return beId;
-        } finally {
-            slotLock.unlock();
-        }
-    }
-
-    public long takeBeTaskSlot(long beId) {
-        slotLock.lock();
-        try {
-            Integer taskNum = beTasksNum.get(beId);
-            if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
-                beTasksNum.put(beId, taskNum + 1);
-                return beId;
-            } else {
-                return -1L;
-            }
         } finally {
             slotLock.unlock();
         }
@@ -196,6 +206,8 @@ public class RoutineLoadMgr implements Writable {
             for (Long nodeId : aliveNodeIds) {
                 if (!beTasksNum.containsKey(nodeId)) {
                     beTasksNum.put(nodeId, 0);
+                    // new BE is added, the tasks of every be should be rebalanced.
+                    beTasksNeedBalance.set(true);
                 }
             }
 
