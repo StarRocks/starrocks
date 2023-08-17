@@ -828,9 +828,9 @@ select group_concat(distinct null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
+select group_concat(distinct name order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
 -- result:
-李四大闹天空,欧阳诸葛方程,May,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	英语外语美誉,数学大不列颠,English,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	["英语外语美誉","数学大不列颠",null,null,"English",null,null,"语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+May,李四大闹天空,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -1089,7 +1089,7 @@ TomEnglish,王武程咬金语文北京上海	1	22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
 李四大闹天空英语外语美誉	1	None
 -- !result
-select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by 1,score,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 TiEnglish,欧阳诸葛方程数学大不列颠	1	98
@@ -1243,9 +1243,9 @@ select group_concat(distinct null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
+select group_concat(distinct name order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
 -- result:
-May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,英语外语美誉,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,"数学大不列颠","英语外语美誉",null,"English",null,"语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+May,李四大闹天空,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -1271,7 +1271,7 @@ select group_concat( name,subject order by 1,2), count(distinct id), max(score) 
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	6	99
 -- !result
-select group_concat( name,subject order by 1,score), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by 1,score, 2), count(distinct id), max(score)  from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	6	99
 -- !result
@@ -1360,11 +1360,11 @@ select group_concat("中国",name order by 2, "第一" separator '\n') from ss;
 -- !result
 select group_concat("中国",name order by 2, "第一" separator subject) from ss;
 -- result:
-中国May中国Ti物理Phy中国TiEnglish中国TomEnglish中国Tom中国TomEnglish中国TomMath中国张三掩耳盗铃Math数学欧拉方程中国张三此地无银三百两英文English中国李四大闹天空英语外语美誉中国欧阳诸葛方程数学大不列颠中国王武程咬金
+中国May中国TiEnglish中国Ti物理Phy中国TomEnglish中国TomMath中国TomEnglish中国Tom中国张三掩耳盗铃Math数学欧拉方程中国张三此地无银三百两英文English中国李四大闹天空英语外语美誉中国欧阳诸葛方程数学大不列颠中国王武程咬金
 -- !result
 select group_concat("中国" order by "第一" separator score) from ss;
 -- result:
-E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_813fa70a3cd911eeac3300163e04d4c2`.`ss`.`score`).")
+E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_4fece76e3cf011eea83a00163e04d4c2`.`ss`.`score`).")
 -- !result
 select group_concat(  order by score) from ss order by 1;
 -- result:
