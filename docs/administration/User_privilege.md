@@ -6,6 +6,67 @@ StarRocks employs both role-based access control (RBAC) and identity-based acces
 
 Within a StarRocks cluster, privileges can be granted to users or roles. A role is a collection of privileges that can be assigned to users or other roles in the cluster as needed. A user can be granted one or more roles, which determine their permissions on different objects.
 
+## View user and role information
+
+Users with the system-defined role `user_admin` can view all the user and role information within the StarRocks cluster.
+
+### View privilege information
+
+You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md).
+
+- View the privileges of the current user.
+
+  ```SQL
+  SHOW GRANTS;
+  ```
+
+  > **NOTE**
+  >
+  > Any user can view their own privileges without needing any privileges.
+
+- View the privileges of a specific user.
+
+  The following example shows the privileges of the user `jack`:
+
+  ```SQL
+  SHOW GRANTS FOR jack@'172.10.1.10';
+  ```
+
+- View the privileges of a specific role.
+
+  The following example shows the privileges of the role `example_role`:
+
+  ```SQL
+  SHOW GRANTS FOR ROLE example_role;
+  ```
+
+### View user property
+
+You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
+
+The following example shows the property of the user `jack`:
+
+```SQL
+SHOW PROPERTY FOR jack@'172.10.1.10';
+```
+
+### View roles
+
+You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md).
+
+```SQL
+SHOW ROLES;
+```
+
+### View users
+
+You can view all the users within the StarRocks cluster using SHOW USERS.
+
+```SQL
+SHOW USERS;
+```
+
+
 ## Manage users
 
 Users with the system-defined role `user_admin` can create users, alter users, and drop users in StarRocks.
@@ -273,66 +334,6 @@ You can revoke privileges from a user or a role using [REVOKE](../sql-reference/
   ```SQL
   REVOKE SELECT ON TABLE sr_member FROM ROLE example_role;
   ```
-
-## View user and role information
-
-Users with the system-defined role `user_admin` can view all the user and role information within the StarRocks cluster.
-
-### View privilege information
-
-You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md).
-
-- View the privileges of the current user.
-
-  ```SQL
-  SHOW GRANTS;
-  ```
-
-  > **NOTE**
-  >
-  > Any user can view their own privileges without needing any privileges.
-
-- View the privileges of a specific user.
-
-  The following example shows the privileges of the user `jack`:
-
-  ```SQL
-  SHOW GRANTS FOR jack@'172.10.1.10';
-  ```
-
-- View the privileges of a specific role.
-
-  The following example shows the privileges of the role `example_role`:
-
-  ```SQL
-  SHOW GRANTS FOR ROLE example_role;
-  ```
-
-### View user property
-
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
-
-The following example shows the property of the user `jack`:
-
-```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
-```
-
-### View roles
-
-You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md).
-
-```SQL
-SHOW ROLES;
-```
-
-### View users
-
-You can view all the users within the StarRocks cluster using SHOW USERS.
-
-```SQL
-SHOW USERS;
-```
 
 ## Best practices
 
