@@ -104,11 +104,7 @@ public class JDBCTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        if (partitionColumns.size() > 0) {
-            return false;
-        } else {
-            return true;
-        }
+        return partitionColumns == null || partitionColumns.size() == 0;
     }
 
     public String getProperty(String propertyKey) {

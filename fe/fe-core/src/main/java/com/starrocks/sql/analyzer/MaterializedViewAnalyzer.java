@@ -751,8 +751,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns2, boolean unPartitioned) {
-            List<Column> partitionColumns = partitionColumns2;
+        private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns, boolean unPartitioned) {
             if (unPartitioned) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");

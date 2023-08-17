@@ -463,26 +463,13 @@ public class PartitionUtil {
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
-                PartitionKey partitionKey = createPartitionKey(
-                        ImmutableList.of(partitionName),
-                        ImmutableList.of(partitionColumn),
-                        table.getType());
-                partitionKeys.add(partitionKey);
-                String mvPartitionName = generateMVPartitionName(partitionKey);
-                // TODO: check `mvPartitionName` existed.
-                mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+                putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
             }
         } else {
             for (String partitionName : partitionNames) {
                 List<String> partitionNameValues = toPartitionValues(partitionName);
-                PartitionKey partitionKey = createPartitionKey(
-                        ImmutableList.of(partitionNameValues.get(partitionColumnIndex)),
-                        ImmutableList.of(partitionColumns.get(partitionColumnIndex)),
-                        table.getType());
-                partitionKeys.add(partitionKey);
-                String mvPartitionName = generateMVPartitionName(partitionKey);
-                // TODO: check `mvPartitionName` existed.
-                mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+                putMvPartitionKeyIntoMap(table, partitionColumns.get(partitionColumnIndex), partitionKeys,
+                        mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
             }
         }
 
@@ -520,6 +507,19 @@ public class PartitionUtil {
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
         }
         return mvPartitionRangeMap;
+    }
+
+    private static void putMvPartitionKeyIntoMap(Table table, Column partitionColumn, List<PartitionKey> partitionKeys,
+                                                 Map<String, PartitionKey> mvPartitionKeyMap, String partitionName)
+            throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                ImmutableList.of(partitionName),
+                ImmutableList.of(partitionColumn),
+                table.getType());
+        partitionKeys.add(partitionKey);
+        String mvPartitionName = generateMVPartitionName(partitionKey);
+        // TODO: check `mvPartitionName` existed.
+        mvPartitionKeyMap.put(mvPartitionName, partitionKey);
     }
 
     public static Map<String, List<List<String>>> getMVPartitionNameWithList(Table table,
