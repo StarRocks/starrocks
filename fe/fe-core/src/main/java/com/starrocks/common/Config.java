@@ -2445,5 +2445,5 @@ public class Config extends ConfigBase {
     public static boolean enable_show_external_catalog_privilege = true;
 
     @ConfField(mutable = true)
-    public static String access_control = "default";
+    public static String access_control = "native";
 }

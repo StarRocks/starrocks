@@ -143,7 +143,7 @@ public class RangerHiveAccessControl implements AccessControl {
         }
     }
 
-    public boolean hasPermission(RangerHiveResource resource, UserIdentity user, PrivilegeType privilegeType) {
+    private boolean hasPermission(RangerHiveResource resource, UserIdentity user, PrivilegeType privilegeType) {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
             accessType = RangerPolicyEngine.ANY_ACCESS;

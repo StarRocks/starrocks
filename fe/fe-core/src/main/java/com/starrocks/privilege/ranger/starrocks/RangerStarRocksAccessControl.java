@@ -46,7 +46,7 @@ import static java.util.Locale.ENGLISH;
 public class RangerStarRocksAccessControl implements AccessControl {
     private static RangerBasePlugin rangerPlugin = null;
 
-    public void init() {
+    public RangerStarRocksAccessControl() {
         rangerPlugin = new RangerBasePlugin("starrocks", "starrocks");
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
@@ -353,7 +353,7 @@ public class RangerStarRocksAccessControl implements AccessControl {
         }
     }
 
-    public boolean hasPermission(RangerStarRocksResource resource, UserIdentity user, PrivilegeType privilegeType) {
+    private boolean hasPermission(RangerStarRocksResource resource, UserIdentity user, PrivilegeType privilegeType) {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
             accessType = RangerPolicyEngine.ANY_ACCESS;

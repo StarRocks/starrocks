@@ -22,15 +22,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class AccessControlProvider {
     protected final AuthorizerStmtVisitor privilegeCheckerVisitor;
-    protected final AccessControl accessControl;
     public final Map<String, AccessControl> catalogToAccessControl;
 
     public AccessControlProvider(AuthorizerStmtVisitor privilegeCheckerVisitor, AccessControl accessControl) {
         this.privilegeCheckerVisitor = privilegeCheckerVisitor;
-        this.accessControl = accessControl;
 
         this.catalogToAccessControl = new ConcurrentHashMap<>();
-        this.catalogToAccessControl.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, this.accessControl);
+        this.catalogToAccessControl.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, accessControl);
     }
 
     public AuthorizerStmtVisitor getPrivilegeCheckerVisitor() {
@@ -39,14 +37,14 @@ public class AccessControlProvider {
 
     public AccessControl getAccessControlOrDefault(String catalogName) {
         if (catalogName == null) {
-            return this.accessControl;
+            return catalogToAccessControl.get(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
 
         AccessControl catalogAccessController = catalogToAccessControl.get(catalogName);
         if (catalogAccessController != null) {
             return catalogAccessController;
         } else {
-            return this.accessControl;
+            return catalogToAccessControl.get(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
     }
 
