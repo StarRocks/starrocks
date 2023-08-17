@@ -183,7 +183,7 @@ public class FrontendServiceImplTest {
                         "\"enable_persistent_index\" = \"false\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
-                        ")")
+                        ")");
         Database db = GlobalStateMgr.getCurrentState().getDb("test_table");
         Table table = db.getTable("pk_table");
         UUID uuid = UUID.randomUUID();
