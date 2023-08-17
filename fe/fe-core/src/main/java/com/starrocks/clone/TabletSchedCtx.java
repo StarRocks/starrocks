@@ -803,12 +803,25 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         cloneTask.setPathHash(srcPathHash, destPathHash);
         cloneTask.setIsLocal(srcReplica.getBackendId() == destBackendId);
 
-        // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING or REPLICA_MISSING_IN_CLUSTER,
+        // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE
         Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
+        // We should avoid full clone task to run concurrently with replica drop task,
+        // otherwise it may cause replica lost in the following scenario:
+        // we have a tablet T with only one replica,
+        // t1: balancer move T from backend 10001 to backend 10002
+        // t2: after clone finished, redundant replica on 10001 will be dropped,
+        //     but this will only clean the meta from FE, replica is physically
+        //     dropped until next tablet report from BE
+        // t3: balancer schedule a task to move back T from backend 10002 to backend 10001
+        // t4: tablet report from 10001 received, and a replica drop task is sent to backend 10001
+        // t5: clone on backend 10001 finished, and a new replica of T is created on FE
+        // t6: replica drop task has been executed on backend 10001
+        // t7: after the second clone finished, redundant replica on 10002 will be dropped
+        // t8: replica of T is physically lost with only meta of replica on 10001 is left on FE
         try {
             db.writeLock();
             if (tabletStatus == TabletStatus.REPLICA_MISSING
