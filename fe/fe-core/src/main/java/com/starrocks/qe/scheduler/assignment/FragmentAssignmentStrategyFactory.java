@@ -26,7 +26,7 @@ import java.util.Random;
 
 public class FragmentAssignmentStrategyFactory {
 
-    private final Random random = new Random(System.currentTimeMillis());
+    private final Random random = new Random(System.currentTimeMillis()); // NOSONAR
 
     private final ConnectContext connectContext;
     private final JobSpec jobSpec;
