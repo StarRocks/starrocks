@@ -52,6 +52,9 @@ public class RepoExecutor {
         return SingletonHolder.INSTANCE;
     }
 
+    private RepoExecutor() {
+    }
+
     public void executeDML(String sql) {
         try {
             ConnectContext context = createConnectContext();
