@@ -431,7 +431,7 @@ public class MaterializedViewAnalyzer {
                 for (String col : keyCols) {
                     Column column = columnMap.get(col);
                     column.setIsKey(true);
-                    column.setAggregationType(null, false);
+                    //                    column.setAggregationType(null, false);
                 }
                 return mvColumns;
             }
