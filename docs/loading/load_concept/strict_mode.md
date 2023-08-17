@@ -6,16 +6,16 @@ This topic introduces what strict mode is and how to set strict mode.
 
 ## Understand strict mode
 
-During data loading, StarRocks converts the values in the source columns whose data types are not completely the same as their mapping destination columns. Data conversions may fail due to various issues such as unmatched data types and excess field lengths. Column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
+During data loading, the data types of the source columns may not be completely consistent with the data types of the destination columns. In such cases, StarRocks performs conversions on the source column values that have inconsistent data types. Data conversions may fail due to various issues such as unmatched field data types and field length overflows. Source column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
 
 Strict mode works as follows:
 
 - If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns an `error_url` field with which you can view details about the unqualified rows.
-- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain `NULL` values together with qualified rows.
+- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain these `NULL` values together with qualified rows.
 
 Note the following points:
 
-- Both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
+- In actual business scenarios, both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
 
 - The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
 
