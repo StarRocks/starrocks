@@ -59,7 +59,7 @@ public class MysqlSchemaResolverTest {
         partitionsResult = new MockResultSet("partitions");
         partitionsResult.addColumn("PARTITION_DESCRIPTION", Arrays.asList("'20230810'"));
         partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
-        partitionsResult.addColumn("CREATE_TIME", Arrays.asList("2023-08-01"));
+        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
