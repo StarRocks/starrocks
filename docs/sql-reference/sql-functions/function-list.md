@@ -349,6 +349,8 @@ You can find a function based on the following categories:
 - [conv](../sql-functions/math-functions/conv.md)
 - [cos](../sql-functions/math-functions/cos.md)
 - [cosh](../sql-functions/math-functions/cosh.md)
+- [cosine_similarity](../sql-functions/math-functions/cos_similarity.md)
+- [cosine_similarity_norm](../sql-functions/math-functions/cos_similarity_norm.md)
 - [cot](../sql-functions/math-functions/cot.md)
 - [degrees](../sql-functions/math-functions/degrees.md)
 - [divide](../sql-functions/math-functions/divide.md)
