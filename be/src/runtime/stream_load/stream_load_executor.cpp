@@ -61,8 +61,7 @@ TLoadTxnRollbackResult k_stream_load_rollback_result;
 Status k_stream_load_plan_status;
 #endif
 
-static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int64_t deadline, const AuthInfo& auth,
-                                  int32_t rpc_timeout_ms);
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
 static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
@@ -222,11 +221,10 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    return commit_txn_internal(request, ctx->load_deadline_sec, ctx->auth, rpc_timeout_ms);
+    return commit_txn_internal(request, rpc_timeout_ms, ctx);
 }
 
-Status commit_txn_internal(const TLoadTxnCommitRequest& request, int64_t deadline, const AuthInfo& auth,
-                           int32_t rpc_timeout_ms) {
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
@@ -246,11 +244,15 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int64_t deadlin
 #endif
     Status status(result.status);
     if (status.ok()) {
+        ctx->need_rollback = false;
         return status;
     } else if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
-        bool visible = wait_txn_visible_until(auth, request.db, request.tbl, request.txnId, deadline);
+        ctx->need_rollback = false;
+        bool visible =
+                wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
         return visible ? Status::OK() : status;
     } else {
+        ctx->need_rollback = true;
         return status;
     }
 }
