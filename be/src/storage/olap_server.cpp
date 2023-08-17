@@ -48,11 +48,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-<<<<<<< HEAD
-=======
-#include "storage/persistent_index_compaction_manager.h"
 #include "storage/publish_version_manager.h"
->>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"

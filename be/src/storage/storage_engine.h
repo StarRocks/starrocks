@@ -401,11 +401,8 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-<<<<<<< HEAD
-=======
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
->>>>>>> 519ef2ca13 ([Enhancement] Support sync publish version for primary key table (#27055))
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
