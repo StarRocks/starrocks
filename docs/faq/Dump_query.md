@@ -42,6 +42,7 @@ Parameter description:
 * mock: turn on/off the desensitization process.
 
 ## Example
+
 command:
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
