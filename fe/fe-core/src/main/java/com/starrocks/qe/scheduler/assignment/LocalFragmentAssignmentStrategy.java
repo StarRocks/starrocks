@@ -81,7 +81,8 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws UserException {
         BackendSelector backendSelector = BackendSelectorFactory.create(
                 scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds);
-        // Some ScanNodes without scan ranges, such as SchemaScanNode, just return here.
+        // The ScanNodes without scan ranges, such as SchemaScanNode, just return here and will be assigned to an
+        // arbitrary worker later.
         if (backendSelector == null) {
             return;
         }
