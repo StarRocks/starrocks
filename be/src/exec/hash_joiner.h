@@ -233,7 +233,7 @@ public:
     Columns string_key_columns() { return _string_key_columns; }
     Status reset_probe(RuntimeState* state);
 
-    float avg_keys_perf_bucket() const;
+    float avg_keys_per_bucket() const;
 
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
