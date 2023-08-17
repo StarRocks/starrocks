@@ -480,7 +480,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void startScheduling() throws Exception {
+    public void startScheduling(boolean needDeploy) throws Exception {
         try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
@@ -490,8 +490,15 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
-            deliverExecFragments();
+            deliverExecFragments(needDeploy);
         }
+    }
+
+    @Override
+    public String getSchedulerExplain() {
+        return executionDAG.getFragmentsInPreorder().stream()
+                .map(ExecutionFragment::getExplainString)
+                .collect(Collectors.joining("\n"));
     }
 
     private void prepareProfile() {
@@ -554,17 +561,22 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void deliverExecFragments() throws RpcException, UserException {
+    private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
         try {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution);
             for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
-                deployer.deployFragments(concurrentFragments);
+                deployer.deployFragments(concurrentFragments, needDeploy);
             }
 
             attachInstanceProfileToFragmentProfile();
+
+            // Avoid `explain scheduler` waits until profile timeout.
+            if (!needDeploy) {
+                profileDoneSignal.countDownToZero(Status.OK);
+            }
         } finally {
             unlock();
         }

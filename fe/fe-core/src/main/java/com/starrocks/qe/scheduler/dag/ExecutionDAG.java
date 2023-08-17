@@ -122,6 +122,10 @@ public class ExecutionDAG {
         return instanceIdToInstance.values();
     }
 
+    public FragmentInstance getInstanceByInstanceId(TUniqueId instanceId) {
+        return instanceIdToInstance.get(instanceId);
+    }
+
     public ExecutionFragment getRootFragment() {
         return fragments.get(0);
     }
