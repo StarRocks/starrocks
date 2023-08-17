@@ -840,6 +840,10 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                     Lists.newArrayList(t), Type.BIGINT, Type.BIGINT, false, true, true));
 
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
+                    Lists.newArrayList(t), t, t, true, false, false));
+
             if (t.isPseudoType()) {
                 continue; // Only function `Count` support pseudo types now.
             }
@@ -874,10 +878,6 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(NDV,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
-
-            // ANY_VALUE
-            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
-                    Lists.newArrayList(t), t, t, true, false, false));
 
             // APPROX_COUNT_DISTINCT
             // alias of ndv, compute approx count distinct use HyperLogLog

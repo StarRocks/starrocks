@@ -220,7 +220,7 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
         Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
-        for (String q: queryList) {
+        for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
         }
@@ -234,7 +234,7 @@ public class SelectStmtTest {
                 "select not(k1 <=> 'abc-def') from db1.tbl1",
         };
         Pattern re = Pattern.compile("NOT.*<=>.*");
-        for (String q: queryList) {
+        for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
         }
@@ -304,7 +304,8 @@ public class SelectStmtTest {
     void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         // array is not supported now
-        String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
+        String sql =
+                "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
         String s = starRocksAssert.query(sql).explainQuery();
         Assert.assertTrue(s, s.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:3: expr | 4: count\n" +
@@ -378,14 +379,11 @@ public class SelectStmtTest {
     }
 
     @Test
-    void testScalarCorrelatedSubquery() {
-        try {
+    void testScalarCorrelatedSubquery() throws Exception {
+        {
             String sql = "select *, (select [a.k1,a.k2] from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
-            UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.fail("Must throw an exception");
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("NOT support scalar correlated sub-query of type array<varchar(32)>"));
+            String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan.contains("any_value([2: k1,3: k2])"));
         }
 
         try {
@@ -420,7 +418,6 @@ public class SelectStmtTest {
                 "  |----17:EXCHANGE"));
     }
 
-
     private static Stream<Arguments> multiDistinctMultiColumnWithLimitSqls() {
         String[][] sqlList = {
                 {"select count(distinct k1, k2), count(distinct k3) from db1.tbl1 limit 1",
@@ -431,12 +428,12 @@ public class SelectStmtTest {
                                 "  |  \n" +
                                 "  |----17:EXCHANGE"},
                 {"select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1) t1 limit 1",
-                     "18:NESTLOOP JOIN\n" +
-                             "  |  join op: CROSS JOIN\n" +
-                             "  |  colocate: false, reason: \n" +
-                             "  |  limit: 1\n" +
-                             "  |  \n" +
-                             "  |----17:EXCHANGE"
+                        "18:NESTLOOP JOIN\n" +
+                                "  |  join op: CROSS JOIN\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  |----17:EXCHANGE"
                 },
                 {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1) " +
                         "select * from t1 limit 1",
@@ -448,30 +445,30 @@ public class SelectStmtTest {
                                 "  |----17:EXCHANGE"
                 },
                 {"select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4 limit 1",
-                    "14:Project\n" +
-                            "  |  <slot 5> : 5: count\n" +
-                            "  |  <slot 6> : 6: count\n" +
-                            "  |  limit: 1\n" +
-                            "  |  \n" +
-                            "  13:HASH JOIN\n" +
-                            "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                            "  |  colocate: false, reason: \n" +
-                            "  |  equal join conjunct: 9: k4 <=> 11: k4\n" +
-                            "  |  limit: 1"
+                        "14:Project\n" +
+                                "  |  <slot 5> : 5: count\n" +
+                                "  |  <slot 6> : 6: count\n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  13:HASH JOIN\n" +
+                                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  equal join conjunct: 9: k4 <=> 11: k4\n" +
+                                "  |  limit: 1"
                 },
                 {"select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4, k3) t1" +
                         " limit 1",
-                       "14:Project\n" +
-                               "  |  <slot 5> : 5: count\n" +
-                               "  |  <slot 6> : 6: count\n" +
-                               "  |  limit: 1\n" +
-                               "  |  \n" +
-                               "  13:HASH JOIN\n" +
-                               "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                               "  |  colocate: false, reason: \n" +
-                               "  |  equal join conjunct: 10: k4 <=> 12: k4\n" +
-                               "  |  equal join conjunct: 9: k3 <=> 11: k3\n" +
-                               "  |  limit: 1"
+                        "14:Project\n" +
+                                "  |  <slot 5> : 5: count\n" +
+                                "  |  <slot 6> : 6: count\n" +
+                                "  |  limit: 1\n" +
+                                "  |  \n" +
+                                "  13:HASH JOIN\n" +
+                                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                                "  |  colocate: false, reason: \n" +
+                                "  |  equal join conjunct: 10: k4 <=> 12: k4\n" +
+                                "  |  equal join conjunct: 9: k3 <=> 11: k3\n" +
+                                "  |  limit: 1"
                 },
                 {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
                         "group by k2, k3, k4) select * from t1 limit 1",
@@ -495,7 +492,8 @@ public class SelectStmtTest {
     @Test
     void testSubstringConstantFolding() {
         try {
-            String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
+            String sql =
+                    "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, plan.contains("dt IN ('2022-01-02', '2022-01-03')"));
         } catch (Exception e) {

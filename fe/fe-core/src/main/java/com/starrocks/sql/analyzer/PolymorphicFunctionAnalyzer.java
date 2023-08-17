@@ -41,32 +41,6 @@ import java.util.List;
 public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
 
-    private static Type getSuperType(Type t1, Type t2) {
-        if (t1.matchesType(t2)) {
-            return t1;
-        }
-        if (t1.isNull()) {
-            return t2;
-        }
-        if (t2.isNull()) {
-            return t1;
-        }
-        if (t1.isScalarType() && t2.isScalarType()) {
-            Type commonType = Type.getCommonType(t1, t2);
-            return commonType.isValid() ? commonType : null;
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            Type superElementType = getSuperType(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType());
-            return superElementType != null ? new ArrayType(superElementType) : null;
-        }
-        if (t1.isMapType() && t2.isMapType()) {
-            Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
-            Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
-            return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
-        }
-        return null;
-    }
-
     private static Function newScalarFunction(ScalarFunction fn, List<Type> newArgTypes, Type newRetType) {
         ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), newArgTypes, newRetType,
                 fn.getLocation(), fn.getSymbolName(), fn.getPrepareFnSymbol(),
@@ -227,6 +201,7 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+            .put(FunctionSet.ANY_VALUE, types -> types[0])
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
