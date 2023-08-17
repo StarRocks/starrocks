@@ -147,6 +147,7 @@ private:
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;
         Version version;
         MaterializedViewParamMap materialized_params_map;
+        std::unique_ptr<TExpr> where_expr;
         std::vector<RowsetSharedPtr> rowsets_to_change;
         bool sc_sorting = false;
         bool sc_directly = false;

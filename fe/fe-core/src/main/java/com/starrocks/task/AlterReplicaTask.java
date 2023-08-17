@@ -182,7 +182,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         req.setMaterialized_column_req(materializedColumnReq);
 
         if (whereExpr != null) {
-            req.setWhereExpr(whereExpr.treeToThrift());
+            req.setWhere_expr(whereExpr.treeToThrift());
         }
 
 

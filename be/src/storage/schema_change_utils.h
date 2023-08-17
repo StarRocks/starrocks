@@ -37,6 +37,9 @@ public:
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
 
+    ExprContext* get_where_expr() { return _where_expr; }
+    void set_where_expr(ExprContext* where_expr) { _where_expr = where_expr; }
+
     const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
     const std::unordered_map<int32_t, int32_t>& get_slot_id_to_index_map() const { return _slot_id_to_index_map; }
@@ -69,6 +72,7 @@ public:
     Status prepare();
 
 private:
+    Buffer<uint8_t> _execute_where_expr(ChunkPtr& chunk);
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;
 
@@ -78,6 +82,8 @@ private:
     RuntimeState* _state = nullptr;
     // columnId -> expr
     std::unordered_map<int, ExprContext*> _mc_exprs;
+
+    ExprContext* _where_expr = nullptr;
 
     bool _has_mv_expr_context{false};
     // base table's slot_id to index mapping
@@ -89,12 +95,14 @@ private:
 class SchemaChangeUtils {
 public:
     static void init_materialized_params(const TAlterTabletReqV2& request,
-                                         MaterializedViewParamMap* materialized_view_param_map);
+                                         MaterializedViewParamMap& materialized_view_param_map,
+                                         std::unique_ptr<TExpr>& where_expr);
 
     static Status parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                 ChunkChanger* chunk_changer,
-                                const MaterializedViewParamMap& materialized_view_param_map, bool has_delete_predicates,
-                                bool* sc_sorting, bool* sc_directly, std::unordered_set<int>* materialized_column_idxs);
+                                const MaterializedViewParamMap& materialized_view_param_map,
+                                const std::unique_ptr<TExpr>& where_expr, bool has_delete_predicates, bool* sc_sorting,
+                                bool* sc_directly, std::unordered_set<int>* materialized_column_idxs);
 
 private:
     // default_value for new column is needed
