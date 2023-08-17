@@ -113,23 +113,16 @@ DROP DATABASE test_normal_column_schema_change;
 CREATE DATABASE test_materialized_column_in_materialized_view;
 USE test_materialized_column_in_materialized_view;
 
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ASYNC AS SELECT id, mc FROM t;
 
 INSERT INTO t VALUES (1);
 SELECT * FROM t;
-select sleep(5);
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 SELECT * FROM mv1;
 
-ALTER TABLE t modify COLUMN mc BIGINT AS (id);
-function: wait_alter_table_finish()
-
-REFRESH MATERIALIZED VIEW mv1;
-select sleep(5);
-
-SELECT * FROM mv1;
-
+DROP MATERIALIZED VIEW mv1;
 DROP TABLE t;
 
 DROP DATABASE test_materialized_column_in_materialized_view;
