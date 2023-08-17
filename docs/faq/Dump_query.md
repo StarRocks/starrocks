@@ -98,7 +98,7 @@ The desensitized data is returned in JSON format.
         "db_mock_000.tbl_mock_001": "CREATE TABLE db_mock_000.tbl_mock_001 (\nmock_008 int(11) NOT NULL ,\nmock_009 int(11) NOT NULL ,\nmock_016 int(11) NOT NULL ,\nmock_006 int(11) NOT NULL ,\nmock_010 double NOT NULL ,\nmock_005 double NOT NULL ,\nmock_004 double NOT NULL ,\nmock_017 double NOT NULL ,\nmock_012 char(1) NOT NULL ,\nmock_007 char(1) NOT NULL ,\nmock_013 date NOT NULL ,\nmock_003 date NOT NULL ,\nmock_011 date NOT NULL ,\nmock_014 char(25) NOT NULL ,\nmock_015 char(10) NOT NULL ,\nmock_002 varchar(44) NOT NULL ,\nmock_018 char(1) NOT NULL \n) ENGINE= OLAP\nDUPLICATE KEY(mock_008)\nDISTRIBUTED BY HASH(mock_008) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" = \"1\"\n);"
     },
     "table_row_count": {
-      "test.lineitem": {
+      "db_mock_000.tbl_mock_001": {
         "lineitem": 600000000
       }
     },
