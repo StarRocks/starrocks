@@ -13,11 +13,11 @@ Strict mode works as follows:
 - If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns an `error_url` field with which you can view details about the unqualified rows.
 - If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain `NULL` values together with qualified rows.
 
-  > **NOTE**
-  >
-  > If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out unqualified rows that contain `NULL` values.
+Note the following points:
 
-Note that the maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
+- Both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
+
+- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
