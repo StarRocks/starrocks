@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.parser.SqlParser;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,7 +75,7 @@ public class QueryDumpAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
-        boolean enableMock = "true".equalsIgnoreCase(request.getSingleParameter(MOCK).trim());
+        boolean enableMock = "true".equalsIgnoreCase(StringUtils.trim(request.getSingleParameter(MOCK)));
 
         if (!Strings.isNullOrEmpty(catalogDbName)) {
             String[] catalogDbNames = catalogDbName.split("\\.");

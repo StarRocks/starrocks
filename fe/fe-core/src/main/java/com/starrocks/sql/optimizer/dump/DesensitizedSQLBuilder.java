@@ -114,6 +114,7 @@ public class DesensitizedSQLBuilder {
     }
 
     public static String desensitizeColName(String colName, Map<String, String> desensitizedDict) {
+        colName = StringUtils.lowerCase(colName);
         Preconditions.checkState(desensitizedDict.containsKey(colName),
                 "col %s not be desensitized", colName);
         return desensitizedDict.get(colName);

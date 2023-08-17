@@ -31,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -216,7 +217,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
                 columnStatistics.addProperty(
-                        DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
+                        DesensitizedSQLBuilder.desensitizeColName(StringUtils.lowerCase(columnEntry.getKey()), dict),
                         columnEntry.getValue().toString()
                 );
             }
