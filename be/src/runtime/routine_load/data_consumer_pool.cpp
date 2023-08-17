@@ -158,7 +158,7 @@ void DataConsumerPool::stop() {
     std::unique_lock<std::mutex> l(_lock);
     *_is_closed = true;
 
-    if(_clean_idle_consumer_thread.joinable()) {
+    if (_clean_idle_consumer_thread.joinable()) {
         _clean_idle_consumer_thread.join();
     }
 }
