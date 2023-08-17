@@ -51,8 +51,8 @@ public class RepoExecutor {
 
     public void executeDML(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
+
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
             DmlStmt dmlStmt = (DmlStmt) parsedStmt;
@@ -71,8 +71,7 @@ public class RepoExecutor {
 
     public List<TResultBatch> executeDQL(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
 
             // TODO: use json sink protocol, instead of statistic protocol
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
@@ -95,8 +94,7 @@ public class RepoExecutor {
 
     public void executeDDL(String sql) {
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            context.setThreadLocalInfo();
+            ConnectContext context = createConnectContext();
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
@@ -107,6 +105,13 @@ public class RepoExecutor {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    private static ConnectContext createConnectContext() {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
+        context.setNeedQueued(false);
+        return context;
     }
 
 }
