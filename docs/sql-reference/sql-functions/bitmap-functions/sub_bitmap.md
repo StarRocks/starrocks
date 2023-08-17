@@ -17,18 +17,15 @@ BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ## Parameters
 
 - `src`: the BITMAP value from which you want to obtain elements.
-- `offset`: the starting position. It must be a BIGINT value. If the starting position specified by this parameter exceeds the actual length of the BITMAP value, NULL is returned. See Example 6.
+- `offset`: the starting position. It must be a BIGINT value. Note the following points when you use `offset`:
+  - Offsets start from 0.
+  - Negative offsets are counted from right to left. See Examples 3 and 4.
+  - If the starting position specified by `offset` exceeds the actual length of the BITMAP value, NULL is returned. See Example 6.
 - `len`: the number of elements to obtain. It must be a BIGINT value greater than or equal to 1. If the number of matching elements is less than the value of `len`, all the matching elements are returned. See Examples 2, 3, and 7.
 
 ## Return value
 
 Returns a value of the BITMAP type. NULL is returned if any of the input parameters is invalid.
-
-## Usage notes
-
-- Offsets start from 0.
-- Negative offsets are counted from right to left.
-- If the starting position specified by `offset` exceeds the actual length of the BITMAP value, NULL is returned.
 
 ## Examples
 
