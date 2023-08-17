@@ -2410,7 +2410,11 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from (select * from tbl1) tbl";
-        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 
     @Test
@@ -2425,11 +2429,8 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from (select * from tbl1) tbl";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail();
         } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error at line 1, column 42." +
-                            " Detail message: resolve partition column failed.",
-                    e.getMessage());
+            Assert.fail();
         }
     }
 
@@ -2698,7 +2699,7 @@ public class CreateMaterializedViewTest {
             Database differentDb = currentState.getDb("test_mv_different_db");
             Table mv1 = differentDb.getTable("test_mv_use_different_tbl");
             Assert.assertTrue(mv1 instanceof MaterializedView);
-            
+
             newStarRocksAssert.dropDatabase("test_mv_different_db");
         } catch (Exception e) {
             Assert.fail();
@@ -2785,6 +2786,7 @@ public class CreateMaterializedViewTest {
             starRocksAssert.dropMaterializedView(mvName);
         }
     }
+
     @Test
     public void testExprAlias() throws Exception {
         testMVColumnAlias("c_1_9 + 1");
@@ -2811,15 +2813,15 @@ public class CreateMaterializedViewTest {
     @Test
     public void testMvNullable() throws Exception {
         starRocksAssert.withTable("create table emps (\n" +
-                "    empid int not null,\n" +
-                "    deptno int not null,\n" +
-                "    name varchar(25) not null,\n" +
-                "    salary double\n" +
-                ")\n" +
-                "distributed by hash(`empid`) buckets 10\n" +
-                "properties (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");")
+                        "    empid int not null,\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null,\n" +
+                        "    salary double\n" +
+                        ")\n" +
+                        "distributed by hash(`empid`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("create table depts (\n" +
                         "    deptno int not null,\n" +
                         "    name varchar(25) not null\n" +
@@ -2866,7 +2868,7 @@ public class CreateMaterializedViewTest {
 
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
-	}
+    }
 
     @Test
     public void testSelectFromSyncMV() throws Exception {
@@ -3219,5 +3221,98 @@ public class CreateMaterializedViewTest {
                 "array<json>[parse_json('{}')] as type_array_json " +
                 "from tbl1 tb1;";
         starRocksAssert.withMaterializedView(sql);
+    }
+    @Test
+    public void testCreateMaterializedViewWithTableAlias1() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select t0.k1, t0.k2, t0.sum as sum0 " +
+                "from (select k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t0 where t0.k2 > 10";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithTableAlias2() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select t0.k1, t0.k2, t0.sum as sum0, t1.sum as sum1, t2.sum as sum2 " +
+                "from (select k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t0 " +
+                "left join (select  k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t1 on t0.k1=t1.k2 " +
+                "left join (select k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t2 on t0.k1=t2.k1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateMvWithViewAndSubQuery() throws Exception {
+        starRocksAssert.withView("create view view_1 as " +
+                "select k1, s2 from (select tb1.k1, k2 s2 from tbl1 tb1) t where t.k1 > 10;");
+        starRocksAssert.withView("create view view_2 as " +
+                "select k1, s2 from (select v1.k1, v1.s2 from view_1 v1) t where t.k1 > 10;");
+        starRocksAssert.withView("create view view_3 as " +
+                "select d1, s2 from (select date_trunc('month',k1) d1, v1.s2 from view_1 v1)t where d1 is not null;");
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select k1, s2 from view_1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select view_1.k1, view_2.s2 from view_1 join view_2 on view_1.k1=view_2.k1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by d1\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select v3.d1, v3.s2 from view_3 v3;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month',k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select view_1.k1, view_2.s2 from view_1 join view_2 on view_1.k1=view_2.k1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        starRocksAssert.dropView("view_1");
+        starRocksAssert.dropView("view_2");
+        starRocksAssert.dropView("view_3");
     }
 }
