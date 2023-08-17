@@ -545,11 +545,9 @@
       + [round](./sql-reference/sql-functions/math-functions/round.md)
       + [sign](./sql-reference/sql-functions/math-functions/sign.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
-      + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
       + [sqrt](./sql-reference/sql-functions/math-functions/sqrt.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
       + [tan](./sql-reference/sql-functions/math-functions/tan.md)
-      + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
       + [truncate](./sql-reference/sql-functions/math-functions/truncate.md)
     + String Functions
       + [append_trailing_char_if_absent](./sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)
