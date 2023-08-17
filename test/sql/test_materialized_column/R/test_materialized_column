@@ -126,7 +126,7 @@ CREATE DATABASE test_materialized_column_in_materialized_view;
 USE test_materialized_column_in_materialized_view;
 -- result:
 -- !result
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ASYNC AS SELECT id, mc FROM t;
@@ -137,34 +137,15 @@ INSERT INTO t VALUES (1);
 -- !result
 SELECT * FROM t;
 -- result:
-1	1
+1	2
 -- !result
-select sleep(5);
--- result:
-1
--- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 SELECT * FROM mv1;
 -- result:
-1	1
+1	2
 -- !result
-ALTER TABLE t modify COLUMN mc BIGINT AS (id);
+DROP MATERIALIZED VIEW mv1;
 -- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-REFRESH MATERIALIZED VIEW mv1;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
--- !result
-select sleep(5);
--- result:
-1
--- !result
-SELECT * FROM mv1;
--- result:
-1	1
 -- !result
 DROP TABLE t;
 -- result:
@@ -546,8 +527,8 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
-  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -578,8 +559,8 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
-  `newcol1` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS `test_add_multiple_column`.`t`.`id` * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 

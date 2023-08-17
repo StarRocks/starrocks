@@ -212,7 +212,7 @@ public class ColumnDef implements ParseNode {
     }
 
     public Expr materializedColumnExpr() {
-        return materializedColumnExpr;
+        return materializedColumnExpr.clone();
     }
 
     public WithColumnMaskingPolicy getWithColumnMaskingPolicy() {
