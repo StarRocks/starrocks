@@ -130,7 +130,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
-        String partitionNamesQuery = "select PARTITION_DESCRIPTION from INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
+        String partitionNamesQuery = "SELECT PARTITION_DESCRIPTION FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
                 "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
@@ -156,7 +156,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
-        String partitionColumnsQuery = "select DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
+        String partitionColumnsQuery = "SELECT DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
                 "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
@@ -180,8 +180,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     public List<Partition> getPartitions(Connection connection, Table table) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        String partitionsQuery = "select PARTITION_DESCRIPTION, CREATE_TIME from INFORMATION_SCHEMA.PARTITIONS " +
-                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+        String partitionsQuery = "SELECT PARTITION_DESCRIPTION, " +
+                "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
+                "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+                "AND PARTITION_NAME IS NOT NULL";
         try (PreparedStatement ps = connection.prepareStatement(partitionsQuery)) {
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
@@ -191,7 +193,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
                             replace("'", "").split(",");
-                    long createTime = rs.getDate("CREATE_TIME").getTime();
+                    long createTime = rs.getDate("MODIFIED_TIME").getTime();
                     for (String partitionName : partitionNames) {
                         list.add(new Partition(partitionName, createTime));
                     }
