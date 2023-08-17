@@ -2226,7 +2226,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     try {
                         chosenBackendIds = chosenBackendIdBySeq(replicationNum);
                     } catch (DdlException ex) {
-                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
+                        throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
                                 ex.getMessage(), table.getName(), Config.default_replication_num));
                     }
                 }
