@@ -627,6 +627,7 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100021, 'xx_hash3_64', 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
 
     # Utility functions
     [100011, 'sleep', 'BOOLEAN', ['INT'], "UtilityFunctions::sleep"],
