@@ -169,8 +169,23 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testGetLoadTxnStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = db.getTable("site_access_day");
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `pk_table` (\n" +
+                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `v1` int(11) NULL COMMENT \"\",\n" +
+                        "  `v2` int(11) NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`k1`)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ")")
+        Database db = GlobalStateMgr.getCurrentState().getDb("test_table");
+        Table table = db.getTable("pk_table");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
         List<Long> tableIdList = Lists.newArrayList();
@@ -186,7 +201,7 @@ public class FrontendServiceImplTest {
         request.setTxnId(100);
         TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
-        request.setDb("test");
+        request.setDb("test_table");
         TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
         request.setTxnId(transactionId);
