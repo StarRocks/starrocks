@@ -6,6 +6,66 @@ StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的�
 
 在 StarRocks 集群中，您可以将权限授予用户或角色。角色是一组权限，可根据需要授予集群内的用户或角色。一个用户或角色可以被授予一个或多个角色，这些角色决定了他们对不同对象的权限。
 
+## 查看用户和角色信息
+
+拥有系统预置角色 `user_admin` 的用户可以查看 StarRocks 集群中用户和角色的信息。
+
+### 查看权限信息
+
+您可以使用 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 查看授予用户或角色的权限。
+
+- 查看当前用户的权限。
+
+  ```SQL
+  SHOW GRANTS;
+  ```
+
+  > **说明**
+  >
+  > 任何用户都可以查看自身的权限，无需任何权限。
+
+- 查看特定用户的权限。
+
+  以下示例查看用户 `jack` 的权限。
+
+  ```SQL
+  SHOW GRANTS FOR jack@'172.10.1.10';
+  ```
+
+- 查看特定角色的权限。
+
+  以下示例查看角色 `example_role` 的权限。
+
+  ```SQL
+  SHOW GRANTS FOR ROLE example_role;
+  ```
+
+### 查看用户属性
+
+您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 查看用户的属性。
+
+以下示例查看用户 `jack` 的属性：
+
+```SQL
+SHOW PROPERTY FOR jack@'172.10.1.10';
+```
+
+### 查看角色
+
+您可以使用 [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md) 查看 StarRocks 集群中的所有角色。
+
+```SQL
+SHOW ROLES;
+```
+
+### 查看用户
+
+您可以使用 SHOW USERS 查看 StarRocks 集群中的所有用户。
+
+```SQL
+SHOW USERS;
+```
+
 ## 管理用户
 
 拥有系统预置角色 `user_admin` 的用户可以在 StarRocks 中创建、修改和删除用户。
@@ -273,66 +333,6 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
   ```SQL
   REVOKE SELECT ON TABLE sr_member FROM ROLE example_role;
   ```
-
-## 查看用户和角色信息
-
-拥有系统预置角色 `user_admin` 的用户可以查看 StarRocks 集群中用户和角色的信息。
-
-### 查看权限信息
-
-您可以使用 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 查看授予用户或角色的权限。
-
-- 查看当前用户的权限。
-
-  ```SQL
-  SHOW GRANTS;
-  ```
-
-  > **说明**
-  >
-  > 任何用户都可以查看自身的权限，无需任何权限。
-
-- 查看特定用户的权限。
-
-  以下示例查看用户 `jack` 的权限。
-
-  ```SQL
-  SHOW GRANTS FOR jack@'172.10.1.10';
-  ```
-
-- 查看特定角色的权限。
-
-  以下示例查看角色 `example_role` 的权限。
-
-  ```SQL
-  SHOW GRANTS FOR ROLE example_role;
-  ```
-
-### 查看用户属性
-
-您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 查看用户的属性。
-
-以下示例查看用户 `jack` 的属性：
-
-```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
-```
-
-### 查看角色
-
-您可以使用 [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md) 查看 StarRocks 集群中的所有角色。
-
-```SQL
-SHOW ROLES;
-```
-
-### 查看用户
-
-您可以使用 SHOW USERS 查看 StarRocks 集群中的所有用户。
-
-```SQL
-SHOW USERS;
-```
 
 ## 最佳实践
 
