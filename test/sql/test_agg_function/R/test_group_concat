@@ -144,7 +144,7 @@ TomMath,TomEnglish
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat(distinct name,subject order by score, 1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -154,11 +154,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4,2,1) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 62. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4.00, 1,2) from ss group by id order by 1;
 -- result:
 None
 Ti物理Phy
@@ -168,7 +168,7 @@ TomMath,TomEnglish
 李四大闹天空英语外语美誉
 欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
-select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,null order by score,1,4.00) from ss group by id order by 1;
 -- result:
 None
 None
@@ -198,15 +198,15 @@ None
 None
 None
 -- !result
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
+select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
 None	None	[null]
-Ti	物理Phy	[null,"物理Phy"]
-Tom	Math,English	["Math","English"]
-Tom,王武程咬金	English,语文北京上海	["English",null,"语文北京上海"]
-张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
-李四大闹天空	英语外语美誉	["英语外语美誉"]
-欧阳诸葛方程,May,Ti	数学大不列颠,English	["数学大不列颠",null,"English"]
+None	英语外语美誉	["英语外语美誉"]
+Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
+Ti99	物理Phy	[null,"物理Phy"]
+Tom80,Tom90	Math,English	["Math","English"]
+张三掩耳盗铃78,张三此地无银三百两98	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+王武程咬金22	English,语文北京上海	[null,"English","语文北京上海"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -242,9 +242,9 @@ select group_concat(distinct 1,2 order by score,2) from ss group by id order by 
 12
 12
 -- !result
-select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat(distinct 3.1323,subject order by 1, 2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 61. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss group by id order by 1;
 -- result:
@@ -266,7 +266,7 @@ TomMath,TomEnglish	1	90
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
 李四大闹天空英语外语美誉	1	None
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -276,11 +276,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 54. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -354,9 +354,9 @@ select group_concat( 1,2 order by score,2) from ss group by id order by 1;
 12,12,12
 12,12,12
 -- !result
-select group_concat( 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat( 3.1323,subject order by 1,2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 52. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss order by 1;
 -- result:
@@ -382,21 +382,21 @@ select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by 1,score) from ss order by 1;
+select group_concat(distinct name,subject order by 1,score,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
 李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss order by 1;
+select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 64. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
+select group_concat(distinct name,subject order by 1,2,score,4.00) from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy
+TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -412,7 +412,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,英语外语美誉,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,"English","数学大不列颠",null,"英语外语美誉",null,null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+欧阳诸葛方程,李四大闹天空,May,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	数学大不列颠,英语外语美誉,English,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	["数学大不列颠","英语外语美誉",null,"English",null,null,null,"语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -442,17 +442,17 @@ select group_concat( name,subject order by 1,score), count(distinct id), max(sco
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	6	99
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,TomEnglish,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -492,16 +492,6 @@ set new_planner_agg_stage = 2;
 set streaming_preaggregation_mode = force_streaming;
 -- result:
 -- !result
-select group_concat(name,subject order by 1,2), group_concat(name,score order by 1,2) from ss group by id order by id;
--- result:
-Ti物理Phy	Ti99
-TomEnglish,TomMath	Tom80,Tom90
-TomEnglish,王武程咬金语文北京上海	王武程咬金22
-TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
-None	None
-张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
-李四大闹天空英语外语美誉	None
--- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss group by id order by 1;
 -- result:
 None	1	None
@@ -532,7 +522,7 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
 李四大闹天空英语外语美誉	None
 -- !result
-select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1,2) from ss group by id order by 1;
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1, 2) from ss group by id order by 1;
 -- result:
 None	None
 TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
@@ -572,7 +562,7 @@ TomMath,TomEnglish
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat(distinct name,subject order by score, 1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -582,11 +572,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4,2,1) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 62. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4.00, 1,2) from ss group by id order by 1;
 -- result:
 None
 Ti物理Phy
@@ -596,7 +586,7 @@ TomMath,TomEnglish
 李四大闹天空英语外语美誉
 欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
-select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,null order by score,1,4.00) from ss group by id order by 1;
 -- result:
 None
 None
@@ -606,7 +596,7 @@ None
 None
 None
 -- !result
-select group_concat(distinct name,subject order by null,1,2) from ss group by id order by 1;
+select group_concat(distinct name,subject order by 1,2, null) from ss group by id order by 1;
 -- result:
 None
 TiEnglish,欧阳诸葛方程数学大不列颠
@@ -626,15 +616,15 @@ None
 None
 None
 -- !result
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
+select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
 None	None	[null]
-May,欧阳诸葛方程,Ti	数学大不列颠,English	[null,"数学大不列颠","English"]
-Ti	物理Phy	[null,"物理Phy"]
-Tom	Math,English	["Math","English"]
-Tom,王武程咬金	English,语文北京上海	[null,"English","语文北京上海"]
-张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
-李四大闹天空	英语外语美誉	["英语外语美誉"]
+None	英语外语美誉	["英语外语美誉"]
+Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
+Ti99	物理Phy	[null,"物理Phy"]
+Tom80,Tom90	Math,English	["Math","English"]
+张三掩耳盗铃78,张三此地无银三百两98	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+王武程咬金22	English,语文北京上海	[null,"English","语文北京上海"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -670,9 +660,9 @@ select group_concat(distinct 1,2 order by score,2) from ss group by id order by 
 12
 12
 -- !result
-select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat(distinct 3.1323,subject order by 1, 2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 61. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss group by id order by 1;
 -- result:
@@ -694,7 +684,7 @@ TomMath,TomEnglish	1	90
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
 李四大闹天空英语外语美誉	1	None
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -704,11 +694,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 54. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -728,7 +718,7 @@ None
 None
 None
 -- !result
-select group_concat( name,subject order by null,2,1) from ss group by id order by 1;
+select group_concat( name,subject order by 1,2, null) from ss group by id order by 1;
 -- result:
 None
 TiEnglish,欧阳诸葛方程数学大不列颠
@@ -782,9 +772,9 @@ select group_concat( 1,2 order by score,2) from ss group by id order by 1;
 12,12,12
 12,12,12
 -- !result
-select group_concat( 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat( 3.1323,subject order by 1,2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 52. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss order by 1;
 -- result:
@@ -810,27 +800,27 @@ select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by 1,score) from ss order by 1;
+select group_concat(distinct name,subject order by 1,score,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss order by 1;
+select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 64. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
+select group_concat(distinct name,subject order by 1,2,score,4.00) from ss order by 1;
 -- result:
-欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy
+TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name,subject order by null, 1,2) from ss order by 1;
+select group_concat(distinct name,subject order by 1,2, null) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
@@ -840,7 +830,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-李四大闹天空,欧阳诸葛方程,May,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	英语外语美誉,English,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	["英语外语美誉",null,null,null,"数学大不列颠","English",null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+李四大闹天空,May,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	英语外语美誉,数学大不列颠,English,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,"英语外语美誉",null,"数学大不列颠",null,"English","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -870,7 +860,7 @@ select group_concat( name,subject order by 1,score), count(distinct id), max(sco
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	6	99
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
 TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
@@ -878,17 +868,17 @@ select group_concat( name,subject order by score,4), count(distinct id), max(sco
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat( name,subject order by null,2,1) from ss order by 1;
+select group_concat( name,subject order by null,1,2) from ss order by 1;
 -- result:
-TiEnglish,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,欧阳诸葛方程数学大不列颠,Ti物理Phy,张三此地无银三百两英文English,李四大闹天空英语外语美誉,王武程咬金语文北京上海
+TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
 select group_concat( null order by score,4.00) from ss order by 1;
 -- result:
@@ -917,19 +907,6 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Deta
 set enable_exchange_pass_through = false;
 -- result:
 -- !result
-set streaming_preaggregation_mode = force_streaming;
--- result:
--- !result
-select group_concat(name,subject order by 1,2), group_concat(name,score order by 1,2) from ss group by id order by id;
--- result:
-Ti物理Phy	Ti99
-TomEnglish,TomMath	Tom80,Tom90
-TomEnglish,王武程咬金语文北京上海	王武程咬金22
-TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
-None	None
-张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
-李四大闹天空英语外语美誉	None
--- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss group by id order by 1;
 -- result:
 None	1	None
@@ -960,7 +937,7 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
 李四大闹天空英语外语美誉	None
 -- !result
-select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1,2) from ss group by id order by 1;
+select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1, 2) from ss group by id order by 1;
 -- result:
 None	None
 TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
@@ -1000,7 +977,7 @@ TomMath,TomEnglish
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat(distinct name,subject order by score, 1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -1010,11 +987,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4,2,1) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 62. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,subject order by score,4.00, 1,2) from ss group by id order by 1;
 -- result:
 None
 Ti物理Phy
@@ -1024,7 +1001,7 @@ TomMath,TomEnglish
 李四大闹天空英语外语美誉
 欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
-select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
+select group_concat(distinct name,null order by score,1,4.00) from ss group by id order by 1;
 -- result:
 None
 None
@@ -1034,7 +1011,7 @@ None
 None
 None
 -- !result
-select group_concat(distinct name,subject order by null,1,2) from ss group by id order by 1;
+select group_concat(distinct name,subject order by 1,2, null) from ss group by id order by 1;
 -- result:
 None
 TiEnglish,欧阳诸葛方程数学大不列颠
@@ -1054,15 +1031,15 @@ None
 None
 None
 -- !result
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
+select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
 None	None	[null]
-May,欧阳诸葛方程,Ti	数学大不列颠,English	[null,"数学大不列颠","English"]
-Ti	物理Phy	[null,"物理Phy"]
-Tom	Math,English	["Math","English"]
-Tom,王武程咬金	English,语文北京上海	[null,"English","语文北京上海"]
-张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
-李四大闹天空	英语外语美誉	["英语外语美誉"]
+None	英语外语美誉	["英语外语美誉"]
+Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
+Ti99	物理Phy	[null,"物理Phy"]
+Tom80,Tom90	Math,English	["Math","English"]
+张三掩耳盗铃78,张三此地无银三百两98	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+王武程咬金22	English,语文北京上海	[null,"English","语文北京上海"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -1098,9 +1075,9 @@ select group_concat(distinct 1,2 order by score,2) from ss group by id order by 
 12
 12
 -- !result
-select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat(distinct 3.1323,subject order by 1, 2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 61. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat( name,subject order by 1,2), count(distinct id), max(score) from ss group by id order by 1;
 -- result:
@@ -1122,7 +1099,7 @@ TomMath,TomEnglish	1	90
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
 李四大闹天空英语外语美誉	1	None
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -1132,11 +1109,11 @@ TomMath,TomEnglish	1	90
 李四大闹天空英语外语美誉	1	None
 欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
-select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 54. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 None	1	None
 Ti物理Phy	0	99
@@ -1156,7 +1133,7 @@ None
 None
 None
 -- !result
-select group_concat( name,subject order by null,2,1) from ss group by id order by 1;
+select group_concat( name,subject order by 1,2, null) from ss group by id order by 1;
 -- result:
 None
 TiEnglish,欧阳诸葛方程数学大不列颠
@@ -1210,9 +1187,9 @@ select group_concat( 1,2 order by score,2) from ss group by id order by 1;
 12,12,12
 12,12,12
 -- !result
-select group_concat( 3.1323,subject order by 1,-20) from ss group by id order by 1;
+select group_concat( 3.1323,subject order by 1,2,-20) from ss group by id order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position -20 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 52. Detail message: ORDER BY position -20 is not in group_concat output list.')
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss order by 1;
 -- result:
@@ -1238,27 +1215,27 @@ select group_concat(distinct name,subject order by 1,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by 1,score) from ss order by 1;
+select group_concat(distinct name,subject order by 1,score,2) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
 李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
-select group_concat(distinct name,subject order by score,4) from ss order by 1;
+select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Detail message: ORDER BY position 4 is not in group_concat output list.')
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 64. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
+select group_concat(distinct name,subject order by 1,2,score,4.00) from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy
+TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name,subject order by null, 1,2) from ss order by 1;
+select group_concat(distinct name,subject order by 1,2, null) from ss order by 1;
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
@@ -1268,7 +1245,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	数学大不列颠,English,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	[null,"English",null,null,"英语外语美誉",null,"数学大不列颠","语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,"数学大不列颠",null,"英语外语美誉","English",null,null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -1298,25 +1275,25 @@ select group_concat( name,subject order by 1,score), count(distinct id), max(sco
 -- result:
 TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	6	99
 -- !result
-select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Detail message: ORDER BY position 4 is not in group_concat output list.')
 -- !result
-select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat( name,subject order by null,2,1) from ss order by 1;
+select group_concat( name,subject order by null,1,2) from ss order by 1;
 -- result:
-TiEnglish,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,欧阳诸葛方程数学大不列颠,Ti物理Phy,张三此地无银三百两英文English,李四大闹天空英语外语美誉,王武程咬金语文北京上海
+TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
 select group_concat( null order by score,4.00) from ss order by 1;
 -- result:
@@ -1354,40 +1331,40 @@ select group_concat(',');
 -- result:
 ,
 -- !result
-select group_concat("中国",name) from ss;
+select group_concat("中国",name order by 2) from ss;
 -- result:
-中国May,中国Ti,中国欧阳诸葛方程,中国Ti,中国李四大闹天空,中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃,中国Tom,中国Tom,中国王武程咬金
+中国May,中国Ti,中国Ti,中国Tom,中国Tom,中国Tom,中国Tom,中国张三掩耳盗铃,中国张三此地无银三百两,中国李四大闹天空,中国欧阳诸葛方程,中国王武程咬金
 -- !result
-select group_concat("中国",name separator NULL) from ss;
+select group_concat("中国",name order by 2 separator NULL) from ss;
 -- result:
-中国May中国Ti中国欧阳诸葛方程中国Tom中国Tom中国张三此地无银三百两中国张三掩耳盗铃中国Ti中国李四大闹天空中国Tom中国Tom中国王武程咬金
+中国May中国Ti中国Ti中国Tom中国Tom中国Tom中国Tom中国张三掩耳盗铃中国张三此地无银三百两中国李四大闹天空中国欧阳诸葛方程中国王武程咬金
 -- !result
-select group_concat("中国",name order by "第一") from ss;
+select group_concat("中国",name order by 2, "第一") from ss;
 -- result:
-中国Ti,中国李四大闹天空,中国Tom,中国Tom,中国王武程咬金,中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃,中国May,中国Ti,中国欧阳诸葛方程
+中国May,中国Ti,中国Ti,中国Tom,中国Tom,中国Tom,中国Tom,中国张三掩耳盗铃,中国张三此地无银三百两,中国李四大闹天空,中国欧阳诸葛方程,中国王武程咬金
 -- !result
-select group_concat("中国",name order by "第一" separator '\n') from ss;
+select group_concat("中国",name order by 2, "第一" separator '\n') from ss;
 -- result:
-中国Tom
-中国Tom
-中国王武程咬金
-中国Tom
-中国Tom
-中国张三此地无银三百两
-中国张三掩耳盗铃
-中国Ti
-中国李四大闹天空
 中国May
 中国Ti
+中国Ti
+中国Tom
+中国Tom
+中国Tom
+中国Tom
+中国张三掩耳盗铃
+中国张三此地无银三百两
+中国李四大闹天空
 中国欧阳诸葛方程
+中国王武程咬金
 -- !result
-select group_concat("中国",name order by "第一" separator subject) from ss;
+select group_concat("中国",name order by 2, "第一" separator subject) from ss;
 -- result:
-中国TomEnglish中国Tom中国王武程咬金语文北京上海中国Ti物理Phy中国李四大闹天空英语外语美誉中国May中国TiEnglish中国欧阳诸葛方程数学大不列颠中国TomEnglish中国TomMath中国张三此地无银三百两英文English中国张三掩耳盗铃
+中国May中国TiEnglish中国Ti物理Phy中国TomEnglish中国Tom中国TomEnglish中国TomMath中国张三掩耳盗铃Math数学欧拉方程中国张三此地无银三百两英文English中国李四大闹天空英语外语美誉中国欧阳诸葛方程数学大不列颠中国王武程咬金
 -- !result
 select group_concat("中国" order by "第一" separator score) from ss;
 -- result:
-E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_32b8be963cac11eea57a00163e04d4c2`.`ss`.`score`).")
+E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_5feb27b03cc411ee94a600163e04d4c2`.`ss`.`score`).")
 -- !result
 select group_concat(  order by score) from ss order by 1;
 -- result:
