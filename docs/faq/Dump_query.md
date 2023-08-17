@@ -41,13 +41,13 @@ Parameter description:
 * db: the database where the SQL query is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
 * mock: turn on/off the desensitization process.
 
-Example
-
+## Example
+command:
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
 ```
 
-## Return data
+Return data:
 
 Data is returned in JSON format.
 
@@ -79,12 +79,12 @@ Data is returned in JSON format.
 }
 ```
 
-
+command:
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
 ```
 
-## Return data
+Return data:
 
 The desensitized data is returned in JSON format.
 
