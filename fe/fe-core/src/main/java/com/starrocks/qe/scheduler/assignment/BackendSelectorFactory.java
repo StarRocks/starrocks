@@ -39,6 +39,9 @@ import java.util.List;
 import java.util.Set;
 
 public class BackendSelectorFactory {
+    private BackendSelectorFactory() {
+    }
+
     public static BackendSelector create(ScanNode scanNode,
                                          boolean isLoadType,
                                          ExecutionFragment execFragment,
