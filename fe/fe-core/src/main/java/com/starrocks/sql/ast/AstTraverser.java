@@ -108,9 +108,6 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitSetOp(SetOperationRelation node, C context) {
-        if (node.hasWithClause()) {
-            node.getRelations().forEach(this::visit);
-        }
         node.getRelations().forEach(this::visit);
         return null;
     }

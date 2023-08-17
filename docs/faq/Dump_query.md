@@ -19,16 +19,19 @@ The query_dump interface returns the information that FE relies on when executin
 * Statistics information (Min, Max values in a column)
 * Exception
 
+To ensure data privacy, we desensitize the meta information such as database names, table names, column names, etc. We also utilize the desensitized metadata to rewrite the query statements.
+Meta information desensitization is enabled by default. If an exception occurs during the desensitization process, use the original info directly. If desensitization needs to be bypassed, you can add the "mock=false" parameter in the HTTP URI.
+
 ## Syntax
 
 HTTP Post
 
 ```shell
- fe_host:fe_http_port/api/query_dump?db=${database} post_data=${Query}
+ fe_host:fe_http_port/api/query_dump?db=${database}&mock={value} post_data=${Query}
 ```
 
 ```shell
-wget --user=${username} --password=${password} --post-file ${query_file} http://${fe_host}:${fe_http_port}/api/query_dump?db=${database} -O ${dump_file}
+wget --user=${username} --password=${password} --post-file ${query_file} "http://${fe_host}:${fe_http_port}/api/query_dump?db=${database}&mock={value}" -O ${dump_file}
 ```
 
 Parameter description:
@@ -36,14 +39,17 @@ Parameter description:
 * query_file: the file containing the query
 * dump_file: the output file
 * db: the database where the SQL query is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
+* mock: turn on/off the desensitization process.
 
-Example
+## Example
+
+command:
 
 ```shell
-wget --user=root --password=123 --post-file query_file http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
+wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
 ```
 
-## Return data
+Return data:
 
 Data is returned in JSON format.
 
@@ -70,6 +76,44 @@ Data is returned in JSON format.
       "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0]"
     }
   },
+  "be_number": 3,
+  "exception": []
+}
+```
+
+command:
+
+```shell
+wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
+```
+
+Return data:
+
+The desensitized data is returned in JSON format.
+
+```json
+{
+    "statement": "SELECT tbl_mock_001.mock_012, tbl_mock_001.mock_007, sum(tbl_mock_001.mock_010) AS mock_019, sum(tbl_mock_001.mock_005) AS mock_020, sum(tbl_mock_001.mock_005 * (1 - tbl_mock_001.mock_004)) AS mock_021, sum((tbl_mock_001.mock_005 * (1 - tbl_mock_001.mock_004)) * (1 + tbl_mock_001.mock_017)) AS mock_022, avg(tbl_mock_001.mock_010) AS mock_023, avg(tbl_mock_001.mock_005) AS mock_024, avg(tbl_mock_001.mock_004) AS mock_025, count(*) AS mock_026\nFROM db_mock_000.tbl_mock_001\nWHERE tbl_mock_001.mock_013 <= '1998-12-01'\nGROUP BY tbl_mock_001.mock_012, tbl_mock_001.mock_007 ORDER BY tbl_mock_001.mock_012 ASC, tbl_mock_001.mock_007 ASC ",
+    "table_meta": {
+        "db_mock_000.tbl_mock_001": "CREATE TABLE db_mock_000.tbl_mock_001 (\nmock_008 int(11) NOT NULL ,\nmock_009 int(11) NOT NULL ,\nmock_016 int(11) NOT NULL ,\nmock_006 int(11) NOT NULL ,\nmock_010 double NOT NULL ,\nmock_005 double NOT NULL ,\nmock_004 double NOT NULL ,\nmock_017 double NOT NULL ,\nmock_012 char(1) NOT NULL ,\nmock_007 char(1) NOT NULL ,\nmock_013 date NOT NULL ,\nmock_003 date NOT NULL ,\nmock_011 date NOT NULL ,\nmock_014 char(25) NOT NULL ,\nmock_015 char(10) NOT NULL ,\nmock_002 varchar(44) NOT NULL ,\nmock_018 char(1) NOT NULL \n) ENGINE= OLAP\nDUPLICATE KEY(mock_008)\nDISTRIBUTED BY HASH(mock_008) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" = \"1\"\n);"
+    },
+    "table_row_count": {
+      "db_mock_000.tbl_mock_001": {
+        "lineitem": 600000000
+      }
+    },
+    "column_statistics": {
+        "db_mock_000.tbl_mock_001": {
+            "mock_017": "[0.0, 0.08, 0.0, 8.0, 9.0]",
+            "mock_013": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]",
+            "mock_005": "[901.0, 104949.5, 0.0, 8.0, 932377.0]",
+            "mock_004": "[0.0, 0.1, 0.0, 8.0, 11.0]",
+            "mock_012": "[-Infinity, Infinity, 0.0, 1.0, 3.0]",
+            "mock_007": "[-Infinity, Infinity, 0.0, 1.0, 2.0]",
+            "mock_010": "[1.0, 50.0, 0.0, 8.0, 50.0]"
+        }
+    },
+  "session_variables": "{\"runtime_join_filter_push_down_limit\":1024000,\"codegen_level\":0,\"character_set_connection\":\"utf8\",\"enable_insert_strict\":true,\"div_precision_increment\":4,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"auto_increment_increment\":1,\"foreign_key_checks\":true,\"character_set_client\":\"utf8\",\"autocommit\":true,\"character_set_results\":\"utf8\",\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"tx_visible_wait_timeout\":10,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"enable_query_dump\":false,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"sql_select_limit\":9223372036854775807,\"profiling\":false,\"sql_safe_updates\":0,\"enable_new_planner_mock_tpch_statistic\":true,\"query_cache_type\":0,\"use_v2_rollup\":false,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"global_runtime_filter_max_size\":4096000,\"new_planner_tpch_scale\":100,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"enable_runtime_filter_from_planner\":true,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"normal\",\"enable_new_planner_push_down_join_to_agg\":false,\"broadcast_row_limit\":15000000,\"exec_mem_limit\":2147483648,\"disable_join_reorder\":false,\"enable_profile\":false,\"global_runtime_filter_rpc_timeout\":400,\"enable_groupby_use_output_alias\":false,\"global_runtime_filter_wait_timeout\":200,\"enable_vectorized_insert\":true,\"net_buffer_length\":16384,\"transmission_compression_type\":\"LZ4\",\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"max_allowed_packet\":1048576,\"query_timeout\":300,\"test_materialized_view\":false,\"enable_cbo\":false,\"collation_server\":\"utf8_general_ci\",\"new_planner_max_transform_reorder_joins\":8,\"time_zone\":\"Asia/Shanghai\",\"max_execution_time\":3000000,\"character_set_server\":\"utf8\",\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"sql_mode\":0,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false}",
   "be_number": 3,
   "exception": []
 }
