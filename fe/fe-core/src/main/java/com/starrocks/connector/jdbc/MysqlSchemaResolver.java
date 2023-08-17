@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
@@ -54,22 +53,40 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
+        boolean isUnsigned = typeName.toLowerCase().contains("unsigned");
+
         switch (dataType) {
             case Types.BOOLEAN:
             case Types.BIT:
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.TINYINT:
-                primitiveType = PrimitiveType.TINYINT;
+                if (isUnsigned) {
+                    primitiveType = PrimitiveType.SMALLINT;
+                } else {
+                    primitiveType = PrimitiveType.TINYINT;
+                }
                 break;
             case Types.SMALLINT:
-                primitiveType = PrimitiveType.SMALLINT;
+                if (isUnsigned) {
+                    primitiveType = PrimitiveType.INT;
+                } else {
+                    primitiveType = PrimitiveType.SMALLINT;
+                }
                 break;
             case Types.INTEGER:
-                primitiveType = PrimitiveType.INT;
+                if (isUnsigned) {
+                    primitiveType = PrimitiveType.BIGINT;
+                } else {
+                    primitiveType = PrimitiveType.INT;
+                }
                 break;
             case Types.BIGINT:
-                primitiveType = PrimitiveType.BIGINT;
+                if (isUnsigned) {
+                    primitiveType = PrimitiveType.LARGEINT;
+                } else {
+                    primitiveType = PrimitiveType.BIGINT;
+                }
                 break;
             case Types.FLOAT:
             case Types.REAL: // real => short float
