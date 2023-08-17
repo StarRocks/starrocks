@@ -98,10 +98,27 @@ public class SyncPartitionUtils {
                 PartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
     }
 
+<<<<<<< HEAD
     public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
                                              Map<String, Range<PartitionKey>> mvRangeMap) {
         RangePartitionDiff diff = PartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
         if (MapUtils.isNotEmpty(diff.getAdds()) || MapUtils.isNotEmpty(diff.getDeletes())) {
+=======
+    public static ListPartitionDiff getListPartitionDiff(Map<String, List<List<String>>> baseListMap,
+                                                         Map<String, List<List<String>>> mvListMap) {
+        // This synchronization method has a one-to-one correspondence
+        // between the base table and the partition of the mv.
+        Map<String, List<List<String>>> adds = diffList(baseListMap, mvListMap);
+        Map<String, List<List<String>>> deletes = diffList(mvListMap, baseListMap);
+        return new ListPartitionDiff(adds, deletes);
+    }
+
+
+    public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                   Map<String, Range<PartitionKey>> mvRangeMap) {
+        Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+>>>>>>> 01fb7b53dd (Support refresh unpartitioned materialized view with list partition tables (#29220))
             return true;
         }
         return false;
@@ -120,6 +137,16 @@ public class SyncPartitionUtils {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
         return getRangePartitionDiff(baseRangeMap, mvRangeMap, rollupRange, differ);
+    }
+
+    public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
+                                                 Map<String, List<List<String>>> mvRangeMap) {
+        Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, List<List<String>>> deletes = diffList(mvRangeMap, baseRangeMap);
+        return deletes != null && !deletes.isEmpty();
     }
 
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
@@ -468,6 +495,48 @@ public class SyncPartitionUtils {
         return truncLowerDateTime;
     }
 
+<<<<<<< HEAD
+=======
+    public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
+
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
+            if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
+                    !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
+                result.put(srcEntry.getKey(), srcEntry.getValue());
+            }
+        }
+        return result;
+    }
+
+    public static Map<String, Range<PartitionKey>> diffRange(List<PartitionRange> srcRanges,
+                                                             List<PartitionRange> dstRanges) {
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        Set<PartitionRange> dstRangeSet = dstRanges.stream().collect(Collectors.toSet());
+        for (PartitionRange range : srcRanges) {
+            if (!dstRangeSet.contains(range)) {
+                result.put(range.getPartitionName(), range.getPartitionKeyRange());
+            }
+        }
+        return result;
+    }
+
+    public static Map<String, List<List<String>>> diffList(Map<String, List<List<String>>> srcListMap,
+                                                           Map<String, List<List<String>>> dstListMap) {
+
+        Map<String, List<List<String>>> result = Maps.newHashMap();
+        for (Map.Entry<String, List<List<String>>> srcEntry : srcListMap.entrySet()) {
+            String key = srcEntry.getKey();
+            if (!dstListMap.containsKey(key) ||
+                    ListPartitionInfo.compareByValue(srcListMap.get(key), dstListMap.get(key)) != 0) {
+                result.put(key, srcEntry.getValue());
+            }
+        }
+        return result;
+    }
+
+>>>>>>> 01fb7b53dd (Support refresh unpartitioned materialized view with list partition tables (#29220))
     public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
                                                                          String start, String end,
                                                                          int partitionTTLNumber,

@@ -1207,6 +1207,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return true;
             }
 
+<<<<<<< HEAD
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                 PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
@@ -1255,6 +1256,85 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
                     if (changed) {
                         return true;
+=======
+                if (snapshotTable.isOlapOrCloudNativeTable()) {
+                    OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
+                    PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
+                    if (snapshotPartitionInfo instanceof SinglePartitionInfo) {
+                        Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
+                        if (!snapShotOlapTable.getPartitionNames().equals(partitionNames)) {
+                            // there is partition rename
+                            return true;
+                        }
+                    } else if (snapshotPartitionInfo instanceof ListPartitionInfo) {
+                        Map<String, List<List<String>>> snapshotPartitionMap =
+                                snapShotOlapTable.getListPartitionMap();
+                        Map<String, List<List<String>>> currentPartitionMap =
+                                ((OlapTable) table).getListPartitionMap();
+                        return SyncPartitionUtils.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                    } else {
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap =
+                                snapShotOlapTable.getRangePartitionMap();
+                        Map<String, Range<PartitionKey>> currentPartitionMap =
+                                ((OlapTable) table).getRangePartitionMap();
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                    }
+                } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
+                    HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
+                    if (snapShotHMSTable.isUnPartitioned()) {
+                        if (!((HiveMetaStoreTable) table).isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
+                        // TODO: Support list partition later.
+                        // do not need to check base partition table changed when mv is not partitioned
+                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            return false;
+                        }
+
+                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapshotTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
+
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(snapshotTable, partitionColumn);
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(table, partitionColumn);
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                    }
+                } else if (snapshotTable.isIcebergTable()) {
+                    IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
+                    if (snapShotIcebergTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
+                        // TODO: Support list partition later.
+                        // do not need to check base partition table changed when mv is not partitioned
+                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            return false;
+                        }
+
+                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
+
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(snapshotTable, partitionColumn);
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(table, partitionColumn);
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+>>>>>>> 01fb7b53dd (Support refresh unpartitioned materialized view with list partition tables (#29220))
                     }
                 }
             }

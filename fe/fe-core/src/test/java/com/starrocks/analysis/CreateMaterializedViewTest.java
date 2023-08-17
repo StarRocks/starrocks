@@ -3566,6 +3566,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateMaterializedViewWithTableAlias1() throws Exception {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
@@ -3594,10 +3595,74 @@ public class CreateMaterializedViewTest {
                 "from (select k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t0 " +
                 "left join (select  k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t1 on t0.k1=t1.k2 " +
                 "left join (select k1, k2, sum(v1) as sum from tbl1 group by k1, k2) t2 on t0.k1=t2.k1;";
+=======
+    public void testCreateMaterializedViewOnListPartitionTables1() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "partition by province " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTables2() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+>>>>>>> 01fb7b53dd (Support refresh unpartitioned materialized view with list partition tables (#29220))
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             e.printStackTrace();
+<<<<<<< HEAD
             Assert.fail(e.getMessage());
         }
     }
@@ -3965,5 +4030,11 @@ public class CreateMaterializedViewTest {
                 "REFRESH ASYNC\n" +
                 "AS\n" +
                 "SELECT id,name,str_to_map(CONCAT_WS(':',id,name),';',':') as mapvalue FROM sr_ods_test_table");
+=======
+            Assert.fail();
+        }
+
+        starRocksAssert.dropTable("list_partition_tbl1");
+>>>>>>> 01fb7b53dd (Support refresh unpartitioned materialized view with list partition tables (#29220))
     }
 }
