@@ -34,6 +34,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -44,17 +45,20 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
@@ -277,15 +281,39 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
+        List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
+                Collectors.toList());
+        List<ConnectorTableColumnStats> columnStatisticList =
+                GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columnNames);
+
+        Statistics.Builder statistics = Statistics.builder();
+        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
+            ColumnRefOperator columnRef = requiredColumnRefs.get(i);
+            ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
+            if (connectorTableColumnStats != null) {
+                statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
+                statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+            }
+        }
+        return statistics.build();
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata ->
-                metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
+        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            return connectorMetadata.map(metadata ->
+                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
+        } else {
+            return statistics;
+        }
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {

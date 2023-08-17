@@ -22,10 +22,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TStatisticData;
@@ -85,6 +87,7 @@ public class CachedStatisticStorageTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         createStatisticsTable();
         String dbName = "test";
@@ -156,6 +159,34 @@ public class CachedStatisticStorageTest {
         Assert.assertEquals(2, columnStatistics.size());
         Assert.assertEquals(888, columnStatistics.get(0).getDistinctValuesCount(), 0.001);
         Assert.assertEquals(999, columnStatistics.get(1).getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testGetHiveColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+
+        ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
+        ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
+        ConnectorTableColumnStats connectorTableColumnStats1 =
+                new ConnectorTableColumnStats(columnStatistic1, 5);
+        ConnectorTableColumnStats connectorTableColumnStats2 =
+                new ConnectorTableColumnStats(columnStatistic2, 5);
+
+        new Expectations() {
+            {
+                cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("r_regionkey", "r_name"));
+                result = ImmutableList.of(connectorTableColumnStats1, connectorTableColumnStats2);
+                minTimes = 0;
+            }
+        };
+        List<ConnectorTableColumnStats> columnStatistics = Deencapsulation
+                .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
+                        ImmutableList.of("r_regionkey", "r_name"));
+        Assert.assertEquals(2, columnStatistics.size());
+        Assert.assertEquals(888, columnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assert.assertEquals(999, columnStatistics.get(1).getColumnStatistic().getDistinctValuesCount(), 0.001);
+        Assert.assertEquals(5, columnStatistics.get(0).getRowCount());
+        Assert.assertEquals(5, columnStatistics.get(1).getRowCount());
     }
 
     @Test

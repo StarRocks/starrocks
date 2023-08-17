@@ -22,7 +22,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -210,7 +209,8 @@ public class StatisticUtils {
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
-                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
 
         // check database
         if (db == null) {
@@ -251,12 +251,11 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
-        if (table instanceof IcebergTable) {
-            // TODO, shall we check empty for external table?
+        if (!table.isNativeTableOrMaterializedView()) {
+            // for external table, return false directly
             return false;
-        } else {
-            return table.getPartitions().stream().noneMatch(Partition::hasData);
         }
+        return table.getPartitions().stream().noneMatch(Partition::hasData);
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {
