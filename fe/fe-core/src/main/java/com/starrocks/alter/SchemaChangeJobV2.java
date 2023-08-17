@@ -78,6 +78,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -580,6 +582,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             RewriteAliasVisitor visitor =
                                                 new RewriteAliasVisitor(sourceScope, outputScope,
                                                     outputExprs, ConnectContext.get());
+
+                            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                        col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                            ConnectContext.get());
 
                             Expr materializedColumnExpr = expr.accept(visitor, null);
 
