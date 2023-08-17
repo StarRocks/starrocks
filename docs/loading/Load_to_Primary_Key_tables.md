@@ -1,12 +1,8 @@
 # Change data through loading
 
-<<<<<<< HEAD
-[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), or [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) or [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
-=======
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 [Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), or [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) or [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
->>>>>>> 0fcb2ba08d ([Doc] add common markdown asset dir (#29261))
 
 StarRocks also supports partial updates and conditional updates.
 
