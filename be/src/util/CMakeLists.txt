@@ -101,6 +101,7 @@ set(UTIL_FILES
   failpoint/fail_point.cpp
   bthreads/future.h
   bthreads/future_impl.cpp
+  hash_util.cpp
 )
 
 add_library(Util STATIC
