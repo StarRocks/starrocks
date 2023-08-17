@@ -87,7 +87,6 @@ import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
-import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
@@ -298,6 +297,8 @@ public class StmtExecutor {
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
         }
 
         profile.addChild(summaryProfile);
@@ -316,7 +317,7 @@ public class StmtExecutor {
                 coord.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 coord.endProfile();
-                profile.addChild(coord.buildMergedQueryProfile(getQueryStatisticsForAuditLog()));
+                profile.addChild(coord.buildMergedQueryProfile());
             }
             coord = null;
         }
@@ -476,9 +477,6 @@ public class StmtExecutor {
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
-                if (!isStatisticsJob) {
-                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
-                }
                 context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
@@ -593,9 +591,6 @@ public class StmtExecutor {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
                                             ProfilingExecPlan.buildFrom(execPlan), profile, null));
                                 }
-                            }
-                            if (!isStatisticsJob) {
-                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -833,7 +828,6 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
-        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -1473,6 +1467,9 @@ public class StmtExecutor {
         if (statisticsForAuditLog.memCostBytes == null) {
             statisticsForAuditLog.memCostBytes = 0L;
         }
+        if (statisticsForAuditLog.spillBytes == null) {
+            statisticsForAuditLog.spillBytes = 0L;
+        }
         return statisticsForAuditLog;
     }
 
@@ -1698,9 +1695,7 @@ public class StmtExecutor {
                         createTime,
                         estimateScanRows,
                         type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
-                        context.getCurrentWarehouse(),
-                        context.isStatisticsJob());
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             }
 
             coord.setLoadJobId(jobId);
@@ -1712,6 +1707,7 @@ public class StmtExecutor {
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlanSupplier(() -> execPlan);
 
+            long jobDeadLineMs = System.currentTimeMillis() + context.getSessionVariable().getQueryTimeoutS() * 1000;
             coord.join(context.getSessionVariable().getQueryTimeoutS());
             if (!coord.isDone()) {
                 /*
@@ -1836,7 +1832,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
+                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);

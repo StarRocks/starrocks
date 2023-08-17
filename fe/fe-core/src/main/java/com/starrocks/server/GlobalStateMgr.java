@@ -306,7 +306,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -1003,10 +1002,6 @@ public class GlobalStateMgr {
         return warehouseMgr;
     }
 
-    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        return nodeMgr.getWarehouseInfosFromOtherFEs();
-    }
-
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
     }
@@ -1315,6 +1310,11 @@ public class GlobalStateMgr {
         }
 
         createBuiltinStorageVolume();
+    }
+
+    public void setFrontendNodeType(FrontendNodeType newType) {
+        // just for test, don't call it directly
+        feType = newType;
     }
 
     // start all daemon threads only running on Master

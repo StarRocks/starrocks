@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
@@ -36,18 +37,26 @@ import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -62,6 +71,7 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class FrontendServiceImplTest {
@@ -733,4 +743,70 @@ public class FrontendServiceImplTest {
         Assert.assertEquals(1, response.tables.size());
     }
 
+    @Test
+    public void testGetSpecialColumnForSyncMv() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `base1` (\n" +
+                        "event_day DATE,\n" +
+                        "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(event_day, department_id)\n" +
+                        "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\"\n" +
+                        ");")
+                .withMaterializedView("create materialized view test_table.mv$test as select event_day from base1");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test4";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.base1 TO USER `test4`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test4");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("mv$test");
+        request.setDb("test_table");
+        request.setType(TTableType.MATERIALIZED_VIEW);
+        TListMaterializedViewStatusResult response = impl.listMaterializedViewStatus(request);
+        Assert.assertEquals(1, response.materialized_views.size());
+    }
+  
+    @Test
+    public void testGetLoadTxnStatus() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                             Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                             new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
+                             TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
+        request.setDb("non-exist-db");
+        request.setTbl("non-site_access_day-tbl");
+        request.setTxnId(100);
+        TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
+        request.setDb("test");
+        TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
+        request.setTxnId(transactionId);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+    }
+  
 }

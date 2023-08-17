@@ -154,10 +154,6 @@ public class DistributionSpec {
         return new GatherDistributionSpec();
     }
 
-    public static DistributionSpec createGatherDistributionSpec(long limit) {
-        return new GatherDistributionSpec(limit);
-    }
-
     public boolean isSatisfy(DistributionSpec spec) {
         return false;
     }

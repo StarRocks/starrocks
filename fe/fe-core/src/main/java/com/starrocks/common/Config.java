@@ -598,6 +598,14 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
+     * When obtaining hardware information, some sensitive commands will be executed indirectly through
+     * the oshi library, such as: getent passwd
+     * If you have higher requirements for security, you can turn off the acquisition of this information
+     */
+    @ConfField(mutable = true)
+    public static boolean http_web_page_display_hardware = true;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
@@ -2131,16 +2139,6 @@ public class Config extends ConfigBase {
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
-    @ConfField
-    public static String azure_blob_tenant_id = "";
-    @ConfField
-    public static String azure_blob_client_id = "";
-    @ConfField
-    public static String azure_blob_client_secret = "";
-    @ConfField
-    public static String azure_blob_client_certificate_path = "";
-    @ConfField
-    public static String azure_blob_authority_host = "";
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
@@ -2277,6 +2275,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
+    @ConfField(mutable = true)
+    public static boolean enable_sync_publish = true;
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.

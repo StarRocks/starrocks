@@ -275,6 +275,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    public String dataSourcePropertiesToSql() {
+        return "";
+    }
+
+    @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
         this.progress.update(attachment);
