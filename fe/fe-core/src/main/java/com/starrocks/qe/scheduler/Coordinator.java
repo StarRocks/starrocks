@@ -79,7 +79,28 @@ public abstract class Coordinator {
         startScheduling();
     }
 
-    public abstract void startScheduling() throws Exception;
+    /**
+     * Start scheduling fragments of this job, mainly containing the following work:
+     * <ul>
+     *     <li> Instantiates multiple parallel instances of each fragment.
+     *     <li> Assigns these fragment instances to appropriate workers (including backends and compute nodes).
+     *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
+     * </ul>
+     * <p>
+     *
+     * @param needDeploy Whether deploying fragment instances to workers.
+     */
+    public abstract void startScheduling(boolean needDeploy) throws Exception;
+
+    public void startScheduling() throws Exception {
+        startScheduling(true);
+    }
+
+    public void startSchedulingWithoutDeploy() throws Exception {
+        startScheduling(false);
+    }
+
+    public abstract String getSchedulerExplain();
 
     public abstract void updateFragmentExecStatus(TReportExecStatusParams params);
 

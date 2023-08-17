@@ -874,12 +874,16 @@ public class StmtExecutor {
 
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+        boolean isSchedulerExplain = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setPipelineProfileLevel(1);
             context.getSessionVariable().setProfileLimitFold(false);
-        } else if (parsedStmt.isExplain()) {
+        } else if (isSchedulerExplain) {
+            // Do nothing.
+        }  else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -898,6 +902,12 @@ public class StmtExecutor {
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
+
+        if (isSchedulerExplain) {
+            coord.startSchedulingWithoutDeploy();
+            handleExplainStmt(coord.getSchedulerExplain());
+            return;
+        }
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
@@ -1534,11 +1544,15 @@ public class StmtExecutor {
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+        boolean isSchedulerExplain = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setPipelineProfileLevel(1);
             context.getSessionVariable().setProfileLimitFold(false);
+        } else if (isSchedulerExplain) {
+            // Do nothing.
         } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
@@ -1710,6 +1724,13 @@ public class StmtExecutor {
 
             QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
+
+            if (isSchedulerExplain) {
+                coord.startSchedulingWithoutDeploy();
+                handleExplainStmt(coord.getSchedulerExplain());
+                return;
+            }
+
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlanSupplier(() -> execPlan);

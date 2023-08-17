@@ -725,7 +725,7 @@ public class SystemInfoService implements GsonPostProcessable {
      * @param srcBackends list of the candidate backends
      * @return empty list if not enough backend, otherwise return a list of backend's id
      */
-    private synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
 
         long lastBackendId;
 
