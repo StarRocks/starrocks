@@ -6,7 +6,7 @@ This topic introduces what strict mode is and how to set strict mode.
 
 ## Understand strict mode
 
-During data loading, if StarRocks detects data inconsistencies between the source columns and the destination columns, it converts the data in the source columns that are inconsistent with their mapping destination columns. Data conversions may fail due to various issues, for example, the data types of the source columns do not match the data types of the destination columns or the values in the source columns exceed their allowed lengths. Column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
+During data loading, StarRocks converts the values in the source columns whose data types are not completely the same as their mapping destination columns. Data conversions may fail due to various issues such as unmatched data types and excess field lengths. Column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
 
 Strict mode works as follows:
 
