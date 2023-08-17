@@ -14,19 +14,18 @@ BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 
 ## 参数说明
 
-- `src`: 要截取的目标 bitmap。
-- `offset`: 用于指定起始位置，支持的数据类型为 BIGINT。`offset` 指定的起始位置不能超出 BITMAP 值的实际长度，否则返回 NULL，见示例六。
+- `src`: 要截断的目标 bitmap。
+- `offset`: 用于指定起始位置，支持的数据类型为 BIGINT。Offset 的使用注意事项：
+
+  - Offset 从 0 开始。
+  - 负偏移量指的是从字符串结尾开始从右向左计数，见示例三和四。
+  - `offset` 指定的起始位置不能超出 BITMAP 值的实际长度，否则返回 NULL，见示例六。
+
 - `len`: 要截取的元素个数，必须为正整数，否则返回 NULL。如果符合条件的元素个数小于 `len` 取值，则返回满足条件的所有元素，见示例二、三、七。
 
 ## 返回值说明
 
 返回值的数据类型为 BITMAP。如果输入参数非法，则返回 NULL。
-
-## 注意事项
-
-- Offset 从 0 开始。
-- 负偏移量指的是从字符串结尾开始从右向左计数。
-- 如果偏移量指定的起始位置超出 BITMAP 值的实际长度，返回 NULL。
 
 ## 示例
 
