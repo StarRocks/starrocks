@@ -923,7 +923,9 @@ public class MaterializedViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }
-            Preconditions.checkState(table instanceof MaterializedView);
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
+            }
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
