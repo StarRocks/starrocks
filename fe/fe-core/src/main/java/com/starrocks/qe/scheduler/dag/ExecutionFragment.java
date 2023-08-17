@@ -30,6 +30,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
@@ -91,6 +92,15 @@ public class ExecutionFragment {
         this.scanRangeAssignment = new FragmentScanRangeAssignment();
     }
 
+    public String getExplainString() {
+        ExplainBuilder builder = new ExplainBuilder();
+        builder.addValue(String.format("PLAN FRAGMENT %d(%s)", fragmentIndex, getFragmentId()), () -> {
+            builder.addValue("DOP", planFragment.getPipelineDop());
+            builder.addValue("INSTANCES", () -> instances.forEach(instance -> instance.buildExplainString(builder)));
+        });
+        return builder.build();
+    }
+
     public int getFragmentIndex() {
         return fragmentIndex;
     }
@@ -109,6 +119,10 @@ public class ExecutionFragment {
 
     public ScanNode getScanNode(PlanNodeId scanId) {
         return scanNodes.get(scanId);
+    }
+
+    public ExecutionDAG getExecutionDAG() {
+        return executionDAG;
     }
 
     public void setBucketSeqToInstanceForRuntimeFilters() {

@@ -469,6 +469,19 @@ public class UtFrameUtils {
                 });
     }
 
+    public static Pair<String, DefaultCoordinator> getPlanAndStartScheduling(ConnectContext connectContext, String originStmt)
+            throws Exception {
+        return buildPlan(connectContext, originStmt,
+                (context, statementBase, execPlan) -> {
+                    DefaultCoordinator scheduler = createScheduler(context, statementBase, execPlan);
+
+                    scheduler.startSchedulingWithoutDeploy();
+                    String plan = scheduler.getSchedulerExplain();
+
+                    return Pair.create(plan, scheduler);
+                });
+    }
+
     public static DefaultCoordinator getScheduler(ConnectContext connectContext, String originStmt) throws Exception {
         return buildPlan(connectContext, originStmt, UtFrameUtils::createScheduler);
     }
