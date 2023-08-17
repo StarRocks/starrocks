@@ -154,7 +154,16 @@ void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {
     }
 }
 
-Status DataConsumerPool::start_bg_worker() {
+void DataConsumerPool::stop() {
+    std::unique_lock<std::mutex> l(_lock);
+    *_is_closed = true;
+
+    if (_clean_idle_consumer_thread.joinable()) {
+        _clean_idle_consumer_thread.join();
+    }
+}
+
+void DataConsumerPool::start_bg_worker() {
     std::shared_ptr<bool> is_closed = _is_closed;
 
     _clean_idle_consumer_thread = std::thread([=] {
@@ -173,8 +182,6 @@ Status DataConsumerPool::start_bg_worker() {
         }
     });
     Thread::set_thread_name(_clean_idle_consumer_thread, "clean_idle_cm");
-    _clean_idle_consumer_thread.detach();
-    return Status::OK();
 }
 
 void DataConsumerPool::_clean_idle_consumer_bg() {
