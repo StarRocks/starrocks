@@ -113,14 +113,14 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             MvRewriteContext mvRewriteContext;
             if (mvContext.getMv().getRefreshScheme().isSync()) {
                 if (queryPredicateWithoutCompensate == null) {
-                    logMVRewrite(context, this, "Query partition compensate failed from sync mv.");
+                    logMVRewrite(context, this, "Query expression's partition compensate failed from sync mv.");
                     return results;
                 }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateWithoutCompensate, onPredicates, this);
             } else {
                 if (queryPredicateSplit == null) {
-                    logMVRewrite(context, this, "Query partition compensate failed.");
+                    logMVRewrite(context, this, "Query expression's partition compensate failed");
                     return results;
                 }
                 mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
@@ -163,7 +163,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         final ScalarOperator queryPartitionPredicate =
                 MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory, isCompensate);
         if (queryPartitionPredicate == null) {
-            logMVRewrite(context, this, "Query partition compensate from partition prune failed without compensate.");
+            logMVRewrite(context, this, "Compensate query expression's partition predicates " +
+                    "from pruned partitions failed.");
             return null;
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);

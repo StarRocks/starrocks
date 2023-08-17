@@ -56,10 +56,15 @@ public class RefreshMaterializedViewStatementTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
+
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
+
+        starRocksAssert.withTable("create table table_name_tmp_1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
+                " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
+                " PROPERTIES(\"replication_num\" = \"1\");");
     }
 
     @AfterClass
@@ -79,11 +84,19 @@ public class RefreshMaterializedViewStatementTest {
     }
 
     @Test
+    public void testRereshNotMaterializedView() {
+        String sql = "REFRESH MATERIALIZED VIEW table_name_tmp_1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+                    "Can not refresh non materialized view:table_name_tmp_1.", e.getMessage());
+        }
+    }
+
+    @Test
     public void testRefreshMaterializedView() throws Exception {
-        cluster.runSql("test",
-                "create table table_name_tmp_1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
-                        " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
-                        " PROPERTIES(\"replication_num\" = \"1\");");
+
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         starRocksAssert.withMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +

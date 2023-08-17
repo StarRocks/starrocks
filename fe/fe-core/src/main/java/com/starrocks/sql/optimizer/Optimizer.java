@@ -248,8 +248,6 @@ public class Optimizer {
                     preprocessor.prepareSyncMvCandidatesForPlan();
                 }
             }
-            OptimizerTraceUtil.logMVPrepare(connectContext, "There are {} candidate MVs after prepare phase",
-                    context.getCandidateMvs().size());
         }
     }
 

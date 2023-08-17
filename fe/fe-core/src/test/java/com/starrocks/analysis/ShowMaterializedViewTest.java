@@ -238,6 +238,14 @@ public class ShowMaterializedViewTest {
         insertSql = "insert into tbl6 partition(p2) values('2022-02-02',2,10);";
         new StmtExecutor(ctx, insertSql).execute();
 
+        // wait until the running task run map is not empty
+        int maxCount = 3000;
+        int count = 0;
+        while (MapUtils.isEmpty(trm.getRunningTaskRunMap()) && count < maxCount) {
+            Thread.sleep(10);
+            count++;
+        }
+
         // refresh materialized view
         HashMap<String, String> taskRunProperties = new HashMap<>();
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));

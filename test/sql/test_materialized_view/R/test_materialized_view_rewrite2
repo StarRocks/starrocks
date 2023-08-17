@@ -1,0 +1,82 @@
+-- name: test_materialized_view_rewrite2
+CREATE TABLE test_empty_partition_tbl(
+  `dt` datetime DEFAULT NULL,
+  `col1` bigint(20) DEFAULT NULL,
+  `col2` bigint(20) DEFAULT NULL,
+  `col3` bigint(20) DEFAULT NULL,
+  `error_code` varchar(1048576) DEFAULT NULL
+)
+DUPLICATE KEY (dt, col1)
+PARTITION BY date_trunc('day', dt)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW  test_empty_partition_mv1 
+DISTRIBUTED BY RANDOM BUCKETS 32
+partition by date_trunc('day', dt)
+PROPERTIES (
+"replication_num" = "1"
+)
+AS select
+      col1,
+        dt,
+        sum(col2) AS sum_col2,
+        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3
+    FROM
+        test_empty_partition_tbl AS f
+    GROUP BY
+        col1,
+        dt;
+-- result:
+-- !result
+insert into test_empty_partition_tbl values('2023-08-16', 1, 1, 1, 'a');
+-- result:
+-- !result
+refresh materialized view test_empty_partition_mv1 with sync mode;
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-16 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt >= '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt <= '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt = '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt = '2023-08-16 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
+-- result:
+None
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;
+-- result:
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-16 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;
+-- result:
+1	1	0
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt >= '2023-08-15 00:00:00' GROUP BY col1;
+-- result:
+1	1	0
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt <= '2023-08-15 00:00:00' GROUP BY col1;
+-- result:
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt = '2023-08-15 00:00:00' GROUP BY col1;
+-- result:
+-- !result
+select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt = '2023-08-16 00:00:00' GROUP BY col1;
+-- result:
+1	1	0
+-- !result
