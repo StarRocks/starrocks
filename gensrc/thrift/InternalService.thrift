@@ -220,7 +220,7 @@ struct TQueryOptions {
 
   102: optional bool enable_collect_table_level_scan_stats;
 
-  103: optional i32 experimental_interleaving;
+  103: optional i32 interleaving_group_size;
 }
 
 

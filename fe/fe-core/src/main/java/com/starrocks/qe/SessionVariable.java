@@ -495,7 +495,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
-    public static final String EXPERIMENTAL_INTERLEAVING = "experimental_interleaving";
+    // 0 means disable interleaving, positive value sets the group size, but adaptively enable interleaving,
+    // negative value means force interleaving under the group size of abs(interleaving_group_size)
+    public static final String INTERLEAVING_GROUP_SIZE = "interleaving_group_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1033,8 +1035,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
 
-    @VariableMgr.VarAttr(name = EXPERIMENTAL_INTERLEAVING)
-    private int experimentalInterleaving = 10;
+    @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
+    private int interleavingGroupSize = 10;
 
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
@@ -2501,7 +2503,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
-        tResult.setExperimental_interleaving(experimentalInterleaving);
+        tResult.setInterleaving_group_size(interleavingGroupSize);
 
         TCompressionType loadCompressionType =
                 CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
