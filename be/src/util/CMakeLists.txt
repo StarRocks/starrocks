@@ -101,6 +101,7 @@ set(UTIL_FILES
   stack_trace_mutex.cpp
   bthreads/future.h
   bthreads/future_impl.cpp
+  hash_util.cpp
 )
 
 add_library(Util STATIC
