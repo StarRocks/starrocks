@@ -406,6 +406,7 @@ public class StmtExecutor {
                             context.getDumpInfo().reset();
                         }
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                        context.getDumpInfo().setStatement(parsedStmt);
                     }
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
@@ -683,8 +684,9 @@ public class StmtExecutor {
     }
 
     private void dumpException(Exception e) {
-        if (context.shouldDumpQuery() && !context.isHTTPQueryDump()) {
+        if (context.isHTTPQueryDump()) {
             context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
+        } else if (context.getSessionVariable().getEnableQueryDump()) {
             QueryDumpLog.getQueryDump().log(GsonUtils.GSON.toJson(context.getDumpInfo()));
         }
     }

@@ -49,6 +49,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.fail;
+
 public class ReplayFromDumpTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
@@ -889,5 +891,36 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: 2: orderid = 71: order_id\n" +
                 "  |  \n" +
                 "  |----26:EXCHANGE"));
+    }
+
+    @Test
+    public void testMockQueryDump() throws Exception {
+        List<String> fileNames = mockCases();
+        for (String fileName : fileNames) {
+            try {
+                Pair<QueryDumpInfo, String> replayPair =
+                        getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
+                                null, TExplainLevel.NORMAL);
+                Assert.assertTrue(replayPair.second, replayPair.second.contains("mock"));
+            } catch (Throwable e) {
+                fail("file: " + fileName + " should success. errMsg: " + e.getMessage());
+            }
+
+        }
+    }
+
+    private static List<String> mockCases() {
+        String folderPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath()
+                + "/query_dump/mock-files";
+        File folder = new File(folderPath);
+        List<String> fileNames = Lists.newArrayList();
+
+        if (folder.exists() && folder.isDirectory()) {
+            File[] files = folder.listFiles();
+            for (File file : files) {
+                fileNames.add(file.getName().split("\\.")[0]);
+            }
+        }
+        return fileNames;
     }
 }
