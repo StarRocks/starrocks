@@ -57,7 +57,7 @@
 #include "util/thread.h"
 #include "util/time.h"
 
-        using std::string;
+using std::string;
 
 namespace starrocks {
 
@@ -96,7 +96,7 @@ Status StorageEngine::start_bg_threads() {
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
-  
+
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
