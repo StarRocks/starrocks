@@ -191,7 +191,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [ceiling](/sql-reference/sql-functions/math-functions/ceiling.md)| 返回大于或等于 x 的最小整数。 |
 |  [conv](/sql-reference/sql-functions/math-functions/conv.md)| 对输入的参数进行进制转换。 |
 |  [cos](/sql-reference/sql-functions/math-functions/cos.md)| 计算余弦值。 |
-|  [cosh](/sql-reference/sql-functions/math-functions/cosh.md)| 计算输入数值的双曲余弦值。 |
+|  [cosine_similarity](/sql-reference/sql-functions/math-functions/cos_similarity.md)| 计算两个向量的余弦夹角来评估向量之间的相似度。 |
+|  [cosine_similarity_norm](/sql-reference/sql-functions/math-functions/cos_similarity_norm.md)| 计算两个归一化向量的余弦夹角来评估向量之间的相似度。|
 |  [cot](/sql-reference/sql-functions/math-functions/cot.md)| 计算余切值（单位为弧度）。 |
 |  [degrees](/sql-reference/sql-functions/math-functions/degrees.md)| 将参数 x 转成角度，x 是弧度。 |
 |  [divide](/sql-reference/sql-functions/math-functions/divide.md)| 除法函数，返回 x 除以 y 的结果， |
