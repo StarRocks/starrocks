@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
@@ -90,9 +89,11 @@ public class JDBCTable extends Table {
 
         resourceName = properties.get(RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
+            if (properties.get(JDBCResource.USER) == null ||
+                    properties.get(JDBCResource.PASSWORD) == null) {
+                throw new DdlException("all catalog properties must be set");
+            }
             if (Strings.isNullOrEmpty(properties.get(JDBCResource.URI)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.USER)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.PASSWORD)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_URL)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.CHECK_SUM)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {

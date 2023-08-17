@@ -170,4 +170,14 @@ public class JDBCMetadataTest {
         Assert.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
     }
+
+    @Test
+    public void testGetTable2() {
+        // user/password are optional fields for jdbc.
+        properties.put(JDBCResource.USER, "");
+        properties.put(JDBCResource.PASSWORD, "");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        Table table = jdbcMetadata.getTable("test", "tbl1");
+        Assert.assertNotNull(table);
+    }
 }
