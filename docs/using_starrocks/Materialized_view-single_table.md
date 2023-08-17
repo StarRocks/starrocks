@@ -31,7 +31,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
   Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins.
 
-  Synchronous materialized views support query rewrite based on some of the aggregate operators. For more information, see [Correspondence of aggregate operators](#correspondence-of-aggregate-operators).
+  Synchronous materialized views support query rewrite based on some of the aggregate operators. For more information, see [Correspondence of aggregate functions](#correspondence-of-aggregate-functions).
 
 ## Preparation
 
