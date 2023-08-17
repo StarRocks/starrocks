@@ -58,8 +58,141 @@ SELECT select_expr[, select_expr ...]
 
   All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
 
+<<<<<<< HEAD
   - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
   - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
+=======
+  - Simple columns or aggregate columns such as `SELECT a, abs(b), min(c) FROM table_a`, where `a`, `b`, and `c` are the names of columns in the base table. If you do not specify column names for the materialized view, StarRocks automatically assigns names to the columns.
+  - Expressions such as `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are the expressions that reference the columns in the base tables, and `x`, `y` and `z` are the aliases assigned to the columns in the materialized view.
+
+  > **NOTE**
+  >
+  > - You must specify at least one column in `select_expr`.
+  > - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
+  > - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in `select_expr`.
+  > - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
+  > - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
+  > - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`. The following restrictions are imposed on the complex expression used for synchronous materialized views:
+  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table.
+  >   - Each complex expression can reference only one column. Query statements such as `a + b as col1` are not supported.
+  >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
+
+- GROUP BY (optional)
+
+  The GROUP BY column of the query. If this parameter is not specified, the data will not be grouped by default.
+
+- ORDER BY (optional)
+
+  The ORDER BY column of the query.
+
+  - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
+  - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
+  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to the following rules:
+    - If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys.
+    - If the materialized view is not the AGGREGATE type, StarRocks automatically selects sort keys based on the prefix columns.
+
+### Query a synchronous materialized view
+
+Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
+
+```SQL
+-- Do not omit the brackets [] in the hint.
+SELECT * FROM <mv_name> [_SYNC_MV_];
+```
+
+> **CAUTION**
+>
+> Currently, StarRocks automatically generates names for columns in a synchronous materialized view even if you have specified aliases for them.
+
+### Automatic query rewrite with synchronous materialized view
+
+When a query that follows the pattern of a synchronous materialized view is executed, the original query statement is automatically rewritten and the intermediate results stored in the materialized view are used. 
+
+The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the materialized view. You can select the corresponding aggregate function to build a materialized view according to your business scenario.
+
+| **aggregate function in the original query**           | **aggregate function of the materialized view** |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| sum                                                    | sum                                             |
+| min                                                    | min                                             |
+| max                                                    | max                                             |
+| count                                                  | count                                           |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
+| percentile_approx, percentile_union                    | percentile_union                                |
+
+## Asynchronous materialized view
+
+### Syntax
+
+```SQL
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
+-- distribution_desc
+[DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
+-- refresh_desc
+[REFRESH 
+-- refresh_moment
+    [IMMEDIATE | DEFERRED]
+-- refresh_scheme
+    [ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
+]
+-- partition_expression
+[PARTITION BY 
+    {<date_column> | date_trunc(fmt, <date_column>)}
+]
+-- order_by_expression
+[ORDER BY (<sort_key>)]
+[PROPERTIES ("key"="value", ...)]
+AS 
+<query_statement>
+```
+
+Parameters in brackets [] are optional.
+
+### Parameters
+
+**mv_name** (required)
+
+The name of the materialized view. The naming requirements are as follows:
+
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
+- The length of the name cannot exceed 64 characters.
+- The name is case-sensitive.
+
+> **CAUTION**
+>
+> Multiple materialized views can be created on the same base table, but the names of the materialized views in the same database cannot be duplicated.
+
+**COMMENT** (optional)
+
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
+
+**distribution_desc** (optional)
+
+The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+
+- **Hash bucketing**:
+
+  Syntax
+
+  ```SQL
+  DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
+  ```
+
+  For more information, see [Data distribution](../../../table_design/Data_distribution.md#data-distribution).
+
+  > **NOTE**
+  >
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+- **Random bucketing**:
+
+  If you choose the random bucketing strategy and allow StarRocks to set the number of buckets automatically, you do not need to specify `distribution_desc`. However, if you want to set the number of buckets manually, you can refer to the following syntax:
+
+  ```SQL
+  DISTRIBUTED BY RANDOM BUCKETS <bucket_number>
+  ```
+>>>>>>> 09f243424d (fix broken link (#29345))
 
   > **CAUTION**
   >
