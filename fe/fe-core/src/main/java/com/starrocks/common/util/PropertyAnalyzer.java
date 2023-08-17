@@ -73,6 +73,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -989,7 +990,13 @@ public class PropertyAnalyzer {
             return null;
         }
         properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        PeriodDuration periodDuration;
+        try {
+            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
+        return periodDuration;
     }
 
 }
