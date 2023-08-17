@@ -30,6 +30,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -39,10 +40,14 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * Maintain the single execution of a fragment instance.
@@ -409,6 +414,23 @@ public class FragmentInstanceExecState {
                 .fragmentId(String.valueOf(fragmentId))
                 .address(address)
                 .build();
+    }
+
+    public List<TPlanFragmentDestination> getDestinations() {
+        if (requestToDeploy == null) {
+            return Collections.emptyList();
+        }
+        if (!requestToDeploy.getParams().getDestinations().isEmpty()) {
+            return requestToDeploy.getParams().getDestinations();
+        }
+        if (requestToDeploy.getFragment().isSetOutput_sink() &&
+                requestToDeploy.getFragment().getOutput_sink().isSetMulti_cast_stream_sink()) {
+            return requestToDeploy.getFragment().getOutput_sink().getMulti_cast_stream_sink()
+                    .getDestinations().stream()
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toList());
+        }
+        return Collections.emptyList();
     }
 
     private synchronized void transitionState(State to) {

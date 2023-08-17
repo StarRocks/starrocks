@@ -49,6 +49,8 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     protected static Backend backend2 = null;
     protected static Backend backend3 = null;
 
+    private static long prevStatisticCollectIntervalSec;
+
     private static final String FILE_UNIT_TEST_ROOT_PATH =
             Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
 
@@ -66,6 +68,10 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
         backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
 
+        // Avoid statistic jobs disturb test cases, because some cases expect the queries are executed in a specific order.
+        prevStatisticCollectIntervalSec = Config.statistic_collect_interval_sec;
+        Config.statistic_collect_interval_sec = 24 * 3600 * 100L;
+
         makeCreateTabletStable();
 
         Config.tablet_sched_disable_colocate_overall_balance = true;
@@ -81,6 +87,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
             e.printStackTrace();
         }
 
+        Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;
         connectContext.getSessionVariable().setPipelineDop(0);
     }
@@ -133,11 +140,14 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link DefaultWorkerProvider#getNextBackendIndex()}.
+     */
     private static void resetNextBackendIndex() {
         Thread currentThread = Thread.currentThread();
         AtomicInteger currentThreadIndex = new AtomicInteger(0);
         AtomicInteger otherThreadIndex = new AtomicInteger(0);
-        new MockUp<WorkerProvider>() {
+        new MockUp<DefaultWorkerProvider>() {
             @Mock
             int getNextBackendIndex() {
                 if (currentThread == Thread.currentThread()) {
@@ -165,6 +175,9 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link CatalogIdGenerator#getNextId()}.
+     */
     private static void resetCatalogIdGenerator() {
         AtomicLong nextId = new AtomicLong(1000L);
         new MockUp<CatalogIdGenerator>() {
@@ -175,11 +188,14 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link SystemInfoService#seqChooseBackendIds(int, boolean, List)}.
+     */
     private static void resetChooseBackendIds() {
         AtomicInteger nextBackendIndex = new AtomicInteger(0);
         new MockUp<SystemInfoService>() {
             @Mock
-            public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+            public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate,
                                                                final List<Backend> srcBackends) {
                 List<Long> backendIds = new ArrayList<>(backendNum);
                 for (int i = 0; i < backendNum; i++) {
