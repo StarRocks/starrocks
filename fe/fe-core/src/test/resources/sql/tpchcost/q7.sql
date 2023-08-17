@@ -419,7 +419,7 @@ column statistics:
   "be_number": 3,
   "be_core_stat": {
     "numOfHardwareCoresPerBe": "{}",
-    "cachedAvgNumOfHardwareCores": 0
+    "cachedAvgNumOfHardwareCores": -1
   },
   "exception": []
 }
