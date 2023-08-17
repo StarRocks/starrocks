@@ -698,6 +698,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
     }
 
     auto* rpc_closure = new RuntimeFilterRpcClosure();
+    DeferOp deferop([&] { rpc_closure->Run(); });
     rpc_closure->ref();
     doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
     _exec_env->add_rf_event(
