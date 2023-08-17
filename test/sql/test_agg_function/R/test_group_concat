@@ -76,11 +76,23 @@ insert into ss values (3,"欧阳诸葛方程","数学大不列颠",NULL);
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 11: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 9: name, 10: subject)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={6: count=count(11: id)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[11(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(7: group_concat, ,)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(13: name, ,, 13: name)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	1	None
+TiEnglish,欧阳诸葛方程数学大不列颠	1	May,Ti,欧阳诸葛方程
+Ti物理Phy	0	Ti
+TomEnglish,TomMath	1	Tom,Tom
+TomEnglish,王武程咬金语文北京上海	1	Tom,Tom,王武程咬金
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	张三掩耳盗铃,张三此地无银三百两
+李四大闹天空英语外语美誉	1	李四大闹天空
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by id;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+TiEnglish,欧阳诸葛方程数学大不列颠
+None
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(name,score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -94,23 +106,53 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1, 2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(5: group_concat, ,), 6: group_concat=group_concat(2: name, cast(4: score as varchar), ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 6: group_concat in expr '6: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
+Ti物理Phy	Ti99
+TomEnglish,TomMath	Tom80,Tom90
+TomEnglish,王武程咬金语文北京上海	王武程咬金22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=7: id <=> 10: id, limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[7: id], partitionBy=[7: id] ,aggregations={5: group_concat=group_concat(8: name, 9: subject, ,, 8: name, 9: subject)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[7(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[10: id], partitionBy=[10: id] ,aggregations={6: group_concat=group_concat(cast(11: score as varchar), ,, 11: score)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[10(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	98
+Ti物理Phy	99
+TomEnglish,TomMath	80,90
+TomEnglish,王武程咬金语文北京上海	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	78,98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by 1,score) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 13: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 11: score)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={6: count=count(12: id)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(7: max)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[13(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(14: score)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None	1	None
+Ti物理Phy	0	99
+TomEnglish,王武程咬金语文北京上海	1	22
+TomMath,TomEnglish	1	90
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
+李四大闹天空英语外语美誉	1	None
+欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
 -- result:
@@ -118,23 +160,53 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
+欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name,subject order by 1,2, null) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, ,, 4: score), 6: group_concat=group_concat(6: group_concat, ,), 7: array_agg=array_agg(7: array_agg)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={6: group_concat=group_concat(3: subject, ,, 4: score), 7: array_agg=array_agg(3: subject, 4: score)}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None	None	[null]
+Ti	物理Phy	[null,"物理Phy"]
+Tom	Math,English	["Math","English"]
+Tom,王武程咬金	English,语文北京上海	["English",null,"语文北京上海"]
+张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+李四大闹天空	英语外语美誉	["英语外语美誉"]
+欧阳诸葛方程,May,Ti	数学大不列颠,English	["数学大不列颠",null,"English"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -142,7 +214,13 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Deta
 -- !result
 select group_concat(distinct score order by 1,name) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(cast(4: score as varchar), ,, 4: score, 2: name)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>, col4 array<varchar(255)>>")
+None
+None
+22
+78,98
+80,90
+98
+99
 -- !result
 select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- result:
@@ -156,7 +234,13 @@ select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- !result
 select group_concat(distinct 1,2 order by score,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(1, 2, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+12
+12
+12
+12
+12
+12
+12
 -- !result
 select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
 -- result:
@@ -312,7 +396,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy
+李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -328,7 +412,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-欧阳诸葛方程,May,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	数学大不列颠,English,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	["数学大不列颠",null,null,null,"英语外语美誉","English",null,"语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,英语外语美誉,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,"English","数学大不列颠",null,"英语外语美誉",null,null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -420,11 +504,23 @@ None	None
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 11: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 9: name, 10: subject)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={6: count=multi_distinct_count(6: count)}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[11(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={6: count=multi_distinct_count(11: id)}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(7: group_concat, ,)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(13: name, ,, 13: name)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	1	None
+TiEnglish,欧阳诸葛方程数学大不列颠	1	May,Ti,欧阳诸葛方程
+Ti物理Phy	0	Ti
+TomEnglish,TomMath	1	Tom,Tom
+TomEnglish,王武程咬金语文北京上海	1	Tom,Tom,王武程咬金
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	张三掩耳盗铃,张三此地无银三百两
+李四大闹天空英语外语美誉	1	李四大闹天空
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by id;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+TiEnglish,欧阳诸葛方程数学大不列颠
+None
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(name,score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -438,23 +534,53 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(5: group_concat, ,), 6: group_concat=group_concat(2: name, cast(4: score as varchar), ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(5: group_concat, ,)}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 6: group_concat in expr '6: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
+Ti物理Phy	Ti99
+TomEnglish,TomMath	Tom80,Tom90
+TomEnglish,王武程咬金语文北京上海	王武程咬金22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=7: id <=> 10: id, limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[7: id], partitionBy=[7: id] ,aggregations={5: group_concat=group_concat(8: name, 9: subject, ,, 8: name, 9: subject)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[7(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[10: id], partitionBy=[10: id] ,aggregations={6: group_concat=group_concat(cast(11: score as varchar), ,, 11: score)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[10(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	98
+Ti物理Phy	99
+TomEnglish,TomMath	80,90
+TomEnglish,王武程咬金语文北京上海	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	78,98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by 1,score) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 13: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 11: score)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={6: count=multi_distinct_count(6: count)}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={6: count=multi_distinct_count(12: id)}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(7: max)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[13(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(14: score)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None	1	None
+Ti物理Phy	0	99
+TomEnglish,王武程咬金语文北京上海	1	22
+TomMath,TomEnglish	1	90
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
+李四大闹天空英语外语美誉	1	None
+欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
 -- result:
@@ -462,23 +588,53 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
+欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name,subject order by null,1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, ,, 4: score), 6: group_concat=group_concat(6: group_concat, ,), 7: array_agg=array_agg(7: array_agg)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={6: group_concat=group_concat(6: group_concat, ,), 7: array_agg=array_agg(7: array_agg)}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={6: group_concat=group_concat(3: subject, ,, 4: score), 7: array_agg=array_agg(3: subject, 4: score)}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None	None	[null]
+May,欧阳诸葛方程,Ti	数学大不列颠,English	[null,"数学大不列颠","English"]
+Ti	物理Phy	[null,"物理Phy"]
+Tom	Math,English	["Math","English"]
+Tom,王武程咬金	English,语文北京上海	[null,"English","语文北京上海"]
+张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+李四大闹天空	英语外语美誉	["英语外语美誉"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -486,7 +642,13 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Deta
 -- !result
 select group_concat(distinct score order by 1,name) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(cast(4: score as varchar), ,, 4: score, 2: name)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>, col4 array<varchar(255)>>")
+None
+None
+22
+78,98
+80,90
+98
+99
 -- !result
 select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- result:
@@ -500,7 +662,13 @@ select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- !result
 select group_concat(distinct 1,2 order by score,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(1, 2, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+12
+12
+12
+12
+12
+12
+12
 -- !result
 select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
 -- result:
@@ -648,7 +816,7 @@ TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方�
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss order by 1;
 -- result:
@@ -672,7 +840,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	数学大不列颠,English,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	[null,"数学大不列颠","英语外语美誉",null,"English",null,null,"语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+李四大闹天空,欧阳诸葛方程,May,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	英语外语美誉,English,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	["英语外语美誉",null,null,null,"数学大不列颠","English",null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -704,7 +872,7 @@ TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学
 -- !result
 select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,TomEnglish,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 -- result:
@@ -712,7 +880,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Deta
 -- !result
 select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,TomEnglish,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
 -- !result
 select group_concat( name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -764,11 +932,23 @@ None	None
 -- !result
 select group_concat(distinct name,subject order by 1,2), count(distinct id), group_concat(name order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 11: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 9: name, 10: subject)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={6: count=multi_distinct_count(6: count)}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[11(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[11: id], partitionBy=[11: id] ,aggregations={6: count=multi_distinct_count(11: id)}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(7: group_concat, ,)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={7: group_concat=group_concat(13: name, ,, 13: name)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	1	None
+TiEnglish,欧阳诸葛方程数学大不列颠	1	May,Ti,欧阳诸葛方程
+Ti物理Phy	0	Ti
+TomEnglish,TomMath	1	Tom,Tom
+TomEnglish,王武程咬金语文北京上海	1	Tom,Tom,王武程咬金
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	张三掩耳盗铃,张三此地无银三百两
+李四大闹天空英语外语美誉	1	李四大闹天空
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by id;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[1: id ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+TiEnglish,欧阳诸葛方程数学大不列颠
+None
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(name,score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -782,23 +962,53 @@ TomEnglish,王武程咬金语文北京上海	王武程咬金22
 -- !result
 select group_concat(name,subject order by 1,2), group_concat(distinct name,score order by 1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(5: group_concat, ,), 6: group_concat=group_concat(2: name, cast(4: score as varchar), ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(5: group_concat, ,)}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 6: group_concat in expr '6: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	Ti98
+Ti物理Phy	Ti99
+TomEnglish,TomMath	Tom80,Tom90
+TomEnglish,王武程咬金语文北京上海	王武程咬金22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	张三掩耳盗铃78,张三此地无银三百两98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2), group_concat(distinct score order by 1) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=7: id <=> 10: id, limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[7: id], partitionBy=[7: id] ,aggregations={5: group_concat=group_concat(8: name, 9: subject, ,, 8: name, 9: subject)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[7(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[7: id, 8: name, 9: subject], partitionBy=[7: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[10: id], partitionBy=[10: id] ,aggregations={6: group_concat=group_concat(cast(11: score as varchar), ,, 11: score)}}\n                ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[10(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[10: id, 11: score], partitionBy=[10: id] ,aggregations={}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None	None
+TiEnglish,欧阳诸葛方程数学大不列颠	98
+Ti物理Phy	99
+TomEnglish,TomMath	80,90
+TomEnglish,王武程咬金语文北京上海	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	78,98
+李四大闹天空英语外语美誉	None
 -- !result
 select group_concat(distinct name,subject order by 1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by 1,score) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<int(11)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalCTEAnchorOperator{cteId='1'}\n        ->  PhysicalCTEProduceOperator{cteId='1'}\n            ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\n        ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 13: id, limit=-1, predicate=null}\n            ->  PhysicalHashJoinOperator{joinType=INNER JOIN, joinPredicate=8: id <=> 12: id, limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[8: id], partitionBy=[8: id] ,aggregations={5: group_concat=group_concat(9: name, 10: subject, ,, 11: score)}}\n                    ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                        ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[8(true)] ,globalDict=[]}\n                            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[8: id, 9: name, 10: subject, 11: score], partitionBy=[8: id] ,aggregations={}}\n                                ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n                ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={6: count=multi_distinct_count(6: count)}}\n                    ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[12(true)] ,globalDict=[]}\n                        ->  PhysicalHashAggregate {type=LOCAL, groupBy=[12: id], partitionBy=[12: id] ,aggregations={6: count=multi_distinct_count(12: id)}}\n                            ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\n            ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(7: max)}}\n                ->  PhysicalDistributionOperator {distributionSpec=SHUFFLE_AGG[13(true)] ,globalDict=[]}\n                    ->  PhysicalHashAggregate {type=LOCAL, groupBy=[13: id], partitionBy=[13: id] ,aggregations={7: max=max(14: score)}}\n                        ->  PhysicalCTEConsumeOperator{cteId='1', limit=-1, predicate=null}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None	1	None
+Ti物理Phy	0	99
+TomEnglish,王武程咬金语文北京上海	1	22
+TomMath,TomEnglish	1	90
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	1	98
+李四大闹天空英语外语美誉	1	None
+欧阳诸葛方程数学大不列颠,TiEnglish	1	98
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss group by id order by 1;
 -- result:
@@ -806,23 +1016,53 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+Ti物理Phy
+TomEnglish,王武程咬金语文北京上海
+TomMath,TomEnglish
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
+欧阳诸葛方程数学大不列颠,TiEnglish
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name,subject order by null,1,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, 3: subject, ,, 2: name, 3: subject)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 3: subject], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<varchar(255)>, col5 array<varchar(255)>>")
+None
+TiEnglish,欧阳诸葛方程数学大不列颠
+Ti物理Phy
+TomEnglish,TomMath
+TomEnglish,王武程咬金语文北京上海
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
+李四大闹天空英语外语美誉
 -- !result
 select group_concat(distinct null order by score,4.00) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(null, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None
+None
+None
+None
+None
+None
+None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(2: name, ,, 4: score), 6: group_concat=group_concat(6: group_concat, ,), 7: array_agg=array_agg(7: array_agg)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={6: group_concat=group_concat(6: group_concat, ,), 7: array_agg=array_agg(7: array_agg)}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={6: group_concat=group_concat(3: subject, ,, 4: score), 7: array_agg=array_agg(3: subject, 4: score)}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 3: subject, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>>")
+None	None	[null]
+May,欧阳诸葛方程,Ti	数学大不列颠,English	[null,"数学大不列颠","English"]
+Ti	物理Phy	[null,"物理Phy"]
+Tom	Math,English	["Math","English"]
+Tom,王武程咬金	English,语文北京上海	[null,"English","语文北京上海"]
+张三掩耳盗铃,张三此地无银三百两	Math数学欧拉方程,英文English	["Math数学欧拉方程","英文English"]
+李四大闹天空	英语外语美誉	["英语外语美誉"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss group by id order by 1;
 -- result:
@@ -830,7 +1070,13 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 47. Deta
 -- !result
 select group_concat(distinct score order by 1,name) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(cast(4: score as varchar), ,, 4: score, 2: name)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 2: name, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 2: name, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<int(11)>, col4 array<varchar(255)>>")
+None
+None
+22
+78,98
+80,90
+98
+99
 -- !result
 select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- result:
@@ -844,7 +1090,13 @@ select group_concat(distinct 1,2 order by 1,2) from ss group by id order by 1;
 -- !result
 select group_concat(distinct 1,2 order by score,2) from ss group by id order by 1;
 -- result:
-E: (1064, "Invalid plan:\nPhysicalTopNOperator {phase=FINAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n->  PhysicalTopNOperator {phase=PARTIAL, orderBy=[5: group_concat ASC NULLS FIRST], limit=-1, offset=0}\n    ->  PhysicalHashAggregate {type=GLOBAL, groupBy=[1: id], partitionBy=[1: id] ,aggregations={5: group_concat=group_concat(1, 2, ,, 4: score)}}\n        ->  PhysicalHashAggregate {type=DISTINCT_GLOBAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n            ->  PhysicalHashAggregate {type=LOCAL, groupBy=[1: id, 4: score], partitionBy=[1: id] ,aggregations={}}\n                ->  PhysicalOlapScanOperator {table=169262, selectedPartitionId=[169261], outputColumns=[1: id, 4: score], projection=null, predicate=null, limit=-1}\nType check failed. the type of arg 5: group_concat in expr '5: group_concat' is defined as VARCHAR, but the actual type is struct<col1 array<varchar>, col2 array<varchar>, col3 array<varchar>, col4 array<int(11)>>")
+12
+12
+12
+12
+12
+12
+12
 -- !result
 select group_concat(distinct 3.1323,subject order by 1,-20) from ss group by id order by 1;
 -- result:
@@ -992,7 +1244,7 @@ TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方�
 -- !result
 select group_concat(distinct name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat(distinct name,subject order by score,4) from ss order by 1;
 -- result:
@@ -1000,7 +1252,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 58. Deta
 -- !result
 select group_concat(distinct name,subject order by score,4.00) from ss order by 1;
 -- result:
-欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy
+李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy
 -- !result
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -1016,7 +1268,7 @@ None
 -- !result
 select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
 -- result:
-李四大闹天空,May,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	英语外语美誉,English,数学大不列颠,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	["英语外语美誉",null,null,null,null,"English","数学大不列颠","语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
+May,欧阳诸葛方程,李四大闹天空,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	数学大不列颠,English,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,英文English,English,物理Phy	[null,"English",null,null,"英语外语美誉",null,"数学大不列颠","语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -1048,7 +1300,7 @@ TiEnglish,Ti物理Phy,TomEnglish,TomMath,TomEnglish,张三掩耳盗铃Math数学
 -- !result
 select group_concat( name,subject order by score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,TomEnglish,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,欧阳诸葛方程数学大不列颠,李四大闹天空英语外语美誉,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
 -- !result
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 -- result:
@@ -1056,7 +1308,7 @@ E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 50. Deta
 -- !result
 select group_concat( name,subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,TomEnglish,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
+TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,张三此地无银三百两英文English,TiEnglish,Ti物理Phy	6	99
 -- !result
 select group_concat( name,null order by score,4.00) from ss order by 1;
 -- result:
@@ -1104,38 +1356,38 @@ select group_concat(',');
 -- !result
 select group_concat("中国",name) from ss;
 -- result:
-中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃,中国Tom,中国Tom,中国王武程咬金,中国Ti,中国李四大闹天空,中国May,中国Ti,中国欧阳诸葛方程
+中国May,中国Ti,中国欧阳诸葛方程,中国Ti,中国李四大闹天空,中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃,中国Tom,中国Tom,中国王武程咬金
 -- !result
 select group_concat("中国",name separator NULL) from ss;
 -- result:
-中国Ti中国李四大闹天空中国Tom中国Tom中国王武程咬金中国Tom中国Tom中国张三此地无银三百两中国张三掩耳盗铃中国May中国Ti中国欧阳诸葛方程
+中国May中国Ti中国欧阳诸葛方程中国Tom中国Tom中国张三此地无银三百两中国张三掩耳盗铃中国Ti中国李四大闹天空中国Tom中国Tom中国王武程咬金
 -- !result
 select group_concat("中国",name order by "第一") from ss;
 -- result:
-中国May,中国Ti,中国欧阳诸葛方程,中国Tom,中国Tom,中国王武程咬金,中国Ti,中国李四大闹天空,中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃
+中国Ti,中国李四大闹天空,中国Tom,中国Tom,中国王武程咬金,中国Tom,中国Tom,中国张三此地无银三百两,中国张三掩耳盗铃,中国May,中国Ti,中国欧阳诸葛方程
 -- !result
 select group_concat("中国",name order by "第一" separator '\n') from ss;
 -- result:
 中国Tom
 中国Tom
 中国王武程咬金
+中国Tom
+中国Tom
+中国张三此地无银三百两
+中国张三掩耳盗铃
 中国Ti
 中国李四大闹天空
 中国May
 中国Ti
 中国欧阳诸葛方程
-中国Tom
-中国Tom
-中国张三此地无银三百两
-中国张三掩耳盗铃
 -- !result
 select group_concat("中国",name order by "第一" separator subject) from ss;
 -- result:
-中国May中国TiEnglish中国欧阳诸葛方程数学大不列颠中国Ti物理Phy中国李四大闹天空英语外语美誉中国TomEnglish中国Tom中国王武程咬金语文北京上海中国TomEnglish中国TomMath中国张三此地无银三百两英文English中国张三掩耳盗铃
+中国TomEnglish中国Tom中国王武程咬金语文北京上海中国Ti物理Phy中国李四大闹天空英语外语美誉中国May中国TiEnglish中国欧阳诸葛方程数学大不列颠中国TomEnglish中国TomMath中国张三此地无银三百两英文English中国张三掩耳盗铃
 -- !result
 select group_concat("中国" order by "第一" separator score) from ss;
 -- result:
-E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_4095eee03c2e11eeb4e500163e04d4c2`.`ss`.`score`).")
+E: (1064, "Getting analyzing error at line 1, column 49. Detail message: group_concat requires separator to be of getType() STRING: group_concat('中国', `test_db_32b8be963cac11eea57a00163e04d4c2`.`ss`.`score`).")
 -- !result
 select group_concat(  order by score) from ss order by 1;
 -- result:
