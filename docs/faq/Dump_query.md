@@ -44,6 +44,7 @@ Parameter description:
 ## Example
 
 command:
+
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
 ```
@@ -81,6 +82,7 @@ Data is returned in JSON format.
 ```
 
 command:
+
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
 ```
