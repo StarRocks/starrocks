@@ -584,14 +584,12 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry) {
-                            if (context.getSessionVariable().isEnableProfile()) {
-                                writeProfile(execPlan, beginTimeInNanoSecond);
-                                if (parsedStmt.isExplain() &&
-                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                    handleExplainStmt(ExplainAnalyzer.analyze(
-                                            ProfilingExecPlan.buildFrom(execPlan), profile, null));
-                                }
+                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
+                            writeProfile(execPlan, beginTimeInNanoSecond);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                handleExplainStmt(ExplainAnalyzer.analyze(
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -830,6 +828,7 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
+        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -877,7 +876,7 @@ public class StmtExecutor {
             context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
-        }  else if (parsedStmt.isExplain()) {
+        } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
@@ -1855,8 +1854,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
-                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                                context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -1914,6 +1913,7 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
+                    Preconditions.checkNotNull(coord);
                     context.getGlobalStateMgr().getLoadMgr()
                             .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());

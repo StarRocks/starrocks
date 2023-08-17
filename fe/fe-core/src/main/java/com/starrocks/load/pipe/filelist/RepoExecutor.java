@@ -43,10 +43,13 @@ import java.util.List;
 public class RepoExecutor {
 
     private static final Logger LOG = LogManager.getLogger(RepoExecutor.class);
-    private static final RepoExecutor INSTANCE = new RepoExecutor();
+
+    private static class SingletonHolder {
+        private static final RepoExecutor INSTANCE = new RepoExecutor();
+    }
 
     public static RepoExecutor getInstance() {
-        return INSTANCE;
+        return SingletonHolder.INSTANCE;
     }
 
     public void executeDML(String sql) {
