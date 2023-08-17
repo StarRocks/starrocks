@@ -314,6 +314,23 @@ public class AuthorizationMgr {
         roleLock.writeLock().unlock();
     }
 
+    /**
+     * Since when modifying role privilege, we need to invalidate privilege cache for users
+     * who own this role, and this process needs user read lock, to keep the lock order of
+     * AuthenticationMgr lock -> user lock -> role lock and avoid deadlock, we should acquire
+     * the user read lock first when doing role modification, like grant to role, drop role etc.
+     * The following locking api is created for that purpose.
+     */
+    public void lockForRoleUpdate() {
+        userReadLock();
+        roleWriteLock();
+    }
+
+    public void unlockForRoleUpdate() {
+        roleWriteUnlock();
+        userReadUnlock();
+    }
+
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
         try {
             if (stmt.getRole() != null) {
@@ -360,8 +377,8 @@ public class AuthorizationMgr {
             List<PEntryObject> objects,
             boolean isGrant,
             String roleName) throws PrivilegeException {
-        roleWriteLock();
         try {
+            lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
             invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
@@ -373,7 +390,7 @@ public class AuthorizationMgr {
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
-            roleWriteUnlock();
+            unlockForRoleUpdate();
         }
     }
 
@@ -419,8 +436,8 @@ public class AuthorizationMgr {
             List<PrivilegeType> privilegeTypes,
             List<PEntryObject> objects,
             String roleName) throws PrivilegeException {
-        roleWriteLock();
         try {
+            lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.revoke(objectType, privilegeTypes, objects);
@@ -432,7 +449,7 @@ public class AuthorizationMgr {
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
-            roleWriteUnlock();
+            unlockForRoleUpdate();
         }
     }
 
@@ -496,8 +513,8 @@ public class AuthorizationMgr {
     }
 
     protected void grantRoleToRole(List<String> parentRoleName, String roleName) throws PrivilegeException {
-        roleWriteLock();
         try {
+            lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
@@ -558,7 +575,7 @@ public class AuthorizationMgr {
             LOG.info("grant role {}[{}] to role {}[{}]", parentRoleName,
                     Joiner.on(", ").join(parentRoleName), roleName, roleId);
         } finally {
-            roleWriteUnlock();
+            unlockForRoleUpdate();
         }
     }
 
@@ -602,8 +619,8 @@ public class AuthorizationMgr {
     }
 
     protected void revokeRoleFromRole(List<String> parentRoleNameList, String roleName) throws PrivilegeException {
-        roleWriteLock();
         try {
+            lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollectionV2 collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
@@ -641,7 +658,7 @@ public class AuthorizationMgr {
             LOG.info("revoke role {}[{}] from role {}[{}]",
                     parentRoleNameList.toString(), parentRoleIdList.toString(), roleName, roleId);
         } finally {
-            roleWriteUnlock();
+            unlockForRoleUpdate();
         }
     }
 
@@ -1184,8 +1201,8 @@ public class AuthorizationMgr {
     }
 
     public void dropRole(DropRoleStmt stmt) throws DdlException {
-        roleWriteLock();
         try {
+            lockForRoleUpdate();
             List<String> roleNameToBeDropped = new ArrayList<>();
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
             for (String roleName : stmt.getRoles()) {
@@ -1218,7 +1235,7 @@ public class AuthorizationMgr {
         } catch (PrivilegeException e) {
             throw new DdlException("failed to drop role: " + e.getMessage(), e);
         } finally {
-            roleWriteUnlock();
+            unlockForRoleUpdate();
         }
     }
 
