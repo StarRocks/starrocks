@@ -115,13 +115,23 @@ public class SyncPartitionUtils {
     }
 
 
-    public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
-                                             Map<String, Range<PartitionKey>> mvRangeMap) {
+    public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                   Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
         }
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
+        return deletes != null && !deletes.isEmpty();
+    }
+
+    public static boolean hasListPartitionChanged(Map<String, List<List<String>>> baseRangeMap,
+                                                 Map<String, List<List<String>>> mvRangeMap) {
+        Map<String, List<List<String>>> adds = diffList(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, List<List<String>>> deletes = diffList(mvRangeMap, baseRangeMap);
         return deletes != null && !deletes.isEmpty();
     }
 
@@ -432,7 +442,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, List<List<String>>> diffList(Map<String, List<List<String>>> srcListMap,
-                                                             Map<String, List<List<String>>> dstListMap) {
+                                                           Map<String, List<List<String>>> dstListMap) {
 
         Map<String, List<List<String>>> result = Maps.newHashMap();
         for (Map.Entry<String, List<List<String>>> srcEntry : srcListMap.entrySet()) {
