@@ -18,12 +18,16 @@ package com.starrocks.sql.optimizer.dump;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.Map;
 
 public interface DumpInfo {
     default void setOriginStmt(String stmt) {
+    }
+
+    default void setStatement(StatementBase statement) {
     }
 
     default void addException(String exception) {
