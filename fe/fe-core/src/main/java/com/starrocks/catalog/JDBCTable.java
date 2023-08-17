@@ -42,6 +42,9 @@ public class JDBCTable extends Table {
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
 
+    public static final String ORIGINAL_TABLENAME = "original_tablename";
+    public static final String ORIGINAL_DBNAME = "original_dbname";
+
     @SerializedName(value = "tn")
     private String jdbcTable;
     @SerializedName(value = "rn")
@@ -118,6 +121,9 @@ public class JDBCTable extends Table {
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {
+            if (!Strings.isNullOrEmpty(properties.get(ORIGINAL_DBNAME))) {
+                return String.join(".", catalogName, properties.get(ORIGINAL_DBNAME), properties.get(ORIGINAL_TABLENAME));
+            }
             return String.join(".", catalogName, dbName, name);
         } else {
             return Long.toString(id);
