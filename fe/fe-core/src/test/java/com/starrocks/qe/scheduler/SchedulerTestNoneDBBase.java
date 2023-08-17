@@ -24,6 +24,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -37,6 +38,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -94,6 +96,13 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     public DefaultCoordinator getScheduler(String sql) throws Exception {
         return UtFrameUtils.getScheduler(connectContext, sql);
+    }
+
+    public DefaultCoordinator getSchedulerWithQueryId(String sql) throws Exception {
+        DefaultCoordinator coordinator = getScheduler(sql);
+        UUID uuid = UUID.randomUUID();
+        coordinator.setQueryId(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+        return coordinator;
     }
 
     public static void makeQueryRandomStable() {
