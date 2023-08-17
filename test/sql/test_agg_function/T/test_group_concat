@@ -88,7 +88,7 @@ select group_concat(distinct name,subject order by 1,2,score,4.00) from ss order
 select group_concat(distinct name,null order by score,4.00) from ss order by 1;
 select group_concat(distinct name,subject order by 1,2, null) from ss order by 1;
 select group_concat(distinct null order by score,4.00) from ss order by 1;
-select group_concat(distinct name order by score,4.00),group_concat(subject order by score,4.00),array_agg(subject order by score,4.00)  from ss order by 1;
+select group_concat(distinct name order by score,4.00,1),group_concat(subject order by score,4.00,1),array_agg(subject order by score,4.00,1)  from ss order by 1;
 select group_concat(distinct score order by 1,2) from ss order by 1;
 select group_concat(distinct score order by 1,name) from ss order by 1;
 select group_concat(distinct 1,2 order by 1,2) from ss order by 1;
@@ -99,7 +99,7 @@ select group_concat( name,subject order by 1,score), count(distinct id), max(sco
 select group_concat( name,subject order by score,1,2), count(distinct id), max(score)  from ss order by 1;
 select group_concat( name,subject order by score,4), count(distinct id), max(score)  from ss order by 1;
 select group_concat( name,subject order by score,4.00,1,2), count(distinct id), max(score)  from ss order by 1;
-select group_concat( name,null order by score,4.00) from ss order by 1;
+select group_concat( name,null order by score,4.00, 1) from ss order by 1;
 select group_concat( name,subject order by null,1,2) from ss order by 1;
 select group_concat( null order by score,4.00) from ss order by 1;
 select group_concat( score order by 1,2) from ss order by 1;
