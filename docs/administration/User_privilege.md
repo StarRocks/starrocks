@@ -66,7 +66,6 @@ You can view all the users within the StarRocks cluster using SHOW USERS.
 SHOW USERS;
 ```
 
-
 ## Manage users
 
 Users with the system-defined role `user_admin` can create users, alter users, and drop users in StarRocks.
