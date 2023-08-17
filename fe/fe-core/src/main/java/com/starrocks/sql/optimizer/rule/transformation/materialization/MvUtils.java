@@ -789,7 +789,9 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                if (isCompensate) {
+                if (!isCompensate) {
+                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
+                } else {
                     // NOTE: It's not safe to get table's pruned partition predicates by
                     // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
                     //  - partitionPredicate is null if olap scan operator cannot prune partitions.
@@ -811,8 +813,6 @@ public class MvUtils {
                     // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
                     partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                             columnRefFactory);
-                } else {
-                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
                 }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);

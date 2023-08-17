@@ -200,7 +200,7 @@ public class OptimizerTraceUtil {
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("REWRITE GLOBAL");
         if (tracer != null) {
             FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
-            tracer.log(String.format("[%s] %s",   rule.type().name(), ft.getMessage()));
+            tracer.log(String.format("[%s] %s", rule.type().name(), ft.getMessage()));
         }
     }
 
