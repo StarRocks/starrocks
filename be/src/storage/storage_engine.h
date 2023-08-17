@@ -385,7 +385,11 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
+<<<<<<< HEAD
     HeartbeatFlags* _heartbeat_flags = nullptr;
+=======
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
+>>>>>>> f3b230786b (stuck when finish_publish_version_thread exits (#29362))
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 

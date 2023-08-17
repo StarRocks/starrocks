@@ -580,6 +580,11 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
+<<<<<<< HEAD
+=======
+    wake_finish_publish_vesion_thread();
+    JOIN_THREAD(_finish_publish_version_thread)
+>>>>>>> f3b230786b (stuck when finish_publish_version_thread exits (#29362))
 
     JOIN_THREADS(_base_compaction_threads)
     JOIN_THREADS(_cumulative_compaction_threads)
@@ -590,6 +595,11 @@ void StorageEngine::stop() {
     JOIN_THREADS(_manual_compaction_threads)
     JOIN_THREADS(_tablet_checkpoint_threads)
 
+<<<<<<< HEAD
+=======
+    JOIN_THREAD(_pk_index_major_compaction_thread)
+
+>>>>>>> f3b230786b (stuck when finish_publish_version_thread exits (#29362))
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
 
