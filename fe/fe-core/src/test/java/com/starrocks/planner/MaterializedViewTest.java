@@ -3812,4 +3812,50 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+
+    @Test
+    public void testEmptyPartitionPrune() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_empty_partition_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` bigint(20) DEFAULT NULL,\n" +
+                "  `col2` bigint(20) DEFAULT NULL,\n" +
+                "  `col3` bigint(20) DEFAULT NULL,\n" +
+                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt, col1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_empty_partition_mv1 \n" +
+                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "partition by date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select\n" +
+                "      col1,\n" +
+                "        dt,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    GROUP BY\n" +
+                "        col1,\n" +
+                "        dt;");
+        String sql = "select\n" +
+                "      col1,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "    GROUP BY col1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
+    }
 }
