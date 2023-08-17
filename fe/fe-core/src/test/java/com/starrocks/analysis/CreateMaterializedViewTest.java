@@ -2171,16 +2171,60 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateMvWithSortCols() throws Exception {
-        String sql = "create materialized view mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
-                "order by (`k1`, `s2`)\n" +
-                "as select tb1.k1, k2 s2 from tbl1 tb1;";
-        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
-                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
-        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(0).isKey());
-        Assert.assertTrue(createMaterializedViewStatement.getMvColumnItems().get(1).isKey());
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k1`, `s2`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(2, createMaterializedViewStatement.getSortKeys().size());
+            Assert.assertEquals(Arrays.asList("k1", "s2"), keyColumns);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`s2`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("s2"), keyColumns);
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k1`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                    UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            List<String> keyColumns = createMaterializedViewStatement.getMvColumnItems().stream()
+                    .filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            Assert.assertEquals(Arrays.asList("k1"), keyColumns);
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`k3`)\n" +
+                    "as select tb1.k1, k2 s2 from tbl1 tb1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
+        {
+            String sql = "create materialized view mv1\n" +
+                    "distributed by hash(s2)\n" +
+                    "order by (`c_1_7`)\n" +
+                    "as select * from t1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
     }
 
     @Test
@@ -3208,5 +3252,77 @@ public class CreateMaterializedViewTest {
                 "array<json>[parse_json('{}')] as type_array_json " +
                 "from tbl1 tb1;";
         starRocksAssert.withMaterializedView(sql);
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTables1() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "partition by province " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
+        }
+        starRocksAssert.dropTable("list_partition_tbl1");
+    }
+
+    @Test
+    public void testCreateMaterializedViewOnListPartitionTables2() throws Exception {
+        String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+        starRocksAssert.withTable(createSQL);
+
+        String sql = "create materialized view list_partition_mv1 " +
+                "distributed by hash(dt, province) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        starRocksAssert.dropTable("list_partition_tbl1");
     }
 }

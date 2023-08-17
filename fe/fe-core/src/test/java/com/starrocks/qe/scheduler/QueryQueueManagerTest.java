@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -30,11 +31,14 @@ import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -52,6 +56,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.MockGenericPool;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -89,7 +94,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
 
-    private boolean prevQueueEnable;
+    private boolean prevQueueEnableSelect;
+    private boolean prevQueueEnableStatistic;
+    private boolean prevQueueEnableLoad;
     private int prevQueueConcurrencyHardLimit;
     private double prevQueueMemUsedPctHardLimit;
     private int prevQueuePendingTimeoutSecond;
@@ -105,7 +112,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Before
     public void before() {
-        prevQueueEnable = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
+        prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
         prevQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         prevQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
@@ -133,8 +142,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @After
     public void after() {
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
+
         // Reset query queue configs.
-        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnable);
+        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnableSelect);
+        GlobalVariable.setEnableQueryQueueStatistic(prevQueueEnableStatistic);
+        GlobalVariable.setEnableQueryQueueLoad(prevQueueEnableLoad);
         GlobalVariable.setQueryQueueConcurrencyLimit(prevQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(prevQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
@@ -640,7 +656,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             }
         });
         thread.start();
-        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue() > 0);
         Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
         // 2. The leader is changed, so the query can get slot from the new leader.
@@ -1171,6 +1187,112 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
+    }
+
+    @Test
+    public void testShowRunningQueriesEmpty() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "show running queries;";
+        ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showStmt);
+        ShowResultSet res = executor.execute();
+        Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+        Assert.assertTrue(res.getResultRows().isEmpty());
+    }
+
+    private DefaultCoordinator runNoPendingQuery() throws Exception {
+        DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, coord);
+        Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+        Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+        return coord;
+    }
+
+    @Test
+    public void testShowRunningQueries() throws Exception {
+        final int concurrencyLimit = 2;
+
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+
+        TWorkGroup group0 = new TWorkGroup().setId(0L).setConcurrency_limit(concurrencyLimit - 1);
+        TWorkGroup group1 = new TWorkGroup().setId(1L).setConcurrency_limit(concurrencyLimit);
+        TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
+        List<TWorkGroup> groups = ImmutableList.of(nonGroup, group0, group1);
+
+        final int numPendingCoords = groups.size() * concurrencyLimit;
+
+        // 1. Run `concurrencyLimit` queries.
+        List<DefaultCoordinator> runningCoords = new ArrayList<>();
+        mockResourceGroup(null);
+        runningCoords.add(runNoPendingQuery());
+        mockResourceGroup(group0);
+        runningCoords.add(runNoPendingQuery());
+
+        // 2. Each group has `concurrencyLimit` pending queries.
+        List<DefaultCoordinator> coords = new ArrayList<>();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < concurrencyLimit; i++) {
+            for (TWorkGroup group : groups) {
+                if (group.getId() == LogicalSlot.ABSENT_GROUP_ID) {
+                    mockResourceGroup(null);
+                } else {
+                    mockResourceGroup(group);
+                }
+                DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+                coords.add(coord);
+
+                threads.add(new Thread(() -> Assert.assertThrows("Cancelled", UserException.class,
+                        () -> manager.maybeWait(connectContext, coord))));
+            }
+        }
+        threads.forEach(Thread::start);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> numPendingCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        coords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() ==
+                        numPendingCoords + concurrencyLimit);
+
+        {
+            // 3. show running queries.
+            ConnectContext ctx = starRocksAssert.getCtx();
+            String sql = "show running queries;";
+            ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            ShowExecutor executor = new ShowExecutor(ctx, showStmt);
+            ShowResultSet res = executor.execute();
+            Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+
+            final int groupIndex = 1;
+            final int stateIndex = 5;
+            Map<String, Map<String, Integer>> groupToStateToCount = res.getResultRows().stream().collect(Collectors.groupingBy(
+                    row -> row.get(groupIndex),
+                    Collectors.groupingBy(
+                            row -> row.get(stateIndex),
+                            Collectors.summingInt(row -> 1)
+                    )
+            ));
+            Map<String, Map<String, Integer>> expectedGroupToStateToCount = ImmutableMap.of(
+                    "0", ImmutableMap.of("RUNNING", 1, "PENDING", 2),
+                    "1", ImmutableMap.of("PENDING", 2),
+                    "-", ImmutableMap.of("RUNNING", 1, "PENDING", 2)
+            );
+            assertThat(groupToStateToCount).containsExactlyInAnyOrderEntriesOf(expectedGroupToStateToCount);
+        }
+
+        {
+            // 4. show running queries with limit.
+            ConnectContext ctx = starRocksAssert.getCtx();
+            String sql = "show running queries limit 4;";
+            ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            ShowExecutor executor = new ShowExecutor(ctx, showStmt);
+            ShowResultSet res = executor.execute();
+            Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
+            Assert.assertEquals(4, res.getResultRows().size());
+        }
+
+        coords.forEach(DefaultCoordinator::cancel);
+        runningCoords.forEach(DefaultCoordinator::onFinished);
     }
 
     private void mockNeedCheckQueue() {

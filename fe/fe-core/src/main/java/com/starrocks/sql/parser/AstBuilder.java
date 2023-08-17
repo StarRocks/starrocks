@@ -315,6 +315,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -347,6 +348,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -1578,6 +1580,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
 
+            // Order By
             if (desc.orderByDesc() != null) {
                 sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
                         .stream().map(Identifier::getValue).collect(toList());
@@ -1877,6 +1880,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CreateRoutineLoadStmt(createLabelName(context.db, context.name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName,
                 dataSourceProperties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateRoutineLoadStatement(StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
+        return new ShowCreateRoutineLoadStmt(createLabelName(context.db, context.name));
     }
 
     @Override
@@ -2761,6 +2769,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProfilelistStatement(StarRocksParser.ShowProfilelistStatementContext context) {
         int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
         return new ShowProfilelistStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRunningQueriesStatement(StarRocksParser.ShowRunningQueriesStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowRunningQueriesStmt(limit, createPos(context));
     }
 
     @Override

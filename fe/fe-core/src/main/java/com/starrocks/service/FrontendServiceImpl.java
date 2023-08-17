@@ -175,6 +175,8 @@ import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TGetProfileRequest;
@@ -258,12 +260,12 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
-import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -271,8 +273,6 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.WarehouseInfosBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -656,9 +656,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     } catch (AccessDeniedException e) {
                         continue;
                     }
-                    if (matcher != null && !matcher.match(mvTable.getName())) {
-                        continue;
-                    }
 
                     if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
                         continue;
@@ -673,9 +670,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (baseIdx == mvMeta.getIndexId()) {
                             continue;
                         }
-                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
+
+                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                                matcher, caseSensitive)) {
                             continue;
                         }
+
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
                 }
@@ -1221,6 +1221,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
+        long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
+        if (Config.enable_sync_publish) {
+            result.setTimeout(timeoutSecond);
+        } else {
+            result.setTimeout(0);
+        }
+        
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
@@ -1423,6 +1430,42 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 break;
         }
+    }
+
+    @Override
+    public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
+        String clientAddr = getClientAddrAsString();
+        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+                request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
+        LOG.debug("get txn status request: {}", request);
+
+        TGetLoadTxnStatusResult result = new TGetLoadTxnStatusResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.warn("current fe is not leader");
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        // get database
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
+        if (db == null) {
+            LOG.warn("unknown database, database=" + dbName);
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        try {
+            TTransactionStatus status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), status);
+            result.setStatus(status);
+        } catch (Throwable e) {
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            LOG.warn("catch unknown result.", e);
+        }
+        return result;
     }
 
     @Override
@@ -2088,16 +2131,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
+    /**
+     * Returns the empty warehouse info.
+     * Maintaining this method is just to avoid problems at grayscale upgrading.
+     */
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
-        Map<String, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
-        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
-                .map(WarehouseInfo::toThrift)
-                .collect(Collectors.toList());
-
         TGetWarehousesResponse res = new TGetWarehousesResponse();
         res.setStatus(new TStatus(OK));
-        res.setWarehouse_infos(warehouseInfos);
+        res.setWarehouse_infos(Collections.emptyList());
 
         return res;
     }

@@ -64,6 +64,8 @@ public:
 
 static ConnectorManagerInit _init;
 
+const std::string DataSource::PROFILE_NAME = "DataSource";
+
 void DataSource::update_has_any_predicate() {
     auto f = [&]() {
         if (_conjunct_ctxs.size() > 0) return true;

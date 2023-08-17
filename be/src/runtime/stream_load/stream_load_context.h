@@ -273,6 +273,7 @@ public:
 
     TStreamLoadPutRequest request;
 
+    int64_t load_deadline_sec = -1;
     std::unique_ptr<ConcurrentLimiterGuard> _http_limiter_guard;
 
 public:

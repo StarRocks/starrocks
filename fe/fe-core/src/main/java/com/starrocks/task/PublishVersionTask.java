@@ -64,10 +64,11 @@ public class PublishVersionTask extends AgentTask {
     private final long commitTimestamp;
     private final TransactionState txnState;
     private Span span;
+    private boolean enableSyncPublish;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state) {
+                              long createTime, TransactionState state, boolean enableSyncPublish) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
@@ -75,6 +76,7 @@ public class PublishVersionTask extends AgentTask {
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
         this.txnState = state;
+        this.enableSyncPublish = enableSyncPublish;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -89,6 +91,7 @@ public class PublishVersionTask extends AgentTask {
         TPublishVersionRequest publishVersionRequest = new TPublishVersionRequest(transactionId, partitionVersionInfos);
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
+        publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
         return publishVersionRequest;
     }
 

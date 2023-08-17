@@ -110,6 +110,7 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+    | showCreateRoutineLoadStatement
 
     // StreamLoad Statement
     | showStreamLoadStatement
@@ -190,6 +191,7 @@ statement
     | showProcStatement
     | showProcesslistStatement
     | showProfilelistStatement
+    | showRunningQueriesStatement
     | showStatusStatement
     | showTabletStatement
     | showTransactionStatement
@@ -1097,6 +1099,10 @@ showRoutineLoadTaskStatement
         WHERE expression
     ;
 
+showCreateRoutineLoadStatement
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
+    ;
+
 showStreamLoadStatement
     : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
         (FROM db=qualifiedName)?
@@ -1375,6 +1381,10 @@ showProcesslistStatement
 
 showProfilelistStatement
     : SHOW PROFILELIST (LIMIT limit =INTEGER_VALUE)?
+    ;
+
+showRunningQueriesStatement
+    : SHOW RUNNING QUERIES (LIMIT limit =INTEGER_VALUE)?
     ;
 
 showStatusStatement
