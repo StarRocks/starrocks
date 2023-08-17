@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.iceberg.glue;
+package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import org.apache.iceberg.aws.AwsClientFactory;
@@ -31,6 +31,7 @@ import software.amazon.awssdk.services.glue.GlueClientBuilder;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
@@ -50,6 +51,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESS
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
@@ -60,11 +62,10 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
-    public IcebergAwsClientFactory() {
-    }
 
     private AwsProperties awsProperties;
 
+    private boolean s3EnablePathStyleAccess;
     private boolean s3UseAWSSDKDefaultBehavior;
     private boolean s3UseInstanceProfile;
     private String s3AccessKey;
@@ -89,6 +90,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     public void initialize(Map<String, String> properties) {
         this.awsProperties = new AwsProperties(properties);
 
+        s3EnablePathStyleAccess = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_ENABLE_PATH_STYLE_ACCESS, "false"));
         s3UseAWSSDKDefaultBehavior = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
         s3UseInstanceProfile = Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_INSTANCE_PROFILE, "false"));
         s3AccessKey = properties.getOrDefault(AWS_S3_ACCESS_KEY, "");
@@ -160,6 +162,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         }
 
         s3ClientBuilder.applyMutation(awsProperties::applyHttpClientConfigurations);
+        // set for s3 path style access
+        s3ClientBuilder.serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(s3EnablePathStyleAccess).build());
 
         return s3ClientBuilder.build();
     }
