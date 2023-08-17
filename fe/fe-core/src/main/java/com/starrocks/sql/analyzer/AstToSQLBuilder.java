@@ -62,8 +62,8 @@ public class AstToSQLBuilder {
 
     public static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
-        private final boolean simple;
-        private final boolean withoutTbl;
+        protected final boolean simple;
+        protected final boolean withoutTbl;
 
         public AST2SQLBuilderVisitor(boolean simple, boolean withoutTbl) {
             this.simple = simple;
