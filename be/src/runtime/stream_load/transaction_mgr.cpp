@@ -258,6 +258,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
 
         st = _commit_transaction(ctx, boost::iequals(TXN_PREPARE, req->param(HTTP_TXN_OP_KEY)));
         if (!st.ok()) {
+            LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
             if (ctx->need_rollback) {
                 _rollback_transaction(ctx);
