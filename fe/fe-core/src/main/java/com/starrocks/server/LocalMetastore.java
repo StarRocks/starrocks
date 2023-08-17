@@ -4173,6 +4173,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            try {
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }
@@ -4187,6 +4194,12 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
+        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
+            tableProperty.buildStorageCoolDownTTL();
+        } else {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
         }
 
         ModifyTablePropertyOperationLog info =
