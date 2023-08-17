@@ -251,6 +251,13 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     std::unique_lock l1(_lock);
     std::unique_lock l2(_rowsets_lock);
 
+    std::vector<TabletSegmentId> tsids;
+    for (auto& [rsid, rowset] : _rowsets) {
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rsid + i});
+        }
+    }
+
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
     _rowset_stats.clear();
@@ -335,6 +342,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     l2.unlock(); // _rowsets_lock
 
     RETURN_IF_ERROR(_load_pending_rowsets());
+    StorageEngine::instance()->update_manager()->clear_cached_del_vec(tsids);
 
     _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
     VLOG(1) << "load tablet " << _debug_string(false, true);
