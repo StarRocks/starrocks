@@ -145,6 +145,7 @@ struct TAlterTabletReqV2 {
     11: optional i64 job_id
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
+    14: optional Exprs.TExpr whereExpr
 }
 
 struct TAlterMaterializedViewParam {

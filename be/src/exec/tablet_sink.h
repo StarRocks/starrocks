@@ -239,6 +239,8 @@ private:
     bool _has_automatic_partition = false;
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;
+
+    RuntimeState* _state = nullptr;
 };
 
 } // namespace starrocks::stream_load

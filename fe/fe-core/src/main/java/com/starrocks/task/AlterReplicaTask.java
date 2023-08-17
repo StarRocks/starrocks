@@ -84,6 +84,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final Map<String, Expr> defineExprs;
+
+    private final Expr whereExpr;
     private final TAlterTabletMaterializedColumnReq materializedColumnReq;
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
@@ -92,29 +94,29 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                                                     TAlterTabletMaterializedColumnReq materializedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0, materializedColumnReq);
+                null, null, TTabletType.TABLET_TYPE_DISK, 0, materializedColumnReq);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                    long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_LAKE, txnId, null);
+                null, null, TTabletType.TABLET_TYPE_LAKE, txnId, null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
                                                      long rollupIndexId, long rollupTabletId, long baseTabletId,
                                                      long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-                                                     long jobId, Map<String, Expr> defineExprs) {
+                                                     long jobId, Map<String, Expr> defineExprs, Expr whereExpr) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
-                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null);
+                defineExprs, whereExpr, TTabletType.TABLET_TYPE_DISK, 0, null);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-                             long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId, TAlterTabletMaterializedColumnReq materializedColumnReq) {
+                             long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, Expr whereExpr,
+                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq materializedColumnReq) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -128,6 +130,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         this.jobType = jobType;
         this.defineExprs = defineExprs;
+        this.whereExpr = whereExpr;
 
         this.tabletType = tabletType;
         this.txnId = txnId;
@@ -177,6 +180,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
         }
         req.setMaterialized_column_req(materializedColumnReq);
+
+        if (whereExpr != null) {
+            req.setWhereExpr(whereExpr.treeToThrift());
+        }
+
 
         // TODO: merge `materializedColumnReq`'s query options into this later.
         if (defineExprs != null && defineExprs.size() > 0) {
