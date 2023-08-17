@@ -149,9 +149,16 @@ public class OptimizerTraceUtil {
             LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(),
                     MessageFormatter.arrayFormat(format, object).getMessage());
         }
-        // Only record trace when mv is not null.
+
+        // Trace log if needed.
         if (mv != null) {
             PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mv.getName());
+            if (tracer != null) {
+                FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
+                tracer.log(ft.getMessage());
+            }
+        } else {
+            PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("PREPARE GLOBAL");
             if (tracer != null) {
                 FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
                 tracer.log(ft.getMessage());
@@ -187,6 +194,13 @@ public class OptimizerTraceUtil {
                     optimizerContext.getTraceInfo().getQueryId(),
                     rule.type().name(),
                     String.format(format, object));
+        }
+
+        // Trace log if needed.
+        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("REWRITE GLOBAL");
+        if (tracer != null) {
+            FormattingTuple ft = MessageFormatter.arrayFormat(format, object);
+            tracer.log(String.format("[%s] %s", rule.type().name(), ft.getMessage()));
         }
     }
 
