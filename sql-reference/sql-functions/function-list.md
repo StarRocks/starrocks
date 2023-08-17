@@ -218,11 +218,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [round, dround](/sql-reference/sql-functions/math-functions/round.md)| 按照指定的小数位数对数值进行四舍五入。 |
 |  [sign](/sql-reference/sql-functions/math-functions/sign.md)| 返回参数 x 的符号。 |
 |  [sin](/sql-reference/sql-functions/math-functions/sin.md)| 计算参数 x 的正弦，x 为弧度值。 |
-|  [sinh](/sql-reference/sql-functions/math-functions/sinh.md)| 计算输入数值的双曲正弦值。 |
 |  [sqrt, dsqrt](/sql-reference/sql-functions/math-functions/sqrt.md)| 计算参数的平方根。 |
 |  [square](/sql-reference/sql-functions/math-functions/square.md)| 计算参数的平方。 |
 |  [tan](/sql-reference/sql-functions/math-functions/tan.md)| 计算参数 x 的正切，x 为弧度值。 |
-|  [tanh](/sql-reference/sql-functions/math-functions/tanh.md)| 计算输入数值的双曲正切值。 |
 |  [truncate](/sql-reference/sql-functions/math-functions/truncate.md)| 返回数值 x 保留到小数点后 y 位的值。 |
 
 ## Array 函数
