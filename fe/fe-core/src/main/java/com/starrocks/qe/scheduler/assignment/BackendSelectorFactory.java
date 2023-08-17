@@ -28,6 +28,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HDFSBackendSelector;
+import com.starrocks.qe.NoopBackendSelector;
 import com.starrocks.qe.NormalBackendSelector;
 import com.starrocks.qe.ReplicatedBackendSelector;
 import com.starrocks.qe.SessionVariable;
@@ -48,11 +49,10 @@ public class BackendSelectorFactory {
                                          WorkerProvider workerProvider,
                                          ConnectContext connectContext,
                                          Set<Integer> destReplicatedScanIds) {
-        // the parameters of getScanRangeLocations may ignore, It doesn't take effect.
+        // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
         if (locations == null) {
-            // only analysis olap scan node
-            return null;
+            return new NoopBackendSelector();
         }
 
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();

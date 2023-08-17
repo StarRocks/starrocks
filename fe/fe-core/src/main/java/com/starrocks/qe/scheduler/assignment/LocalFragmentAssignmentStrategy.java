@@ -81,11 +81,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws UserException {
         BackendSelector backendSelector = BackendSelectorFactory.create(
                 scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds);
-        // The ScanNodes without scan ranges, such as SchemaScanNode, just return here and will be assigned to an
-        // arbitrary worker later.
-        if (backendSelector == null) {
-            return;
-        }
 
         backendSelector.computeScanRangeAssignment();
 
@@ -225,12 +220,10 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 }
 
                 int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
-                List<List<TScanRangeParams>> scanRangesPerInstance =
-                        ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
+                List<List<TScanRangeParams>> scanRangesPerInstance = ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
 
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
-                    FragmentInstance instance =
-                            new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                    FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                     execFragment.addInstance(instance);
 
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
