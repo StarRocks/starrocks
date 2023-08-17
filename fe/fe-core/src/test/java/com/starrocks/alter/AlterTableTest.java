@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -79,6 +80,34 @@ public class AlterTableTest {
         Assert.assertEquals("3 day", storageCooldownTtl);
         PeriodDuration storageCoolDownTTL = olapTable.getTableProperty().getStorageCoolDownTTL();
         Assert.assertEquals("P3D", storageCoolDownTTL.toString());
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testAlterTableStorageCoolDownTTLExcept() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_2 (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                "PROPERTIES(\n" +
+                "\t\"replication_num\" = \"1\",\n" +
+                "    \"storage_medium\" = \"SSD\",\n" +
+                "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
 }

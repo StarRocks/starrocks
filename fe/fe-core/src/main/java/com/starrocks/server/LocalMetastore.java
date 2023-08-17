@@ -236,7 +236,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -3485,10 +3484,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
-        PeriodDuration periodDuration = null;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             try {
-                periodDuration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
