@@ -234,7 +234,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                     } else {
-                        int expectedDop = Math.max(1, pipelineDop);
+                        int expectedDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
                         List<List<TScanRangeParams>> scanRangesPerDriverSeq;
                         if (Config.enable_schedule_insert_query_by_row_count && isLoadType
                                 && !scanRanges.isEmpty()
