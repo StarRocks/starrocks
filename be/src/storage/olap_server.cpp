@@ -34,7 +34,9 @@
 #include "storage/compaction_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/publish_version_manager.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "util/gc_helper.h"
@@ -80,6 +82,8 @@ Status StorageEngine::start_bg_threads() {
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
+    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -358,6 +362,19 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
                 break;
             }
         } while (true);
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::pindex_major_compaction_schedule_interval_seconds);
+        // schedule persistent index compaction
+        _update_manager->get_pindex_compaction_mgr()->schedule();
     }
 
     return nullptr;

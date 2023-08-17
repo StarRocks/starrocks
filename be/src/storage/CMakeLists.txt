@@ -174,4 +174,4 @@ add_library(Storage STATIC
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
-)
+    persistent_index_compaction_manager.cpp)
