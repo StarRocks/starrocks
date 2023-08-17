@@ -262,7 +262,7 @@ public class ExecutionDAG {
      * <ul>
      *  <li>Assign instance id to fragment instances.
      *  <li>Assign monotonic unique indexInJob to fragment instances to keep consistent order with indexInFragment.
-     *      Also see {@link FragmentInstance#indexInJob}.
+     *      Also see {@link FragmentInstance#getIndexInJob()}.
      *  <li>Connect each fragment to its destination fragments
      *  <li>Setup {@link #workerIdToNumInstances}, {@link #channelIdToBEHTTP}, and {@link #channelIdToBEPort}
      * </ul>
