@@ -71,6 +71,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PStatus;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
@@ -543,6 +544,9 @@ public class Coordinator {
             int profileFragmentId = 0;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
+
+            long totalBytes = 0;
+            List<Pair<Long, String>> allBytesLists = Lists.newArrayList();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
@@ -579,6 +583,8 @@ public class Coordinator {
                     infightFInstanceExecParamList.add(params.instanceExecParams);
                 }
 
+                long beBytes = 0;
+                long beNums = 0;
                 boolean isFirst = true;
                 for (List<FInstanceExecParam> fInstanceExecParamList : infightFInstanceExecParamList) {
                     TDescriptorTable descTable = new TDescriptorTable();
@@ -621,7 +627,11 @@ public class Coordinator {
                             }
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
+
+                        totalBytes += execState.rpcParamsSize;
+                        beBytes += execState.rpcParamsSize;
                     }
+                    beNums += tParams.size();
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -665,8 +675,18 @@ public class Coordinator {
                     }
                 }
                 profileFragmentId += 1;
+
+                allBytesLists.add(new Pair<>(beBytes,
+                        fragment.getFragmentId().asInt() + ":[" + infightFInstanceExecParamList.size() + "x" + beNums +
+                                "]" + "[" + beBytes + "]"));
             }
             attachInstanceProfileToFragmentProfile();
+            {
+                String bytesStr = allBytesLists.stream().sorted((o1, o2) -> o2.first.compareTo(o1.first))
+                        .limit(20).map(c -> c.second).collect(Collectors.joining(", "));
+                LOG.info("query id: {}, fragment: {}, total bytes: {}, top-20 bytes: {}",
+                        DebugUtil.printId(queryId), fragments.size(), totalBytes, bytesStr);
+            }
         } finally {
             unlock();
         }
@@ -2049,6 +2069,7 @@ public class Coordinator {
         TNetworkAddress address;
         Backend backend;
         long lastMissingHeartbeatTime = -1;
+        long rpcParamsSize = 0;
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
                                 TExecPlanFragmentParams rpcParams, Map<TNetworkAddress, Long> addressToBackendID) {
@@ -2153,7 +2174,11 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceProxy.getInstance().execPlanFragmentAsync(brpcAddress, rpcParams);
+                final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
+                pRequest.setRequest(rpcParams);
+                rpcParamsSize = pRequest.getSerializedRequest().length;
+                return BackendServiceProxy.getInstance().execPlanFragmentAsync(brpcAddress, pRequest);
+                // return BackendServiceProxy.getInstance().execPlanFragmentAsync(brpcAddress, rpcParams);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.

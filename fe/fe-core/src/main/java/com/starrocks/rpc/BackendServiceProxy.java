@@ -97,6 +97,34 @@ public class BackendServiceProxy {
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
+            TNetworkAddress address, PExecPlanFragmentRequest pRequest)
+            throws RpcException {
+        try {
+            final PBackendService service = getProxy(address);
+            return service.execPlanFragmentAsync(pRequest);
+        } catch (NoSuchElementException e) {
+            try {
+                // retry
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    // do nothing
+                }
+                final PBackendService service = getProxy(address);
+                return service.execPlanFragmentAsync(pRequest);
+            } catch (NoSuchElementException noSuchElementException) {
+                LOG.warn("Execute plan fragment retry failed, address={}:{}",
+                        address.getHostname(), address.getPort(), noSuchElementException);
+                throw new RpcException(address.hostname, e.getMessage());
+            }
+        } catch (Throwable e) {
+            LOG.warn("Execute plan fragment catch a exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
             TNetworkAddress address, TExecPlanFragmentParams tRequest)
             throws TException, RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
