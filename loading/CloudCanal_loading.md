@@ -7,9 +7,9 @@ CloudCanal 社区版是一款由 [ClouGence 公司](https://www.clougence.com) �
 
 ## 下载安装
 
-[CloudCanal 最新版下载地址](https://clougence.com)
+[CloudCanal 最新版下载地址](https://www.clougence.com)
 
-[CloudCanal 社区版安装部署参考文档](https://doc-cloudcanal.clougence.com/operation/install_linux)
+[CloudCanal 快速开始](https://www.clougence.com/cc-doc/quick/quick_start)
 
 ## 功能说明
 
@@ -20,12 +20,16 @@ CloudCanal 社区版是一款由 [ClouGence 公司](https://www.clougence.com) �
   - 增量参数为 `increBatchSize` 和 `increRingBufferSize`。
 - 支持的源端以及功能项：
   
-  | 数据源 \ 功能项 | 结构迁移 | 全量数据迁移 | 增量实时同步 | 数据校验 |
-  | --- | --- | --- | --- | --- |
-  | Oracle 源端 | 支持 | 支持 | 支持 | 支持 |
-  | PostgreSQL 源端 | 支持 | 支持 | 支持 | 支持 |
-  | Greenplum 源端 | 支持 | 支持 | 不支持 | 支持 |
-  | MySQL 源端 | 支持 | 支持 | 支持 | 支持 |
+  | 数据源 \ 功能项         | 结构迁移 | 全量数据迁移 | 增量实时同步 | 数据校验 |
+     | --- | --- | --- | --- | --- |
+  | Oracle 源端            | 支持 | 支持 | 支持 | 支持 |
+  | PostgreSQL 源端        | 支持 | 支持 | 支持 | 支持 |
+  | Greenplum 源端         | 支持 | 支持 | 不支持 | 支持 |
+  | MySQL 源端             | 支持 | 支持 | 支持 | 支持 |
+  | Kafka 源端             | 不支持 | 不支持 | 支持 | 不支持 |
+  | OceanBase 源端         | 支持 | 支持 | 支持 | 支持 |
+  | PolarDb for MySQL 源端 | 支持 | 支持 | 支持 | 支持 |
+  | Db2 源端               | 支持 | 支持 | 支持 | 支持 |
   
 ## 使用方法
 
@@ -33,7 +37,7 @@ CloudCanal 提供了完整的产品化能力，用户在可视化界面完成数
 
 ### 前置条件
 
-首先参考 [CloudCanal 安装部署参考文档](https://www.askcug.com/topic/75) 完成 CloudCanal 社区版的安装和部署。
+首先参考 [CloudCanal 快速开始](https://www.clougence.com/cc-doc/quick/quick_start) 完成 CloudCanal 社区版的安装和部署。
 
 ### 添加数据源
 
@@ -62,7 +66,7 @@ CloudCanal 提供了完整的产品化能力，用户在可视化界面完成数
 ![image.png](../assets/3.11-3.png)
 
 - 选择 **增量同步**，并且启用 **全量数据初始化**
-- 不勾选 DDL 同步(暂不支持)
+- 勾选 DDL 同步
 - 点击下一步
 
 ![image.png](../assets/3.11-4.png)
@@ -89,6 +93,4 @@ CloudCanal 提供了完整的产品化能力，用户在可视化界面完成数
 
 更多关于 CloudCanal 同步 StarRocks 的资料，可以查看
 
-- [5 分钟搞定 MySQL/PostgreSQL/Oracle 到 StarRocks 数据迁移同步-CloudCanal 实战](https://www.askcug.com/topic/262)
-
-- [CloudCanal 官方社区](https://www.askcug.com/)
+- [5 分钟搞定 PostgreSQL 到 StarRocks 数据迁移同步-CloudCanal 实战](https://www.askcug.com/topic/262)
