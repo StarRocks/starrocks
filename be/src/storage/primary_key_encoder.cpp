@@ -261,7 +261,7 @@ FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& 
     }
     if (key_idxes.size() == 1) {
         if (!schema.sort_key_idxes().empty() && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
-            return TYPE_VARCHAR;
+            return OLAP_FIELD_TYPE_VARCHAR;
         }
         return schema.field(key_idxes[0])->type()->type();
     }
@@ -446,7 +446,7 @@ void PrimaryKeyEncoder::encode_sort_key(const vectorized::Schema& schema, const 
     prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
     auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
     bdest.reserve(bdest.size() + len);
-    std::vector<std::shared_ptr<Column>> cols(ncol);
+    std::vector<std::shared_ptr<vectorized::Column>> cols(ncol);
     for (int i = 0; i < ncol; i++) {
         cols[i] = chunk.get_column_by_index(schema.sort_key_idxes()[i]);
     }
