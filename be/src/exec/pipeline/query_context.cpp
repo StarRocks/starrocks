@@ -201,6 +201,7 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
+    res->add_spill_bytes(get_spill_bytes());
 
     {
         std::lock_guard l(_scan_stats_lock);

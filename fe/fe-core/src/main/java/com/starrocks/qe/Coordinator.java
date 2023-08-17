@@ -1720,6 +1720,7 @@ public class Coordinator {
 
         long maxQueryCumulativeCpuTime = 0;
         long maxQueryPeakMemoryUsage = 0;
+        long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
@@ -1759,6 +1760,12 @@ public class Coordinator {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
+
+                toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
+                if (toBeRemove != null) {
+                    maxQuerySpillBytes = Math.max(maxQuerySpillBytes, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QuerySpillBytes");
             }
             newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
             newFragmentProfile.addInfoString("InstanceIds", String.join(",", instanceIds));
@@ -1872,6 +1879,8 @@ public class Coordinator {
         queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
+        querySpillBytes.setValue(maxQuerySpillBytes);
 
         return newQueryProfile;
     }
