@@ -128,14 +128,14 @@ public class OutFileClause implements ParseNode {
             if (!isCsvFormat()) {
                 throw new AnalysisException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
             }
-            columnSeparator = properties.get(PROP_COLUMN_SEPARATOR);
+            columnSeparator = Delimiter.convertDelimiter(properties.get(PROP_COLUMN_SEPARATOR));
         }
 
         if (properties.containsKey(PROP_LINE_DELIMITER)) {
             if (!isCsvFormat()) {
                 throw new AnalysisException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
-            rowDelimiter = properties.get(PROP_LINE_DELIMITER);
+            rowDelimiter = Delimiter.convertDelimiter(properties.get(PROP_LINE_DELIMITER));
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
