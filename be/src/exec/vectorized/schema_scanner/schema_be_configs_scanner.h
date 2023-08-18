@@ -21,6 +21,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_configs_scanner.h
 class SchemaBeConfigsScanner : public vectorized::SchemaScanner {
 public:
     SchemaBeConfigsScanner();
@@ -37,5 +38,11 @@ private:
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };
+=======
+std::pair<bool, size_t> register_task_info(TTaskType::type task_type, int64_t signature);
+std::vector<uint8_t> batch_register_task_info(const std::vector<const TAgentTaskRequest*>& tasks);
+size_t remove_task_info(TTaskType::type task_type, int64_t signature);
+std::map<TTaskType::type, std::set<int64_t>> count_all_tasks();
+>>>>>>> e88b4018be ([Refactor] Log the task number in the task queue (#28621)):be/src/agent/task_signatures_manager.h
 
 } // namespace starrocks
