@@ -427,7 +427,7 @@ public class PrivilegeCheckerTest {
                 "use 'catalog test_ex_catalog'",
                 "grant DROP on catalog test_ex_catalog to test",
                 "revoke DROP on catalog test_ex_catalog from test",
-                "Access denied; you need (at least one of) the ANY IN CATALOG");
+                "Access denied; you need (at least one of) the ANY privilege(s) on CATALOG test_ex_catalog for this operation");
 
         // check create external catalog: CREATE EXTERNAL CATALOG on system object
         verifyGrantRevoke(

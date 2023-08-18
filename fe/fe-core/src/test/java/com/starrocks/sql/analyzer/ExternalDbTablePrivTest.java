@@ -244,8 +244,8 @@ public class ExternalDbTablePrivTest {
         // set catalog xxx: check any action on or in catalog
         verifyGrantRevoke(
                 "set catalog hive0",
-                "grant select on tpch.region to test",
-                "revoke select on tpch.region from test",
-                "Access denied; you need (at least one of) the ANY IN CATALOG hive0 privilege(s) for this operation");
+                "grant usage on catalog hive0 to test",
+                "revoke usage on catalog hive0 from test",
+                "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
     }
 }
