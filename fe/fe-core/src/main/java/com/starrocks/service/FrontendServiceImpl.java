@@ -80,6 +80,11 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.StarRocksPlannerException;
+>>>>>>> c461da8a98 ([BugFix] search globalUdfFunction only when GlobalStateMgr() is available (#29386))
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -1213,7 +1218,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             result.setParams(streamLoadPutImpl(request));
-        } catch (UserException e) {
+        } catch (UserException | StarRocksPlannerException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());

@@ -142,8 +142,18 @@ public class AnalyzerUtils {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
         Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
+<<<<<<< HEAD
         if (fn == null) {
             return null;
+=======
+        return fn;
+    }
+
+    public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
+        Function fn = getDBUdfFunction(context, fnName, argTypes);
+        if (fn == null && context.getGlobalStateMgr() != null) {
+            fn = getGlobalUdfFunction(context, fnName, argTypes);
+>>>>>>> c461da8a98 ([BugFix] search globalUdfFunction only when GlobalStateMgr() is available (#29386))
         }
 
         if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
