@@ -27,7 +27,7 @@ select pipe_name, file_name, file_size, load_state
     from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 
 alter pipe p1 resume;
-select sleep(5);
+function: wait_for_pipe_finish('db_${uuid0}', 'p1')
 
 select count(*) from t1;
 select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
