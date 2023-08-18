@@ -22,7 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryQueueManager;
@@ -34,29 +33,22 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TFileType;
-import com.starrocks.thrift.TGetLoadTxnStatusRequest;
-import com.starrocks.thrift.TGetLoadTxnStatusResult;
->>>>>>> 3b86b83934... [Enhancement][Cherry-pick][Branch-3.1] Support sync publish version for primary key table (#27055) (#29370)
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStreamLoadPutRequest;
+import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.thrift.TTransactionStatus;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -71,7 +63,6 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class FrontendServiceImplTest {
@@ -261,8 +252,8 @@ public class FrontendServiceImplTest {
     @AfterClass
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table site_access";
-        String dropSQL2 = "drop table site_access_2";
+        String dropSQL = "drop table if exists site_access";
+        String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
@@ -701,5 +692,35 @@ public class FrontendServiceImplTest {
         request.setDb("test_table");
         TGetTablesResult response = impl.getTableNames(request);
         Assert.assertEquals(1, response.tables.size());
+    }
+
+    @Test
+    public void testStreamLoadPutColumnMapException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_hour");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        // wrong format of str_to_date()
+        request.setColumns("col1,event_day=str_to_date(col1)");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assert.assertEquals(1, errMsg.size());
+        Assert.assertEquals(
+                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
+                        "No matching function with signature: str_to_date(varchar).",
+                errMsg.get(0));
     }
 }
