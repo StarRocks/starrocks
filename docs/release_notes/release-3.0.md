@@ -22,16 +22,16 @@ Fixed the following issues:
 - Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#27779](https://github.com/StarRocks/starrocks/pull/27779)
 - The query result is not stable if the sort key is modified for a partitioned table. [#27850](https://github.com/StarRocks/starrocks/pull/27850)
 - The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- The number of buckets is automatically inferred as 0 if the number of buckets is not specified at the creation of a Colocation table, which causes failure of adding new partitions. [#27086](https://github.com/StarRocks/starrocks/pull/27086)
-- When the SELECT result set of INSERT INTO SELECT is empty, the output of SHOW LOAD shows the load job status is `CANCELED`. [#26913](https://github.com/StarRocks/starrocks/pull/26913)
+- If the bucket number is not specified when users create a Colocation table, the number will be inferred as 0, which causes failures in adding new partitions. [#27086](https://github.com/StarRocks/starrocks/pull/27086)
+- When the SELECT result set of INSERT INTO SELECT is empty, the load job status returned by SHOW LOAD is `CANCELED`. [#26913](https://github.com/StarRocks/starrocks/pull/26913)
 - BEs may crash when the input values of the sub_bitmap function are not of the BITMAP type. [#27982](https://github.com/StarRocks/starrocks/pull/27982)
 - BEs may crash when the AUTO_INCREMENT column is being updated. [#27199](https://github.com/StarRocks/starrocks/pull/27199)
 - Outer join and Anti join rewrite errors for materialized views. [#28028](https://github.com/StarRocks/starrocks/pull/28028)
 - Inaccurate estimation of average row size causes Primary Key partial updates to occupy excessively large memory. [#27485](https://github.com/StarRocks/starrocks/pull/27485)
 - Activating an inactive materialized view may cause a FE to crash. [#27959](https://github.com/StarRocks/starrocks/pull/27959)
-- Queries can not be rewritten to materialized views created based on external tables in the Hudi catalog. [#28023](https://github.com/StarRocks/starrocks/pull/28023)
-- You can still query the data of the Hive table even if you drop the Hive table and manually update the metadata cache. [#28223](https://github.com/StarRocks/starrocks/pull/28223)
-- Manually refreshing an asynchronous materialized view via a synchronous call results in multiple INSERT OVERWRITE records in the `information_schema.task_run` table. [#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- Queries can not be rewritten to materialized views created based on external tables in a Hudi catalog. [#28023](https://github.com/StarRocks/starrocks/pull/28023)
+- The data of a Hive table can still be queried even after the table is dropped and the metadata cache is manually updated. [#28223](https://github.com/StarRocks/starrocks/pull/28223)
+- Manually refreshing an asynchronous materialized view via a synchronous call results in multiple INSERT OVERWRITE records in the `information_schema.task_runs` table. [#28060](https://github.com/StarRocks/starrocks/pull/28060)
 - FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311)
 
 ## 3.0.4
@@ -44,7 +44,7 @@ Queries can be rewritten even when the queries contain a different type of join 
 
 ### Improvements
 
-- Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25904](https://github.com/StarRocks/starrocks/pull/25904)
+- Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 - If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten to benefit from the materialized view. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
 - [When the SQL dialect (`sql_dialect`) is set to `trino`](../reference/System_variable.md), table aliases are not case-sensitive. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - Added a new field `table_id` to the table `Information_schema.tables_config`. You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
