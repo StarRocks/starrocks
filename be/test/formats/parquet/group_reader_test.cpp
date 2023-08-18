@@ -39,7 +39,7 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) override {
+    Status prepare_batch(size_t* num_records, Column* column) override {
         if (_step > 1) {
             *num_records = 0;
             return Status::EndOfFile("");
@@ -75,10 +75,9 @@ public:
 
     Status finish_batch() override { return Status::OK(); }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
-                      Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         size_t rows = static_cast<size_t>(range.span_size());
-        return prepare_batch(&rows, content_type, dst);
+        return prepare_batch(&rows, dst);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override{};
@@ -384,7 +383,6 @@ TEST_F(GroupReaderTest, TestInit) {
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices.clear();
-    group_reader->_dict_filter_ctx.init(param->read_cols.size());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
