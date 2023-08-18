@@ -2553,7 +2553,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(jdbcTable, false)) {
@@ -2577,7 +2577,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
             if (!db.createTableWithLock(table, false)) {
