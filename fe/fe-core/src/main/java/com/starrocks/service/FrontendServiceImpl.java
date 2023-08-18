@@ -121,6 +121,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -1427,7 +1428,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             result.setParams(streamLoadPutImpl(request));
-        } catch (UserException e) {
+        } catch (UserException | StarRocksPlannerException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
