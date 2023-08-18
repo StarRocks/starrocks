@@ -393,8 +393,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
     for (auto* task : all_tasks) {                                                                                 \
         auto pool = get_thread_pool(t_task_type);                                                                  \
         auto signature = task->signature;                                                                          \
-        if (register_task_info(task_type, signature)) {                                                            \
-            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature;               \
+        std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);                          \
+        if (register_pair.first) {                                                                                 \
+            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature                \
+                      << ", task_count_in_queue=" << register_pair.second;                                         \
             ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
         } else {                                                                                                   \
