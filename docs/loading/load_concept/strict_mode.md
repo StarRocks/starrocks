@@ -6,20 +6,26 @@ This topic introduces what strict mode is and how to set strict mode.
 
 ## Understand strict mode
 
-If the original data type of a source column, or the new data type of a source column upon function computation, differs from the data type of the matching destination column, StarRocks converts the source column values to the destination data type during loading. Source column values that fail to be converted are processed into `NULL` values, which are called "error data." Rows that contain such error data are called "error rows."
+During data loading, the data types of the source columns may not be completely consistent with the data types of the destination columns. In such cases, StarRocks performs conversions on the source column values that have inconsistent data types. Data conversions may fail due to various issues such as unmatched field data types and field length overflows. Source column values that fail to be properly converted are unqualified column values, and source rows that contain unqualified column values are referred to as "unqualified rows". Strict mode is used to control whether to filter out unqualified rows during data loading.
 
 Strict mode works as follows:
 
-- If strict mode is enabled, StarRocks loads only qualified rows. It filters out error rows and returns details about the error rows.
-- If strict mode is disabled, StarRocks loads qualified rows together with error rows.
+- If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows.
+- If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain these `NULL` values together with qualified rows.
+
+Note the following points:
+
+- In actual business scenarios, both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
+
+- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
 - The source column value `\N` is processed into `NULL` upon conversion to TINYINT.
 
-  - > **NOTE**
-    >
-    > `\N` is always processed into `NULL` upon conversion regardless of the destination data type.
+  > **NOTE**
+  >
+  > `\N` is always processed into `NULL` upon conversion regardless of the destination data type.
 
 - The source column value `abc` is processed into `NULL`, because its data type is not TINYINT and the conversion fails.
 
