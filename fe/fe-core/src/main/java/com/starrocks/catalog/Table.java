@@ -283,7 +283,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public boolean isView() {
-        return type == TableType.VIEW || type == TableType.HIVE_VIEW;
+        return type == TableType.VIEW;
+    }
+
+    public boolean isHiveView() {
+        return type == TableType.HIVE_VIEW;
     }
 
     public boolean isOlapTableOrMaterializedView() {
