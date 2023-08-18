@@ -212,7 +212,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbitGlobalDict = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
         return newTableProperty;
     }
 
