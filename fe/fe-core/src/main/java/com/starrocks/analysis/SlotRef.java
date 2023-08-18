@@ -244,7 +244,6 @@ public class SlotRef extends Expr {
 
     public void setDesc(SlotDescriptor desc) {
         this.desc = desc;
-        analysisDone();
     }
 
     public void setType(Type type) {
