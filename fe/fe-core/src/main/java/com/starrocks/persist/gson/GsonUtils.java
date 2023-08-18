@@ -145,11 +145,19 @@ import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PolicyFCEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
+<<<<<<< HEAD
+=======
+import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.server.StorageVolumeMgr;
+>>>>>>> e58c3a9e59 (Support privilege entry object forward compatible (#29425))
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -299,12 +307,22 @@ public class GsonUtils {
                     .registerSubtype(FunctionPEntryObject.class, "FunctionPEntryObject")
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
+<<<<<<< HEAD
                     .registerSubtype(ForwardCompatiblePEntryObject.StorageVolumeForwardCompatiblePEntryObject.class,
                             "StorageVolumePEntryObject")
                     .registerSubtype(ForwardCompatiblePEntryObject.PolicyForwardCompatiblePEntryObject.class,
                             "PolicyPEntryObject")
                     .registerSubtype(ForwardCompatiblePEntryObject.WarehouseForwardCompatiblePEntryObject.class,
                             "WarehousePEntryObject");
+=======
+                    .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
+                    .registerSubtype(WarehouseFCPEntryObject.class, "WarehousePEntryObject")
+                    .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
+
+    private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
+                    .registerSubtype(LDAPSecurityIntegration.class, "LDAPSecurityIntegration");
+>>>>>>> e58c3a9e59 (Support privilege entry object forward compatible (#29425))
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
