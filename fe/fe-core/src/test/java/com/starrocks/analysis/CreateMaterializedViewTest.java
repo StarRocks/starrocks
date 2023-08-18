@@ -3168,6 +3168,8 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testRandomizeStart() throws Exception {
+        // NOTE: if the test case execute super slow, the delta would not be so stable
+        final long FIXED_DELTA = 5;
         String sql = "create materialized view mv_test_randomize \n" +
                 "distributed by hash(k1) buckets 10\n" +
                 "refresh async every(interval 1 minute) " +
@@ -3186,8 +3188,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         MaterializedView mv = getMv(testDb.getFullName(), "mv_test_randomize");
         long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertTrue("difference is " + (startTime - currentSecond),
-                currentSecond <= startTime && startTime < currentSecond + 60);
+        long delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= 60);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual disable it
@@ -3210,7 +3212,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertEquals(startTime, currentSecond);
+        delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < FIXED_DELTA);
         starRocksAssert.dropMaterializedView("mv_test_randomize");
 
         // manual specify it
@@ -3233,8 +3236,8 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView(sql);
         mv = getMv(testDb.getFullName(), "mv_test_randomize");
         startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
-        Assert.assertTrue("difference is " + (startTime - currentSecond),
-                currentSecond <= startTime && startTime < currentSecond + 2);
+        delta = startTime - currentSecond;
+        Assert.assertTrue("delta is " + delta, delta >= 0 && delta < (2 + FIXED_DELTA));
         starRocksAssert.dropMaterializedView("mv_test_randomize");
     }
 
