@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -75,9 +76,18 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             // only need check operator with projection
             if (MapUtils.isNotEmpty(rowOutputInfo.getColOutputInfo())) {
                 ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
-                final ColumnRefSet usedCols = new ColumnRefSet();
-                rowOutputInfo.getColOutputInfo().values().stream().forEach(e -> usedCols.union(e.getUsedColumns()));
-                checkInputCols(inputCols, usedCols, optExpression);
+                ColumnRefSet usedCols = new ColumnRefSet();
+                for (ColumnOutputInfo col : rowOutputInfo.getColumnOutputInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.union(col.getUsedColumns());
+                }
+
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                    usedCols.except(col.getColumnRef().getUsedColumns());
+                }
+                checkInputCols(inputCols, rowOutputInfo.getUsedColumnRefSet(), optExpression);
             }
         }
 
