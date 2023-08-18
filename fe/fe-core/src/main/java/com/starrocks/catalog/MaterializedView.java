@@ -697,12 +697,36 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
+<<<<<<< HEAD
     public void onCreate() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
             active = false;
             return;
+=======
+    public void onReload() {
+        try {
+            boolean desiredActive = active;
+            active = false;
+            boolean reloadActive = onReloadImpl();
+            setActive(desiredActive && reloadActive);
+        } catch (Throwable e) {
+            LOG.error("reload mv failed: {}", this, e);
+            setInactiveAndReason("reload failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * @return active or not
+     */
+    private boolean onReloadImpl() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
+            setInactiveAndReason("db not exists: " + dbId);
+            return false;
+>>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
         }
         if (baseTableInfos == null) {
             baseTableInfos = Lists.newArrayList();
@@ -713,10 +737,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             } else {
                 active = false;
-                return;
+                return false;
             }
         }
 
+        boolean res = true;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
@@ -724,7 +749,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
+<<<<<<< HEAD
                     active = false;
+=======
+                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
+                    res = false;
+>>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
@@ -741,6 +771,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         analyzePartitionInfo();
+        return res;
     }
 
     private void analyzePartitionInfo() {
