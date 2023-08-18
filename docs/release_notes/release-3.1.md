@@ -1,5 +1,29 @@
 # StarRocks version 3.1
 
+## 3.1.1
+
+Release date: August 18, 2023
+
+## New Features
+
+- Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+- Supports Azure Blob Storage for [shared-data clusters](../deployment/deploy_shared_data.md).
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+## Improvements
+
+Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `ENABLE_STRICT_TYPE`. The default value of this session variable is `false`.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When data is loaded into tables that have multiple replicas, a large number of invalid log records are written if some partitions of the tables are empty.  [#28824](https://github.com/StarRocks/starrocks/issues/28824)
+- Inaccurate estimation of average row size causes partial updates in column mode on Primary Key tables to occupy excessively large memory.  [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- If clone operations are triggered on tablets in an ERROR state, disk usage increases. [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- Compaction causes cold data to be written to the local cache. [#28831](https://github.com/StarRocks/starrocks/pull/28831)
+
 ## 3.1.0
 
 Release date: August 7, 2023
