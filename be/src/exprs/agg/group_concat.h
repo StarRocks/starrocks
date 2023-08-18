@@ -621,6 +621,7 @@ public:
             order_by_columns.clear();
             state_impl.release_order_by_columns();
             if (UNLIKELY(ctx->state()->cancelled_ref())) {
+                ctx->set_error("group_concat detects cancelled.", false);
                 return;
             }
             if (UNLIKELY(!st.ok())) {

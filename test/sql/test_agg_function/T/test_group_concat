@@ -251,7 +251,7 @@ select group_concat("中国",name order by 2 separator NULL) from ss;
 select group_concat("中国",name order by 2, "第一") from ss;
 select group_concat("中国",name order by 2, "第一" separator '\n') from ss;
 select group_concat("中国",name order by 2, "第一" separator subject) from ss;
-select group_concat("中国" order by "第一" separator score) from ss;
+select group_concat("中国" order by "第一" separator 1) from ss;
 select group_concat(  order by score) from ss order by 1;
 select group_concat(distinct  order by score) from ss order by 1;
 select group_concat([1,2]) from ss;
