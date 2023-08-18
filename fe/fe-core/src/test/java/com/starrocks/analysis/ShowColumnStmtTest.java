@@ -63,4 +63,21 @@ public class ShowColumnStmtTest {
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
+    @Test
+    public void testOnlyMetricTypeDefaultValue() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Config.default_replication_num = 1;
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("create table test_only_metric_default (a int,b hll hll_union," +
+                        "c bitmap bitmap_union,d percentile percentile_union) distributed by hash(a);");
+        String sql = "show full columns from test_only_metric_default;";
+        ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(0).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(1).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(2).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(3).get(5));
+    }
+
 }
