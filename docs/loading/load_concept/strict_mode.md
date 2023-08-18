@@ -10,7 +10,7 @@ During data loading, the data types of the source columns may not be completely 
 
 Strict mode works as follows:
 
-- If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns an `error_url` field with which you can view details about the unqualified rows.
+- If strict mode is enabled, StarRocks loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows.
 - If strict mode is disabled, StarRocks converts unqualified column values into `NULL` and loads unqualified rows that contain these `NULL` values together with qualified rows.
 
 Note the following points:
