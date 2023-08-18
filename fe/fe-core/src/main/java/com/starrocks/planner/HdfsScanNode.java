@@ -22,12 +22,9 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
-import com.starrocks.connector.Connector;
-import com.starrocks.connector.ConnectorService;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -95,7 +92,7 @@ public class HdfsScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

@@ -21,7 +21,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.ConnectorService;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -84,7 +84,7 @@ public class PaimonScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

@@ -25,12 +25,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
-    private final ConcurrentHashMap<String, ConnectorService> connectors = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public ConnectorService createConnector(ConnectorContext context) {
+    public CatalogConnector createConnector(ConnectorContext context) {
         String catalogName = context.getCatalogName();
-        ConnectorService connector = null;
+        CatalogConnector connector = null;
         readLock();
         try {
             connector = ConnectorFactory.createConnector(context);
@@ -62,8 +62,8 @@ public class ConnectorMgr {
 
         writeLock();
         try {
-            ConnectorService connectorService = connectors.remove(catalogName);
-            connectorService.shutdown();
+            CatalogConnector catalogConnector = connectors.remove(catalogName);
+            catalogConnector.shutdown();
         } finally {
             writeUnLock();
         }
@@ -78,7 +78,7 @@ public class ConnectorMgr {
         }
     }
 
-    public ConnectorService getConnector(String catalogName) {
+    public CatalogConnector getConnector(String catalogName) {
         readLock();
         try {
             return connectors.get(catalogName);
@@ -87,7 +87,7 @@ public class ConnectorMgr {
         }
     }
 
-    public List<ConnectorService> listConnectors() {
+    public List<CatalogConnector> listConnectors() {
         return new ArrayList<>(connectors.values());
     }
 

@@ -30,7 +30,7 @@ public class ConnectorFactory {
      * @param context - encapsulate all information needed to create a connector
      * @return a connector instance
      */
-    public static ConnectorService createConnector(ConnectorContext context) {
+    public static CatalogConnector createConnector(ConnectorContext context) {
         if (null == context || !ConnectorType.isSupport(context.getType())) {
             return null;
         }
@@ -51,7 +51,7 @@ public class ConnectorFactory {
 
             InformationSchemaMetadata informationSchemaMetadata =
                     new InformationSchemaMetadata(context.getCatalogName());
-            return new ConnectorService(connector, informationSchemaMetadata);
+            return new CatalogConnector(connector, informationSchemaMetadata);
         } catch (Exception e) {
             LOG.error("can't create connector for type: " + context.getType(), e);
             return null;

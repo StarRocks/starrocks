@@ -26,8 +26,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
-import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -145,7 +145,7 @@ public class HiveMetastoreApiConverter {
         // using hadoop properties from catalog definition
         Configuration configuration = new Configuration();
         if (catalogName != null) {
-            ConnectorService connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();

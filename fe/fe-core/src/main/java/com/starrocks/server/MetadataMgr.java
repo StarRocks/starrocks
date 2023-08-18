@@ -30,9 +30,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorService;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -49,16 +49,40 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
+    private class QueryMetadatas {
+        private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
+
+        public QueryMetadatas() {}
+
+        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
+            if (metadatas.containsKey(catalogName)) {
+                return metadatas.get(catalogName);
+            }
+
+            CatalogConnector connector = connectorMgr.getConnector(catalogName);
+            if (connector == null) {
+                LOG.error("Connector [{}] doesn't exist", catalogName);
+                return null;
+            }
+            ConnectorMetadata connectorMetadata = connector.getMetadata();
+            metadatas.put(catalogName, connectorMetadata);
+            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
+            return connectorMetadata;
+        }
+    }
 
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+    private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
 
     public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
@@ -87,28 +111,29 @@ public class MetadataMgr {
             return Optional.of(localMetastore);
         }
 
-        ConnectorService connector = connectorMgr.getConnector(catalogName);
+        CatalogConnector connector = connectorMgr.getConnector(catalogName);
         if (connector == null) {
             LOG.error("Failed to get {} catalog", catalogName);
             return Optional.empty();
         }
 
-        ConnectorMetadata connectorMetadata = null;
         Optional<String> queryId = getOptionalQueryID();
         if (queryId.isPresent()) { // use query-level cache if from query
-            connectorMetadata = connector.getCachedMetadata(queryId.get());
-        } else {
-            connectorMetadata = connector.getMetadata();
+            QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId.get(), ignored -> new QueryMetadatas());
+            return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
         }
 
-        return Optional.of(connectorMetadata);
+        return Optional.ofNullable(connector.getMetadata());
     }
 
     public void removeQueryMetadata() {
         Optional<String> queryId = getOptionalQueryID();
         if (queryId.isPresent()) {
-            for (ConnectorService connectorService : connectorMgr.listConnectors()) {
-                connectorService.removeMetadata(queryId.get());
+            QueryMetadatas queryMetadatas = metadataByQueryId.get(queryId.get());
+            if (queryMetadatas != null) {
+                queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
+                metadataByQueryId.remove(queryId.get());
+                LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
     }
