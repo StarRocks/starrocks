@@ -349,8 +349,8 @@ protected:
 
                     EditVersionMetaPB edit;
                     auto v = edit.mutable_version();
-                    v->set_major(i + 1);
-                    v->set_minor(0);
+                    v->set_major_number(i + 1);
+                    v->set_minor_number(0);
                     edit.set_creation_time(time(nullptr));
                     edit.add_rowsets_add(rowset_meta_pb.rowset_seg_id());
                     edit.add_deltas(rowset_meta_pb.rowset_seg_id());
