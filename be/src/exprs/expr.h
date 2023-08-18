@@ -139,6 +139,8 @@ public:
     // Returns the number of slots added to the vector
     virtual int get_slot_ids(std::vector<SlotId>* slot_ids) const;
 
+    virtual int get_subfields(std::vector<std::vector<std::string>>* subfields) const;
+
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.

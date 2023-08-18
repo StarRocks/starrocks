@@ -49,6 +49,7 @@ struct TSlotDescriptor {
   8: required string colName;
   9: required i32 slotIdx
   10: required bool isMaterialized
+  11: optional bool isOutputColumn
 }
 
 struct TTupleDescriptor {

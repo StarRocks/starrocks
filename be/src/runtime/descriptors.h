@@ -96,6 +96,7 @@ public:
     TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
+    bool is_output_column() const { return _is_output_column; }
     bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
 
     int slot_size() const { return _slot_size; }
@@ -127,6 +128,7 @@ private:
     const int _slot_size;
 
     const bool _is_materialized;
+    const bool _is_output_column;
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);
