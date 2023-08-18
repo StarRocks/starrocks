@@ -225,6 +225,14 @@ public class ExecutionFragment {
         }
     }
 
+    public PlanNode getLeftMostNode() {
+        PlanNode node = planFragment.getPlanRoot();
+        while (!node.getChildren().isEmpty() && !(node instanceof ExchangeNode)) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
+
     public Map<Integer, Integer> getNumSendersPerExchange() {
         return numSendersPerExchange;
     }
