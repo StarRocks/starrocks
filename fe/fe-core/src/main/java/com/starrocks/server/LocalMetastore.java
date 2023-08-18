@@ -226,6 +226,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
@@ -325,8 +326,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
+            Stream.concat(db.getMaterializedViews().stream(), db.getHiveTables().stream()).forEach(tbl -> {
+                try {
+                    tbl.onCreate();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -4952,4 +4958,5 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return newPartitions;
     }
+
 }

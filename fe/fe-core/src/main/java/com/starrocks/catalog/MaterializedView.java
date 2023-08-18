@@ -541,11 +541,26 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public void onCreate() {
+        try {
+            boolean desiredActive = active;
+            active = false;
+            boolean reloadActive = onReloadImpl();
+            setActive(desiredActive && reloadActive);
+        } catch (Throwable e) {
+            LOG.error("reload mv failed: {}", this, e);
+            setActive(false);
+        }
+    }
+
+    /**
+     * @return active or not
+     */
+    private boolean onReloadImpl() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            active = false;
-            return;
+            setActive(false);
+            return false;
         }
         if (baseTableInfos == null) {
             baseTableInfos = Lists.newArrayList();
@@ -556,10 +571,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 }
             } else {
                 active = false;
-                return;
+                return false;
             }
         }
 
+        boolean res = true;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
@@ -568,6 +584,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     active = false;
+                    res = false;
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
@@ -584,6 +601,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         analyzePartitionInfo();
+        return res;
     }
 
     private void analyzePartitionInfo() {
