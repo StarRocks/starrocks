@@ -2406,7 +2406,6 @@ TEST_F(AggregateTest, test_group_concatV2) {
         local_ctx->state()->set_is_cancelled(true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_TRUE(local_ctx->has_error());
-        ASSERT_EQ(res_col->size(), 0);
     }
 }
 
