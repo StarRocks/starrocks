@@ -59,6 +59,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -111,6 +112,7 @@ public class Pipe implements GsonPostProcessable {
         this.pipeSource = sourceTable;
         this.originSql = originSql;
         this.createdTime = System.currentTimeMillis();
+        this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
@@ -120,16 +122,16 @@ public class Pipe implements GsonPostProcessable {
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
         stmt.getDataSource().initPipeId(pipeId);
-        res.properties = stmt.getProperties();
         res.recovered = true;
-        res.processProperties();
+        res.processProperties(stmt.getProperties());
         return res;
     }
 
-    private void processProperties() {
+    public void processProperties(Map<String, String> properties) {
         if (MapUtils.isEmpty(properties)) {
             return;
         }
+        this.properties.putAll(properties);
         if (properties.containsKey(PipeAnalyzer.PROPERTY_POLL_INTERVAL)) {
             this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_POLL_INTERVAL));
         }
@@ -618,7 +620,7 @@ public class Pipe implements GsonPostProcessable {
         this.lock = new ReentrantReadWriteLock();
         this.lastErrorInfo = new ErrorInfo();
         pipeSource.initPipeId(id);
-        processProperties();
+        processProperties(this.properties);
     }
 
     public String toJson() {

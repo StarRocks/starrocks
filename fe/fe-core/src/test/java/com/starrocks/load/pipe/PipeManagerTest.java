@@ -472,6 +472,13 @@ public class PipeManagerTest {
         pm.alterPipe(resumeStmt);
         Assert.assertEquals(Pipe.State.RUNNING, pipe.getState());
 
+        // alter property
+        sql = "alter pipe p_crud set ('auto_ingest'='false', 'BATCH_SIZE'='10GB') ";
+        AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        pm.alterPipe(alterStmt);
+        pipe = getPipe("p_crud");
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+
         // drop
         sql = "drop pipe p_crud";
         DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

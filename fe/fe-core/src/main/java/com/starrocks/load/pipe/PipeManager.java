@@ -25,6 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
@@ -153,6 +154,10 @@ public class PipeManager {
             } else if (alterClause instanceof AlterPipeClauseRetry) {
                 AlterPipeClauseRetry retry = (AlterPipeClauseRetry) alterClause;
                 pipe.retry(retry);
+            } else if (alterClause instanceof AlterPipeSetProperty) {
+                AlterPipeSetProperty setProperty = (AlterPipeSetProperty) alterClause;
+                pipe.processProperties(setProperty.getProperties());
+                LOG.info("alter pipe {} properties {}", pipe, setProperty.getProperties());
             }
 
             // persistence

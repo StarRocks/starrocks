@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -188,6 +189,10 @@ public class PipeAnalyzer {
 
     public static void analyze(AlterPipeStmt stmt, ConnectContext context) {
         analyzePipeName(stmt.getPipeName(), context);
+        if (stmt.getAlterPipeClause() instanceof AlterPipeSetProperty) {
+            AlterPipeSetProperty setProperty = (AlterPipeSetProperty) stmt.getAlterPipeClause();
+            analyzeProperties(setProperty.getProperties());
+        }
     }
 
     public static void analyze(DescPipeStmt stmt, ConnectContext context) {
