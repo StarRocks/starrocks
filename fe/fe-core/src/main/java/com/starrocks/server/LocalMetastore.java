@@ -350,8 +350,18 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+<<<<<<< HEAD
             db.getTables().forEach(Table::onCreate);
             db.getHiveTables().forEach(Table::onCreate);
+=======
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
+>>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2771,9 +2781,24 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     public void replayCreateTable(String dbName, Table table) {
         Database db = this.fullNameToDb.get(dbName);
         db.createTableWithLock(table, true);
+=======
+    public void replayCreateTable(CreateTableInfo info) {
+        Table table = info.getTable();
+        Database db = this.fullNameToDb.get(info.getDbName());
+        db.writeLock();
+        try {
+            db.registerTableUnlocked(table);
+            table.onReload();
+        } catch (Throwable e) {
+            LOG.error("replay create table failed: {}", table, e);
+        } finally {
+            db.writeUnlock();
+        }
+>>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -5456,8 +5481,18 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+<<<<<<< HEAD
             db.getMaterializedViews().forEach(Table::onCreate);
             db.getHiveTables().forEach(Table::onCreate);
+=======
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
+>>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
         }
 
         // put built-in database into local metastore
