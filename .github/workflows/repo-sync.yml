@@ -60,8 +60,6 @@ jobs:
     name: Repo Sync
     runs-on: [self-hosted, sync]
     needs: pr-info
-    env:
-      PR_BODY: ${{ needs.pr-info.outputs.body }}
     steps:
       - name: clean
         run: |
@@ -75,6 +73,15 @@ jobs:
         run: |
           curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
+
+      - name: Prepare PR Info
+        id: prepare_pr_info
+        run: |
+          set -x
+          echo ${{ needs.pr-info.outputs.body }} > tmp_info.txt
+          sed -i 's#\\r\\n#\r\n#g' tmp_info.txt
+          echo PR_BODY=`cat tmp_info.txt` >> $GITHUB_ENV
+          rm -rf ${{ github.workspace }}/*
 
       - uses: actions/checkout@v3
         with:
