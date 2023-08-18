@@ -212,6 +212,11 @@ public:
 
     // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto defer = DeferOp([&]() {
+            if (ctx->has_error() && to != nullptr) {
+                to->append_default();
+            }
+        });
         if (UNLIKELY(!ColumnHelper::get_data_column(to)->is_array())) {
             ctx->set_error(std::string("The output column of " + get_name() +
                                        " finalize_to_column() is not array, but is " + to->get_name())

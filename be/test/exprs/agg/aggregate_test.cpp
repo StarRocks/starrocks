@@ -2119,7 +2119,6 @@ TEST_F(AggregateTest, test_array_agg) {
         local_ctx->state()->set_is_cancelled(true);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_TRUE(local_ctx->has_error());
-        ASSERT_EQ(res_array_col->size(), 0);
     }
 }
 
