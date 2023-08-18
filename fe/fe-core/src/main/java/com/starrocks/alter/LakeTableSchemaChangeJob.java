@@ -131,8 +131,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap;
 
-    @SerializedName(value = "warehouse")
-    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @SerializedName(value = "warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
@@ -159,8 +159,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         this.startTime = startTime;
     }
 
-    void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
@@ -345,13 +345,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
 
-                        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                         if (currentWh == null) {
-                            throw new AlterCancelException("warehouse " + warehouse + " not exist.");
+                            throw new AlterCancelException("warehouse " + warehouseId + " not exist.");
                         }
                         Long nodeId = Utils.chooseBackend(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
                         if (nodeId == null) {
-                            throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouse);
+                            throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouseId);
                         }
 
                         countDownLatch.addMark(nodeId, shadowTabletId);
@@ -418,9 +418,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
-                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                 if (currentWh == null) {
-                    throw new AlterCancelException("warehouse " + warehouse + " not exist.");
+                    throw new AlterCancelException("warehouse " + warehouseId + " not exist.");
                 }
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
@@ -596,9 +596,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
-                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                 if (currentWh == null) {
-                    throw new Exception("warehouse " + warehouse + " not exist");
+                    throw new Exception("warehouse " + warehouseId + " not exist");
                 }
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,

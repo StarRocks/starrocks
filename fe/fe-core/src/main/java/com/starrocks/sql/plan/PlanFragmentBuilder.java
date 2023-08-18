@@ -256,7 +256,7 @@ public class PlanFragmentBuilder {
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false,
-                connectContext.getCurrentWarehouse());
+                connectContext.getCurrentWarehouseId());
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;
@@ -697,7 +697,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
-                    context.getConnectContext().getCurrentWarehouse());
+                    context.getConnectContext().getCurrentWarehouseId());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());

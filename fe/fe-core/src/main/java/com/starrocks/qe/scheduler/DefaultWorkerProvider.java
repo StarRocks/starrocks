@@ -84,10 +84,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
-                                                             String warehouseName) {
+                                                             long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseName);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
             ImmutableMap<Long, ComputeNode> idToBackend;
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 idToBackend = idToComputeNode;
@@ -258,7 +258,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            String currentWh = ConnectContext.get().getCurrentWarehouse();
+            long currentWh = ConnectContext.get().getCurrentWarehouseId();
             return GlobalStateMgr.getCurrentWarehouseMgr().
                     getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
         }
@@ -272,9 +272,9 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes,
-                                                                        String warehouseName) {
+                                                                        long warehouseId) {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(warehouseName);
+            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(warehouseId);
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

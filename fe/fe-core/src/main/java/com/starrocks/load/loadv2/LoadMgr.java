@@ -234,7 +234,7 @@ public class LoadMgr implements Writable {
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
                                 long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
-                                String warehouse, boolean isStatisticsJob)
+                                long warehouseId, boolean isStatisticsJob)
             throws UserException {
 
         // get db id
@@ -246,7 +246,7 @@ public class LoadMgr implements Writable {
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(
-                    label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout, warehouse,
+                    label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout, warehouseId,
                     isStatisticsJob);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");

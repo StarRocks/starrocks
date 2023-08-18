@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -616,12 +617,30 @@ public class ConnectContext {
         this.currentCatalog = currentCatalog;
     }
 
-    public String getCurrentWarehouse() {
-        return this.sessionVariable.getWarehouse();
+    public long getCurrentWarehouseId() {
+        String warehouseName = this.sessionVariable.getWarehouseName();
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+        }
+        return warehouse.getId();
+    }
+
+    public String getCurrentWarehouseName() {
+        return this.sessionVariable.getWarehouseName();
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.sessionVariable.setWarehouse(currentWarehouse);
+        this.sessionVariable.setWarehouseName(currentWarehouse);
+    }
+
+    public void setCurrentWarehouseId(long warehouseId) {
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
+        if (warehouse == null) {
+            throw new SemanticException("Warehouse " + warehouseId + " not exist");
+        }
+
+        this.sessionVariable.setWarehouseName(warehouse.getName());
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -823,7 +842,7 @@ public class ConnectContext {
             }
             row.add(stmt);
             row.add(Boolean.toString(isPending));
-            row.add(sessionVariable.getWarehouse());
+            row.add(sessionVariable.getWarehouseName());
             return row;
         }
     }

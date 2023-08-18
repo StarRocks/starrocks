@@ -63,7 +63,7 @@ public abstract class Coordinator {
                                                          List<ScanNode> scanNodes, String timezone, long startTime,
                                                          Map<String, String> sessionVariables,
                                                          ConnectContext context, long execMemLimit,
-                                                         String warehouse);
+                                                         long warehouseId);
 
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,

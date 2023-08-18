@@ -149,8 +149,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
-    @SerializedName(value = "warehouse")
-    private String warehouse;
+    @SerializedName(value = "warehouseId")
+    private long warehouseId;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -186,8 +186,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, String warehouse) {
-        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs, warehouse);
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad, long warehouseId) {
+        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs, warehouseId);
         isSyncStreamLoad = true;
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
@@ -197,7 +197,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, int channelNum, int channelId, long createTimeMs, String warehouse) {
+                          long timeoutMs, int channelNum, int channelId, long createTimeMs, long warehouseId) {
         this.id = id;
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
@@ -220,7 +220,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         this.endTimeMs = -1;
         this.txnId = -1;
         this.errorMsg = null;
-        this.warehouse = warehouse;
+        this.warehouseId = warehouseId;
 
         init();
     }
@@ -241,8 +241,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public String getCurrentWarehouse() {
-        return warehouse;
+    public long getCurrentWarehouseId() {
+        return warehouseId;
     }
 
     @Override
@@ -767,7 +767,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.setWarehouse(streamLoadInfo.getWarehouse());
+        loadPlanner.setWarehouseId(streamLoadInfo.getWarehouseId());
 
         loadPlanner.plan();
 
@@ -902,9 +902,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void unprotectedBeginTxn(boolean replay) throws UserException {
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
         if (currentWh == null) {
-            throw new UserException("Warehouse " + warehouse + " not exist");
+            throw new UserException("Warehouse " + warehouseId + " not exist");
         }
         long workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
         this.txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(

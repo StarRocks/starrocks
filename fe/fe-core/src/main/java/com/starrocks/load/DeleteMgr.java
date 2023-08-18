@@ -265,11 +265,11 @@ public class DeleteMgr implements Writable {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
 
-        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         if (ConnectContext.get() != null) {
-            warehouseName = ConnectContext.get().getCurrentWarehouse();
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
         // begin txn here and generate txn id

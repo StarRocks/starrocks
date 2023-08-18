@@ -15,7 +15,7 @@
 package com.starrocks.load;
 
 public interface LoadJobWithWarehouse {
-    String getCurrentWarehouse();
+    long getCurrentWarehouseId();
 
     boolean isFinal();
 

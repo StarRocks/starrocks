@@ -155,7 +155,7 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // convert offset of OFFSET_END and OFFSET_BEGINNING to current offset number
-    public void convertOffset(String brokerList, String topic, Map<String, String> properties, String warehouse)
+    public void convertOffset(String brokerList, String topic, Map<String, String> properties, long warehouseId)
             throws UserException {
         List<Integer> beginningPartitions = Lists.newArrayList();
         List<Integer> endPartitions = Lists.newArrayList();
@@ -172,12 +172,12 @@ public class KafkaProgress extends RoutineLoadProgress {
 
         if (beginningPartitions.size() > 0) {
             Map<Integer, Long> partOffsets = KafkaUtil
-                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, warehouse);
+                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, warehouseId);
             partitionIdToOffset.putAll(partOffsets);
         }
         if (endPartitions.size() > 0) {
             Map<Integer, Long> partOffsets =
-                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, warehouse);
+                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, warehouseId);
             partitionIdToOffset.putAll(partOffsets);
         }
     }

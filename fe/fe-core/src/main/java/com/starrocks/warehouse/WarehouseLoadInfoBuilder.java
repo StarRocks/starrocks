@@ -16,6 +16,7 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Maps;
 import com.starrocks.load.LoadJobWithWarehouse;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Collection;
 import java.util.Map;
@@ -30,8 +31,10 @@ public class WarehouseLoadInfoBuilder {
                 continue;
             }
 
+            long warehouseId = job.getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
             WarehouseLoadStatusInfo info =
-                    warehouseToInfo.computeIfAbsent(job.getCurrentWarehouse(), k -> new WarehouseLoadStatusInfo());
+                    warehouseToInfo.computeIfAbsent(warehouse.getName(), k -> new WarehouseLoadStatusInfo());
             if (job.isFinal()) {
                 info.updateLastFinishedJobTimeMs(job.getFinishTimestampMs());
             } else {
@@ -56,7 +59,11 @@ public class WarehouseLoadInfoBuilder {
         if (!job.isFinal() || job.isInternalJob()) {
             return;
         }
-        warehouseToRemovedJobLastFinishedTimeMs.compute(job.getCurrentWarehouse(), (k, lastFinishedTimeMs) -> {
+
+        long warehouseId = job.getCurrentWarehouseId();
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+
+        warehouseToRemovedJobLastFinishedTimeMs.compute(warehouse.getName(), (k, lastFinishedTimeMs) -> {
             if (lastFinishedTimeMs == null) {
                 return job.getFinishTimestampMs();
             } else {

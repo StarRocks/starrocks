@@ -268,7 +268,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
             // context.parseHttpHeader(request.getRequest().headers());
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                    dbName, tableName, label, timeoutMillis, channelNum, channelId, resp, warehouseName);
+                    dbName, tableName, label, timeoutMillis, channelNum, channelId, resp, warehouse.getId());
             sendResult(request, response, resp);
             return;
         }

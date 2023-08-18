@@ -40,6 +40,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -58,7 +59,7 @@ public abstract class ScanNode extends PlanNode {
     protected List<ColumnAccessPath> columnAccessPaths;
     protected boolean canUseAnyColumn;
     protected boolean canUseMinMaxCountOpt;
-    protected String warehouse;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -73,8 +74,8 @@ public abstract class ScanNode extends PlanNode {
         this.columnAccessPaths = columnAccessPaths;
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     public void setCanUseAnyColumn(boolean canUseAnyColumn) {

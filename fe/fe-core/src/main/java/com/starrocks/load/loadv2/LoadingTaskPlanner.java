@@ -124,7 +124,7 @@ public class LoadingTaskPlanner {
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
-    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
@@ -152,12 +152,12 @@ public class LoadingTaskPlanner {
         this.context = context;
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     private boolean checkNullExprInAutoIncrement() {
@@ -243,7 +243,7 @@ public class LoadingTaskPlanner {
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
         scanNode.setUseVectorizedLoad(true);
-        scanNode.setWarehouse(warehouse);
+        scanNode.setWarehouseId(warehouseId);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
         scanNodes.add(scanNode);
@@ -260,7 +260,7 @@ public class LoadingTaskPlanner {
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
-                checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouse);
+                checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
@@ -305,7 +305,7 @@ public class LoadingTaskPlanner {
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
         scanNode.setUseVectorizedLoad(true);
-        scanNode.setWarehouse(warehouse);
+        scanNode.setWarehouseId(warehouseId);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
         scanNodes.add(scanNode);
@@ -343,7 +343,7 @@ public class LoadingTaskPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), table.enableReplicatedStorage(),
-                checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouse);
+                checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);

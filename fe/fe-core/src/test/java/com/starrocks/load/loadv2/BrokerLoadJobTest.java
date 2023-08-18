@@ -56,6 +56,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
@@ -64,6 +65,7 @@ import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -373,10 +375,15 @@ public class BrokerLoadJobTest {
                                           @Mocked LeaderTaskExecutor leaderTaskExecutor,
                                           @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
                                           @Injectable OlapTable olapTable,
-                                          @Mocked LoadingTaskPlanner loadingTaskPlanner) {
+                                          @Mocked LoadingTaskPlanner loadingTaskPlanner,
+                                          @Mocked WarehouseManager warehouseMgr) {
+
+        ConnectContext context = new ConnectContext();
+        context.setGlobalStateMgr(globalStateMgr);
+
         Config.enable_pipeline_load = false;
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
-        brokerLoadJob.setConnectContext(new ConnectContext());
+        brokerLoadJob.setConnectContext(context);
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         long taskId = 1L;
         long tableId1 = 1L;
@@ -422,6 +429,20 @@ public class BrokerLoadJobTest {
                 priorityLeaderTaskExecutor.submit((PriorityLeaderTask) any);
                 minTimes = 0;
                 result = true;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentWarehouseMgr();
+                minTimes = 0;
+                result = warehouseMgr;
+
+                warehouseMgr.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 

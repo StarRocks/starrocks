@@ -795,13 +795,13 @@ public final class MetricRepo {
             return;
         }
 
-        Map<String, List<RoutineLoadJob>> kafkaJobsMp = allKafkaJobs.stream().collect(
-                Collectors.groupingBy(RoutineLoadJob::getWarehouse)
+        Map<Long, List<RoutineLoadJob>> kafkaJobsMp = allKafkaJobs.stream().collect(
+                Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
         // get all partitions offset in a batch api
-        for (Map.Entry<String, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
-            String warehouse = entry.getKey();
+        for (Map.Entry<Long, List<RoutineLoadJob>> entry : kafkaJobsMp.entrySet()) {
+            long warehouseId = entry.getKey();
             List<RoutineLoadJob> kafkaJobs = entry.getValue();
 
             List<PKafkaOffsetProxyRequest> requests = new ArrayList<>();
@@ -816,7 +816,7 @@ public final class MetricRepo {
                 }
                 PKafkaOffsetProxyRequest offsetProxyRequest = new PKafkaOffsetProxyRequest();
                 offsetProxyRequest.kafkaInfo = KafkaUtil.genPKafkaLoadInfo(kJob.getBrokerList(), kJob.getTopic(),
-                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), warehouse);
+                        ImmutableMap.copyOf(kJob.getConvertedCustomProperties()), warehouseId);
                 offsetProxyRequest.partitionIds = new ArrayList<>(
                         ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset().keySet());
                 requests.add(offsetProxyRequest);

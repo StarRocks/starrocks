@@ -482,7 +482,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
-    public static final String WAREHOUSE = "warehouse";
+    public static final String WAREHOUSE_NAME = "warehouse";
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -1227,8 +1227,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
-    @VariableMgr.VarAttr(name = WAREHOUSE)
-    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @VariableMgr.VarAttr(name = WAREHOUSE_NAME)
+    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     private int exprChildrenLimit = -1;
 
@@ -1475,12 +1475,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return maxParallelScanInstanceNum;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseName(String warehouseName) {
+        this.warehouseName = warehouseName;
     }
     
     public String getHdfsBackendSelectorHashAlgorithm() {

@@ -658,8 +658,8 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.fromTUniqueid(request.getQueryId()));
         }
 
-        if (request.isSetWarehouse()) {
-            ctx.setCurrentWarehouse(request.warehouse);
+        if (request.isSetWarehouse_id()) {
+            ctx.setCurrentWarehouseId(request.getWarehouse_id());
         }
 
         ctx.setThreadLocalInfo();

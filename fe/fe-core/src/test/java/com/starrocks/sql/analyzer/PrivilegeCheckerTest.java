@@ -1811,7 +1811,7 @@ public class PrivilegeCheckerTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       String warehouse) {
+                                                       long warehouseId) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };

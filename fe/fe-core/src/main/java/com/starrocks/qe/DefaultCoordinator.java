@@ -241,10 +241,10 @@ public class DefaultCoordinator extends Coordinator {
                                                                        long startTime,
                                                                        Map<String, String> sessionVariables,
                                                                        ConnectContext context, long execMemLimit,
-                                                                       String warehouse) {
+                                                                       long warehouseId) {
             JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
-                    startTime, sessionVariables, execMemLimit);
+                    startTime, sessionVariables, execMemLimit, warehouseId);
 
             return new DefaultCoordinator(context, jobSpec, true);
         }

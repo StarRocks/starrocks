@@ -72,10 +72,10 @@ public class JobSpec {
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
     private final TWorkGroup resourceGroup;
-    private final String warehouseName;
+    private final long warehouseId;
 
-    public String getWarehouseName() {
-        return warehouseName;
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public static class Factory {
@@ -106,7 +106,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseName(context.getCurrentWarehouse())
+                    .warehouseId(context.getCurrentWarehouseId())
                     .build();
         }
 
@@ -146,7 +146,7 @@ public class JobSpec {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
 
-            return new JobSpec.Builder()
+            return new Builder()
                     .loadJobId(loadPlanner.getLoadJobId())
                     .queryId(loadPlanner.getLoadId())
                     .fragments(loadPlanner.getFragments())
@@ -157,7 +157,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
-                    .warehouseName(loadPlanner.getWarehouse())
+                    .warehouseId(loadPlanner.getWarehouseId())
                     .build();
         }
 
@@ -203,7 +203,8 @@ public class JobSpec {
                                                                String timezone,
                                                                long startTime,
                                                                Map<String, String> sessionVariables,
-                                                               long execMemLimit) {
+                                                               long execMemLimit,
+                                                               long warehouseId) {
             TQueryOptions queryOptions = new TQueryOptions();
             setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
             queryOptions.setQuery_type(TQueryType.LOAD);
@@ -219,7 +220,7 @@ public class JobSpec {
 
             TQueryGlobals queryGlobals = genQueryGlobals(startTime, timezone);
 
-            return new JobSpec.Builder()
+            return new Builder()
                     .loadJobId(loadJobId)
                     .queryId(queryId)
                     .fragments(fragments)
@@ -230,6 +231,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .warehouseId(warehouseId)
                     .build();
         }
 
@@ -248,7 +250,7 @@ public class JobSpec {
                     .queryOptions(null)
                     .enablePipeline(false)
                     .resourceGroup(null)
-                    .warehouseName(planner.getWarehouse())
+                    .warehouseId(planner.getWarehouseId())
                     .build();
         }
 
@@ -274,7 +276,6 @@ public class JobSpec {
                     .queryOptions(queryOptions)
                     .enablePipeline(true)
                     .resourceGroup(null)
-                    .warehouseName(context.getCurrentWarehouse())
                     .build();
         }
 
@@ -336,7 +337,7 @@ public class JobSpec {
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
         this.resourceGroup = builder.resourceGroup;
-        this.warehouseName = builder.warehouseName;
+        this.warehouseId = builder.warehouseId;
     }
 
     @Override
@@ -348,7 +349,7 @@ public class JobSpec {
                 ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
-                ", warehouseName=" + warehouseName +
+                ", warehouseId=" + warehouseId +
                 '}';
     }
 
@@ -452,7 +453,7 @@ public class JobSpec {
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
         private TWorkGroup resourceGroup;
-        private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
         public JobSpec build() {
             return new JobSpec(this);
@@ -527,8 +528,8 @@ public class JobSpec {
             return this;
         }
 
-        private Builder warehouseName(String warehouseName) {
-            this.warehouseName = warehouseName;
+        private Builder warehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 

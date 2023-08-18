@@ -193,7 +193,7 @@ public class SparkLoadJob extends BulkLoadJob {
             throws MetaNotFoundException {
         this(dbId, label, resourceDesc, originStmt);
         if (context != null) {
-            this.warehouse = context.getCurrentWarehouse();
+            this.warehouseId = context.getCurrentWarehouseId();
         }
     }
 
@@ -238,9 +238,9 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
         if (currentWh == null) {
-            throw new BeginTransactionException("warehouse " + warehouse + " not exist.");
+            throw new BeginTransactionException("warehouse " + warehouseId + " not exist.");
         }
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
@@ -557,9 +557,10 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+                                    Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(
+                                            warehouseId);
                                     if (currentWh == null) {
-                                        throw new LoadException("warehouse " + warehouse + " not exist.");
+                                        throw new LoadException("warehouse " + warehouseId + " not exist.");
                                     }
                                     long backendId = ((LakeTablet) tablet).
                                             getPrimaryComputeNodeId(currentWh.getAnyAvailableCluster().getWorkerGroupId());

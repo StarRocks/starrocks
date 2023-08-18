@@ -123,7 +123,7 @@ public class DefaultWorkerProviderTest {
             nextComputeNodeIndex.setRef(0);
 
             workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                    numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                    numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -177,7 +177,7 @@ public class DefaultWorkerProviderTest {
 
             new MockUp<WarehouseManager>() {
                 @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(String warehouseName) {
+                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
                     return id2ComputeNode;
                 }
             };
@@ -191,7 +191,7 @@ public class DefaultWorkerProviderTest {
 
                 workerProvider =
                         workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), false,
-                                numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                                numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
                 for (long id = 0; id < 15; id++) {
                     ComputeNode worker = workerProvider.getWorkerById(id);

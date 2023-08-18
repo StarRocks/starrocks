@@ -84,6 +84,7 @@ import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
+    @Mocked
     private ConnectContext connectContext;
     private LakeTableSchemaChangeJob schemaChangeJob;
     private Database db;
@@ -108,6 +109,12 @@ public class LakeTableSchemaChangeJobTest {
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
                         "An internal warehouse contains all compute nodes in this system");
+                minTimes = 0;
+            }
+
+            {
+                connectContext.getCurrentWarehouseId();
+                result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 minTimes = 0;
             }
         };

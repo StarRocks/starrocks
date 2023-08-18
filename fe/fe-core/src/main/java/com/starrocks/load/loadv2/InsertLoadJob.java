@@ -84,7 +84,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
-                         long estimateScanRow, TLoadJobType type, long timeout, String warehouse,
+                         long estimateScanRow, TLoadJobType type, long timeout, long warehouseId,
                          boolean isStatisticsJob) {
         super(dbId, label);
         this.tableId = tableId;
@@ -95,7 +95,7 @@ public class InsertLoadJob extends LoadJob {
         this.estimateScanRow = estimateScanRow;
         this.loadType = type;
         this.timeoutSecond = timeout;
-        this.warehouse = warehouse;
+        this.warehouseId = warehouseId;
         this.isStatisticsJob = isStatisticsJob;
     }
 

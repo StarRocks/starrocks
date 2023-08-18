@@ -90,7 +90,7 @@ public class SetWarehouseStmtTest {
                 String.format("SET WAREHOUSE aaa"), ctx));
         executor.execute();
 
-        Assert.assertEquals("aaa", ctx.getCurrentWarehouse());
+        Assert.assertEquals("aaa", ctx.getCurrentWarehouseName());
 
         executor = new StmtExecutor(ctx, "set xxx=aaa");
         executor.execute();

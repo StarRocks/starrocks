@@ -40,7 +40,7 @@ public interface WorkerProvider {
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
-                                               String warehouseName);
+                                               long warehouseId);
     }
 
     /**

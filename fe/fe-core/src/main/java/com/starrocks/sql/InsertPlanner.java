@@ -250,7 +250,7 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouse());
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {

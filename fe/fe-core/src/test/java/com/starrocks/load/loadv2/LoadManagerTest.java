@@ -41,7 +41,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -201,11 +203,21 @@ public class LoadManagerTest {
 
     @Test
     public void testRemoveOldLoadJob(@Mocked GlobalStateMgr globalStateMgr,
+                                     @Mocked WarehouseManager warehouseMgr,
                                      @Injectable Database db) throws Exception {
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
                 result = db;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseMgr;
+                minTimes = 0;
+
+                warehouseMgr.getWarehouse(anyLong);
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 

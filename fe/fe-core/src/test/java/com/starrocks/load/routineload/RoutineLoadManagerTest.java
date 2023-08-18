@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -672,9 +673,9 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getName();
                 minTimes = 0;
                 result = "";
-                routineLoadJob.getCurrentWarehouse();
+                routineLoadJob.getCurrentWarehouseId();
                 minTimes = 0;
-                result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+                result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -709,9 +710,9 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getDbId();
                 minTimes = 0;
                 result = 1L;
-                routineLoadJob.getCurrentWarehouse();
+                routineLoadJob.getCurrentWarehouseId();
                 minTimes = 0;
-                result = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+                result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 operation.getId();
                 minTimes = 0;
                 result = 1L;
@@ -800,7 +801,21 @@ public class RoutineLoadManagerTest {
 
 
     @Test
-    public void testLoadImageWithoutExpiredJob() throws Exception {
+    public void testLoadImageWithoutExpiredJob(@Mocked GlobalStateMgr globalStateMgr,
+                                               @Mocked WarehouseManager warehouseMgr) throws Exception {
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseMgr;
+                minTimes = 0;
+
+                warehouseMgr.getWarehouse(anyLong);
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
+            }
+        };
 
         Config.label_keep_max_second = 10;
         Config.enable_dict_optimize_routine_load = true;

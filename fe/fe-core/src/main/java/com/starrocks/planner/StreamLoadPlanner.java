@@ -40,7 +40,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
@@ -106,14 +105,14 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
-    private String warehouse;
+    private long warehouseId;
 
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
-        this.warehouse = streamLoadInfo.getWarehouse();
+        this.warehouseId = streamLoadInfo.getWarehouseId();
     }
 
     private void resetAnalyzer() {
@@ -130,8 +129,8 @@ public class StreamLoadPlanner {
         return connectContext;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
@@ -188,7 +187,7 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
-        scanNode.setWarehouse(streamLoadInfo.getWarehouse());
+        scanNode.setWarehouseId(streamLoadInfo.getWarehouseId());
 
         descTable.computeMemLayout();
 
@@ -204,7 +203,7 @@ public class StreamLoadPlanner {
         }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
-                enableAutomaticPartition, streamLoadInfo.getWarehouse());
+                enableAutomaticPartition, streamLoadInfo.getWarehouseId());
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }

@@ -106,7 +106,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     public void setConnectContext(ConnectContext context) {
         this.context = context;
         if (context != null) {
-            this.warehouse = context.getCurrentWarehouse();
+            this.warehouseId = context.getCurrentWarehouseId();
         }
     }
 
@@ -118,7 +118,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.jobType = EtlJobType.BROKER;
         this.context = context;
         if (context != null) {
-            this.warehouse = context.getCurrentWarehouse();
+            this.warehouseId = context.getCurrentWarehouseId();
         }
     }
 
@@ -126,9 +126,9 @@ public class BrokerLoadJob extends BulkLoadJob {
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
         if (currentWh == null) {
-            throw new BeginTransactionException("warehouse " + warehouse + " not exist.");
+            throw new BeginTransactionException("warehouse " + warehouseId + " not exist.");
         }
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,

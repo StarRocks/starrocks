@@ -103,7 +103,7 @@ public class LoadLoadingTask extends LoadTask {
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
 
-    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
                            long jobDeadlineMs, long execMemLimit, boolean strictMode,
@@ -135,8 +135,8 @@ public class LoadLoadingTask extends LoadTask {
         this.partialUpdateMode = partialUpdateMode;
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
@@ -146,14 +146,14 @@ public class LoadLoadingTask extends LoadTask {
                     strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
                     partialUpdateMode);
             planner.setConnectContext(context);
-            planner.setWarehouse(warehouse);
+            planner.setWarehouseId(warehouseId);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                     timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                     brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.setPartialUpdateMode(partialUpdateMode);
-            loadPlanner.setWarehouse(warehouse);
+            loadPlanner.setWarehouseId(warehouseId);
             loadPlanner.plan();
         }
     }
@@ -187,7 +187,7 @@ public class LoadLoadingTask extends LoadTask {
                     planner.getDescTable(),
                     planner.getFragments(), planner.getScanNodes(),
                     planner.getTimezone(), planner.getStartTime(), sessionVariables,
-                    context, execMemLimit, planner.getWarehouse());
+                    context, execMemLimit, planner.getWarehouseId());
 
             curCoordinator.setTimeoutSecond((int) (getLeftTimeMs() / 1000));
         } else {

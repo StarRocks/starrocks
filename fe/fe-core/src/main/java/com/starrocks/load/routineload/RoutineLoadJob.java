@@ -296,8 +296,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("os")
     protected OriginStatement origStmt;
 
-    @SerializedName("wh")
-    protected String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @SerializedName("warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
@@ -336,8 +336,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public String getCurrentWarehouse() {
-        return warehouse;
+    public long getCurrentWarehouseId() {
+        return warehouseId;
     }
 
     @Override
@@ -682,12 +682,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
@@ -865,7 +865,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        taskTimeoutSecond, true, warehouse);
+                        taskTimeoutSecond, true, warehouseId);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);

@@ -40,7 +40,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
                                                        List<Integer> partitions,
-                                                       String warehouse) throws UserException {
+                                                       long warehouseId) throws UserException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(0, 100L);
                 return result;
@@ -50,7 +50,7 @@ public class KafkaProgressTest {
             public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                           ImmutableMap<String, String> properties,
                                                           List<Integer> partitions,
-                                                          String warehouse) throws UserException {
+                                                          long warehouseId) throws UserException {
                 Map<Integer, Long> result = Maps.newHashMap();
                 result.put(1, 1L);
                 return result;
@@ -72,7 +72,7 @@ public class KafkaProgressTest {
         progress.addPartitionOffset(new Pair<>(2, 10L));
         progress.addPartitionOffset(new Pair<>(3, 10L));
         progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap(),
-                WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
         partitionToOffset.add(new Pair<>(3, 20L));

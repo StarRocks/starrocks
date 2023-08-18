@@ -223,7 +223,7 @@ public class RoutineLoadMgr implements Writable {
                 throw new UserException("Unknown data source type: " + type);
         }
 
-        routineLoadJob.setWarehouse(ConnectContext.get().getCurrentWarehouse());
+        routineLoadJob.setWarehouseId(ConnectContext.get().getCurrentWarehouseId());
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }

@@ -158,7 +158,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouse);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -215,7 +215,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
-                    kafkaTaskInfo.setWarehouse(warehouse);
+                    kafkaTaskInfo.setWarehouseId(warehouseId);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -239,7 +239,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
             aliveNodeNum = 0;
             for (long nodeId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
@@ -313,7 +313,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
-        kafkaTaskInfo.setWarehouse(routineLoadTaskInfo.getWarehouse());
+        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -413,7 +413,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Integer> getAllKafkaPartitions() throws UserException {
         convertCustomProperties(false);
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
-                ImmutableMap.copyOf(convertedCustomProperties), warehouse);
+                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {

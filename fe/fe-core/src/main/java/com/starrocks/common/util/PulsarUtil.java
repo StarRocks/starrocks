@@ -32,6 +32,7 @@ import com.starrocks.proto.PStringPair;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
@@ -53,15 +54,15 @@ public class PulsarUtil {
 
     public static List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
                                                        ImmutableMap<String, String> properties,
-                                                       String warehouse) throws UserException {
-        return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties, warehouse);
+                                                       long warehouseId) throws UserException {
+        return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties, warehouseId);
     }
 
     public static Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
                                                     ImmutableMap<String, String> properties,
                                                     List<String> partitions,
-                                                    String warehouse) throws UserException {
-        return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions, warehouse);
+                                                    long warehouseId) throws UserException {
+        return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions, warehouseId);
     }
 
     public static List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
@@ -71,11 +72,12 @@ public class PulsarUtil {
 
     public static PPulsarLoadInfo genPPulsarLoadInfo(String serviceUrl, String topic, String subscription,
                                                      ImmutableMap<String, String> properties,
-                                                     String warehouse) {
+                                                     long warehouseId) {
         PPulsarLoadInfo pulsarLoadInfo = new PPulsarLoadInfo();
         pulsarLoadInfo.serviceUrl = serviceUrl;
         pulsarLoadInfo.topic = topic;
         pulsarLoadInfo.subscription = subscription;
+        pulsarLoadInfo.warehouseId = warehouseId;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();
@@ -91,11 +93,11 @@ public class PulsarUtil {
     static class ProxyAPI {
         public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
                                                    ImmutableMap<String, String> convertedCustomProperties,
-                                                   String warehouse)
+                                                   long warehouseId)
                 throws UserException {
             // create request
             PPulsarMetaProxyRequest metaRequest = new PPulsarMetaProxyRequest();
-            metaRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, convertedCustomProperties, warehouse);
+            metaRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, convertedCustomProperties, warehouseId);
             PPulsarProxyRequest request = new PPulsarProxyRequest();
             request.pulsarMetaRequest = metaRequest;
 
@@ -105,11 +107,11 @@ public class PulsarUtil {
 
         public Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
                                                 ImmutableMap<String, String> properties, List<String> partitions,
-                                                String warehouse)
+                                                long warehouseId)
                 throws UserException {
             // create request
             PPulsarBacklogProxyRequest backlogRequest = new PPulsarBacklogProxyRequest();
-            backlogRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, properties, warehouse);
+            backlogRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, properties, warehouseId);
             backlogRequest.partitions = partitions;
             PPulsarProxyRequest request = new PPulsarProxyRequest();
             request.pulsarBacklogRequest = backlogRequest;
@@ -146,18 +148,18 @@ public class PulsarUtil {
                 // TODO: need to refactor after be split into cn + dn
                 List<Long> nodeIds = new ArrayList<>();
                 if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
-                    String warehouseName = null;
+                    long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                     if (request.pulsarMetaRequest != null) {
-                        warehouseName = request.pulsarMetaRequest.pulsarInfo.warehouse;
+                        warehouseId = request.pulsarMetaRequest.pulsarInfo.warehouseId;
                     } else if (request.pulsarBacklogRequest != null) {
-                        warehouseName = request.pulsarBacklogRequest.pulsarInfo.warehouse;
+                        warehouseId = request.pulsarBacklogRequest.pulsarInfo.warehouseId;
                     } else if (request.pulsarBacklogBatchRequest != null) {
                         // contain kafkaOffsetBatchRequest
                         PPulsarBacklogProxyRequest req = request.pulsarBacklogBatchRequest.requests.get(0);
-                        warehouseName = req.pulsarInfo.warehouse;
+                        warehouseId = req.pulsarInfo.warehouseId;
                     }
 
-                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                     for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
                         if (node != null && node.isAlive()) {

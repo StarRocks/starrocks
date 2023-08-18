@@ -80,8 +80,8 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public AtomicInteger getNextComputeNodeIndexFromWarehouse(String warehouseName) {
-        return getWarehouse(warehouseName).getAnyAvailableCluster().getNextComputeNodeHostId();
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        return getWarehouse(warehouseId).getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
     public Warehouse getDefaultWarehouse() {
@@ -122,9 +122,9 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(String warehouseName) {
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        Warehouse warehouse = getWarehouse(warehouseName);
+        Warehouse warehouse = getWarehouse(warehouseId);
         warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
                 nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();

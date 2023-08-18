@@ -70,7 +70,6 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -513,9 +512,9 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
             if (currentWh == null) {
-                throw new UserException("warehouse " +  warehouse + " not exist.");
+                throw new UserException("warehouse " + warehouseId + " not exist.");
             }
             for (long cnId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);

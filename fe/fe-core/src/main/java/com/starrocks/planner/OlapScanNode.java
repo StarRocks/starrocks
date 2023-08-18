@@ -164,17 +164,15 @@ public class OlapScanNode extends ScanNode {
 
     private boolean usePkIndex = false;
 
-    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
-
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         olapTable = (OlapTable) desc.getTable();
     }
 
-    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, String warehouseName) {
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
         this(id, desc, planNodeName);
-        this.warehouseName = warehouseName;
+        this.warehouseId = warehouseId;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -381,7 +379,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         expectedVersion, -1, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
             } else {
@@ -471,7 +469,7 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
             } else {

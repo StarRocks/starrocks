@@ -38,6 +38,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -54,10 +56,12 @@ import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -79,6 +83,12 @@ public class StreamLoadPlannerTest {
 
     @Mocked
     Partition partition;
+
+    @Mocked
+    GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    WarehouseManager warehouseMgr;
 
     @Test
     public void testNormalPlan() throws UserException {
@@ -106,6 +116,15 @@ public class StreamLoadPlannerTest {
                 partition.getId();
                 minTimes = 0;
                 result = 0;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseMgr;
+                minTimes = 0;
+
+                warehouseMgr.getWarehouse(anyString);
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                    "An internal warehouse contains all compute nodes in this system");
             }
         };
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
@@ -148,6 +167,15 @@ public class StreamLoadPlannerTest {
                 partition.getId();
                 minTimes = 0;
                 result = 0;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseMgr;
+                minTimes = 0;
+
+                warehouseMgr.getWarehouse(anyString);
+                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
             }
         };
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();

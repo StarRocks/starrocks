@@ -482,7 +482,7 @@ public class StmtExecutor {
                 context.getState().setIsQuery(true);
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 if (!isStatisticsJob) {
-                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
+                    WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouseName(), 1L);
                 }
                 context.setStatisticsJob(isStatisticsJob);
 
@@ -600,7 +600,7 @@ public class StmtExecutor {
                                 }
                             }
                             if (!isStatisticsJob) {
-                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
+                                WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouseName(), -1L);
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -1644,8 +1644,8 @@ public class StmtExecutor {
         } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
             // schema table and iceberg table does not need txn
         } else {
-            String currentWarehouse = context.getCurrentWarehouse();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(currentWarehouse);
+            long warehouseId = context.getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1726,7 +1726,7 @@ public class StmtExecutor {
                         estimateScanRows,
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
-                        context.getCurrentWarehouse(),
+                        context.getCurrentWarehouseId(),
                         context.isStatisticsJob());
             }
 

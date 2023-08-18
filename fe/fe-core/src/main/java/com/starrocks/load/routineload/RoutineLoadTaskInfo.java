@@ -105,7 +105,7 @@ public abstract class RoutineLoadTaskInfo {
 
     protected StreamLoadTask streamLoadTask = null;
 
-    protected String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
@@ -191,12 +191,12 @@ public abstract class RoutineLoadTaskInfo {
         this.msg = msg;
     }
 
-    public void setWarehouse(String warehouse) {
-        this.warehouse = warehouse;
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public boolean isRunningTimeout() {
@@ -228,9 +228,9 @@ public abstract class RoutineLoadTaskInfo {
 
         //  label = job_name+job_id+task_id
         label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouse);
+        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
         if (currentWh == null) {
-            throw new BeginTransactionException("warehouse " + warehouse + " not exist.");
+            throw new BeginTransactionException("warehouse " + warehouseId + " not exist.");
         }
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
@@ -289,7 +289,7 @@ public abstract class RoutineLoadTaskInfo {
         } else {
             row.add(msg);
         }
-        row.add(warehouse);
+        row.add(String.valueOf(warehouseId));
 
         return row;
     }

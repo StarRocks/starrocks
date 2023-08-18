@@ -172,8 +172,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("pg")
     protected int progress;
 
-    @SerializedName("wh")
-    protected String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    @SerializedName("warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public int getProgress() {
         return this.progress;
@@ -227,8 +227,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public String getCurrentWarehouse() {
-        return warehouse;
+    public long getCurrentWarehouseId() {
+        return warehouseId;
     }
 
     @Override

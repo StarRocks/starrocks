@@ -226,7 +226,7 @@ public class RoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       String warehouse) throws UserException {
+                                                       long warehouseId) throws UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };

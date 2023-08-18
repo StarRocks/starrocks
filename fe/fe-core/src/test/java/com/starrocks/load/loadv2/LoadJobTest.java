@@ -131,7 +131,7 @@ public class LoadJobTest {
     @Test
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                            @Mocked WarehouseManagerEpack warehouseManager)
+                            @Mocked WarehouseManagerEpack warehouseMgr)
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
@@ -151,9 +151,9 @@ public class LoadJobTest {
             {
                 GlobalStateMgr.getCurrentWarehouseMgr();
                 minTimes = 0;
-                result = warehouseManager;
+                result = warehouseMgr;
 
-                warehouseManager.getWarehouse(anyString);
+                warehouseMgr.getWarehouse(anyLong);
                 minTimes = 0;
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,

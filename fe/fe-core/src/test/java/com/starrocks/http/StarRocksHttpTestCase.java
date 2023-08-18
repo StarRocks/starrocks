@@ -56,11 +56,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -394,6 +396,14 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        WarehouseManager warehouseMgr = new WarehouseManagerEpack();
+        new MockUp<ConnectContext>() {
+            @Mock
+            public long getCurrentWarehouseId() {
+                return WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            }
+        };
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
@@ -423,6 +433,11 @@ public abstract class StarRocksHttpTestCase {
             @Mock
             public EditLog getEditLog() {
                 return new EditLog(null);
+            }
+
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return warehouseMgr;
             }
         };
         assignBackends();

@@ -95,7 +95,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @Before
     public void before() {
-        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         mockLoadMgr();
 
         // Mock CatalogIdGenerator::getNextId, which is used when creating a new load job and assigned a job id.
@@ -172,6 +172,16 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, 1L, null),
                 new LocalWarehouse(1, "wh-1", 2L, null));
 
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                if (warehouseId >= whs.size() || warehouseId < 0) {
+                    return null;
+                }
+                return whs.get((int) warehouseId);
+            }
+        };
+
         Map<Warehouse, JobExecutingInfo> whToJobInfo = ImmutableMap.of(
                 whs.get(0), new JobExecutingInfo(
                         new JobInfo(10L, 20L, 30L, 40L, 50L, 60L, 70L, 80L),
@@ -189,8 +199,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
         // Add statistics insert jobs.
         Thread.sleep(10L); // Make the finished timestamps of statistic jobs are different from the above jobs.
-        addInsertLoadJobs(whs.get(0).getName(), 13, false, true);
-        addInsertLoadJobs(whs.get(1).getName(), 12, true, true);
+        addInsertLoadJobs(whs.get(0).getId(), 13, false, true);
+        addInsertLoadJobs(whs.get(1).getId(), 12, true, true);
 
         // ------------------------------------------------------------------------------------
         // Case 1. The warehouse#1 is not in the warehouse manager.
@@ -211,6 +221,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         assertThat(whToWhInfo.get(whs.get(1).getName()).getId()).isEqualTo(WarehouseInfo.ABSENT_ID);
         // Set id of warehouse#1 to ABSENT_ID temporarily, to compare the whole info below.
         expectedWhToWhInfo.get(whs.get(1).getName()).setId(WarehouseInfo.ABSENT_ID);
+
         assertThat(whToWhInfo).containsExactlyInAnyOrderEntriesOf(expectedWhToWhInfo);
         // Reset id of warehouse#1.
         expectedWhToWhInfo.get(whs.get(1).getName()).setId(1);
@@ -340,6 +351,15 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         };
     }
 
+    private void mockConnectContext(long whId) {
+        new MockUp<ConnectContext>() {
+            @Mock
+            public long getCurrentWarehouseId() {
+                return whId;
+            }
+        };
+    }
+
     /**
      * Reset all the load managers to clear information of jobs.
      */
@@ -449,35 +469,35 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         WarehouseMetricMgr.increaseUnfinishedQueries(wh.getName(), jobInfo.numQueryJobs * deltaFactor);
         WarehouseMetricMgr.increaseUnfinishedBackupJobs(wh.getName(), jobInfo.numBackupJobs * deltaFactor);
         WarehouseMetricMgr.increaseUnfinishedRestoreJobs(wh.getName(), jobInfo.numRestoreJobs * deltaFactor);
-        addLoadJobs(wh.getName(), jobInfo.numBrokerLoadJobs, isFinished, this::genBrokerLoadJob);
-        addLoadJobs(wh.getName(), jobInfo.numSparkLoadJobs, isFinished, this::genSparkLoadJob);
-        addInsertLoadJobs(wh.getName(), jobInfo.numInsertLoadJobs, isFinished, false);
-        addRoutineJobs(wh.getName(), jobInfo.numRoutineLoadJobs, isFinished);
-        addStreamJobs(wh.getName(), jobInfo.numStreamLoadJobs, isFinished);
+        addLoadJobs(wh.getId(), jobInfo.numBrokerLoadJobs, isFinished, this::genBrokerLoadJob);
+        addLoadJobs(wh.getId(), jobInfo.numSparkLoadJobs, isFinished, this::genSparkLoadJob);
+        addInsertLoadJobs(wh.getId(), jobInfo.numInsertLoadJobs, isFinished, false);
+        addRoutineJobs(wh.getId(), jobInfo.numRoutineLoadJobs, isFinished);
+        addStreamJobs(wh.getId(), jobInfo.numStreamLoadJobs, isFinished);
     }
 
-    private BrokerLoadJob genBrokerLoadJob(String wh) throws MetaNotFoundException {
+    private BrokerLoadJob genBrokerLoadJob(long whId) throws MetaNotFoundException {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setCurrentWarehouse(wh);
+        mockConnectContext(whId);
         return new BrokerLoadJob(TEST_DB_ID, "broker-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
     }
 
-    private SparkLoadJob genSparkLoadJob(String wh) throws MetaNotFoundException {
+    private SparkLoadJob genSparkLoadJob(long whId) throws MetaNotFoundException {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setCurrentWarehouse(wh);
+        mockConnectContext(whId);
         return new SparkLoadJob(TEST_DB_ID, "spark-load-" + NEXT_INDEX.getAndIncrement(), null, null, context);
     }
 
-    private RoutineLoadJob genRoutineLoadJob(String wh) {
+    private RoutineLoadJob genRoutineLoadJob(Long whId) {
         KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(NEXT_INDEX.getAndIncrement(),
                 "routine-load-" + NEXT_INDEX.getAndIncrement(),
                 TEST_DB_ID, TEST_TABLE_ID, "brokerList", "topic");
-        job.setWarehouse(wh);
+        job.setWarehouseId(whId);
         return job;
 
     }
 
-    private StreamLoadTask genStreamLoadJob(String wh) {
+    private StreamLoadTask genStreamLoadJob(Long whId) {
         Database db = GlobalStateMgr.getCurrentState().getDb(TEST_DB_ID);
         Table table = db.getTable(TEST_TABLE_ID);
         return new StreamLoadTask(NEXT_INDEX.getAndIncrement(),
@@ -486,7 +506,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                 "stream-load-" + NEXT_INDEX.getAndIncrement(),
                 0L, System.currentTimeMillis(),
                 false,
-                wh);
+                whId);
     }
 
     @FunctionalInterface
@@ -494,11 +514,11 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         R apply(T t) throws E;
     }
 
-    private void addLoadJobs(String wh, long numJobs, boolean isFinished,
-                             FunctionWithException<String, LoadJob, MetaNotFoundException> jobSupplier)
+    private void addLoadJobs(long whId, long numJobs, boolean isFinished,
+                             FunctionWithException<Long, LoadJob, MetaNotFoundException> jobSupplier)
             throws MetaNotFoundException {
         for (int i = 0; i < numJobs; i++) {
-            LoadJob job = jobSupplier.apply(wh);
+            LoadJob job = jobSupplier.apply(whId);
             if (isFinished) {
                 job.updateState(JobState.FINISHED);
             }
@@ -506,7 +526,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
-    private void addInsertLoadJobs(String wh, long numJobs, boolean isFinished, boolean isStatisticsJob)
+    private void addInsertLoadJobs(long whId, long numJobs, boolean isFinished, boolean isStatisticsJob)
             throws UserException {
 
         for (int i = 0; i < numJobs; i++) {
@@ -519,7 +539,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     0L,
                     TLoadJobType.INSERT_QUERY,
                     0L,
-                    wh,
+                    whId,
                     isStatisticsJob);
             if (isFinished) {
                 loadMgr.getLoadJob(jobId).updateState(JobState.FINISHED);
@@ -527,10 +547,10 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
-    private void addRoutineJobs(String wh, long numJobs, boolean isFinished)
+    private void addRoutineJobs(Long whId, long numJobs, boolean isFinished)
             throws UserException {
         for (int i = 0; i < numJobs; i++) {
-            RoutineLoadJob job = genRoutineLoadJob(wh);
+            RoutineLoadJob job = genRoutineLoadJob(whId);
             if (isFinished) {
                 job.updateState(RoutineLoadJob.JobState.STOPPED, null, true);
             }
@@ -538,10 +558,10 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
-    private void addStreamJobs(String wh, long numJobs, boolean isFinished)
+    private void addStreamJobs(long whId, long numJobs, boolean isFinished)
             throws UserException {
         for (int i = 0; i < numJobs; i++) {
-            StreamLoadTask job = genStreamLoadJob(wh);
+            StreamLoadTask job = genStreamLoadJob(whId);
             if (isFinished) {
                 job.cancelAfterRestart();
             }
