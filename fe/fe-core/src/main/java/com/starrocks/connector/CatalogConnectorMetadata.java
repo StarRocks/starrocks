@@ -79,18 +79,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return normal;
     }
 
-    private ConnectorMetadata metadataOfDb(long dbId) {
-        if (isInfoSchemaDb(dbId)) {
-            return informationSchema;
-        }
-        return normal;
-    }
-
     @Override
     public List<String> listDbNames() {
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
-        return builder.addAll(this.informationSchema.listDbNames())
+        return ImmutableList.<String>builder()
                 .addAll(this.normal.listDbNames())
+                .addAll(this.informationSchema.listDbNames())
                 .build();
     }
 
@@ -171,23 +164,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(long dbId) {
-        ConnectorMetadata metadata = metadataOfDb(dbId);
-        return metadata.getDb(dbId);
-    }
-
-    @Override
     public Database getDb(String name) {
         ConnectorMetadata metadata = metadataOfDb(name);
         return metadata.getDb(name);
-    }
-
-    @Override
-    public List<Long> getDbIds() {
-        ImmutableList.Builder<Long> builder = ImmutableList.builder();
-        return builder.addAll(this.informationSchema.getDbIds())
-                .addAll(this.normal.getDbIds())
-                .build();
     }
 
     @Override
