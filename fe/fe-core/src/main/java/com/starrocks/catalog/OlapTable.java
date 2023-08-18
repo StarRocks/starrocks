@@ -301,7 +301,9 @@ public class OlapTable extends Table {
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
-        olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
+        if (this.partitionInfo != null) {
+            olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
+        }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -2085,7 +2087,7 @@ public class OlapTable extends Table {
 
     public void setHasDelete() {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasDelete(true);
     }
@@ -2117,7 +2119,7 @@ public class OlapTable extends Table {
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }
