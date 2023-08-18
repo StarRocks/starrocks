@@ -1,0 +1,3 @@
+-- name: test_select_be_bvars
+select * from information_schema.be_bvars where name like '%lake_publish_version_queued%' and value < 0;
+
