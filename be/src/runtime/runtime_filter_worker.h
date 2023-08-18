@@ -16,7 +16,9 @@
 
 #include <atomic>
 #include <map>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -26,6 +28,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/blocking_queue.hpp"
+#include "util/ref_count_closure.h"
 #include "util/uid_util.h"
 namespace starrocks {
 
@@ -36,7 +39,8 @@ class JoinRuntimeFilter;
 class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
 
-class RuntimeFilterRpcClosure;
+using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
+using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
 // RuntimeFilterPort is bind to a fragment instance
 // and it's to exchange RF(publish/receive) with outside world.
 class RuntimeFilterPort {
@@ -94,10 +98,10 @@ class RuntimeFilterMerger {
 public:
     RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
-    void merge_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
+    void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
 
 private:
-    void _send_total_runtime_filter(int rf_version, int32_t filter_id, RuntimeFilterRpcClosure* rpc_closure);
+    void _send_total_runtime_filter(int rf_version, int32_t filter_id);
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;
     std::map<int32_t, RuntimeFilterMergerStatus> _statuses;
@@ -134,7 +138,7 @@ public:
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms);
 
 private:
-    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
+    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
                                                       std::vector<TRuntimeFilterDestination>&& destinations,
                                                       int timeout_ms);
@@ -145,6 +149,9 @@ private:
                                                  std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms);
     void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
                                                  const TRuntimeFilterDestination& destinations);
+
+    void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
+                                      PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms);
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
