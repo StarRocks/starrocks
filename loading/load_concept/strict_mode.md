@@ -4,14 +4,21 @@
 
 本文档主要介绍什么是严格模式、以及如何设置严格模式。
 
-## 认识严格模式
+## 严格模式介绍
 
-在导入过程中，如果某列的原始数据类型跟目标数据类型不一致、或某列通过函数计算后的数据类型跟目标数据类型不一致，StarRocks 会对该列的数据类型进行转换。转换失败的列数据，会变为 `NULL` 值，这类数据称为“错误数据”，包含这类数据的行称为“错误的数据行”。
+在导入过程中，原始列跟目标列的数据类型可能不完全一致，这种情况下，StarRocks 会对存在数据类型不一致的原始列值进行转换。转换过程中可能会发生字段类型不匹配、字段超长等转换失败的情况。转换失败的字段称为“错误字段”，包含错误字段的数据行称为“错误的数据行”。严格模式用于控制导入过程中是否会对这些错误的数据行进行过滤。
 
-严格过滤的策略如下：
+严格模式的过滤策略如下：
 
-- 如果开启了严格模式，StarRocks 会把错误的数据行过滤掉，只导入正确的数据行，并且会返回错误数据详情。
-- 如果关闭了严格模式，StarRocks 会把错误的数据行跟正确的数据行一起导入。
+- 如果开启严格模式，StarRocks 会把错误的数据行过滤掉，只导入正确的数据行，并返回错误数据详情。
+
+- 如果关闭严格模式，StarRocks 会把转换失败的错误字段转换成 `NULL` 值，并把这些包含 `NULL` 值的错误数据行跟正确的数据行一起导入。
+
+注意以下两点：
+
+- 实际导入过程中，正确的数据行和错误的数据行都有可能存在 `NULL` 值。如果目标列不允许 `NULL` 值，则 StarRocks 会报错，并把这些包含 `NULL` 值的数据行过滤掉。
+
+- 对于 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)，导入作业能够容忍的因数据质量不合格而过滤掉的错误数据行所占的最大比例，由作业的可选参数 `max_filter_ratio` 控制。[INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 导入方式当前不支持 `max_filter_ratio` 参数。
 
 下面以 CSV 格式的数据文件为例来说明严格模式的效果。假设目标列数据类型为 TINYINT [-128, 127]。以 `\N`（表示空值 null）、`abc`、`2000` 和 `1` 四个原始列值为例：
 
