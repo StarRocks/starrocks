@@ -363,7 +363,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     plan_read_by_rssid(_partial_update_states[idx].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     total_rows += _partial_update_states[idx].src_rss_rowids.size();
     RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids,
-                                                         _partial_update_states[idx].read_version.major(),
+                                                         _partial_update_states[idx].read_version.major_number(),
                                                          num_default > 0, rowids_by_rssid, &read_columns, nullptr));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         _partial_update_states[idx].write_columns[col_idx]->append_selective(*read_columns[col_idx], idxes.data(), 0,
@@ -445,7 +445,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         }
     }
 
-    RETURN_IF_ERROR(tablet->updates()->get_column_values(column_id, latest_applied_version.major(), new_rows > 0,
+    RETURN_IF_ERROR(tablet->updates()->get_column_values(column_id, latest_applied_version.major_number(), new_rows > 0,
                                                          rowids_by_rssid, &read_column,
                                                          &_auto_increment_partial_update_states[idx]));
 
@@ -555,7 +555,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-        RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, latest_applied_version.major(),
+        RETURN_IF_ERROR(tablet->updates()->get_column_values(read_column_ids, latest_applied_version.major_number(),
                                                              num_default > 0, rowids_by_rssid, &read_columns, nullptr));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {

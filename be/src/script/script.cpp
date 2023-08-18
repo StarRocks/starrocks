@@ -95,12 +95,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major(EditVersion& self) {
-    return self.major();
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
 }
 
-static uint64_t get_minor(EditVersion& self) {
-    return self.minor();
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -325,8 +325,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major>("major");
-            cls.funcExt<&get_minor>("minor");
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
         }
         {
