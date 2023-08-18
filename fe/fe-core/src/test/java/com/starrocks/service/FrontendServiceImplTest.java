@@ -33,13 +33,24 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TDescribeTableParams;
+import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
+>>>>>>> c461da8a98 ([BugFix] search globalUdfFunction only when GlobalStateMgr() is available (#29386))
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStreamLoadPutRequest;
+import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
@@ -248,8 +259,8 @@ public class FrontendServiceImplTest {
     @AfterClass
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table site_access";
-        String dropSQL2 = "drop table site_access_2";
+        String dropSQL = "drop table if exists site_access";
+        String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
@@ -689,4 +700,103 @@ public class FrontendServiceImplTest {
         TGetTablesResult response = impl.getTableNames(request);
         Assert.assertEquals(1, response.tables.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetSpecialColumnForSyncMv() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `base1` (\n" +
+                        "event_day DATE,\n" +
+                        "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(event_day, department_id)\n" +
+                        "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\"\n" +
+                        ");")
+                .withMaterializedView("create materialized view test_table.mv$test as select event_day from base1");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test4";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.base1 TO USER `test4`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test4");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("mv$test");
+        request.setDb("test_table");
+        request.setType(TTableType.MATERIALIZED_VIEW);
+        TListMaterializedViewStatusResult response = impl.listMaterializedViewStatus(request);
+        Assert.assertEquals(1, response.materialized_views.size());
+    }
+  
+    @Test
+    public void testGetLoadTxnStatus() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                             Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                             new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
+                             TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
+        request.setDb("non-exist-db");
+        request.setTbl("non-site_access_day-tbl");
+        request.setTxnId(100);
+        TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
+        request.setDb("test");
+        TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
+        request.setTxnId(transactionId);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+    }
+  
+    @Test
+    public void testStreamLoadPutColumnMapException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_hour");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        // wrong format of str_to_date()
+        request.setColumns("col1,event_day=str_to_date(col1)");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assert.assertEquals(1, errMsg.size());
+        Assert.assertEquals(
+                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
+                        "No matching function with signature: str_to_date(varchar).",
+                errMsg.get(0));
+    }
+>>>>>>> c461da8a98 ([BugFix] search globalUdfFunction only when GlobalStateMgr() is available (#29386))
 }

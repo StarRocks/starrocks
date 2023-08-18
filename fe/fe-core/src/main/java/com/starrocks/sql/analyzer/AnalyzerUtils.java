@@ -208,7 +208,7 @@ public class AnalyzerUtils {
 
     public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
         Function fn = getDBUdfFunction(context, fnName, argTypes);
-        if (fn == null) {
+        if (fn == null && context.getGlobalStateMgr() != null) {
             fn = getGlobalUdfFunction(context, fnName, argTypes);
         }
         if (fn != null) {
