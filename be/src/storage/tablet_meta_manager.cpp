@@ -733,7 +733,7 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
         }
     }
     // pending rowset may exists or not, but delete it anyway
-    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
+    RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major_number()));
     return store->get_meta()->write_batch(&batch);
 }
 
@@ -801,8 +801,8 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     auto ops = log.add_ops();
     ops->set_type(TabletMetaOpType::OP_APPLY);
     auto version_pb = ops->mutable_apply();
-    version_pb->set_major(version.major());
-    version_pb->set_minor(version.minor());
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
     auto logval = log.SerializeAsString();
     rocksdb::Status st = batch.Put(handle, logkey, logval);
     if (!st.ok()) {
@@ -815,7 +815,7 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     int64_t total_bytes = 0;
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
-        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
         auto dv_value = rssid_delvec.second->save();
         total_bytes += dv_value.size();
         st = batch.Put(handle, dv_key, dv_value);
@@ -842,7 +842,90 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto rowset_value = rowset_meta->SerializeAsString();
         st = batch.Put(handle, rowset_key, rowset_value);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+=======
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+            return to_status(st);
+        }
+    }
+
+    return store->get_meta()->write_batch(&batch);
+}
+
+// used in column mode partial update
+Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
+                                              const EditVersion& version,
+                                              const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups,
+                                              const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                              const starrocks::RowsetMetaPB* rowset_meta) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
+    span->SetAttribute("version", version.to_string());
+    WriteBatch batch;
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string logkey = encode_meta_log_key(tablet_id, logid);
+    TabletMetaLogPB log;
+    auto ops = log.add_ops();
+    ops->set_type(TabletMetaOpType::OP_APPLY);
+    auto version_pb = ops->mutable_apply();
+    version_pb->set_major_number(version.major_number());
+    version_pb->set_minor_number(version.minor_number());
+    auto logval = log.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, logkey, logval);
+    if (!st.ok()) {
+        LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+        return to_status(st);
+    }
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    // persist delta column group
+    span->AddEvent("delta_column_group_start");
+    int64_t total_bytes = 0;
+    for (const auto& delta_column : delta_column_groups) {
+        tsid.segment_id = delta_column.first;
+        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major_number());
+        auto dcg_value = delta_column.second->save();
+        total_bytes += dcg_value.size();
+        st = batch.Put(handle, dcg_key, dcg_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+            return to_status(st);
+        }
+    }
+    span->SetAttribute("delta_column_group_bytes", total_bytes);
+    span->AddEvent("delta_column_group_end");
+    // persist delvec
+    span->AddEvent("delvec_start");
+    for (auto& rssid_delvec : delvecs) {
+        tsid.segment_id = rssid_delvec.first;
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
+        auto dv_value = rssid_delvec.second->save();
+        st = batch.Put(handle, dv_key, dv_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+            return to_status(st);
+        }
+    }
+    span->AddEvent("delvec_end");
+
+    if (enable_persistent_index) {
+        auto meta_key = encode_persistent_index_key(tsid.tablet_id);
+        auto meta_value = index_meta.SerializeAsString();
+        st = batch.Put(handle, meta_key, meta_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+            return to_status(st);
+        }
+    }
+
+    if (rowset_meta != nullptr) {
+        string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
+        auto rowset_value = rowset_meta->SerializeAsString();
+        st = batch.Put(handle, rowset_key, rowset_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed, tablet_id: " << tablet_id;
+>>>>>>> 7e0e1b9ef8 ([Enhancement] Resolve a protobuf/glibc incompatability. (#29331))
             return to_status(st);
         }
     }
