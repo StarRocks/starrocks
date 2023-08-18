@@ -172,7 +172,8 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
 
-    if (register_task_info(task_type, signature)) {
+    std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);
+    if (register_pair.first) {
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
