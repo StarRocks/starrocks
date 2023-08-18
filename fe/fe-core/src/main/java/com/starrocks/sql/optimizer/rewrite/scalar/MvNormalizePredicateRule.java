@@ -20,12 +20,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -38,10 +35,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // Comparator to normalize predicates, only use scalar operators' string to compare.
@@ -82,30 +78,32 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             if (one == null) {
                 return binaryPredicate;
             }
-            Type[] argsType = {constantOperator.getType(), constantOperator.getType()};
+            Optional<ConstantOperator> pre = constantOperator.previousValue();
+            Optional<ConstantOperator> next = constantOperator.nextValue();
             switch (binary.getBinaryType()) {
                 case LT:
-                    Function substractFn = findArithmeticFunction(argsType, FunctionSet.SUBTRACT);
-                    CallOperator sub = new CallOperator(FunctionSet.SUBTRACT,
-                            substractFn.getReturnType(), Lists.newArrayList(constantOperator, one), substractFn);
-                    return new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), sub);
+                    if (!pre.isPresent()) {
+                        return ConstantOperator.FALSE;
+                    }
+                    return new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get());
                 case GT:
-                    Function addFn = findArithmeticFunction(argsType, FunctionSet.ADD);
-                    CallOperator add = new CallOperator(
-                            FunctionSet.ADD, addFn.getReturnType(), Lists.newArrayList(constantOperator, one), addFn);
-                    return new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), add);
+                    if (!next.isPresent()) {
+                        return ConstantOperator.FALSE;
+                    }
+                    return new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), next.get());
                 case EQ:
                     BinaryPredicateOperator gePart =
                             new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), constantOperator);
                     BinaryPredicateOperator lePart =
                             new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), constantOperator);
-                    return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, gePart, lePart);
+                    return Utils.compoundAnd(gePart, lePart);
                 case NE:
-                    BinaryPredicateOperator gtPart =
-                            new BinaryPredicateOperator(BinaryType.GT, binary.getChild(0), constantOperator);
-                    BinaryPredicateOperator ltPart =
-                            new BinaryPredicateOperator(BinaryType.LT, binary.getChild(0), constantOperator);
-                    return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, gtPart, ltPart);
+                    BinaryPredicateOperator left = pre.isPresent() ?
+                            new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get()) : null;
+                    BinaryPredicateOperator right = next.isPresent() ?
+                            new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), next.get()) : null;
+
+                    return Utils.compoundOr(left, right);
                 default:
                     break;
             }
@@ -182,19 +180,6 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         });
 
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
-    }
-
-    private ConstantOperator createConstantIntegerOne(Type type) {
-        if (Type.SMALLINT.equals(type)) {
-            return ConstantOperator.createSmallInt((short) 1);
-        } else if (Type.INT.equals(type)) {
-            return ConstantOperator.createInt(1);
-        } else if (Type.BIGINT.equals(type)) {
-            return ConstantOperator.createBigint(1L);
-        } else if (Type.LARGEINT.equals(type)) {
-            return ConstantOperator.createLargeInt(BigInteger.ONE);
-        }
-        return null;
     }
 
     // NOTE: View-Delta Join may produce redundant compensation predicates as below.
