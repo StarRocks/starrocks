@@ -59,9 +59,9 @@ select pipe_name, file_name, file_size, load_state
 alter pipe p1 resume;
 -- result:
 -- !result
-select sleep(5);
+function: wait_for_pipe_finish('db_${uuid0}', 'p1')
 -- result:
-1
+None
 -- !result
 select count(*) from t1;
 -- result:

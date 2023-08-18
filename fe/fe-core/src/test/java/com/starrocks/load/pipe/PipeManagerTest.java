@@ -713,8 +713,4 @@ public class PipeManagerTest {
         }
     }
 
-    @Test
-    public void testRetry() {
-
-    }
 }
