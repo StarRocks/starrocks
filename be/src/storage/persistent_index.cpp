@@ -3967,16 +3967,16 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     const std::string new_l1_filename =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
     const size_t tmp_l1_cnt = _get_tmp_l1_count();
-    // maybe need to append wal in 1.a
-    bool need_append_wal = false;
+    // maybe need to dump snapshot in 1.a
+    bool need_snapshot = false;
     if (tmp_l1_cnt == 1) {
         // step 1.a
         // move tmp l1 to l1
         std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
         RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
         if (_l0->size() > 0) {
-            // check if need to append wal
-            need_append_wal = true;
+            // check if need to dump snapshot
+            need_snapshot = true;
         }
         LOG(INFO) << "PersistentIndex minor compaction, link from tmp-l1: " << tmp_l1_filename
                   << " to l1: " << new_l1_filename;
@@ -4025,7 +4025,7 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     _version.to_pb(index_meta->mutable_version());
     _version.to_pb(index_meta->mutable_l1_version());
     MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
-    RETURN_IF_ERROR(_l0->commit(l0_meta, _version, need_append_wal ? kAppendWAL : kFlush));
+    RETURN_IF_ERROR(_l0->commit(l0_meta, _version, need_snapshot ? kSnapshot : kFlush));
     return Status::OK();
 }
 
