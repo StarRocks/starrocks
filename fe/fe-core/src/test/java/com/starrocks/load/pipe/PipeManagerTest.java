@@ -261,12 +261,11 @@ public class PipeManagerTest {
 
             @Mock
             public List<PipeFileRecord> listFilesByState(FileListRepo.PipeFileState state) {
-                return records.stream().filter(x -> x.getLoadState().equals(state))
-                        .collect(Collectors.toList());
+                return records.stream().filter(x -> x.getLoadState().equals(state)).collect(Collectors.toList());
             }
 
             @Mock
-            public void addFiles(List<PipeFileRecord> records) {
+            public void stageFiles(List<PipeFileRecord> records) {
                 this.records.addAll(records);
             }
 
