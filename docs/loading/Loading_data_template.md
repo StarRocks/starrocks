@@ -51,7 +51,7 @@ There are some notes in this template, they are in bold italic format, please de
 ***Note: descriptive text***
 ```
 
-## Finally, the start of the template:
+## Finally, the start of the template
 
 ***Note: If there are multiple recommended choices, tell the
 reader this in the intro. For example, when loading from S3,
