@@ -79,6 +79,8 @@ public class InfoSchemaDbTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable("create table db.tbl " + createTblStmtStr);
         starRocksAssert.withView("create view db.v as select * from db.tbl");
+        starRocksAssert.withMaterializedView(
+                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
@@ -443,7 +445,48 @@ public class InfoSchemaDbTest {
         item2.setPrivilege_type("SELECT");
         item2.setIs_grantable(false);
 
+        Assert.assertEquals(GrantsTo.getGrantsTo(request).grants_to.size(), 1);
         Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item));
         Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item2));
+
+        sql = "revoke select on all tables in database db from test_user";
+        RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.revoke(revokePrivilegeStmt);
+
+
+        sql = "grant select on all views in database db to test_user";
+        grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.grant(grantStmt);
+        Assert.assertEquals(GrantsTo.getGrantsTo(request).grants_to.size(), 1);
+        TGetGrantsToRolesOrUserItem item3 = new TGetGrantsToRolesOrUserItem();
+        item3.setGrantee("'test_user'@'%'");
+        item3.setObject_catalog("default_catalog");
+        item3.setObject_database("db");
+        item3.setObject_name("v");
+        item3.setObject_type("VIEW");
+        item3.setPrivilege_type("SELECT");
+        item3.setIs_grantable(false);
+        Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
+        sql = "revoke select on all views in database db from test_user";
+        revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.revoke(revokePrivilegeStmt);
+
+        sql = "grant select on all materialized views in database db to test_user";
+        grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.grant(grantStmt);
+        System.out.println(GrantsTo.getGrantsTo(request).grants_to);
+        Assert.assertEquals(GrantsTo.getGrantsTo(request).grants_to.size(), 1);
+        TGetGrantsToRolesOrUserItem item4 = new TGetGrantsToRolesOrUserItem();
+        item4.setGrantee("'test_user'@'%'");
+        item4.setObject_catalog("default_catalog");
+        item4.setObject_database("db");
+        item4.setObject_name("mv");
+        item4.setObject_type("MATERIALIZED VIEW");
+        item4.setPrivilege_type("SELECT");
+        item4.setIs_grantable(false);
+        Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item4));
+        sql = "revoke select on all materialized views in database db from test_user";
+        revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.revoke(revokePrivilegeStmt);
     }
 }
