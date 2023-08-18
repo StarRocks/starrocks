@@ -21,7 +21,7 @@ import java.util.Map;
 
 public class AlterPipeSetProperty extends AlterPipeClause {
 
-    final private Map<String, String> properties;
+    private final Map<String, String> properties;
 
     public AlterPipeSetProperty(NodePosition pos, Map<String, String> properties) {
         super(pos);
