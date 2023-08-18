@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.List;
 
@@ -54,7 +55,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         public Void visit(OptExpression optExpression, Void context) {
             Operator operator = optExpression.getOp();
             if (optExpression.arity() == 0) {
-                return context;
+                checkOptWithoutChild(optExpression);
             } else if (optExpression.arity() == 1) {
                 checkOptExprWithOneChild(optExpression);
             } else if (operator instanceof LogicalJoinOperator || operator instanceof PhysicalJoinOperator) {
@@ -67,6 +68,17 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 }
             }
             return context;
+        }
+
+        private void checkOptWithoutChild(OptExpression optExpression) {
+            RowOutputInfo rowOutputInfo = optExpression.getRowOutputInfo();
+            // only need check operator with projection
+            if (MapUtils.isNotEmpty(rowOutputInfo.getColOutputInfo())) {
+                ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
+                final ColumnRefSet usedCols = new ColumnRefSet();
+                rowOutputInfo.getColOutputInfo().values().stream().forEach(e -> usedCols.union(e.getUsedColumns()));
+                checkInputCols(inputCols, usedCols, optExpression);
+            }
         }
 
         private void checkOptExprWithOneChild(OptExpression optExpression) {
