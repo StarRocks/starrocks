@@ -546,4 +546,62 @@ StatusOr<ColumnPtr> MapColumn::downgrade() {
     return downgrade_helper_func(&_values);
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == 2) << "Map schema does not match data's";
+    _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
+    _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
+    return Status::OK();
+}
+
+// keep the last identical key
+void MapColumn::remove_duplicated_keys(bool need_recursive) {
+    // recursively distinct keys
+    if (need_recursive && _values->is_map()) {
+        down_cast<MapColumn*>(ColumnHelper::get_data_column(_values.get()))->remove_duplicated_keys(true);
+    }
+    Filter filter(_keys->size(), 1);
+    // compute hash for all keys
+    auto hash = std::make_unique<uint32_t[]>(_keys->size());
+    memset(hash.get(), 0, _keys->size() * sizeof(uint32_t));
+    _keys->fnv_hash(hash.get(), 0, _keys->size());
+
+    bool has_duplicated_keys = false;
+    size_t size = this->size();
+    UInt32Column::Ptr new_offsets = UInt32Column::create();
+    new_offsets->reserve(size + 1);
+    auto& offsets_vec = new_offsets->get_data();
+    offsets_vec.push_back(0);
+
+    uint32_t new_offset = 0;
+    for (auto i = 0; i < size; ++i) {
+        std::unordered_multimap<uint32_t, uint32_t> key_hash_to_offsets;
+        key_hash_to_offsets.reserve(_offsets->get_data()[i + 1] - _offsets->get_data()[i]);
+        for (int32_t j = _offsets->get_data()[i + 1] - 1; j >= 0 && j >= _offsets->get_data()[i]; --j) {
+            auto same_hash_offsets = key_hash_to_offsets.equal_range(hash[j]);
+            for (auto it = same_hash_offsets.first; it != same_hash_offsets.second; ++it) {
+                if (_keys->equals(j, *_keys, it->second)) {
+                    filter[j] = 0;
+                    has_duplicated_keys = true;
+                    break;
+                }
+            }
+            new_offset += filter[j];
+            if (filter[j] != 0) {
+                key_hash_to_offsets.emplace(hash[j], (uint32_t)j);
+            }
+        }
+        offsets_vec.push_back(new_offset);
+    }
+    if (has_duplicated_keys) {
+        auto new_keys_size = _keys->filter(filter);
+        auto new_values_size = _values->filter(filter);
+        DCHECK(new_keys_size == new_values_size);
+        _offsets.swap(new_offsets);
+    }
+}
+
+} // namespace starrocks
+>>>>>>> 4f8571094b ([Enhancement] improve map columns's remove dup key performence (#29342))
