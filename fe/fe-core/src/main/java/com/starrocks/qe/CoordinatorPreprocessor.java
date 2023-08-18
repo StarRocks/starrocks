@@ -208,7 +208,8 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
+    @VisibleForTesting
+    FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
         return executionDAG.getFragment(fragmentId).getScanRangeAssignment();
     }
 
