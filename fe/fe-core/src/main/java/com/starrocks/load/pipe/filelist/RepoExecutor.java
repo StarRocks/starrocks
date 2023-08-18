@@ -67,8 +67,8 @@ public class RepoExecutor {
             context.setQueryId(UUIDUtil.genUUID());
             executor.handleDMLStmt(execPlan, dmlStmt);
         } catch (Exception e) {
-            LOG.error("Repo execute SQL failed {}", sql, e);
-            throw new SemanticException("execute sql failed with exception", e);
+            LOG.error("RepoExecutor execute SQL {} failed: {}", sql, e.getMessage(), e);
+            throw new SemanticException(String.format("execute sql %s failed: %s", sql, e.getMessage()), e);
         } finally {
             ConnectContext.remove();
         }

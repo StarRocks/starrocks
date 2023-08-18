@@ -23,6 +23,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -92,15 +93,33 @@ public class FileListTableRepo extends FileListRepo {
     }
 
     @Override
-    public void addFiles(List<PipeFileRecord> records) {
+    public void stageFiles(List<PipeFileRecord> records) {
+        // Split the records into batches, to avoid build a tremendous SQL
+        final int selectBatchSize = 20;
+        final int writeBatchSize = 2000;
         records.forEach(file -> file.pipeId = pipeId.getId());
-        List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(records);
-        List<PipeFileRecord> newFiles = ListUtils.subtract(records, stagedFiles);
-        if (CollectionUtils.isEmpty(newFiles)) {
-            return;
+
+        List<PipeFileRecord> stagingFile = new ArrayList<>();
+        for (List<PipeFileRecord> batch : ListUtils.partition(records, selectBatchSize)) {
+            List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(batch);
+            List<PipeFileRecord> newFiles = ListUtils.subtract(batch, stagedFiles);
+            if (CollectionUtils.isEmpty(newFiles)) {
+                return;
+            }
+            stagingFile.addAll(newFiles);
+
+            if (stagingFile.size() >= writeBatchSize) {
+                RepoAccessor.getInstance().addFiles(stagingFile);
+                LOG.info("stage {} files into file-list, pipe={}, newFiles={}",
+                        stagingFile.size(), pipeId, stagingFile);
+                stagingFile.clear();
+            }
         }
-        RepoAccessor.getInstance().addFiles(records);
-        LOG.info("add files into file-list, pipe={}, alreadyStagedFile={}, newFiles={}", pipeId, stagedFiles, newFiles);
+        if (CollectionUtils.isNotEmpty(stagingFile)) {
+            RepoAccessor.getInstance().addFiles(stagingFile);
+            LOG.info("stage {} files into file-list, pipe={}, newFiles={}",
+                    stagingFile.size(), pipeId, stagingFile);
+        }
     }
 
     @Override

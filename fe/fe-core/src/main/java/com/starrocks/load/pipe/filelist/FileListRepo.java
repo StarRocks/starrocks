@@ -41,9 +41,9 @@ public abstract class FileListRepo {
 
     /**
      * Add files into the list, as unloaded state
-     * If some files have already been loaded, they will not been added
+     * If some files have already been loaded, they will be ignored
      */
-    public abstract void addFiles(List<PipeFileRecord> files);
+    public abstract void stageFiles(List<PipeFileRecord> files);
 
     /**
      * Update state in different scenarios

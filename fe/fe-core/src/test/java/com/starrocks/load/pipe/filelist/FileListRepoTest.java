@@ -262,7 +262,7 @@ public class FileListRepoTest {
                 result = Lists.newArrayList();
             }
         };
-        repo.addFiles(Lists.newArrayList(record));
+        repo.stageFiles(Lists.newArrayList(record));
 
         // updateFileState
         new Expectations(executor) {

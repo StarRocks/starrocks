@@ -73,13 +73,26 @@ public class RepoAccessor {
     }
 
     public void addFiles(List<PipeFileRecord> records) {
-        try {
-            String sql = buildSqlAddFiles(records);
-            RepoExecutor.getInstance().executeDML(sql);
-            LOG.info("addFiles into repo: {}", records);
-        } catch (Exception e) {
-            LOG.error("addFiles {} failed", records, e);
-            throw e;
+        for (int retry = 0; retry < 3; retry++) {
+            try {
+                String sql = buildSqlAddFiles(records);
+                RepoExecutor.getInstance().executeDML(sql);
+                LOG.info("addFiles into repo: {}", records);
+                return;
+            } catch (Exception e) {
+                // Retry on some specific errors
+                if (e.getMessage().contains("too many versions")) {
+                    LOG.warn("staging pipe files got too many versions error, wait a moment and retry", e);
+                    try {
+                        Thread.sleep(10000);
+                    } catch (InterruptedException ex) {
+                        throw e;
+                    }
+                } else {
+                    LOG.error("addFiles {} failed", records, e);
+                    throw e;
+                }
+            }
         }
     }
 

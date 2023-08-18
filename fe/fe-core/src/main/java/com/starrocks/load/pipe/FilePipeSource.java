@@ -88,7 +88,7 @@ public class FilePipeSource implements GsonPostProcessable {
                         ListUtils.emptyIfNull(files).stream()
                                 .map(PipeFileRecord::fromHdfsFile)
                                 .collect(Collectors.toList());
-                fileListRepo.addFiles(records);
+                fileListRepo.stageFiles(records);
 
                 if (!autoIngest) {
                     // TODO: persist state
