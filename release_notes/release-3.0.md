@@ -1,5 +1,39 @@
 # StarRocks version 3.0
 
+## 3.0.5
+
+发布日期：2023 年 8 月 16 日
+
+### 新增特性
+
+- 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
+- 支持[窗口函数](../sql-reference/sql-functions/Window_function.md) COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP。
+
+### 功能优化
+
+- 在报错信息 `xxx too many versions xxx` 中增加了如何处理的建议说明。[#28397](https://github.com/StarRocks/starrocks/pull/28397)
+- 动态分区新增支持分区粒度为年。[#28386](https://github.com/StarRocks/starrocks/pull/28386)
+- [INSERT OVERWRITE 中使用表达式分区时](../table_design/expression_partitioning#%E5%AF%BC%E5%85%A5%E6%95%B0%E6%8D%AE%E8%87%B3%E5%88%86%E5%8C%BA)，分区字段大小写不敏感。[#28309](https://github.com/StarRocks/starrocks/pull/28309)
+
+### 问题修复
+
+修复了如下问题：
+
+- FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。 [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- 分区表中修改 sort key 列后查询结果不稳定。[#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- Restore 后同一个 tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- 建 Colocation 表时如果不指定 buckets 数量，则 bucket 数量自动推断为 0，后续添加分区会失败。[#27086](https://github.com/StarRocks/starrocks/pull/27086)
+- 当 INSERT INTO SELECT 的 SELECT 结果集为空时，SHOW LOAD 显示导入任务状态为 `CANCELED`。[#26913](https://github.com/StarRocks/starrocks/pull/26913)
+- 当 sub_bitmap 函数的输入值不是 BITMAP 类型时，会导致 BE crash。[#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- 更新 AUTO_INCREMENT 列时会导致 BE crash。[#27199](https://github.com/StarRocks/starrocks/pull/27199)
+- 物化视图 Outer join 和 Anti join 改写错误。 [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- 主键模型部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 激活失效物化视图时可能导致 FE crash。[#27959](https://github.com/StarRocks/starrocks/pull/27959)
+- 查询无法改写至基于 Hudi Catalog 外部表创建的物化视图。[#28023](https://github.com/StarRocks/starrocks/pull/28023)
+- 删除 Hive 表后，即使手动更新元数据缓存，仍然可以查询到 Hive 表数据。[#28223](https://github.com/StarRocks/starrocks/pull/28223)
+- 当异步物化视图的刷新策略为手动刷新且同步调用刷新任务（SYNC MODE）时，手动刷新后 `information_schema.task_runs` 表中有多条 INSERT OVERWRITE 的记录。[#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- LabelCleaner 线程卡死导致 FE 内存泄漏。 [#28311](https://github.com/StarRocks/starrocks/pull/28311) [#28636](https://github.com/StarRocks/starrocks/pull/28636)
+
 ## 3.0.4
 
 发布日期：2023 年 7 月 18 日
@@ -10,6 +44,7 @@
 
 ### 功能优化
 
+- 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25904](https://github.com/StarRocks/starrocks/pull/25904)
 - 如果查询的字段不包含在物化视图的 output 列但是包含在其谓词条件中，仍可使用该物化视图进行查询改写。[#23028](https://github.com/StarRocks/starrocks/issues/23028)
 - [切换至 Trino 语法](../reference/System_variable.md) `set sql_dialect = 'trino';`，查询时表别名大小写不敏感。[#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - `Information_schema.tables_config` 表中增加了 `table_id` 字段。您可以基于 `table_id` 字段关联数据库 `Information_schema` 中的表 `tables_config` 和 `be_tablets`，来查询 tablet 所属数据库和表名称。[#24061](https://github.com/StarRocks/starrocks/pull/24061)

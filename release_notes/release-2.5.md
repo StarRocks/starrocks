@@ -73,7 +73,7 @@
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 - 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 优化建表时 Comment 中的默认值。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
-- 异步物化视图支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 进行同步手动刷新。 [#25910](https://github.com/StarRocks/starrocks/pull/25910)
+- 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
 ### 问题修复
 
