@@ -690,11 +690,11 @@ public class QueryAnalyzer {
             }
 
             // check view schema
-            Map<String, Column> columns =
-                    node.getView().getColumns().stream().collect(Collectors.toMap(Column::getName, c -> c));
+            Map<String, Column> columns = node.getView().getColumns().stream()
+                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c));
 
             for (Field field : fields) {
-                if (!columns.containsKey(field.getName())) {
+                if (!columns.containsKey(field.getName().toLowerCase())) {
                     throw new SemanticException(
                             "Found undefined column[%s] from View[%s]'s query, " +
                                     "please check the source table has been modified", field.getName(),

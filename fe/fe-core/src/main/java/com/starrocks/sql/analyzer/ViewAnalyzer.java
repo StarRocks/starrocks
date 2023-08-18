@@ -52,7 +52,7 @@ public class ViewAnalyzer {
 
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
-            String viewSql = AstToViewBuilder.toSQL(stmt.getQueryStatement());
+            String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
             stmt.setInlineViewDef(viewSql);
             return null;
         }
