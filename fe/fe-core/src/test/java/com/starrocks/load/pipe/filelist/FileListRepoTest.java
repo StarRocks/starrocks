@@ -136,7 +136,9 @@ public class FileListRepoTest {
 
         // add files
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
-        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list VALUES " +
+        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
+                        "(`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
+                        "`staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label`) VALUES " +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')," +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
@@ -256,7 +258,9 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "INSERT INTO _statistics_.pipe_file_list VALUES " +
+                        "INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                "`error_info`, `insert_label`) VALUES " +
                                 "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
                                 "NULL, NULL, '{\"errorMessage\":null}', '')");
                 result = Lists.newArrayList();
