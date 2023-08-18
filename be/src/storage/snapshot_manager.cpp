@@ -687,8 +687,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         auto version = meta_pb.mutable_updates()->add_versions();
 
         uint32_t next_segment_id = 0;
-        version->mutable_version()->set_major(snapshot_version);
-        version->mutable_version()->set_minor(0);
+        version->mutable_version()->set_major_number(snapshot_version);
+        version->mutable_version()->set_minor_number(0);
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
@@ -697,8 +697,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
         meta_pb.mutable_updates()->set_next_log_id(0);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_major(snapshot_version);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_major_number(snapshot_version);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_minor_number(0);
     }
 
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};

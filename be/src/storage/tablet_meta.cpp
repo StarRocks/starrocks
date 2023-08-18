@@ -530,11 +530,11 @@ void TabletMeta::create_inital_updates_meta() {
     _updatesPB = std::make_unique<TabletUpdatesPB>();
     auto edit_version_meta_pb = _updatesPB->add_versions();
     auto edit_version_pb = edit_version_meta_pb->mutable_version();
-    edit_version_pb->set_major(1);
-    edit_version_pb->set_minor(0);
+    edit_version_pb->set_major_number(1);
+    edit_version_pb->set_minor_number(0);
     edit_version_meta_pb->set_creation_time(creation_time());
-    _updatesPB->mutable_apply_version()->set_major(edit_version_pb->major());
-    _updatesPB->mutable_apply_version()->set_minor(edit_version_pb->minor());
+    _updatesPB->mutable_apply_version()->set_major_number(edit_version_pb->major_number());
+    _updatesPB->mutable_apply_version()->set_minor_number(edit_version_pb->minor_number());
     _updatesPB->set_next_log_id(0);
     _updatesPB->set_next_rowset_id(0);
 }

@@ -124,7 +124,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     EditVersion edit_version;
     std::vector<uint64_t> rowids(n);
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *pk_column, &edit_version, &rowids));
-    if (edit_version.major() != _version) {
+    if (edit_version.major_number() != _version) {
         return Status::InternalError(
                 strings::Substitute("multi_get version not match tablet:$0 current_version:$1 read_version:$2",
                                     _tablet->tablet_id(), edit_version.to_string(), _version));
