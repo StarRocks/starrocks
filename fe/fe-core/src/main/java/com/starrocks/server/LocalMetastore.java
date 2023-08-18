@@ -346,7 +346,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2021,6 +2027,8 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             db.registerTableUnlocked(table);
             table.onReload();
+        } catch (Throwable e) {
+            LOG.error("replay create table failed: {}", table, e);
         } finally {
             db.writeUnlock();
         }
@@ -4752,7 +4760,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
 
         // put built-in database into local metastore
