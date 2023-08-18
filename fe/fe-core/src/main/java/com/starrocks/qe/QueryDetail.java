@@ -76,6 +76,7 @@ public class QueryDetail implements Serializable {
     private long returnRows = -1;
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
+    private long spillBytes = -1;
 
     public QueryDetail() {
     }
@@ -127,6 +128,7 @@ public class QueryDetail implements Serializable {
         queryDetail.returnRows = this.returnRows;
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
+        queryDetail.spillBytes = this.spillBytes;
         return queryDetail;
     }
 
@@ -288,5 +290,9 @@ public class QueryDetail implements Serializable {
 
     public void setMemCostBytes(long memCostBytes) {
         this.memCostBytes = memCostBytes;
+    }
+
+    public void setSpillBytes(long spillBytes) {
+        this.spillBytes = spillBytes;
     }
 }

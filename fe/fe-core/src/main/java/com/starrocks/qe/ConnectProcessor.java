@@ -174,6 +174,7 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            ctx.getAuditEventBuilder().setSpilledBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
 
         if (ctx.getState().isQuery()) {
@@ -270,6 +271,7 @@ public class ConnectProcessor {
             queryDetail.setScanRows(statistics.scanRows);
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
 
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
