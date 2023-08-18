@@ -22,9 +22,9 @@ import static java.util.Objects.requireNonNull;
 public class InformationSchemaConnector implements Connector {
     private final InformationSchemaMetadata informationSchemaMetadata;
 
-    public InformationSchemaConnector(InformationSchemaMetadata informationSchemaMetadata) {
-        requireNonNull(informationSchemaMetadata, "informationSchemaMetadata is null");
-        this.informationSchemaMetadata = informationSchemaMetadata;
+    public InformationSchemaConnector(String catalogName) {
+        requireNonNull(catalogName, "catalogName is null");
+        this.informationSchemaMetadata = new InformationSchemaMetadata(catalogName);
     }
 
     @Override
