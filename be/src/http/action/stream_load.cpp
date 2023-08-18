@@ -146,8 +146,8 @@ void StreamLoadAction::handle(HttpRequest* req) {
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
         if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
-            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id
-                         << " errmsg=" << ctx->status.get_error_msg();
+            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.get_error_msg()
+                         << " " << ctx->brief();
         }
     }
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
