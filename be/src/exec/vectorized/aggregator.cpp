@@ -529,7 +529,7 @@ Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     } else {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
-
+    RETURN_IF_ERROR(check_has_error());
     // For agg function column is non-nullable and table is empty
     // sum(zero_row) should be null, not 0.
     if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
@@ -599,6 +599,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
 
     _num_pass_through_rows += result_chunk->num_rows();
@@ -608,7 +609,58 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
 void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
+=======
+Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) {
+    auto use_intermediate_as_input = _use_intermediate_as_input();
+    size_t num_rows = input_chunk->num_rows();
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    const auto& slots = _intermediate_tuple_desc->slots();
+    // build group by column
+    for (size_t i = 0; i < _group_by_columns.size(); i++) {
+        DCHECK_EQ(num_rows, _group_by_columns[i]->size());
+        // materialize group by const columns
+        if (_group_by_columns[i]->is_constant()) {
+            auto res =
+                    ColumnHelper::unfold_const_column(_group_by_types[i].result_type, num_rows, _group_by_columns[i]);
+            result_chunk->append_column(std::move(res), slots[i]->id());
+        } else {
+            result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        }
+    }
+
+    if (!_agg_fn_ctxs.empty()) {
+        DCHECK(!_group_by_columns.empty());
+
+        RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+
+        const auto num_rows = _group_by_columns[0]->size();
+        Columns agg_result_column = _create_agg_result_columns(num_rows, true);
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            size_t id = _group_by_columns.size() + i;
+            auto slot_id = slots[id]->id();
+            // If it is AGG stage 3/4, the input of AGG is the intermediate result type (merge/serilaze stage and merge/finalize stage),
+            // and it can be directly converted to intermediate result type at this time
+            if (_is_merge_funcs[i] || use_intermediate_as_input) {
+                DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
+                result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
+            } else {
+                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                                                               result_chunk->num_rows(), &agg_result_column[i]);
+                result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
+            }
+        }
+        RETURN_IF_ERROR(check_has_error());
+    }
+    _num_rows_processed += result_chunk->num_rows();
+    *chunk = std::move(result_chunk);
+
+    return Status::OK();
+}
+
+Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
+>>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464)):be/src/exec/aggregator.cpp
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -1029,7 +1081,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
                 }
             }
         }
-
+        RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 
         // If there is null key, output it last
@@ -1047,7 +1099,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
                     } else {
                         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
-
+                    RETURN_IF_ERROR(check_has_error());
                     ++read_index;
                 } else {
                     // Output null key in next round
