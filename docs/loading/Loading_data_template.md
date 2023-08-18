@@ -22,20 +22,20 @@ Introductory text that let's the reader know what the end result will be if they
 
 #### Data flow or other diagram
 
-Diagrams or images can be helpful. If you are describing a technique that is complex and an image helps, then use one. If you are describing a technique that produces something visual (for example, the use of Superset to analyze data), then definitely include an image of the end product. 
+Diagrams or images can be helpful. If you are describing a technique that is complex and an image helps, then use one. If you are describing a technique that produces something visual (for example, the use of Superset to analyze data), then definitely include an image of the end product.
 
 Use a data flow diagram if the flow is non-obvious. When a command causes StarRocks to run several processes and combine the output of those processes and then manipulate the data it is probably time for a description of the data flow. In this template there are two methods for loading data described. One of them is simple, and has no data flow section; the other is more complicated (StarRocks is handling the complex work, not the user!), and the complex option includes a data flow section.
 
 #### Examples with verification section
 
-Note that examples should come before syntax details and other deep technical details. Many readers will be coming to the docs to find a particular technique that they can copy, paste, and modify. 
+Note that examples should come before syntax details and other deep technical details. Many readers will be coming to the docs to find a particular technique that they can copy, paste, and modify.
 
-If possible give an example that will work and includes a dataset to use. The example in this template uses a dataset stored in S3 that anyone who has an AWS account and can authenticate with a key and secret can use. By providing a dataset the examples are more valuable to the reader because they can fully experience the described technique. 
+If possible give an example that will work and includes a dataset to use. The example in this template uses a dataset stored in S3 that anyone who has an AWS account and can authenticate with a key and secret can use. By providing a dataset the examples are more valuable to the reader because they can fully experience the described technique.
 
 Make sure that the example works as written. This implies two things:
 
 1. you have run the commands in the order presented
-2. you have included the necessary prerequisites. For example, if your example refers to database `foo`, then probably you need to preface it with `CREATE DATABASE foo;`, `USE foo;`. 
+2. you have included the necessary prerequisites. For example, if your example refers to database `foo`, then probably you need to preface it with `CREATE DATABASE foo;`, `USE foo;`.
 
 Verification is so important. If the process that you are describing includes several steps, then include a verification step whenever something should have been accomplished; this helps avoid having the reader get to the end and realizing that they had a typo in step 10. If this example the **Check progress** step is a verification step, and the `DESCRIBE user_behavior_inferred;` command is another verification step.
 
