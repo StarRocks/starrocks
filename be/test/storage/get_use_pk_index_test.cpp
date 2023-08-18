@@ -201,7 +201,7 @@ public:
             std::vector<RowsetSharedPtr> rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version, &rowsets, &full_version).ok());
-            if (full_version.major() >= version) {
+            if (full_version.major_number() >= version) {
                 break;
             }
             std::cerr << "waiting for version " << version << std::endl;

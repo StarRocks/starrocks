@@ -118,6 +118,10 @@ public class QueryQueueManager {
     }
 
     public boolean needCheckQueue(DefaultCoordinator coord) {
+        if (!coord.getJobSpec().isNeedQueued()) {
+            return false;
+        }
+
         // The queries only using schema meta will never been queued, because a MySQL client will
         // query schema meta after the connection is established.
         List<ScanNode> scanNodes = coord.getScanNodes();

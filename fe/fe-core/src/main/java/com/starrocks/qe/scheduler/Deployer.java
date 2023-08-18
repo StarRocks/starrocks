@@ -78,13 +78,18 @@ public class Deployer {
         this.failureHandler = failureHandler;
     }
 
-    public void deployFragments(List<ExecutionFragment> concurrentFragments) throws RpcException, UserException {
+    public void deployFragments(List<ExecutionFragment> concurrentFragments, boolean needDeploy)
+            throws RpcException, UserException {
         // Divide requests of fragments in the current group to two stages.
         // - stage 1, the first request to a host, which need send descTable.
         // - stage 2, the non-first requests to a host, which needn't send descTable.
         List<List<FragmentInstanceExecState>> twoStageExecutionsToDeploy = ImmutableList.of(new ArrayList<>(), new ArrayList<>());
 
         concurrentFragments.forEach(fragment -> this.createFragmentInstanceExecStates(fragment, twoStageExecutionsToDeploy));
+
+        if (!needDeploy) {
+            return;
+        }
 
         for (List<FragmentInstanceExecState> executions : twoStageExecutionsToDeploy) {
             executions.forEach(FragmentInstanceExecState::deployAsync);

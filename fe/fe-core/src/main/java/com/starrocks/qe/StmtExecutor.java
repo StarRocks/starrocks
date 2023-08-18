@@ -432,6 +432,7 @@ public class StmtExecutor {
                             context.getDumpInfo().reset();
                         }
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                        context.getDumpInfo().setStatement(parsedStmt);
                     }
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
@@ -476,7 +477,7 @@ public class StmtExecutor {
 
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
-                final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
+                final boolean isStatisticsJob = context.isStatisticsJob() || AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
@@ -583,14 +584,12 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry) {
-                            if (context.getSessionVariable().isEnableProfile()) {
-                                writeProfile(execPlan, beginTimeInNanoSecond);
-                                if (parsedStmt.isExplain() &&
-                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                    handleExplainStmt(ExplainAnalyzer.analyze(
-                                            ProfilingExecPlan.buildFrom(execPlan), profile, null));
-                                }
+                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
+                            writeProfile(execPlan, beginTimeInNanoSecond);
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                handleExplainStmt(ExplainAnalyzer.analyze(
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -730,8 +729,9 @@ public class StmtExecutor {
     }
 
     private void dumpException(Exception e) {
-        if (context.shouldDumpQuery() && !context.isHTTPQueryDump()) {
+        if (context.isHTTPQueryDump()) {
             context.getDumpInfo().addException(ExceptionUtils.getStackTrace(e));
+        } else if (context.getSessionVariable().getEnableQueryDump()) {
             QueryDumpLog.getQueryDump().log(GsonUtils.GSON.toJson(context.getDumpInfo()));
         }
     }
@@ -828,6 +828,7 @@ public class StmtExecutor {
         if (killCtx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_THREAD, id);
         }
+        Preconditions.checkNotNull(killCtx);
         if (context == killCtx) {
             // Suicide
             context.setKilled();
@@ -866,11 +867,15 @@ public class StmtExecutor {
 
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+        boolean isSchedulerExplain = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setPipelineProfileLevel(1);
             context.getSessionVariable().setProfileLimitFold(false);
+        } else if (isSchedulerExplain) {
+            // Do nothing.
         } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
@@ -890,6 +895,12 @@ public class StmtExecutor {
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
+
+        if (isSchedulerExplain) {
+            coord.startSchedulingWithoutDeploy();
+            handleExplainStmt(coord.getSchedulerExplain());
+            return;
+        }
 
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
@@ -1179,10 +1190,10 @@ public class StmtExecutor {
         } else if (analyzeJob != null) {
             Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
                     analyzeJob.getTableId());
-            tableNames.forEach(tableName -> {
-                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl(), analyzeId);
-            });
+            tableNames.forEach(tableName ->
+                    checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl(), analyzeId)
+            );
         }
     }
 
@@ -1529,11 +1540,15 @@ public class StmtExecutor {
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
+        boolean isSchedulerExplain = parsedStmt.isExplain()
+                && StatementBase.ExplainLevel.SCHEDULER.equals(parsedStmt.getExplainLevel());
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setPipelineProfileLevel(1);
             context.getSessionVariable().setProfileLimitFold(false);
+        } else if (isSchedulerExplain) {
+            // Do nothing.
         } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
@@ -1685,7 +1700,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+            context.setStatisticsJob(context.isStatisticsJob() || AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             if (!targetTable.isIcebergTable()) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
@@ -1703,6 +1718,13 @@ public class StmtExecutor {
 
             QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
+
+            if (isSchedulerExplain) {
+                coord.startSchedulingWithoutDeploy();
+                handleExplainStmt(coord.getSchedulerExplain());
+                return;
+            }
+
             coord.exec();
             coord.setTopProfileSupplier(this::buildTopLevelProfile);
             coord.setExecPlanSupplier(() -> execPlan);
@@ -1832,8 +1854,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
-                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                                context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -1891,6 +1913,7 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
+                    Preconditions.checkNotNull(coord);
                     context.getGlobalStateMgr().getLoadMgr()
                             .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());

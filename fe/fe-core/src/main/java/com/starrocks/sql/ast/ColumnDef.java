@@ -210,7 +210,7 @@ public class ColumnDef implements ParseNode {
     }
 
     public Expr materializedColumnExpr() {
-        return materializedColumnExpr;
+        return materializedColumnExpr.clone();
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.

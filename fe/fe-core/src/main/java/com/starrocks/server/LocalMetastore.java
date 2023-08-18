@@ -346,7 +346,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2021,6 +2027,8 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             db.registerTableUnlocked(table);
             table.onReload();
+        } catch (Throwable e) {
+            LOG.error("replay create table failed: {}", table, e);
         } finally {
             db.writeUnlock();
         }
@@ -2156,7 +2164,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     try {
                         chosenBackendIds = chosenBackendIdBySeq(replicationNum);
                     } catch (DdlException ex) {
-                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
+                        throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
                                 ex.getMessage(), table.getName(), Config.default_replication_num));
                     }
                 }
@@ -3484,6 +3492,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            try {
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }
@@ -3498,6 +3513,12 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
+        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
+            tableProperty.buildStorageCoolDownTTL();
+        } else {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
         }
 
         ModifyTablePropertyOperationLog info =
@@ -4739,7 +4760,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
 
         // put built-in database into local metastore

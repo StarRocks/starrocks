@@ -585,6 +585,8 @@
       + [conv](/sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [cosine_similarity](./sql-reference/sql-functions/math-functions/cos_similarity.md)
+      + [cosine_similarity_norm](./sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)

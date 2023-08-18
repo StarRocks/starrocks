@@ -67,6 +67,8 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     @Override
     public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
+        properties.putIfAbsent(JDBCTable.ORIGINAL_DBNAME, dbName);
+        properties.putIfAbsent(JDBCTable.ORIGINAL_TABLENAME, name);
         return new JDBCTable(id, "\"" + dbName + "\"" + "." + "\"" + name + "\"", schema, "", catalogName, properties);
     }
 

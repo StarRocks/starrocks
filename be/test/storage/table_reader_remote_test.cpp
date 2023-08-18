@@ -219,7 +219,7 @@ TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {
             std::vector<RowsetSharedPtr> dummy_rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
-            if (full_version.major() < 2) {
+            if (full_version.major_number() < 2) {
                 ok = false;
                 break;
             }
@@ -314,7 +314,7 @@ TEST_F(TableReaderRemoteTest, test_multi_get_4_tablet) {
             std::vector<RowsetSharedPtr> dummy_rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(2, &dummy_rowsets, &full_version).ok());
-            if (full_version.major() < 2) {
+            if (full_version.major_number() < 2) {
                 ok = false;
                 break;
             }

@@ -68,7 +68,8 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _col_unique_id(-1),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(false) {}
+          _is_materialized(false),
+          _is_output_column(false) {}
 
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
@@ -79,7 +80,8 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _col_unique_id(tdesc.col_unique_id),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(tdesc.isMaterialized) {}
+          _is_materialized(tdesc.isMaterialized),
+          _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -90,7 +92,8 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
-          _is_materialized(pdesc.is_materialized()) {}
+          _is_materialized(pdesc.is_materialized()),
+          _is_output_column(true) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
