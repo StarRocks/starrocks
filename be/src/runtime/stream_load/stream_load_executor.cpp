@@ -237,13 +237,6 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
     result = k_stream_load_commit_result;
 #endif
     Status status(result.status);
-<<<<<<< HEAD
-    if (!status.ok()) {
-        LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
-        if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
-            ctx->need_rollback = false;
-        }
-=======
     if (status.ok()) {
         ctx->need_rollback = false;
         return status;
@@ -254,7 +247,6 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
         return visible ? Status::OK() : status;
     } else {
         ctx->need_rollback = true;
->>>>>>> 4997747770 ([Refactor] Split stream load commit function into smaller units (#29367))
         return status;
     }
 }
