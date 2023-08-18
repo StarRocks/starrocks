@@ -197,6 +197,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
             Assert.assertTrue(manager.needCheckQueue(coordinator));
         }
+
+        {
+            // 4. set connectContext.needQueued to false.
+            connectContext.setNeedQueued(false);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId(
+                    "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
+            Assert.assertFalse(manager.needCheckQueue(coordinator));
+            connectContext.setNeedQueued(true);
+        }
     }
 
     @Test

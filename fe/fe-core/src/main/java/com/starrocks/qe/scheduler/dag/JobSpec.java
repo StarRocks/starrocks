@@ -57,10 +57,10 @@ public class JobSpec {
      */
     private final TDescriptorTable descTable;
 
+    private final ConnectContext connectContext;
     private final boolean enablePipeline;
     private final boolean enableStreamPipeline;
     private final boolean isBlockQuery;
-    private final boolean isStatisticsJob;
 
     /**
      * Why we use query global?
@@ -321,7 +321,7 @@ public class JobSpec {
         this.enablePipeline = builder.enablePipeline;
         this.enableStreamPipeline = builder.enableStreamPipeline;
         this.isBlockQuery = builder.isBlockQuery;
-        this.isStatisticsJob = builder.isStatisticsJob;
+        this.connectContext = builder.connectContext;
 
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
@@ -413,7 +413,11 @@ public class JobSpec {
     }
 
     public boolean isStatisticsJob() {
-        return isStatisticsJob;
+        return connectContext.isStatisticsJob();
+    }
+
+    public boolean isNeedQueued() {
+        return connectContext.isNeedQueued();
     }
 
     public boolean isStreamLoad() {
@@ -435,7 +439,7 @@ public class JobSpec {
         private boolean enablePipeline;
         private boolean enableStreamPipeline;
         private boolean isBlockQuery;
-        private boolean isStatisticsJob;
+        private ConnectContext connectContext;
 
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
@@ -451,7 +455,7 @@ public class JobSpec {
             this.resourceGroup(newResourceGroup);
 
             this.enablePipeline(isEnablePipeline(context, fragments));
-            this.isStatisticsJob = context.isStatisticsJob();
+            this.connectContext = context;
 
             return this;
         }
