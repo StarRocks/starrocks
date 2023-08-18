@@ -1407,7 +1407,10 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 }
             }
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464))
         RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 

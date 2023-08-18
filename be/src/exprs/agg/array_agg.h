@@ -190,6 +190,7 @@ struct ArrayAggAggregateStateV2 {
     void update(const Column& column, size_t index, size_t offset, size_t count) {
         (*data_columns)[index]->append(column, offset, count);
     }
+<<<<<<< HEAD
     void update_nulls(size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
 
     bool check_overflow(FunctionContext* ctx) const {
@@ -211,6 +212,9 @@ struct ArrayAggAggregateStateV2 {
         }
         return false;
     }
+=======
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
+>>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464))
 
     // release the trailing N-1 order-by columns
     void release_order_by_columns() const {

@@ -2250,6 +2250,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_TRUE(local_ctx->has_error());
     }
+<<<<<<< HEAD
 }
 
 TEST_F(AggregateTest, test_group_concatV2) {
@@ -2641,6 +2642,8 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(26, offsets->get_data().back());
+=======
+>>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464))
 }
 
 } // namespace starrocks
