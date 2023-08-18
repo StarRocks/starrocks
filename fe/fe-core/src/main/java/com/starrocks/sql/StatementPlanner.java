@@ -44,6 +44,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -239,7 +241,9 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs.values()) {
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        dbList.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbList) {
             db.readLock();
         }
     }
