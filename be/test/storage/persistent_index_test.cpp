@@ -1320,7 +1320,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
 
 void build_persistent_index_from_tablet(size_t N) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test";
+    const std::string kPersistentIndexDir = "./persistent_index_test_build_from_tablet";
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
@@ -1442,12 +1442,20 @@ void build_persistent_index_from_tablet(size_t N) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
+    auto manager = StorageEngine::instance()->update_manager();
+    config::l0_max_mem_usage = 104857600;
+    manager->mem_tracker()->set_limit(-1);
     // dump snapshot
     build_persistent_index_from_tablet(100000);
     // write wal
     build_persistent_index_from_tablet(250000);
     // flush l1
+    config::l0_max_mem_usage = 1000000;
     build_persistent_index_from_tablet(1000000);
+    // flush one tmp l1
+    config::l0_max_mem_usage = 18874368;
+    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 104857600;
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_fixlen_replace) {
