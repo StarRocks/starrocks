@@ -82,11 +82,8 @@ public class QueryRuntimeProfile {
     /**
      * The number of instances of this query.
      * <p> It is equal to the number of backends executing plan fragments on behalf of this query.
-     * It is set in computeFragmentExecParams(); TODO
-     * same as backend_exec_states_.size() after Exec()
-     * instance id -> dummy value
      */
-    private volatile MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = null;
+    private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = null;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
     private Supplier<ExecPlan> execPlanSupplier;
