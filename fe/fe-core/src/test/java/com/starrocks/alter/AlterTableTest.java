@@ -14,11 +14,14 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -108,6 +111,57 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test
+    public void testAlterTableStorageCoolDownTTLPartition() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_partition (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                "PROPERTIES(\n" +
+                "\t\"replication_num\" = \"1\",\n" +
+                "    \"storage_medium\" = \"SSD\",\n" +
+                "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_cool_down_ttl_partition");
+        OlapTable olapTable = (OlapTable) table;
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+        DataProperty p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
+        DataProperty p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
+        DataProperty p20200323 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200323").getId());
+        DataProperty p20200324 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200324").getId());
+        Assert.assertEquals("2020-03-23 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+
+        String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
+                "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+
+        p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
+        p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
+        p20200323 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200323").getId());
+        p20200324 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200324").getId());
+        Assert.assertEquals("2020-03-24 00:00:00", TimeUtils.longToTimeString(p20200321.getCooldownTimeMs()));
+        Assert.assertEquals("2020-03-25 00:00:00", TimeUtils.longToTimeString(p20200322.getCooldownTimeMs()));
+        Assert.assertEquals("2020-03-26 00:00:00", TimeUtils.longToTimeString(p20200323.getCooldownTimeMs()));
+        Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
+
     }
 
 }
