@@ -638,15 +638,27 @@ void MapColumn::remove_duplicated_keys() {
     uint32_t new_offset = 0;
     size_t size = this->size();
     for (auto i = 0; i < size; ++i) {
+<<<<<<< HEAD
         for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
             for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
                 if (_keys->equals(j, *_keys, k)) {
+=======
+        std::unordered_multimap<uint32_t, uint32_t> key_hash_to_offsets;
+        key_hash_to_offsets.reserve(_offsets->get_data()[i + 1] - _offsets->get_data()[i]);
+        for (int32_t j = _offsets->get_data()[i + 1] - 1; j >= 0 && j >= _offsets->get_data()[i]; --j) {
+            auto same_hash_offsets = key_hash_to_offsets.equal_range(hash[j]);
+            for (auto it = same_hash_offsets.first; it != same_hash_offsets.second; ++it) {
+                if (_keys->equals(j, *_keys, it->second)) {
+>>>>>>> 4f8571094b ([Enhancement] improve map columns's remove dup key performence (#29342))
                     filter[j] = 0;
                     has_duplicated_keys = true;
                     break;
                 }
             }
             new_offset += filter[j];
+            if (filter[j] != 0) {
+                key_hash_to_offsets.emplace(hash[j], (uint32_t)j);
+            }
         }
         offsets_vec.push_back(new_offset);
     }

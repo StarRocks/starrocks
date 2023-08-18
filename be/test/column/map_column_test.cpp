@@ -1280,6 +1280,205 @@ PARALLEL_TEST(MapColumnTest, test_remove_duplicated_keys) {
         ASSERT_EQ("{'a':'world','b':' '}", column->debug_item(0));
         ASSERT_EQ("{'def':'haha','g h':'let's dance'}", column->debug_item(1));
     }
+<<<<<<< HEAD
+=======
+    { // nested map
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+        auto column = MapColumn::create(keys, values, offsets);
+
+        DatumMap map;
+        map[(int32_t)1] = (int32_t)11;
+        map[(int32_t)22] = (int32_t)22;
+        map[(int32_t)22] = (int32_t)33;
+        column->append_datum(map);
+
+        DatumMap map1;
+        map1[(int32_t)4] = (int32_t)44;
+        map1[(int32_t)4] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        column->append_datum(map1);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        column->append_datum(map3);
+
+        // {} empty
+        column->append_datum(DatumMap());
+
+        auto nest_offsets = UInt32Column::create();
+        auto nest_keys = keys->clone_empty();
+        nest_keys->append_datum(1);
+        nest_keys->append_datum(1);
+        nest_keys->append_datum(1);
+        nest_keys->append_datum(1);
+        nest_offsets->get_data().push_back(0);
+        nest_offsets->get_data().push_back(2);
+        nest_offsets->get_data().push_back(4);
+
+        auto nest_map = MapColumn::create(std::move(nest_keys),
+                                          std::move(ColumnHelper::cast_to_nullable_column(column)), nest_offsets);
+        nest_map->remove_duplicated_keys(true);
+
+        ASSERT_EQ("{1:{4:66}}", nest_map->debug_item(0));
+        ASSERT_EQ("{1:{}}", nest_map->debug_item(1));
+    }
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+        auto column = MapColumn::create(keys, values, offsets);
+
+        DatumMap map;
+        map[(int32_t)1] = (int32_t)11;
+        map[(int32_t)22] = (int32_t)22;
+        map[(int32_t)22] = (int32_t)33;
+        map[(int32_t)33] = (int32_t)44;
+        map[(int32_t)33] = (int32_t)55;
+        map[(int32_t)33] = (int32_t)66;
+        map[(int32_t)44] = (int32_t)44;
+        map[(int32_t)44] = (int32_t)55;
+        map[(int32_t)100] = (int32_t)100;
+        column->append_datum(map);
+
+        DatumMap map1;
+        map1[(int32_t)4] = (int32_t)44;
+        map1[(int32_t)4] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        column->append_datum(map1);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        column->append_datum(map3);
+
+        // {} empty
+        column->append_datum(DatumMap());
+
+        column->remove_duplicated_keys(true);
+
+        ASSERT_EQ("{1:11,22:33,33:66,44:55,100:100}", column->debug_item(0));
+        ASSERT_EQ("{4:66}", column->debug_item(1));
+        ASSERT_EQ("{3:NULL}", column->debug_item(2));
+        ASSERT_EQ("{}", column->debug_item(3));
+    }
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = BinaryColumn::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = BinaryColumn::create();
+        auto null_column = NullColumn::create();
+        auto values = NullableColumn::create(values_data, null_column);
+        auto column = MapColumn::create(keys, values, offsets);
+
+        DatumMap map;
+        map[(Slice) "a"] = (Slice) "aaa";
+        map[(Slice) "b"] = (Slice) "bbb";
+        map[(Slice) "a"] = (Slice) "aaaa";
+        map[(Slice) "b"] = (Slice) "bbbb";
+        map[(Slice) "a"] = (Slice) "aaaaa";
+        map[(Slice) "b"] = (Slice) "bbbbb";
+        column->append_datum(map);
+
+        column->remove_duplicated_keys(true);
+
+        ASSERT_EQ("{'a':'aaaaa','b':'bbbbb'}", column->debug_item(0));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST(MapColumnTest, test_hash) {
+    ColumnPtr column = nullptr;
+    ColumnPtr column1 = nullptr;
+
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+
+        offsets->append(0);
+        offsets->append(3);
+
+        keys_null->append(0);
+        keys_null->append(0);
+        keys_null->append(0);
+
+        keys_data->append(1);
+        keys_data->append(2);
+        keys_data->append(3);
+
+        values_null->append(0);
+        values_null->append(0);
+        values_null->append(0);
+
+        values_data->append(11);
+        values_data->append(21);
+        values_data->append(31);
+
+        column = MapColumn::create(keys, values, offsets);
+    }
+
+    {
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(keys_data, keys_null);
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(values_data, values_null);
+
+        offsets->append(0);
+        offsets->append(3);
+
+        keys_null->append(0);
+        keys_null->append(0);
+        keys_null->append(0);
+
+        keys_data->append(2);
+        keys_data->append(1);
+        keys_data->append(3);
+
+        values_null->append(0);
+        values_null->append(0);
+        values_null->append(0);
+
+        values_data->append(21);
+        values_data->append(11);
+        values_data->append(31);
+
+        column1 = MapColumn::create(keys, values, offsets);
+    }
+
+    ASSERT_EQ("{1:11,2:21,3:31}", column->debug_item(0));
+    ASSERT_EQ("{2:21,1:11,3:31}", column1->debug_item(0));
+
+    uint32_t hash = 0;
+    uint32_t hash1 = 0;
+    column->fnv_hash_at(&hash, 0);
+    column1->fnv_hash_at(&hash1, 0);
+
+    ASSERT_EQ(hash, hash1);
+
+    hash = 0;
+    hash1 = 0;
+    column->crc32_hash_at(&hash, 0);
+    column1->crc32_hash_at(&hash1, 0);
+
+    ASSERT_EQ(hash, hash1);
+>>>>>>> 4f8571094b ([Enhancement] improve map columns's remove dup key performence (#29342))
 }
 
 } // namespace starrocks
