@@ -24,6 +24,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -108,6 +109,7 @@ struct ArrayAggAggregateStateV2 {
         }
         (*data_columns)[index]->append(column, offset, count);
     }
+<<<<<<< HEAD
     void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
         if (UNLIKELY(index >= data_columns->size())) {
             if (ctx != nullptr) {
@@ -119,10 +121,15 @@ struct ArrayAggAggregateStateV2 {
         DCHECK((*data_columns)[index]->is_nullable());
         (*data_columns)[index]->append_nulls(count);
     }
+=======
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
+>>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464))
 
     // release the trailing N-1 order-by columns
     void release_order_by_columns() const {
-        DCHECK(data_columns != nullptr);
+        if (data_columns == nullptr) {
+            return;
+        }
         for (auto i = 1; i < data_columns->size(); ++i) {
             data_columns->at(i).reset();
         }
@@ -164,7 +171,6 @@ public:
                                                                                   arg_type->precision, arg_type->scale),
                                                 true));
         }
-        DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
         DCHECK(state->data_columns->size() == ctx->get_is_asc_order().size() + 1);
     }
 
@@ -180,7 +186,10 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         for (auto i = 0; i < ctx->get_num_args(); ++i) {
-            DCHECK(columns[i]->size() > row_num);
+            if (UNLIKELY(columns[i]->size() <= row_num)) {
+                ctx->set_error(std::string(get_name() + "'s update row number overflow").c_str(), false);
+                return;
+            }
             // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
             if ((columns[i]->is_nullable() && columns[i]->is_null(row_num)) || columns[i]->only_null()) {
                 this->data(state).update_nulls(ctx, i, 1);
@@ -235,7 +244,18 @@ public:
 
     // finalize each state->column to a [nullable] array
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_nullable() || to->is_array());
+        auto defer = DeferOp([&]() {
+            if (ctx->has_error() && to != nullptr) {
+                to->append_default();
+            }
+        });
+        if (UNLIKELY(!ColumnHelper::get_data_column(to)->is_array())) {
+            ctx->set_error(std::string("The output column of " + get_name() +
+                                       " finalize_to_column() is not array, but is " + to->get_name())
+                                   .c_str(),
+                           false);
+            return;
+        }
         auto& state_impl = this->data(state);
         auto elem_size = (*state_impl.data_columns)[0]->size();
         auto res = (*state_impl.data_columns)[0];
@@ -249,7 +269,14 @@ public:
             // release order-by columns early
             order_by_columns.clear();
             state_impl.release_order_by_columns();
-            DCHECK(ctx->state()->cancelled_ref() || st.ok());
+            if (UNLIKELY(ctx->state()->cancelled_ref())) {
+                ctx->set_error("array_agg detects cancelled.", false);
+                return;
+            }
+            if (UNLIKELY(!st.ok())) {
+                ctx->set_error(st.to_string().c_str(), false);
+                return;
+            }
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));
         }
