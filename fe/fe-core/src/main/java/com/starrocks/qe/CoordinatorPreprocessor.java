@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
@@ -214,7 +215,7 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    void computeFragmentInstances() throws Exception {
+    void computeFragmentInstances() throws UserException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }

@@ -41,6 +41,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Status;
@@ -484,7 +485,7 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachInstances(executionDAG.getInstanceIds());
     }
 
-    private void prepareResultSink() throws Exception {
+    private void prepareResultSink() throws AnalysisException {
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {

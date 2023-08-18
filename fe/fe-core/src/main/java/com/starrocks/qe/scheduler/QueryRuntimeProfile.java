@@ -176,9 +176,8 @@ public class QueryRuntimeProfile {
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execution has been initiated, otherwise we might try to cancel fragment
         // execution at backends where it hasn't even started
-        MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
+        profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
         instanceIds.forEach(instanceId -> profileDoneSignal.addMark(instanceId, MARKED_COUNT_DOWN_VALUE));
-        this.profileDoneSignal = profileDoneSignal;
     }
 
     public void attachExecutionProfiles(Collection<FragmentInstanceExecState> executions) {
