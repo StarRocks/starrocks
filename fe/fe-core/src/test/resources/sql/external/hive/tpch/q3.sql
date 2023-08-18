@@ -141,7 +141,7 @@ OutPut Exchange Id: 09
 3:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
-MIN/MAX PREDICATES: 37: o_orderdate < '1995-03-11'
+MIN/MAX PREDICATES: 13: o_orderdate < '1995-03-11'
 partitions=1/1
 avgRowSize=24.0
 cardinality: 72661123
@@ -169,7 +169,7 @@ OutPut Exchange Id: 06
 4:HdfsScanNode
 TABLE: customer
 NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
-MIN/MAX PREDICATES: 38: c_mktsegment <= 'HOUSEHOLD', 39: c_mktsegment >= 'HOUSEHOLD'
+MIN/MAX PREDICATES: 7: c_mktsegment <= 'HOUSEHOLD', 7: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
 avgRowSize=18.0
 cardinality: 3000000
@@ -197,7 +197,7 @@ OutPut Exchange Id: 02
 0:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
-MIN/MAX PREDICATES: 36: l_shipdate > '1995-03-11'
+MIN/MAX PREDICATES: 28: l_shipdate > '1995-03-11'
 partitions=1/1
 avgRowSize=28.0
 cardinality: 323426370
