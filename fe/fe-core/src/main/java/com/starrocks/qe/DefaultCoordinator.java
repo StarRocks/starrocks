@@ -111,7 +111,6 @@ public class DefaultCoordinator extends Coordinator {
     private final ExecutionDAG executionDAG;
 
     private final ConnectContext connectContext;
-    private final boolean needReport;
 
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
@@ -148,9 +147,8 @@ public class DefaultCoordinator extends Coordinator {
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec =
-                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
-            return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
+            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+            return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
@@ -158,7 +156,7 @@ public class DefaultCoordinator extends Coordinator {
                                                         List<ScanNode> scanNodes,
                                                         TDescriptorTable descTable) {
             JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD);
-            return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
+            return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
@@ -166,7 +164,7 @@ public class DefaultCoordinator extends Coordinator {
             ConnectContext context = loadPlanner.getContext();
             JobSpec jobSpec = JobSpec.Factory.fromBrokerLoadJobSpec(loadPlanner);
 
-            return new DefaultCoordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
@@ -174,7 +172,7 @@ public class DefaultCoordinator extends Coordinator {
             ConnectContext context = loadPlanner.getContext();
             JobSpec jobSpec = JobSpec.Factory.fromStreamLoadJobSpec(loadPlanner);
 
-            return new DefaultCoordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
@@ -200,7 +198,7 @@ public class DefaultCoordinator extends Coordinator {
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit);
 
-            return new DefaultCoordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec);
         }
 
         @Override
@@ -216,7 +214,7 @@ public class DefaultCoordinator extends Coordinator {
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit);
 
-            return new DefaultCoordinator(context, jobSpec, true);
+            return new DefaultCoordinator(context, jobSpec);
         }
     }
 
@@ -240,14 +238,12 @@ public class DefaultCoordinator extends Coordinator {
         queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
 
         this.coordinatorPreprocessor = null;
-        this.needReport = true;
     }
 
-    DefaultCoordinator(ConnectContext context, JobSpec jobSpec, boolean needReport) {
+    DefaultCoordinator(ConnectContext context, JobSpec jobSpec) {
         this.connectContext = context;
         this.jobSpec = jobSpec;
         this.returnedAllResults = false;
-        this.needReport = needReport;
 
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
@@ -904,7 +900,7 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         // wait for all backends
-        if (needReport) {
+        if (jobSpec.isNeedReport()) {
             int timeout;
             // connectContext can be null for broker export task coordinator
             if (connectContext != null) {
