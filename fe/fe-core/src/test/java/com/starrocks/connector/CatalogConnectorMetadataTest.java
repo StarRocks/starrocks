@@ -20,14 +20,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
-import com.starrocks.sql.ast.*;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CatalogConnectorMetadataTest {
 
@@ -69,7 +73,11 @@ public class CatalogConnectorMetadataTest {
         );
 
         List<String> tblNames = catalogConnectorMetadata.listTableNames(InfoSchemaDb.DATABASE_NAME);
-        List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints", "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations", "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics", "triggers", "events", "views", "partitions", "column_privileges");
+        List<String> expected = ImmutableList.of("tables", "table_privileges", "referential_constraints",
+                "key_column_usage", "routines", "schemata", "columns", "character_sets", "collations",
+                "table_constraints", "engines", "user_privileges", "schema_privileges", "statistics",
+                "triggers", "events", "views", "partitions", "column_privileges"
+        );
         assertEquals(expected, tblNames);
 
         tblNames = catalogConnectorMetadata.listTableNames("test_db");
