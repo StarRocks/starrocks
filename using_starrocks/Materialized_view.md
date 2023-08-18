@@ -181,7 +181,7 @@ GROUP BY order_id;
 
 ## 手动刷新异步物化视图
 
-您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) 命令手动刷新指定异步物化视图。StarRocks 2.5 版本中，异步物化视图支持手动刷新部分分区。在 3.1 版本中，StarRocks 支持同步调用刷新任务。
+您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) 命令手动刷新指定异步物化视图。StarRocks 2.5 版本中，异步物化视图支持手动刷新部分分区。自 v3.0.4 版本起，StarRocks 支持同步调用刷新任务。
 
 ```SQL
 -- 异步调用刷新任务。
