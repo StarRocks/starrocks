@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -24,10 +24,12 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -36,6 +38,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -88,7 +91,7 @@ public class HiveMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration());
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
@@ -295,5 +298,23 @@ public class HiveMetadataTest {
         ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
                 "Failed to access database empty_db",
                 () -> hiveMetadata.dropDb("empty_db", true));
+    }
+
+    @Test
+    public void testMetastoreType() {
+        Assert.assertEquals(MetastoreType.HMS, MetastoreType.get("hive"));
+        Assert.assertEquals(MetastoreType.GLUE, MetastoreType.get("glue"));
+        Assert.assertEquals(MetastoreType.DLF, MetastoreType.get("dlf"));
+    }
+
+    @Test
+    public void testDropTable() throws DdlException {
+        TableName tableName = new TableName("hive_catalog", "hive_db", "hive_table");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table location will be cleared. 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table hive_catalog.hive_db.hive_table force",
+                () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
+
+        hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
     }
 }

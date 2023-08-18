@@ -314,8 +314,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
 
     source ${STARROCKS_HOME}/bin/common.sh
 
-    update_submodules
-
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
       if [ -z "$STARLET_INSTALL_DIR" ] ; then

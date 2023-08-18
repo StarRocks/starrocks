@@ -245,7 +245,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot) {
+        if (!single_slot || slot_ids.empty()) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             continue;
         }
@@ -269,16 +269,16 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
-    _profile.reader_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ReaderInit", "IOTaskExecTime");
-    _profile.open_file_timer = ADD_CHILD_TIMER(_runtime_profile, "OpenFile", "IOTaskExecTime");
-    _profile.expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", "IOTaskExecTime");
+    _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
+    _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
+    _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.column_read_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnReadTime", "IOTaskExecTime");
-    _profile.column_convert_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnConvertTime", "IOTaskExecTime");
+    _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
+    _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
     {
         static const char* prefix = "SharedBuffered";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
@@ -293,7 +293,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
         _profile.block_cache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
         _profile.block_cache_read_bytes =
@@ -308,11 +308,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
         static const char* prefix = "InputStream";
-        ADD_CHILD_COUNTER(_runtime_profile, prefix, TUnit::UNIT, "IOTaskExecTime");
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
         _profile.app_io_bytes_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
         _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
@@ -408,7 +412,7 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     return scanner;
 }
 
-HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
     const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
 
     std::string required_fields;
@@ -428,12 +432,35 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
 
+    string option_info = "";
+    if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {
+        const AWSCloudConfiguration aws_cloud_configuration =
+                CloudConfigurationFactory::create_aws(*options.cloud_configuration);
+        AWSCloudCredential aws_cloud_credential = aws_cloud_configuration.aws_cloud_credential;
+        if (!aws_cloud_credential.endpoint.empty()) {
+            option_info += "s3.endpoint=" + aws_cloud_credential.endpoint + ",";
+        }
+        if (!aws_cloud_credential.access_key.empty()) {
+            option_info += "s3.access-key=" + aws_cloud_credential.access_key + ",";
+        }
+        if (!aws_cloud_credential.secret_key.empty()) {
+            option_info += "s3.secret-key=" + aws_cloud_credential.secret_key + ",";
+        }
+        string enable_ssl = aws_cloud_configuration.enable_ssl ? "true" : "false";
+        option_info += "s3.connection.ssl.enabled=" + enable_ssl + ",";
+        string enable_path_style_access = aws_cloud_configuration.enable_path_style_access ? "true" : "false";
+        option_info += "s3.path.style.access=" + enable_path_style_access;
+    }
+    jni_scanner_params["option_info"] = option_info;
+
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
+    SCOPED_TIMER(_profile.open_file_timer);
+
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
     if (_hive_table != nullptr && _hive_table->has_partition()) {
@@ -443,9 +470,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                     "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
                     scan_range.partition_id));
         }
-
-        SCOPED_TIMER(_profile.open_file_timer);
-
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
@@ -507,7 +531,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     if (use_paimon_jni_reader) {
-        scanner = _create_paimon_jni_scanner();
+        scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
     } else if (format == THdfsFileFormat::PARQUET) {

@@ -77,6 +77,10 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
+    return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
+}
+
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
     return tablet.tablet_schema();
 }
@@ -93,12 +97,12 @@ static DataDir* tablet_data_dir(Tablet& tablet) {
     return tablet.data_dir();
 }
 
-static uint64_t get_major(EditVersion& self) {
-    return self.major();
+static uint64_t get_major_number(EditVersion& self) {
+    return self.major_number();
 }
 
-static uint64_t get_minor(EditVersion& self) {
-    return self.minor();
+static uint64_t get_minor_number(EditVersion& self) {
+    return self.minor_number();
 }
 
 static void bind_common(ForeignModule& m) {
@@ -361,6 +365,7 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+            cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
@@ -395,8 +400,8 @@ public:
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
-            cls.funcExt<&get_major>("major");
-            cls.funcExt<&get_minor>("minor");
+            cls.funcExt<&get_major_number>("major_number");
+            cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
         }
         {

@@ -52,6 +52,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.loadv2.LoadJob;
@@ -62,7 +63,6 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
@@ -70,6 +70,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -169,13 +170,16 @@ public class DefaultCoordinator extends Coordinator {
     private Supplier<ExecPlan> execPlanSupplier;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
+    private LogicalSlot slot = null;
+
     public static class Factory implements Coordinator.Factory {
 
         @Override
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+            JobSpec jobSpec =
+                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
             return new DefaultCoordinator(context, jobSpec, context.getSessionVariable().isEnableProfile());
         }
 
@@ -232,9 +236,11 @@ public class DefaultCoordinator extends Coordinator {
         @Override
         public DefaultCoordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId,
                                                                        DescriptorTable descTable,
-                                                                       List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                                                                       List<PlanFragment> fragments,
+                                                                       List<ScanNode> scanNodes,
                                                                        String timezone,
-                                                                       long startTime, Map<String, String> sessionVariables,
+                                                                       long startTime,
+                                                                       Map<String, String> sessionVariables,
                                                                        ConnectContext context, long execMemLimit) {
             JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
@@ -284,6 +290,15 @@ public class DefaultCoordinator extends Coordinator {
 
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
+    }
+
+    @Override
+    public LogicalSlot getSlot() {
+        return slot;
+    }
+
+    public void setSlot(LogicalSlot slot) {
+        this.slot = slot;
     }
 
     @Override
@@ -443,7 +458,8 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
-        // Do nothing.
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -464,16 +480,25 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public void startScheduling() throws Exception {
+    public void startScheduling(boolean needDeploy) throws Exception {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Pending")) {
+            QueryQueueManager.getInstance().maybeWait(connectContext, this);
+        }
 
-        QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Prepare")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
-            deliverExecFragments();
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Scheduler.Deploy")) {
+            deliverExecFragments(needDeploy);
         }
+    }
+
+    @Override
+    public String getSchedulerExplain() {
+        return executionDAG.getFragmentsInPreorder().stream()
+                .map(ExecutionFragment::getExplainString)
+                .collect(Collectors.joining("\n"));
     }
 
     private void prepareProfile() {
@@ -536,16 +561,22 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void deliverExecFragments() throws RpcException, UserException {
+    private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
         try {
-            Deployer deployer = new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
-                    this::handleErrorExecution);
+            Deployer deployer =
+                    new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
+                            this::handleErrorExecution);
             for (List<ExecutionFragment> concurrentFragments : executionDAG.getFragmentsInTopologicalOrderFromRoot()) {
-                deployer.deployFragments(concurrentFragments);
+                deployer.deployFragments(concurrentFragments, needDeploy);
             }
 
             attachInstanceProfileToFragmentProfile();
+
+            // Avoid `explain scheduler` waits until profile timeout.
+            if (!needDeploy) {
+                profileDoneSignal.countDownToZero(Status.OK);
+            }
         } finally {
             unlock();
         }
@@ -615,7 +646,8 @@ public class DefaultCoordinator extends Coordinator {
                 for (final FragmentInstance instance : execFragment.getInstances()) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.getInstanceId());
-                    probeParam.setFragment_instance_address(coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
+                    probeParam.setFragment_instance_address(
+                            coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
                     probeParamList.add(probeParam);
                 }
                 if (jobSpec.isEnablePipeline() && kv.getValue().isBroadcastJoin() &&
@@ -897,6 +929,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
         if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
@@ -965,9 +998,10 @@ public class DefaultCoordinator extends Coordinator {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan execPlan = execPlanSupplier.get();
-            profile.addChild(buildMergedQueryProfile(null));
-            ProfileManager.getInstance().pushProfile(execPlan, profile);
+            ExecPlan plan = execPlanSupplier.get();
+            profile.addChild(buildMergedQueryProfile());
+            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
 
         lock();
@@ -1131,7 +1165,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics) {
+    public RuntimeProfile buildMergedQueryProfile() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         if (!sessionVariable.isEnableProfile()) {
@@ -1153,6 +1187,7 @@ public class DefaultCoordinator extends Coordinator {
 
         long maxQueryCumulativeCpuTime = 0;
         long maxQueryPeakMemoryUsage = 0;
+        long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
@@ -1192,6 +1227,12 @@ public class DefaultCoordinator extends Coordinator {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
+
+                toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
+                if (toBeRemove != null) {
+                    maxQuerySpillBytes = Math.max(maxQuerySpillBytes, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QuerySpillBytes");
             }
             newFragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
             newFragmentProfile.addInfoString("InstanceIds", String.join(",", instanceIds));
@@ -1302,11 +1343,11 @@ public class DefaultCoordinator extends Coordinator {
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(statistics == null || statistics.cpuCostNs == null ?
-                maxQueryCumulativeCpuTime : statistics.cpuCostNs);
+        queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
-        queryPeakMemoryUsage.setValue(statistics == null || statistics.memCostBytes == null ?
-                maxQueryPeakMemoryUsage : statistics.memCostBytes);
+        queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
+        querySpillBytes.setValue(maxQuerySpillBytes);
 
         return newQueryProfile;
     }

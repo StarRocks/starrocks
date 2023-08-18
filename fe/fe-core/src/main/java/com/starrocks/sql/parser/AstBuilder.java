@@ -315,6 +315,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -347,6 +348,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
@@ -394,6 +396,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -1577,6 +1580,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
 
+            // Order By
             if (desc.orderByDesc() != null) {
                 sortKeys = visit(desc.orderByDesc().identifierList().identifier(), Identifier.class)
                         .stream().map(Identifier::getValue).collect(toList());
@@ -1767,7 +1771,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowClustersStmt(whName, createPos(context));
     }
 
-
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
     public ParseNode visitInsertStatement(StarRocksParser.InsertStatementContext context) {
@@ -1877,6 +1880,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CreateRoutineLoadStmt(createLabelName(context.db, context.name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName,
                 dataSourceProperties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateRoutineLoadStatement(StarRocksParser.ShowCreateRoutineLoadStatementContext context) {
+        return new ShowCreateRoutineLoadStmt(createLabelName(context.db, context.name));
     }
 
     @Override
@@ -2633,7 +2641,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CancelCompactionStmt(txnIdExpr, createPos(context));
     }
 
-
     // ------------------------------------------- Show Statement ------------------------------------------------------
 
     @Override
@@ -2762,6 +2769,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProfilelistStatement(StarRocksParser.ShowProfilelistStatementContext context) {
         int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
         return new ShowProfilelistStmt(limit, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRunningQueriesStatement(StarRocksParser.ShowRunningQueriesStatementContext context) {
+        int limit = context.LIMIT() != null ? Integer.parseInt(context.limit.getText()) : -1;
+        return new ShowRunningQueriesStmt(limit, createPos(context));
     }
 
     @Override
@@ -3638,7 +3651,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
                             columnDef.getPos());
                 }
-    
+
                 if (properties.size() != 0) {
                     throw new ParsingException(
                             PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
@@ -3913,6 +3926,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AlterPipePauseResume(createPos(context), true);
         } else if (context.RESUME() != null) {
             return new AlterPipePauseResume(createPos(context), false);
+        } else if (context.RETRY() != null) {
+            if (context.ALL() != null) {
+                return new AlterPipeClauseRetry(createPos(context), true);
+            } else {
+                String fileName = ((StringLiteral) visitString(context.fileName)).getStringValue();
+                return new AlterPipeClauseRetry(createPos(context), false, fileName);
+            }
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo(context.toString()));
         }
@@ -4331,7 +4351,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(Long::parseLong).collect(toList());
         }
 
-        TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds, createPos(start, stop));
+        List<Long> replicaLists = Lists.newArrayList();
+        if (context.replicaList() != null) {
+            stop = context.replicaList().stop;
+            replicaLists = context.replicaList().INTEGER_VALUE().stream().map(ParseTree::getText).map(Long::parseLong)
+                    .collect(toList());
+        }
+
+        TableRelation tableRelation =
+                new TableRelation(tableName, partitionNames, tabletIds, replicaLists, createPos(start, stop));
         if (context.bracketHint() != null) {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
                 // just ignore the hint if failed to add it which is the same as the previous behaviour
@@ -6199,6 +6227,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.VERBOSE;
         } else if (context.COSTS() != null) {
             explainLevel = StatementBase.ExplainLevel.COST;
+        } else if (context.SCHEDULER() != null) {
+            explainLevel = StatementBase.ExplainLevel.SCHEDULER;
         }
         return explainLevel;
     }

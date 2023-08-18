@@ -99,6 +99,9 @@ set(UTIL_FILES
   random.cc
   stack_trace_mutex.cpp
   failpoint/fail_point.cpp
+  bthreads/future.h
+  bthreads/future_impl.cpp
+  hash_util.cpp
 )
 
 add_library(Util STATIC

@@ -293,9 +293,12 @@ vectorized_functions = [
     [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
+    [30312, 'substring_index', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::substring_index'],
     [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30321, 'regexp_extract_all', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract_all',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
@@ -423,6 +426,9 @@ vectorized_functions = [
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
+
+    [50262, 'to_iso8601', 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
+    [50263, 'to_iso8601', 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.
@@ -612,6 +618,7 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100021, 'xx_hash3_64', 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
 
     # Utility functions
     [100011, 'sleep', 'BOOLEAN', ['INT'], "UtilityFunctions::sleep"],

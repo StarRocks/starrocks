@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -328,8 +329,18 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+            String dbName = null;
+            String jobName = null;
+            if (stmt.getLabelName() != null) {
+                dbName = stmt.getLabelName().getDbName();
+                jobName = stmt.getLabelName().getLabelName();
+            }
+            if (dbName != null) {
+                sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(jobName).append(" ON ").append(stmt.getTableName());
+            } else {
+                sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
+            }
 
             if (stmt.getRoutineLoadDesc() != null) {
                 sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
@@ -707,6 +718,25 @@ public class AstToStringBuilder {
             }
 
             return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(FileTableFunctionRelation.IDENTIFIER);
+            sb.append("(");
+            boolean first = true;
+            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
+                if (!first) {
+                    sb.append(",");
+                }
+                first = false;
+                sb.append("'").append(entry.getKey()).append("'");
+                sb.append("=");
+                sb.append("'").append((entry.getValue())).append("'");
+            }
+            sb.append(")");
+            return sb.toString();
         }
 
         // ---------------------------------- Expression --------------------------------

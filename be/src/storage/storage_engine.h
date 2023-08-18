@@ -75,6 +75,7 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -219,6 +220,8 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
+    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -276,6 +279,11 @@ public:
 
     void clear_rowset_delta_column_group_cache(const Rowset& rowset);
 
+    void wake_finish_publish_vesion_thread() {
+        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+        _finish_publish_version_cv.notify_one();
+    }
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -327,6 +335,8 @@ private:
     void* _repair_compaction_thread_callback(void* arg);
     // manual compaction function
     void* _manual_compaction_thread_callback(void* arg);
+    // pk index major compaction function
+    void* _pk_index_major_compaction_thread_callback(void* arg);
 
     bool _check_and_run_manual_compaction_task();
 
@@ -335,6 +345,9 @@ private:
 
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
+
+    // finish publish version process function
+    void* _finish_publish_version_thread_callback(void* arg);
 
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
@@ -381,6 +394,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to check finish publish version task
+    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -393,6 +408,8 @@ private:
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     std::vector<std::thread> _manual_compaction_threads;
+    // thread to run pk index major compaction
+    std::thread _pk_index_major_compaction_thread;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -408,6 +425,9 @@ private:
 
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
+
+    std::mutex _finish_publish_version_mutex;
+    std::condition_variable _finish_publish_version_cv;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;
@@ -431,6 +451,8 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
+
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 

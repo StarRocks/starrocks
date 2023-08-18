@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
@@ -77,6 +78,26 @@ public:
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:
+    inline void handle_null(orc::ColumnVectorBatch* cvb, NullableColumn* col, size_t column_from, size_t cvb_from,
+                            size_t size, bool need_update_has_null = true) {
+        DCHECK(_nullable);
+        DCHECK(col->is_nullable());
+        uint8_t* column_nulls = col->null_column()->get_data().data();
+        if (!cvb->hasNulls) {
+            memset(column_nulls + column_from, 0, size);
+            return;
+        }
+        uint8_t* cvb_not_nulls = reinterpret_cast<uint8_t*>(cvb->notNull.data());
+
+        for (size_t column_pos = column_from, cvb_pos = cvb_from; column_pos < column_from + size;
+             column_pos++, cvb_pos++) {
+            column_nulls[column_pos] = !cvb_not_nulls[cvb_pos];
+        }
+        if (need_update_has_null) {
+            col->update_has_null();
+        }
+    }
+
     const TypeDescriptor& _type;
     const orc::Type* _orc_type;
     bool _nullable;
@@ -115,11 +136,11 @@ private:
 };
 
 template <LogicalType Type>
-class FloatColumnReader : public PrimitiveColumnReader {
+class DoubleColumnReader : public PrimitiveColumnReader {
 public:
-    FloatColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
+    DoubleColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
             : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
-    ~FloatColumnReader() override = default;
+    ~DoubleColumnReader() override = default;
 
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 };
@@ -133,17 +154,11 @@ public:
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    void _fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
-                                                 size_t size);
+    void _fill_decimal_column_from_orc_decimal64(orc::Decimal64VectorBatch* cvb, Column* col, size_t col_start,
+                                                 size_t from, size_t size);
 
-    void _fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col, size_t from,
-                                                  size_t size);
-
-    void _fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
-                                                           size_t from, size_t size);
-
-    void _fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb, starrocks::ColumnPtr& col,
-                                                            size_t from, size_t size);
+    void _fill_decimal_column_from_orc_decimal128(orc::Decimal128VectorBatch* cvb, Column* col, size_t col_start,
+                                                  size_t from, size_t size);
 };
 
 template <LogicalType DecimalType>
@@ -157,9 +172,6 @@ public:
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 
 private:
-    inline void _fill_decimal_column_from_orc_decimal64_or_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                                      size_t from, size_t size);
-
     template <typename T>
     inline void _fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size);
 };

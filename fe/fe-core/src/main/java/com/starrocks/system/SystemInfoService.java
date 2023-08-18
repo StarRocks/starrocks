@@ -70,6 +70,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,6 +90,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -148,6 +150,13 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addComputeNode(ComputeNode computeNode) {
         idToComputeNodeRef.put(computeNode.getId(), computeNode);
+    }
+
+    /**
+     * For TEST only!
+     */
+    public void dropComputeNode(ComputeNode computeNode) {
+        idToComputeNodeRef.remove(computeNode.getId());
     }
 
     // Final entry of adding compute node
@@ -437,6 +446,19 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend;
     }
 
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                    int cpuUsedPermille) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateResourceUsage receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+
+        node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+
+        GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyResourceUsageUpdate();
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -643,6 +665,12 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+    public List<Backend> getAvailableBackends() {
+        return getBackends().stream()
+                .filter(v -> v.isAvailable())
+                .collect(Collectors.toList());
+    }
+
     public List<ComputeNode> getComputeNodes() {
         return Lists.newArrayList(idToComputeNodeRef.values());
     }
@@ -653,23 +681,52 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
-        final List<Backend> backends =
-                getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
-                        .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate,
+                v -> !v.diskExceedLimitByStorageMedium(storageMedium));
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
-        final List<Backend> backends =
-                getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
     }
 
-    // choose backends by round-robin
-    // return null if not enough backend
-    // use synchronized to run serially
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
-                                                       final List<Backend> srcBackends) {
+    private List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                           Predicate<? super Backend> predicate) {
+
+        final List<Backend> candidateBackends = needAvailable ? getAvailableBackends() : getBackends();
+        if (CollectionUtils.isEmpty(candidateBackends)) {
+            LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
+            return Collections.emptyList();
+        }
+
+        final List<Backend> filteredBackends = candidateBackends.stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(filteredBackends)) {
+            String backendInfo = candidateBackends.stream()
+                    .map(backend -> "[host=" + backend.getHost() + ", bePort=" + backend.getBePort() + "]")
+                    .collect(Collectors.joining("; "));
+
+            LOG.warn(
+                    "failed to find any backend with qualified disk usage from {} candidate backends, needAvailable={}, [{}]",
+                    candidateBackends.size(), needAvailable, backendInfo);
+            return Collections.emptyList();
+        }
+        return seqChooseBackendIds(backendNum, isCreate, filteredBackends);
+    }
+
+    /**
+     * choose backends by round-robin
+     *
+     * @param backendNum  number of backend wanted
+     * @param isCreate    last backend id for creation
+     * @param srcBackends list of the candidate backends
+     * @return empty list if not enough backend, otherwise return a list of backend's id
+     */
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
+
         long lastBackendId;
 
         if (isCreate) {
@@ -681,18 +738,13 @@ public class SystemInfoService implements GsonPostProcessable {
         // host -> BE list
         Map<String, List<Backend>> backendMaps = Maps.newHashMap();
         for (Backend backend : srcBackends) {
-            // If needAvailable is true, unavailable backend won't go into the pick list
-            if (needAvailable && !backend.isAvailable()) {
-                continue;
+            String host = backend.getHost();
+
+            if (!backendMaps.containsKey(host)) {
+                backendMaps.put(host, Lists.newArrayList());
             }
 
-            if (backendMaps.containsKey(backend.getHost())) {
-                backendMaps.get(backend.getHost()).add(backend);
-            } else {
-                List<Backend> list = Lists.newArrayList();
-                list.add(backend);
-                backendMaps.put(backend.getHost(), list);
-            }
+            backendMaps.get(host).add(backend);
         }
 
         // if more than one backend exists in same host, select a backend at random
@@ -744,21 +796,20 @@ public class SystemInfoService implements GsonPostProcessable {
             failed = true;
         }
 
-        if (!failed) {
-            if (isCreate) {
-                lastBackendIdForCreation = lastBackendId;
-            } else {
-                lastBackendIdForOther = lastBackendId;
+        if (failed) {
+            // debug: print backend info when the selection failed
+            for (Backend backend : backends) {
+                LOG.debug("random select: {}", backend);
             }
-            return backendIds;
+            return Collections.emptyList();
         }
 
-        // debug
-        for (Backend backend : backends) {
-            LOG.debug("random select: {}", backend);
+        if (isCreate) {
+            lastBackendIdForCreation = lastBackendId;
+        } else {
+            lastBackendIdForOther = lastBackendId;
         }
-
-        return Collections.emptyList();
+        return backendIds;
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {

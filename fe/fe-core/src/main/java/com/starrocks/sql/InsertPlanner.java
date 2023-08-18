@@ -587,8 +587,7 @@ public class InsertPlanner {
                                                           List<ColumnRefOperator> outputColumns) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
-            DistributionProperty distributionProperty =
-                    new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
+            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 

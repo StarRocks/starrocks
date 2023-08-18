@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
@@ -366,8 +365,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
             PhysicalDistributionOperator distributionOperator =
                     (PhysicalDistributionOperator) childBestExpr.getOp();
-            if (distributionOperator.getDistributionSpec().getType().equals(DistributionSpec.DistributionType.GATHER) &&
-                    ((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit()) {
+            if (childBestExpr.getOp().hasLimit() && distributionOperator.getDistributionSpec().getType()
+                    .equals(DistributionSpec.DistributionType.GATHER)) {
                 return true;
             }
         }

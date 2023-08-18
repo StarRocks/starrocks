@@ -27,8 +27,10 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         max-retries: [1, 2, 3]
+    continue-on-error: true
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
@@ -174,13 +176,22 @@ jobs:
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.generate-xml-report.outcome == 'success'
+        env:
+          fe_path: ${{ github.workspace }}/fe
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
-            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+          if [[ -e "${fe_path}/diff.txt" ]]; then
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
+              -d ${fe_path}/diff.txt -dt file
+          else
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+          fi
           rm -rf coverchecker
           rm -rf ci-tools
 
@@ -198,6 +209,11 @@ jobs:
           override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
           override_branch: ${{ needs.INFO.outputs.BASE_REF }}
           override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
@@ -298,3 +314,26 @@ jobs:
           commit: ${{ github.event.workflow_run.head_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'admit-result/*.xml'
+
+  NOTIFICATION:
+    runs-on: [ self-hosted, quick ]
+    needs: INFO
+    env:
+      PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
+      WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+      FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+      FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: NOTIFY
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/notify.sh
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

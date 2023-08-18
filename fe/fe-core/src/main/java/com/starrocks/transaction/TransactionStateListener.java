@@ -20,6 +20,8 @@ import java.util.List;
 // TransactionStateListener will be created by the FE master process before it commit a transaction.
 // Used to check if a transaction can be committed and save some information in the TransactionState.
 public interface TransactionStateListener {
+    String getTableName();
+
     // This method is called by the FE master before changing the in-memory TransactionState to COMMITTED.
     void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException;

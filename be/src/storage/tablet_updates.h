@@ -130,6 +130,8 @@ public:
     // get latest version's version
     int64_t max_version() const;
 
+    int64_t max_readable_version() const;
+
     // get total number of committed and pending rowsets
     size_t version_count() const;
 
@@ -314,6 +316,10 @@ public:
     bool check_delta_column_generate_from_version(EditVersion begin_version);
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
+
+    double get_pk_index_write_amp_score();
+
+    Status pk_index_major_compaction();
 
 private:
     friend class Tablet;

@@ -90,7 +90,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
@@ -343,6 +342,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -546,6 +549,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

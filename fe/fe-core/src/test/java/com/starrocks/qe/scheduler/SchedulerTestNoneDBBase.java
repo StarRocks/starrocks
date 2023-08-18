@@ -24,6 +24,7 @@ import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -37,6 +38,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -46,6 +48,8 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     protected static final long BACKEND1_ID = 10001L;
     protected static Backend backend2 = null;
     protected static Backend backend3 = null;
+
+    private static long prevStatisticCollectIntervalSec;
 
     private static final String FILE_UNIT_TEST_ROOT_PATH =
             Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
@@ -64,6 +68,10 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
         backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
 
+        // Avoid statistic jobs disturb test cases, because some cases expect the queries are executed in a specific order.
+        prevStatisticCollectIntervalSec = Config.statistic_collect_interval_sec;
+        Config.statistic_collect_interval_sec = 24 * 3600 * 100L;
+
         makeCreateTabletStable();
 
         Config.tablet_sched_disable_colocate_overall_balance = true;
@@ -79,6 +87,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
             e.printStackTrace();
         }
 
+        Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;
         connectContext.getSessionVariable().setPipelineDop(0);
     }
@@ -94,6 +103,13 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     public DefaultCoordinator getScheduler(String sql) throws Exception {
         return UtFrameUtils.getScheduler(connectContext, sql);
+    }
+
+    public DefaultCoordinator getSchedulerWithQueryId(String sql) throws Exception {
+        DefaultCoordinator coordinator = getScheduler(sql);
+        UUID uuid = UUID.randomUUID();
+        coordinator.setQueryId(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+        return coordinator;
     }
 
     public static void makeQueryRandomStable() {
@@ -124,11 +140,14 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link DefaultWorkerProvider#getNextBackendIndex()}.
+     */
     private static void resetNextBackendIndex() {
         Thread currentThread = Thread.currentThread();
         AtomicInteger currentThreadIndex = new AtomicInteger(0);
         AtomicInteger otherThreadIndex = new AtomicInteger(0);
-        new MockUp<WorkerProvider>() {
+        new MockUp<DefaultWorkerProvider>() {
             @Mock
             int getNextBackendIndex() {
                 if (currentThread == Thread.currentThread()) {
@@ -156,6 +175,9 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link CatalogIdGenerator#getNextId()}.
+     */
     private static void resetCatalogIdGenerator() {
         AtomicLong nextId = new AtomicLong(1000L);
         new MockUp<CatalogIdGenerator>() {
@@ -166,11 +188,14 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         };
     }
 
+    /**
+     * Mock {@link SystemInfoService#seqChooseBackendIds(int, boolean, List)}.
+     */
     private static void resetChooseBackendIds() {
         AtomicInteger nextBackendIndex = new AtomicInteger(0);
         new MockUp<SystemInfoService>() {
             @Mock
-            public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+            public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate,
                                                                final List<Backend> srcBackends) {
                 List<Long> backendIds = new ArrayList<>(backendNum);
                 for (int i = 0; i < backendNum; i++) {

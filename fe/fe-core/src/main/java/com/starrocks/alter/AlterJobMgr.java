@@ -37,7 +37,9 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -57,10 +59,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
@@ -70,8 +75,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -105,8 +112,6 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.AlterViewClause;
-import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
@@ -134,14 +139,18 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -335,7 +344,7 @@ public class AlterJobMgr {
     }
 
     private void processChangeMaterializedViewStatus(String status, String dbName,
-                                                        MaterializedView materializedView, Database db)
+                                                     MaterializedView materializedView, Database db)
             throws DdlException, MetaNotFoundException {
         if (!db.writeLockAndCheckExist()) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
@@ -452,6 +461,20 @@ public class AlterJobMgr {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
+        TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
+                materializedView.getTableProperty().getForceExternalTableQueryRewrite();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+            oldExternalQueryRewriteConsistencyMode = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        }
+        TableProperty.QueryRewriteConsistencyMode oldQueryRewriteConsistencyMode =
+                materializedView.getTableProperty().getQueryRewriteConsistencyMode();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+            oldQueryRewriteConsistencyMode = TableProperty.analyzeQueryRewriteMode(propertyValue);
+            properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+        }
 
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
@@ -519,6 +542,20 @@ public class AlterJobMgr {
             curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
                     propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            materializedView.getTableProperty().getProperties().
+                    put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                            String.valueOf(oldExternalQueryRewriteConsistencyMode));
+            materializedView.getTableProperty().setForceExternalTableQueryRewrite(oldExternalQueryRewriteConsistencyMode);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            materializedView.getTableProperty().getProperties().
+                    put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY,
+                            String.valueOf(oldQueryRewriteConsistencyMode));
+            materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
@@ -1003,57 +1040,7 @@ public class AlterJobMgr {
         }
     }
 
-    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws DdlException {
-        TableName dbTableName = stmt.getTableName();
-        String dbName = dbTableName.getDb();
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        String tableName = dbTableName.getTbl();
-        db.writeLock();
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-            }
-
-            if (table.getType() != TableType.VIEW) {
-                throw new DdlException("The specified table [" + tableName + "] is not a view");
-            }
-
-
-            AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
-            String inlineViewDef = alterViewClause.getInlineViewDef();
-            List<Column> newFullSchema = alterViewClause.getColumns();
-            long sqlMode = ctx.getSessionVariable().getSqlMode();
-
-            View view = (View) table;
-            String viewName = view.getName();
-
-            view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
-            try {
-                view.init();
-            } catch (UserException e) {
-                throw new DdlException("failed to init view stmt", e);
-            }
-            view.setNewFullSchema(newFullSchema);
-
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
-            db.dropTable(viewName);
-            db.registerTableUnlocked(view);
-
-            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-            LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
-    public void replayModifyViewDef(AlterViewInfo alterViewInfo) throws DdlException {
+    public void alterView(AlterViewInfo alterViewInfo) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         String inlineViewDef = alterViewInfo.getInlineViewDef();
@@ -1068,7 +1055,7 @@ public class AlterJobMgr {
             try {
                 view.init();
             } catch (UserException e) {
-                throw new DdlException("failed to init view stmt", e);
+                throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
 
@@ -1151,8 +1138,17 @@ public class AlterJobMgr {
             hasInMemory = true;
         }
 
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         // get value from properties here
         // 1. data property
+        PeriodDuration periodDuration = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (!partitionInfo.isRangePartition()) {
+                throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
+            }
+            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+        }
         DataProperty newDataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties, null, false);
         // 2. replication num
@@ -1166,11 +1162,28 @@ public class AlterJobMgr {
                 PropertyAnalyzer.analyzeTabletType(properties);
 
         // modify meta here
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
+
             if (newDataProperty != null) {
+                // for storage_cooldown_ttl
+                if (periodDuration != null) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+                    PartitionKey partitionKey = range.upperEndpoint();
+                    if (partitionKey.isMaxValue()) {
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+                    } else {
+                        String stringUpperValue = partitionKey.getKeys().get(0).getStringValue();
+                        DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                        LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                        LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                        DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                        long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                        newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+                    }
+                }
                 partitionInfo.setDataProperty(partition.getId(), newDataProperty);
             }
             // 2. replication num

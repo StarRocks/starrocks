@@ -212,6 +212,23 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 Collectors.toSet());
     }
 
+    public void createTable(String dbName, Table table) {
+        try {
+            metastore.createTable(dbName, table);
+        } finally {
+            invalidateTable(dbName, table.getName());
+        }
+    }
+
+    @Override
+    public void dropTable(String dbName, String tableName) {
+        try {
+            metastore.dropTable(dbName, tableName);
+        } finally {
+            invalidateTable(dbName, tableName);
+        }
+    }
+
     @Override
     public Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionName) {
         return partitionCache.getAllPresent(hivePartitionName);

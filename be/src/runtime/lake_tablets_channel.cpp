@@ -39,7 +39,7 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
-#include "util/bthreads/shared_mutex.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/stack_trace_mutex.h"

@@ -32,7 +32,6 @@
 package com.starrocks.http;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
@@ -59,8 +58,8 @@ public class HttpConnectContext extends ConnectContext {
     // when connection is established
     private boolean initialized;
 
-    // print connectionId or not, Mainly for ease of testing
-    private boolean disablePrintConnectionId;
+    // used for test. only output reuslt raws
+    private boolean onlyOutputResultRaw;
 
     private volatile ChannelHandlerContext nettyChannel;
 
@@ -76,7 +75,7 @@ public class HttpConnectContext extends ConnectContext {
         super();
         sendDate = false;
         initialized = false;
-        disablePrintConnectionId = false;
+        onlyOutputResultRaw = false;
     }
 
     public TResultSinkFormatType getResultSinkFormatType() {
@@ -128,14 +127,6 @@ public class HttpConnectContext extends ConnectContext {
         this.statement = statement;
     }
 
-    public boolean get_disable_print_connection_id() {
-        return disablePrintConnectionId;
-    }
-
-    public void set_disable_print_connection_id(boolean disablePrintConnectionId) {
-        this.disablePrintConnectionId = disablePrintConnectionId;
-    }
-
     public String getRemoteAddres() {
         return remoteAddres;
     }
@@ -148,6 +139,14 @@ public class HttpConnectContext extends ConnectContext {
         isKeepAlive = keepAlive;
     }
 
+    public boolean isOnlyOutputResultRaw() {
+        return onlyOutputResultRaw;
+    }
+
+    public void setOnlyOutputResultRaw(boolean onlyOutputResultRaw) {
+        this.onlyOutputResultRaw = onlyOutputResultRaw;
+    }
+
     @Override
     public void kill(boolean killConnection) {
         LOG.warn("kill query, {}, kill connection: {}", remoteAddres, killConnection);
@@ -156,7 +155,6 @@ public class HttpConnectContext extends ConnectContext {
         if (killConnection) {
             isKilled = true;
         }
-        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }

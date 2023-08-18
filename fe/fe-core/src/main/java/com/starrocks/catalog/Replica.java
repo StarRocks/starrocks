@@ -53,7 +53,6 @@ public class Replica implements Writable {
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
-    public static final int DEPRECATED_PROP_PATH_HASH = 0;
 
     public enum ReplicaState {
         NORMAL,

@@ -45,6 +45,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -115,7 +117,7 @@ public class StatementPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
         ExecPlan plan;
-        if (!isOnlyOlapTable) {
+        if (!isOnlyOlapTable || session.getSessionVariable().isCboUseDBLock()) {
             plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
         } else {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
@@ -129,7 +131,7 @@ public class StatementPlanner {
                                             TResultSinkType resultSinkType) {
         QueryRelation query = (QueryRelation) relation;
         List<String> colNames = query.getColumnOutputNames();
-        //1. Build Logical plan
+        // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
@@ -139,7 +141,7 @@ public class StatementPlanner {
 
         OptExpression optimizedPlan;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
-            //2. Optimize logical plan and build physical plan
+            // 2. Optimize logical plan and build physical plan
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
                     session,
@@ -149,7 +151,7 @@ public class StatementPlanner {
                     columnRefFactory);
         }
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
-            //3. Build fragment exec plan
+            // 3. Build fragment exec plan
             /*
              * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
              * currently only used in Spark/Flink Connector
@@ -168,16 +170,9 @@ public class StatementPlanner {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
-        //1. Build Logical plan
+        // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan;
-
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
-        }
-
         boolean isSchemaValid = true;
-        boolean isPartitionVersionConsistent = false;
 
         // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
@@ -191,29 +186,23 @@ public class StatementPlanner {
                 // Need lock to avoid olap table metas ConcurrentModificationException
                 lock(dbs);
                 AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+
+                // Only need to re analyze and re transform when schema isn't valid
+                if (!isSchemaValid) {
+                    Analyzer.analyze(queryStmt, session);
+                }
             } finally {
                 unLock(dbs);
             }
 
-            // Only need to re analyze and re transform when schema isn't valid
-            if (i > 0 && !isSchemaValid) {
-
-                try {
-                    // We always need db lock when analyze phase
-                    lock(dbs);
-                    Analyzer.analyze(queryStmt, session);
-                } finally {
-                    unLock(dbs);
-                }
-
-                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
-                    logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
-                }
+            LogicalPlan logicalPlan;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
+                logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
             }
 
             OptExpression optimizedPlan;
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
-                //2. Optimize logical plan and build physical plan
+                // 2. Optimize logical plan and build physical plan
                 Optimizer optimizer = new Optimizer();
                 optimizedPlan = optimizer.optimize(
                         session,
@@ -223,7 +212,7 @@ public class StatementPlanner {
                         columnRefFactory);
             }
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
-                //3. Build fragment exec plan
+                // 3. Build fragment exec plan
                 /*
                  * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
                  * currently only used in Spark/Flink Connector
@@ -238,10 +227,10 @@ public class StatementPlanner {
                         !session.getSessionVariable().isSingleNodeExecPlan());
                 isSchemaValid = olapTables.stream().noneMatch(t ->
                         t.lastSchemaUpdateTime.get() > planStartTime);
-                isPartitionVersionConsistent = olapTables.stream().allMatch(t ->
+                isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
-                if (isSchemaValid && isPartitionVersionConsistent) {
+                if (isSchemaValid) {
                     return plan;
                 }
             }
@@ -256,7 +245,9 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs.values()) {
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        dbList.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbList) {
             db.readLock();
         }
     }

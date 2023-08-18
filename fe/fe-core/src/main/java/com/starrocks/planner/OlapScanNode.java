@@ -147,7 +147,8 @@ public class OlapScanNode extends ScanNode {
     private List<Long> selectedPartitionIds = Lists.newArrayList();
     private long actualRows = 0;
     // List of tablets will be scanned by current olap_scan_node
-    private ArrayList<Long> scanTabletIds = Lists.newArrayList();
+    private List<Long> scanTabletIds = Lists.newArrayList();
+    private List<Long> hintsReplicaIds = Lists.newArrayList();
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
@@ -171,7 +172,7 @@ public class OlapScanNode extends ScanNode {
         this.reasonOfPreAggregation = reason;
     }
 
-    public ArrayList<Long> getScanTabletIds() {
+    public List<Long> getScanTabletIds() {
         return scanTabletIds;
     }
 
@@ -395,7 +396,8 @@ public class OlapScanNode extends ScanNode {
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                ComputeNode node =
+                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -429,7 +431,8 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        boolean fillDataCache = olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
+        boolean fillDataCache =
+                olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
 
@@ -481,12 +484,21 @@ public class OlapScanNode extends ScanNode {
                 replicas = allQueryableReplicas;
             }
 
+            if (!hintsReplicaIds.isEmpty()) {
+                replicas.removeIf(replica -> !hintsReplicaIds.contains(replica.getId()));
+                // direct return if no expected replica
+                if (replicas.isEmpty()) {
+                    continue;
+                }
+            }
+
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                ComputeNode node =
+                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -862,8 +874,10 @@ public class OlapScanNode extends ScanNode {
      */
     public void updateScanInfo(List<Long> selectedPartitionIds,
                                List<Long> scanTabletIds,
+                               List<Long> hintsReplicaIds,
                                long selectedIndexId) {
-        this.scanTabletIds = new ArrayList<>(scanTabletIds);
+        this.scanTabletIds = Lists.newArrayList(scanTabletIds);
+        this.hintsReplicaIds = Lists.newArrayList(hintsReplicaIds);
         this.selectedTabletsNum = scanTabletIds.size();
         this.selectedPartitionIds = selectedPartitionIds;
         this.selectedPartitionNum = selectedPartitionIds.size();

@@ -194,6 +194,7 @@ public class FunctionSet {
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
+    public static final String SUBSTRING_INDEX = "substring_index";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -507,7 +508,7 @@ public class FunctionSet {
     public final ImmutableSet<String> couldApplyDictOptimizationFunctions =
             ImmutableSet.of(APPEND_TRAILING_CHAR_IF_ABSENT, CONCAT, CONCAT_WS, HEX, LEFT, LIKE, LOWER, LPAD, LTRIM,
                     REGEXP_EXTRACT, REGEXP_REPLACE, REPEAT, REPLACE, REVERSE, RIGHT, RPAD, RTRIM, SPLIT_PART, SUBSTR,
-                    SUBSTRING,
+                    SUBSTRING, SUBSTRING_INDEX,
                     TRIM, UPPER, IF);
 
     public static final Set<String> alwaysReturnNonNullableFunctions =
@@ -839,6 +840,10 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                     Lists.newArrayList(t), Type.BIGINT, Type.BIGINT, false, true, true));
 
+            // ANY_VALUE
+            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
+                    Lists.newArrayList(t), t, t, true, false, false));
+
             if (t.isPseudoType()) {
                 continue; // Only function `Count` support pseudo types now.
             }
@@ -873,10 +878,6 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(NDV,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
-
-            // ANY_VALUE
-            addBuiltin(AggregateFunction.createBuiltin(ANY_VALUE,
-                    Lists.newArrayList(t), t, t, true, false, false));
 
             // APPROX_COUNT_DISTINCT
             // alias of ndv, compute approx count distinct use HyperLogLog

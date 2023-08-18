@@ -45,7 +45,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -346,7 +346,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -968,6 +974,12 @@ public class LocalMetastore implements ConnectorMetadata {
             Map<String, String> sourceProperties = partitionDesc.getProperties();
             if (sourceProperties != null && !sourceProperties.isEmpty()) {
                 cloneProperties.putAll(sourceProperties);
+            }
+
+            String storageCoolDownTTL = olapTable.getTableProperty()
+                    .getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (storageCoolDownTTL != null) {
+                cloneProperties.putIfAbsent(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
             }
 
             if (partitionDesc instanceof SingleRangePartitionDesc) {
@@ -1967,7 +1979,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
 
@@ -1992,6 +2004,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
 
+                // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+                LOG.info("Successfully create table: {}-{}, in database: {}-{}",
+                        table.getName(), table.getId(), db.getFullName(), db.getId());
+
                 CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
                 GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
                 table.onCreate(db);
@@ -2011,6 +2027,8 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             db.registerTableUnlocked(table);
             table.onReload();
+        } catch (Throwable e) {
+            LOG.error("replay create table failed: {}", table, e);
         } finally {
             db.writeUnlock();
         }
@@ -2146,7 +2164,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     try {
                         chosenBackendIds = chosenBackendIdBySeq(replicationNum);
                     } catch (DdlException ex) {
-                        throw new DdlException(String.format("%stable=%s, default_replication_num=%d",
+                        throw new DdlException(String.format("%s, table=%s, default_replication_num=%d",
                                 ex.getMessage(), table.getName(), Config.default_replication_num));
                     }
                 }
@@ -2627,7 +2645,7 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterView(AlterViewStmt stmt) throws UserException {
-        stateMgr.getAlterJobMgr().processAlterView(stmt, ConnectContext.get());
+        new AlterJobExecutor().process(stmt, ConnectContext.get());
     }
 
     @Override
@@ -3474,6 +3492,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            try {
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }
@@ -3488,6 +3513,12 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
+        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
+            tableProperty.buildStorageCoolDownTTL();
+        } else {
+            throw new DdlException("Modify failed because unknown properties: " + properties);
         }
 
         ModifyTablePropertyOperationLog info =
@@ -3869,15 +3900,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (existed) {
             // already existed, need to alter the view
-            AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-            try {
-                AlterViewStmt alterViewStmt = AlterViewStmt.fromReplaceStmt(stmt);
-                alterJobMgr.processAlterView(alterViewStmt, ConnectContext.get());
-                LOG.info("replace view {} successfully", tableName);
-            } catch (DdlException e) {
-                LOG.warn("replace view failed due to {}", e.getMessage(), e);
-                throw new DdlException("replace view failed due to " + e.getMessage(), e);
-            }
+            AlterViewStmt alterViewStmt = AlterViewStmt.fromReplaceStmt(stmt);
+            new AlterJobExecutor().process(alterViewStmt, ConnectContext.get());
+            LOG.info("replace view {} successfully", tableName);
         } else {
             List<Column> columns = stmt.getColumns();
             long tableId = getNextId();
@@ -4735,7 +4760,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onReload);
+            db.getTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            });
         }
 
         // put built-in database into local metastore

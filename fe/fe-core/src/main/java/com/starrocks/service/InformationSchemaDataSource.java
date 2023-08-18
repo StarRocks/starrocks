@@ -74,6 +74,7 @@ public class InformationSchemaDataSource {
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (authInfo.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
@@ -107,8 +108,9 @@ public class InformationSchemaDataSource {
                 continue;
             }
 
-            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db1)) {
+            final String dbName = ClusterNamespace.getNameFromFullName(fullName);
+
+            if (!PatternMatcher.matchPattern(authInfo.getPattern(), dbName, matcher, caseSensitive)) {
                 continue;
             }
             authorizedDbs.add(fullName);

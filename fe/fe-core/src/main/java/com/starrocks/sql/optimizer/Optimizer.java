@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.LabelMinMaxCountOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -50,7 +51,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -189,12 +189,12 @@ public class Optimizer {
         }
 
         OptExpression result;
-        if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
-            result = extractBestPlan(requiredProperty, memo.getRootGroup());
-        } else {
+        if (connectContext.getSessionVariable().isSetUseNthExecPlan()) {
             // extract the nth execution plan
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
+        } else {
+            result = extractBestPlan(requiredProperty, memo.getRootGroup());
         }
         OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
@@ -248,8 +248,6 @@ public class Optimizer {
                     preprocessor.prepareSyncMvCandidatesForPlan();
                 }
             }
-            OptimizerTraceUtil.logMVPrepare(connectContext, "There are {} candidate MVs after prepare phase",
-                    context.getCandidateMvs().size());
         }
     }
 
@@ -424,6 +422,9 @@ public class Optimizer {
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
                                                  SessionVariable sessionVariable,
                                                  OptExpression queryPlan) {
+        if (sessionVariable.isDisableMaterializedViewRewrite()) {
+            return false;
+        }
         // if disable single mv rewrite, return false.
         if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
             return false;
@@ -526,11 +527,11 @@ public class Optimizer {
                 new ReorderJoinRule().transform(tree, context);
                 OptimizerTraceUtil.logOptExpression(connectContext, "after ReorderJoinRule:\n%s", tree);
 
-                context.getRuleSet().addJoinCommutativityWithOutInnerRule();
+                context.getRuleSet().addJoinCommutativityWithoutInnerRule();
             } else {
                 if (Utils.countJoinNodeSize(tree, JoinOperator.semiAntiJoinSet()) <
                         sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
-                    context.getRuleSet().getTransformRules().add(new SemiReorderRule());
+                    context.getRuleSet().getTransformRules().add(JoinLeftAsscomRule.INNER_JOIN_LEFT_ASSCOM_RULE);
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
@@ -571,6 +572,10 @@ public class Optimizer {
     }
 
     private boolean isEnableMultiTableRewrite(ConnectContext connectContext, OptExpression queryPlan) {
+        if (connectContext.getSessionVariable().isDisableMaterializedViewRewrite()) {
+            return false;
+        }
+
         if (context.getCandidateMvs().isEmpty()) {
             return false;
         }

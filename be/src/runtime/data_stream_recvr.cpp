@@ -98,7 +98,11 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
     _chunks_merger = nullptr;
-    _cascade_merger = std::make_unique<CascadeChunkMerger>(state);
+    if (exprs->is_constant_lhs_ordering()) {
+        _cascade_merger = std::make_unique<ConstChunkMerger>(state);
+    } else {
+        _cascade_merger = std::make_unique<CascadeChunkMerger>(state);
+    }
 
     std::vector<ChunkProvider> providers;
     for (SenderQueue* q : _sender_queues) {

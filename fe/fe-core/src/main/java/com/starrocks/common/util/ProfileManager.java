@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,18 +82,15 @@ public class ProfileManager {
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public byte[] profileContent;
-
-        public ExecPlan plan;
-        public RuntimeProfile profile;
+        public ProfilingExecPlan plan;
 
         public List<String> toRow() {
             List<String> res = Lists.newArrayList();
-            RuntimeProfile summary = profile.getChildList().get(0).first;
-            res.add(summary.getInfoString(QUERY_ID));
-            res.add(summary.getInfoString(START_TIME));
-            res.add(summary.getInfoString(TOTAL_TIME));
-            res.add(summary.getInfoString(QUERY_STATE));
-            String statement = summary.getInfoString(SQL_STATEMENT);
+            res.add(infoStrings.get(QUERY_ID));
+            res.add(infoStrings.get(START_TIME));
+            res.add(infoStrings.get(TOTAL_TIME));
+            res.add(infoStrings.get(QUERY_STATE));
+            String statement = infoStrings.get(SQL_STATEMENT);
             if (statement.length() > 128) {
                 statement = statement.substring(0, 124) + " ...";
             }
@@ -149,8 +145,8 @@ public class ProfileManager {
                 profileString = profile.toString();
                 break;
             case "json":
-                RuntimeProfile.ProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
-                profileString = formater.format(profile, "");
+                RuntimeProfile.ProfileFormatter formatter = new RuntimeProfile.JsonProfileFormatter();
+                profileString = formatter.format(profile, "");
                 break;
             default:
                 profileString = profile.toString();
@@ -159,11 +155,10 @@ public class ProfileManager {
         return profileString;
     }
 
-    public String pushProfile(ExecPlan plan, RuntimeProfile profile) {
+    public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
-        element.profile = profile;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
@@ -263,5 +258,23 @@ public class ProfileManager {
             readLock.unlock();
         }
         return result;
+    }
+
+    public long getQueryProfileCount() {
+        readLock.lock();
+        try {
+            return profileMap.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public long getLoadProfileCount() {
+        readLock.lock();
+        try {
+            return loadProfileMap.size();
+        } finally {
+            readLock.unlock();
+        }
     }
 }

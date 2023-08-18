@@ -34,8 +34,11 @@ public interface IHiveMetastore {
 
     Database getDb(String dbName);
 
-
     List<String> getAllTableNames(String dbName);
+
+    void createTable(String dbName, Table table);
+
+    void dropTable(String dbName, String tableName);
 
     Table getTable(String dbName, String tableName);
 

@@ -198,6 +198,21 @@ public class HiveMetaClient {
         }
     }
 
+    public void createTable(Table table) {
+        Class<?>[] argClasses = {Table.class};
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createTable")) {
+            callRPC("createTable", "Failed to create table " + table.getDbName() + "." + table.getTableName(),
+                    argClasses, table);
+        }
+    }
+
+    public void dropTable(String dbName, String tableName) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropTable")) {
+            callRPC("dropTable", "Failed to drop table " + dbName + "." + tableName,
+                    dbName, tableName, true, false);
+        }
+    }
+
     public List<String> getPartitionKeys(String dbName, String tableName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames")) {
             return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),

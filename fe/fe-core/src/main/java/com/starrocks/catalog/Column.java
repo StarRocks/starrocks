@@ -454,6 +454,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return materializedColumnExpr.clone();
     }
 
+    public Expr getMaterializedColumnExpr() {
+        return materializedColumnExpr;
+    }
     public void setMaterializedColumnExpr(Expr expr) {
         materializedColumnExpr = expr;
     }
@@ -576,10 +579,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return defaultValue;
         } else if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-                extras.add("DEFAULT_GENERATED");
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
                 return "CURRENT_TIMESTAMP";
             } else {
-                extras.add("DEFAULT_GENERATED");
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
                 return defaultExpr.getExpr();
             }
         }
@@ -625,7 +632,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.name, this.type);
+        return Objects.hash(this.name.toLowerCase(), this.type);
     }
 
     @Override

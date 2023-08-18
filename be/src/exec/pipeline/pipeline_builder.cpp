@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 
+#include "common/config.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
@@ -38,7 +39,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(num_receivers);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(num_receivers,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
@@ -96,7 +98,8 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
     int max_input_dop = std::max(num_receivers, static_cast<int>(source_op->degree_of_parallelism()));
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_input_dop);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(max_input_dop,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
@@ -131,7 +134,8 @@ void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_si
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(source_operator_dop);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(source_operator_dop,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
@@ -157,8 +161,9 @@ void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(source_operator_dop * state->chunk_size() *
-                                                                localExchangeBufferChunks());
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(
+            source_operator_dop * state->chunk_size() * localExchangeBufferChunks(),
+            config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     auto local_exchanger = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
@@ -217,7 +222,8 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
@@ -263,7 +269,8 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_input_dop);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(max_input_dop,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);

@@ -41,10 +41,10 @@ StarRocks has optimized the metadata information provided by the tables `tables`
 
 | **Information Schema table name** | **Description**                                              |
 | --------------------------------- | ------------------------------------------------------------ |
-| tables                            | Provides general metadata information of tables.             |
-| tables_config                     | Provides additional table metadata information that is unique to StarRocks. |
-| load_tracking_logs                | Provides error information (if any) of load jobs. |
-| loads                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from this table.                 |
+| [tables](#tables)                            | Provides general metadata information of tables.             |
+| [tables_config](#tables_config)                     | Provides additional table metadata information that is unique to StarRocks. |
+| [load_tracking_logs](#load_tracking_logs)                | Provides error information (if any) of load jobs. |
+| [loads](#loads)                             | Provides the results of load jobs. This table is supported from v3.1 onwards. Currently, you can only view the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from this table.                 |
 
 ### loads
 
@@ -55,7 +55,7 @@ The following fields are provided in `loads`:
 | JOB_ID               | The unique ID assigned by StarRocks to identify the load job. |
 | LABEL                | The label of the load job.                                   |
 | DATABASE_NAME        | The name of the database to which the destination StarRocks tables belong. |
-| STATE                | The state of the load job. Valid values:<ul><li>`PENDING`: The load job is created.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see [Asynchronous loading](https://docs.starrocks.io/en-us/main/loading/Loading_intro#asynchronous-loading). |
+| STATE                | The state of the load job. Valid values:<ul><li>`PENDING`: The load job is created.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see [Asynchronous loading](../loading/Loading_intro.md#asynchronous-loading). |
 | PROGRESS             | The progress of the ETL stage and LOADING stage of the load job. |
 | TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. |
 | PRIORITY             | The priority of the load job. Valid values: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, and `LOWEST`. |

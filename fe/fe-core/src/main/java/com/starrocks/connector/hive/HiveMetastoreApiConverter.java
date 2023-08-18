@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
@@ -26,18 +25,24 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Version;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.trino.TrinoViewColumnTypeConverter;
+import com.starrocks.connector.trino.TrinoViewDefinition;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.avro.HoodieAvroUtils;
@@ -49,12 +54,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_NAMES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
@@ -63,6 +70,7 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
+import static com.starrocks.connector.hive.HiveMetastoreOperations.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
@@ -78,7 +86,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static boolean isHudiTable(String inputFormat) {
-        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+        return inputFormat != null && HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
@@ -129,9 +137,76 @@ public class HiveMetastoreApiConverter {
         return tableBuilder.build();
     }
 
+    public static Table toMetastoreApiTable(HiveTable table) {
+        Table apiTable = new Table();
+        apiTable.setDbName(table.getDbName());
+        apiTable.setTableName(table.getTableName());
+        apiTable.setTableType("MANAGED_TABLE");
+        apiTable.setParameters(toApiTableProperties(table));
+        apiTable.setPartitionKeys(table.getPartitionColumns().stream()
+                .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
+                .collect(Collectors.toList()));
+        apiTable.setSd(makeStorageDescriptor(table));
+        return apiTable;
+    }
+
+    private static StorageDescriptor makeStorageDescriptor(HiveTable table) {
+        SerDeInfo serdeInfo = new SerDeInfo();
+        serdeInfo.setName(table.getTableName());
+        HiveStorageFormat storageFormat = HiveStorageFormat.get(table.getHiveProperties().getOrDefault(FILE_FORMAT, "parquet"));
+        serdeInfo.setSerializationLib(storageFormat.getSerde());
+
+        StorageDescriptor sd = new StorageDescriptor();
+        sd.setLocation(table.getTableLocation());
+        sd.setCols(table.getDataColumnNames().stream()
+                .map(table::getColumn)
+                .map(HiveMetastoreApiConverter::toMetastoreApiFieldSchema)
+                .collect(toImmutableList()));
+        sd.setSerdeInfo(serdeInfo);
+        sd.setInputFormat(storageFormat.getInputFormat());
+        sd.setOutputFormat(storageFormat.getOutputFormat());
+        sd.setParameters(ImmutableMap.of());
+
+        return sd;
+    }
+
+    public static FieldSchema toMetastoreApiFieldSchema(Column column) {
+        return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), column.getComment());
+    }
+
+    public static Map<String, String> toApiTableProperties(HiveTable table) {
+        ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
+
+        tableProperties.put("numFiles", "-1");
+        tableProperties.put("totalSize", "-1");
+        tableProperties.put("comment", table.getComment());
+        tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+        if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
+            tableProperties.put("starrocks_query_id", ConnectContext.get().getQueryId().toString());
+        }
+
+        return tableProperties.build();
+    }
+
     public static HiveView toHiveView(Table table, String catalogName) {
-        HiveView hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+        HiveView hiveView;
+        if (table.getViewOriginalText() != null && table.getViewOriginalText().startsWith(HiveView.PRESTO_VIEW_PREFIX)
+                && table.getViewOriginalText().endsWith(HiveView.PRESTO_VIEW_SUFFIX)) {
+            // for trino view
+            String hiveViewText = table.getViewOriginalText();
+            hiveViewText = hiveViewText.substring(HiveView.PRESTO_VIEW_PREFIX.length());
+            hiveViewText = hiveViewText.substring(0, hiveViewText.length() - HiveView.PRESTO_VIEW_SUFFIX.length());
+            byte[] bytes = Base64.getDecoder().decode(hiveViewText);
+            TrinoViewDefinition trinoViewDefinition = GsonUtils.GSON.fromJson(new String(bytes),
+                    TrinoViewDefinition.class);
+            hiveViewText = trinoViewDefinition.getOriginalSql();
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
+        } else {
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+        }
+
         try {
             hiveView.getQueryStatementWithSRParser();
         } catch (StarRocksPlannerException e) {
@@ -204,6 +279,23 @@ public class HiveMetastoreApiConverter {
                 type = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(fieldSchema.getName(), type, true);
+            fullSchema.add(column);
+        }
+        return fullSchema;
+    }
+
+    public static List<Column> toFullSchemasForTrinoView(Table table, TrinoViewDefinition definition) {
+        List<TrinoViewDefinition.ViewColumn> viewColumns = definition.getColumns();
+        List<Column> fullSchema = Lists.newArrayList();
+        for (TrinoViewDefinition.ViewColumn col : viewColumns) {
+            Type type;
+            try {
+                type = TrinoViewColumnTypeConverter.fromTrinoType(col.getType());
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert trino view type {} on {}", col.getType(), table.getTableName(), e);
+                type = Type.UNKNOWN_TYPE;
+            }
+            Column column = new Column(col.getName(), type, true);
             fullSchema.add(column);
         }
         return fullSchema;

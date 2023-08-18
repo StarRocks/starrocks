@@ -35,6 +35,11 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.google.common.reflect.TypeToken;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -46,6 +51,7 @@ import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TTabletInternalParallelMode;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -56,11 +62,18 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
 public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
+
+    public static final SessionVariable DEFAULT_SESSION_VARIABLE = new SessionVariable();
+    private static final Gson GSON = new GsonBuilder()
+            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE) // explicit default, may be omitted
+            .create();
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
     public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
@@ -261,6 +274,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
+    public static final String PREFER_CTE_REWRITE = "prefer_cte_rewrite";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -272,6 +286,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
+
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
 
     // --------  New planner session variables end --------
 
@@ -361,6 +377,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+
+    public enum MaterializedViewRewriteMode {
+        DISABLE,            // disable materialized view rewrite
+        DEFAULT,            // default, choose the materialized view or not by cost optimizer
+        DEFAULT_OR_ERROR,   // default, but throw exception if no materialized view is not chosen.
+        FORCE,              // force to choose the materialized view if possible, otherwise use the original query
+        FORCE_OR_ERROR;     // force to choose the materialized view if possible, throw exception if no materialized view is
+        // not chosen.
+
+        public static String MODE_DISABLE = DISABLE.toString();
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static String MODE_DEFAULT_OR_ERROR = DEFAULT_OR_ERROR.toString();
+        public static String MODE_FORCE = FORCE.toString();
+        public static String MODE_FORCE_OR_ERROR = FORCE_OR_ERROR.toString();
+
+        public static MaterializedViewRewriteMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(MaterializedViewRewriteMode.class, str);
+        }
+    }
+    public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
@@ -649,8 +685,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
+    // auto, force_streaming, force_preaggregation
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
-    private String streamingPreaggregationMode = SessionVariableConstants.AUTO; // auto, force_streaming, force_preaggregation
+    private String streamingPreaggregationMode = SessionVariableConstants.AUTO;
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -671,11 +708,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
 
+    @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean preferCTERewrite = false;
+
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
+    private boolean cboUseDBLock = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1076,6 +1119,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
 
+    @VarAttr(name = MATERIALIZED_VIEW_REWRITE_MODE)
+    private String materializedViewRewriteMode = MaterializedViewRewriteMode.MODE_DEFAULT;
+
     //  Whether to enable view delta compensation for single table,
     //  - try to rewrite single table query into candidate view-delta mvs if enabled which will choose
     //      plan by cost.
@@ -1259,6 +1305,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    public boolean isCboUseDBLock() {
+        return cboUseDBLock;
+    }
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1844,6 +1894,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return false;
     }
 
+    public String getMaterializedViewRewriteMode() {
+        return materializedViewRewriteMode;
+    }
+
+    public void setMaterializedViewRewriteMode(String materializedViewRewriteMode) {
+        this.materializedViewRewriteMode = materializedViewRewriteMode;
+    }
+
+    public boolean isDisableMaterializedViewRewrite() {
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_DISABLE);
+    }
+
+    public boolean isEnableMaterializedViewForceRewrite() {
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE)  ||
+                        materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+    }
+
+    public boolean isEnableMaterializedViewRewriteOrError() {
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR) ||
+                materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_DEFAULT_OR_ERROR);
+    }
+
     public boolean isSetUseNthExecPlan() {
         return useNthExecPlan > 0;
     }
@@ -1857,7 +1929,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
-
     }
 
     public boolean isUseCorrelatedJoinEstimate() {
@@ -1913,6 +1984,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCteReuse(boolean cboCteReuse) {
         this.cboCteReuse = cboCteReuse;
+    }
+
+    public boolean isPreferCTERewrite() {
+        return preferCTERewrite;
     }
 
     public void setSingleNodeExecPlan(boolean singleNodeExecPlan) {
@@ -2502,6 +2577,49 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         } catch (Exception e) {
             LOG.warn("failed to read session variable: {}", e.getMessage());
+        }
+    }
+
+    public Map<String, NonDefaultValue> getNonDefaultVariables() {
+        Map<String, NonDefaultValue> nonDefaultVariables = Maps.newHashMap();
+        Class<SessionVariable> clazz = SessionVariable.class;
+        Field[] fields = clazz.getDeclaredFields();
+        try {
+            for (Field field : fields) {
+                VarAttr varAttr = field.getAnnotation(VarAttr.class);
+                if (varAttr == null) {
+                    continue;
+                }
+                field.setAccessible(true);
+
+                Object defaultValue = field.get(DEFAULT_SESSION_VARIABLE);
+                Object actualValue = field.get(this);
+                if (!Objects.equals(defaultValue, actualValue)) {
+                    nonDefaultVariables.put(varAttr.name(), new NonDefaultValue(defaultValue, actualValue));
+                }
+            }
+        } catch (IllegalAccessException e) {
+            LOG.warn("failed to get non default variables", e);
+        }
+        return nonDefaultVariables;
+    }
+
+    public String getNonDefaultVariablesJson() {
+        return GSON.toJson(getNonDefaultVariables());
+    }
+
+    public static final class NonDefaultValue {
+        public final Object defaultValue;
+        public final Object actualValue;
+
+        public NonDefaultValue(Object defaultValue, Object actualValue) {
+            this.defaultValue = defaultValue;
+            this.actualValue = actualValue;
+        }
+
+        public static Map<String, NonDefaultValue> parseFrom(String content) {
+            return GSON.fromJson(content, new TypeToken<Map<String, NonDefaultValue>>() {
+            }.getType());
         }
     }
 

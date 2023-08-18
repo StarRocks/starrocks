@@ -76,6 +76,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
@@ -120,10 +121,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -139,6 +140,7 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -166,6 +168,8 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishSlotRequirementRequest;
+import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
@@ -173,6 +177,8 @@ import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetLoadTxnStatusRequest;
+import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TGetProfileRequest;
@@ -230,9 +236,13 @@ import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TReleaseSlotRequest;
+import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TRequireSlotRequest;
+import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.thrift.TSetConfigRequest;
@@ -252,12 +262,12 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TVerboseVariableRecord;
-import com.starrocks.thrift.TWarehouseInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -265,8 +275,6 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.WarehouseInfosBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -306,10 +314,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetDbsResult result = new TGetDbsResult();
 
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
-                matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
+                matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
             } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + params.getPattern());
             }
@@ -324,7 +332,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
@@ -341,7 +349,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
@@ -358,6 +366,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> tablesResult = Lists.newArrayList();
         result.setTables(tablesResult);
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
@@ -404,9 +413,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     continue;
                 }
 
-                if (matcher != null && !matcher.match(tableName)) {
+                if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
                     continue;
                 }
+
                 tablesResult.add(tableName);
             }
         }
@@ -420,10 +430,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTableStatus> tablesResult = Lists.newArrayList();
         result.setTables(tablesResult);
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
             try {
-                matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                        CaseSensibility.TABLE.getCaseSensibility());
+                matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
             } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
@@ -431,7 +441,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
@@ -451,9 +461,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         continue;
                     }
 
-                    if (matcher != null && !matcher.match(table.getName())) {
+                    if (!PatternMatcher.matchPattern(params.getPattern(), table.getName(), matcher, caseSensitive)) {
                         continue;
                     }
+
                     TTableStatus status = new TTableStatus();
                     status.setName(table.getName());
                     status.setType(table.getMysqlType());
@@ -509,21 +520,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get list table request: {}", params);
 
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
-            matcher = PatternMatcher.createMysqlPattern(params.getPattern(),
-                    CaseSensibility.TABLE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(params.getPattern(), caseSensitive);
         }
 
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
-        return listMaterializedViewStatus(limit, matcher, currentUser, params.db);
+        return listMaterializedViewStatus(limit, matcher, currentUser, params);
     }
 
     @Override
@@ -547,9 +558,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             row.setPipe_name(pipe.getName());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
-            row.setLoaded_files(pipe.getLoadStatus().loadFiles);
+            row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
             row.setLoaded_rows(pipe.getLoadStatus().loadRows);
-            row.setLoaded_bytes(pipe.getLoadStatus().loadBytes);
+            row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);
 
             result.addToPipes(row);
         }
@@ -596,10 +607,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             file.setStart_load(DateUtils.formatDateTimeUnix(record.startLoadTime));
             file.setFinish_load(DateUtils.formatDateTimeUnix(record.finishLoadTime));
 
-            // TODO(murphy
-            file.setFirst_error_msg("");
-            file.setError_count(0L);
-            file.setError_line(0L);
+            file.setFirst_error_msg(record.getErrorMessage());
+            file.setError_count(record.getErrorCount());
+            file.setError_line(record.getErrorLine());
 
             result.addToPipe_files(file);
         }
@@ -609,17 +619,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
-                                                                         UserIdentity currentUser, String dbName) {
+                                                                         UserIdentity currentUser, TGetTablesParams params) {
         TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
+        String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
             return result;
         }
 
-        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, dbName);
+        List<List<String>> rowSets = listMaterializedViews(limit, matcher, currentUser, params);
         for (List<String> rowSet : rowSets) {
             TMaterializedViewStatus status = new TMaterializedViewStatus();
             status.setId(rowSet.get(0));
@@ -652,10 +663,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private List<List<String>> listMaterializedViews(long limit, PatternMatcher matcher,
-                                                     UserIdentity currentUser, String dbName) {
+                                                     UserIdentity currentUser, TGetTablesParams params) {
+        String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+        boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         db.readLock();
         try {
             for (Table table : db.getTables()) {
@@ -667,7 +680,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     } catch (AccessDeniedException e) {
                         continue;
                     }
-                    if (matcher != null && !matcher.match(mvTable.getName())) {
+
+                    if (!PatternMatcher.matchPattern(params.getPattern(), mvTable.getName(), matcher, caseSensitive)) {
                         continue;
                     }
 
@@ -680,9 +694,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (baseIdx == mvMeta.getIndexId()) {
                             continue;
                         }
-                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
+
+                        if (!PatternMatcher.matchPattern(params.getPattern(), olapTable.getIndexNameById(mvMeta.getIndexId()),
+                                matcher, caseSensitive)) {
                             continue;
                         }
+
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
                 }
@@ -1075,6 +1092,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (precision != null) {
                 desc.setColumnPrecision(precision);
             }
+            desc.setColumnDefault(column.getMetaDefaultValue(null));
             final Integer columnLength = column.getType().getColumnSize();
             if (columnLength != null) {
                 desc.setColumnLength(columnLength);
@@ -1234,6 +1252,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
+        long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
+        if (Config.enable_sync_publish) {
+            result.setTimeout(timeoutSecond);
+        } else {
+            result.setTimeout(0);
+        }
+        
         try {
             result.setTxnId(loadTxnBeginImpl(request, clientAddr));
         } catch (DuplicatedRequestException e) {
@@ -1439,6 +1464,42 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TGetLoadTxnStatusResult getLoadTxnStatus(TGetLoadTxnStatusRequest request) throws TException {
+        String clientAddr = getClientAddrAsString();
+        LOG.info("receive get txn status request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+                request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
+        LOG.debug("get txn status request: {}", request);
+
+        TGetLoadTxnStatusResult result = new TGetLoadTxnStatusResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            LOG.warn("current fe is not leader");
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        // get database
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
+        if (db == null) {
+            LOG.warn("unknown database, database=" + dbName);
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            return result;
+        }
+
+        try {
+            TTransactionStatus status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), status);
+            result.setStatus(status);
+        } catch (Throwable e) {
+            result.setStatus(TTransactionStatus.UNKNOWN);
+            LOG.warn("catch unknown result.", e);
+        }
+        return result;
+    }
+
+    @Override
     public TLoadTxnCommitResult loadTxnPrepare(TLoadTxnCommitRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
         LOG.info("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
@@ -1605,7 +1666,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             result.setParams(streamLoadPutImpl(request));
-        } catch (UserException e) {
+        } catch (UserException | StarRocksPlannerException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -2091,7 +2152,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
         TResourceUsage usage = request.getResource_usage();
-        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(request.getBackend_id(),
                 usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille());
 
@@ -2101,16 +2162,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
+    /**
+     * Returns the empty warehouse info.
+     * Maintaining this method is just to avoid problems at grayscale upgrading.
+     */
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
-        Map<String, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
-        List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
-                .map(WarehouseInfo::toThrift)
-                .collect(Collectors.toList());
-
         TGetWarehousesResponse res = new TGetWarehousesResponse();
         res.setStatus(new TStatus(OK));
-        res.setWarehouse_infos(warehouseInfos);
+        res.setWarehouse_infos(Collections.emptyList());
 
         return res;
     }
@@ -2141,11 +2201,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, request.getLabel(), true).stream()
+                                    dbId, request.getLabel(), true).stream()
                             .map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                            dbId, null, false).stream().map(LoadJob::toThrift)
+                                    dbId, null, false).stream().map(LoadJob::toThrift)
                             .collect(Collectors.toList()));
                 }
             } else {
@@ -2219,7 +2279,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         load.getDb(), load.getLabel(), load.getType(), load.getUrl()))
                 .collect(Collectors.toList());
     }
-
 
     private List<TTrackingLoadInfo> convertRoutineLoadInfoList(TGetLoadsParams request) throws TException {
         TGetRoutineLoadJobsResult loadsResult = getRoutineLoadJobs(request);
@@ -2338,4 +2397,36 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
         return GrantsTo.getGrantsTo(request);
     }
+
+    @Override
+    public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
+        LogicalSlot slot = LogicalSlot.fromThrift(request.getSlot());
+        GlobalStateMgr.getCurrentState().getSlotManager().requireSlotAsync(slot);
+
+        return new TRequireSlotResponse();
+    }
+
+    @Override
+    public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
+
+        Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
+                .finishSlotRequirement(request.getSlot_id(), new Status(request.getStatus()));
+
+        TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
+        res.setStatus(status.toThrift());
+
+        return res;
+    }
+
+    @Override
+    public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
+        GlobalStateMgr.getCurrentState().getSlotManager().releaseSlotAsync(request.getSlot_id());
+
+        TStatus tstatus = new TStatus(OK);
+        TReleaseSlotResponse res = new TReleaseSlotResponse();
+        res.setStatus(tstatus);
+
+        return res;
+    }
+
 }

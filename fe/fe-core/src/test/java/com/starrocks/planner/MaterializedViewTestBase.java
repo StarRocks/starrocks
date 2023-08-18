@@ -70,7 +70,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv() {
+            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
                 return Sets.newHashSet();
             }
         };

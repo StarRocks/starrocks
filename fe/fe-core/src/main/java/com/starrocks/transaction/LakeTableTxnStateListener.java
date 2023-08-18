@@ -58,6 +58,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
+    public String getTableName() {
+        return table.getName();
+    }
+
+    @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);

@@ -553,6 +553,18 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+    public void testLoadingTaskOnFinishedPartialUpdate(@Injectable BrokerPendingTaskAttachment attachment1,
+                                          @Injectable LoadTask loadTask1,
+                                          @Mocked GlobalStateMgr globalStateMgr,
+                                          @Injectable Database database) throws DdlException {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.PARTIAL_UPDATE_MODE, "column");
+        brokerLoadJob.setJobProperties(properties);
+        brokerLoadJob.onTaskFinished(attachment1);
+    }
+
+    @Test
     public void testExecuteReplayOnAborted(@Injectable TransactionState txnState,
                                            @Injectable LoadJobFinalOperation attachment,
                                            @Injectable EtlStatus etlStatus) {

@@ -777,7 +777,9 @@ public class MvUtils {
         return partitionPredicates;
     }
 
-    public static ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
+    public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
+                                                              ColumnRefFactory columnRefFactory,
+                                                              boolean isCompensate) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         if (scanOperators.isEmpty()) {
             return ConstantOperator.createBoolean(true);
@@ -787,27 +789,31 @@ public class MvUtils {
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                // NOTE: It's not safe to get table's pruned partition predicates by
-                // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
-                //  - partitionPredicate is null if olap scan operator cannot prune partitions.
-                //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
-                // eg:
-                // t1:
-                //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
-                //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
-                //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
-                //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
-                //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
-                //
-                // TODO: support partition prune for this later.
-                // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
-                // `partitionPredicate` : null
-                //
-                // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
-                // `partitionPredicate` : k1>='2020-02-11'
-                // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
-                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
-                        columnRefFactory);
+                if (!isCompensate) {
+                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
+                } else {
+                    // NOTE: It's not safe to get table's pruned partition predicates by
+                    // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
+                    //  - partitionPredicate is null if olap scan operator cannot prune partitions.
+                    //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
+                    // eg:
+                    // t1:
+                    //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
+                    //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
+                    //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
+                    //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
+                    //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
+                    //
+                    // TODO: support partition prune for this later.
+                    // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
+                    // `partitionPredicate` : null
+                    //
+                    // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
+                    // `partitionPredicate` : k1>='2020-02-11'
+                    // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
+                    partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
+                            columnRefFactory);
+                }
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else {
@@ -845,6 +851,11 @@ public class MvUtils {
         if (olapScanOperator.getSelectedPartitionId() != null
                 && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
             return partitionPredicates;
+        }
+
+        // if no partitions are selected, return pruned partition predicates directly.
+        if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
+            return olapScanOperator.getPrunedPartitionPredicates();
         }
 
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
@@ -911,6 +922,7 @@ public class MvUtils {
     // p2:[2022-01-02, 2022-01-03), p2 is outdated,
     // then this function will return predicate:
     // k1 >= "2022-01-01" and k1 < "2022-01-02"
+    // NOTE: This method can be only used in query rewrite and cannot be used in insert routine.
     public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
                                                                  OptExpression mvPlan,
                                                                  Set<String> mvPartitionNamesToRefresh) {
@@ -946,11 +958,21 @@ public class MvUtils {
         return null;
     }
 
+    /**
+     * Return the updated partition key ranges of the specific table.
+     *
+     * NOTE: This method can be only used in query rewrite and cannot be used to insert routine.
+     * @param partitionByTable          : the base table of the mv
+     * @param partitionColumn           : the partition column of the base table
+     * @param mv                        : the materialized view
+     * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
+     * @return
+     */
     private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
                                                                              Column partitionColumn,
                                                                              MaterializedView mv,
                                                                              Set<String> mvPartitionNamesToRefresh) {
-        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
+        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);

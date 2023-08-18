@@ -73,6 +73,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +92,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_STORAGE_TYPE = "storage_type";
     public static final String PROPERTIES_STORAGE_MEDIUM = "storage_medium";
     public static final String PROPERTIES_STORAGE_COOLDOWN_TIME = "storage_cooldown_time";
+    public static final String PROPERTIES_STORAGE_COOLDOWN_TTL = "storage_cooldown_ttl";
     // for 1.x -> 2.x migration
     public static final String PROPERTIES_VERSION_INFO = "version_info";
     // for restore
@@ -174,14 +176,17 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
-    public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty inferredDataProperty,
+    public static DataProperty analyzeDataProperty(Map<String, String> properties,
+                                                   DataProperty inferredDataProperty,
                                                    boolean isDefault)
             throws AnalysisException {
         String mediumKey = PROPERTIES_STORAGE_MEDIUM;
-        String coolDownKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        String coolDownTimeKey = PROPERTIES_STORAGE_COOLDOWN_TIME;
+        String coolDownTTLKey = PROPERTIES_STORAGE_COOLDOWN_TTL;
         if (isDefault) {
             mediumKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_MEDIUM;
-            coolDownKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+            coolDownTimeKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TIME;
+            coolDownTTLKey = PROPERTIES_DEFAULT_PREFIX + PROPERTIES_STORAGE_COOLDOWN_TTL;
         }
 
         if (properties == null) {
@@ -192,7 +197,8 @@ public class PropertyAnalyzer {
         long coolDownTimeStamp = DataProperty.MAX_COOLDOWN_TIME_MS;
 
         boolean hasMedium = false;
-        boolean hasCooldown = false;
+        boolean hasCooldownTime = false;
+        boolean hasCoolDownTTL = false;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
@@ -205,36 +211,50 @@ public class PropertyAnalyzer {
                 } else {
                     throw new AnalysisException("Invalid storage medium: " + value);
                 }
-            } else if (!hasCooldown && key.equalsIgnoreCase(coolDownKey)) {
-                hasCooldown = true;
+            } else if (!hasCooldownTime && key.equalsIgnoreCase(coolDownTimeKey)) {
+                hasCooldownTime = true;
                 DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+            } else if (!hasCoolDownTTL && key.equalsIgnoreCase(coolDownTTLKey)) {
+                hasCoolDownTTL = true;
             }
         } // end for properties
 
-        if (!hasCooldown && !hasMedium) {
+        if (!hasCooldownTime && !hasMedium && !hasCoolDownTTL) {
             return inferredDataProperty;
         }
 
+        if (hasCooldownTime && hasCoolDownTTL) {
+            throw new AnalysisException("Invalid data property. "
+                    + coolDownTimeKey + " and " + coolDownTTLKey + " conflict. you can only use one of them. ");
+        }
+
         properties.remove(mediumKey);
-        properties.remove(coolDownKey);
+        properties.remove(coolDownTimeKey);
+        properties.remove(coolDownTTLKey);
 
-        if (hasCooldown && !hasMedium) {
-            throw new AnalysisException("Invalid data property. storage medium property is not found");
-        }
-
-        if (storageMedium == TStorageMedium.HDD && hasCooldown) {
-            throw new AnalysisException("Can not assign cooldown timestamp to HDD storage medium");
-        }
-
-        long currentTimeMs = System.currentTimeMillis();
-        if (storageMedium == TStorageMedium.SSD && hasCooldown) {
+        if (hasCooldownTime) {
+            if (!hasMedium) {
+                throw new AnalysisException("Invalid data property. storage medium property is not found");
+            }
+            if (storageMedium == TStorageMedium.HDD) {
+                throw new AnalysisException("Can not assign cooldown timestamp to HDD storage medium");
+            }
+            long currentTimeMs = System.currentTimeMillis();
             if (coolDownTimeStamp <= currentTimeMs) {
-                throw new AnalysisException("Cooldown time should later than now");
+                throw new AnalysisException("Cooldown time should be later than now");
+            }
+
+        } else if (hasCoolDownTTL) {
+            if (!hasMedium) {
+                throw new AnalysisException("Invalid data property. storage medium property is not found");
+            }
+            if (storageMedium == TStorageMedium.HDD) {
+                throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
             }
         }
 
-        if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
+        if (storageMedium == TStorageMedium.SSD && !hasCooldownTime && !hasCoolDownTTL) {
             // set default cooldown time
             coolDownTimeStamp = DataProperty.getSsdCooldownTimeMs();
         }
@@ -790,7 +810,7 @@ public class PropertyAnalyzer {
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
         } else {
-            tableInfo = new BaseTableInfo(catalogName, dbName, table.getTableIdentifier());
+            tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
 
         return Pair.create(tableInfo, table);
@@ -963,4 +983,20 @@ public class PropertyAnalyzer {
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
     }
+
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        PeriodDuration periodDuration;
+        try {
+            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
+        return periodDuration;
+    }
+
 }

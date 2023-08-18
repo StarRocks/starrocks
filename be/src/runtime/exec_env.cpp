@@ -414,7 +414,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
+
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
+    RETURN_IF_ERROR(_routine_load_task_executor->init());
+
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
@@ -484,7 +487,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _cache_mgr = new query_cache::CacheManager(capacity);
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
-    RETURN_IF_ERROR(_spill_dir_mgr->init());
+    RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
     return Status::OK();
 }
@@ -537,6 +540,10 @@ void ExecEnv::stop() {
 
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
+    }
+
+    if (_routine_load_task_executor) {
+        _routine_load_task_executor->stop();
     }
 
 #ifndef BE_TEST

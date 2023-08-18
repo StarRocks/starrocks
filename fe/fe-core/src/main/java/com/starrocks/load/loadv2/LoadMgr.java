@@ -70,8 +70,6 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
-import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
-import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -112,9 +110,6 @@ public class LoadMgr implements Writable {
     private final LoadJobScheduler loadJobScheduler;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    private final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
-            new WarehouseLoadInfoBuilder();
 
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -233,8 +228,7 @@ public class LoadMgr implements Writable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
-                                String warehouse, boolean isStatisticsJob)
+                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
             throws UserException {
 
         // get db id
@@ -245,9 +239,8 @@ public class LoadMgr implements Writable {
 
         LoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob = new InsertLoadJob(
-                    label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout, warehouse,
-                    isStatisticsJob);
+            loadJob =
+                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
@@ -385,8 +378,6 @@ public class LoadMgr implements Writable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
-
-        warehouseLoadInfoBuilder.withRemovedJob(job);
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -402,7 +393,7 @@ public class LoadMgr implements Writable {
         List<LoadJob> insertJobs;
         try {
             insertJobs = idToLoadJob.values().stream()
-                    .filter(job -> job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
+                    .filter(job -> job.hasTxn() && job.getJobType() == EtlJobType.INSERT && !job.isCompleted())
                     .collect(Collectors.toList());
         } finally {
             readUnlock();
@@ -411,7 +402,7 @@ public class LoadMgr implements Writable {
         insertJobs.forEach(job -> {
             TransactionState state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTransactionState(
                     job.getDbId(), job.getLabel());
-            if (state != null && state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+            if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 try {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
@@ -790,15 +781,6 @@ public class LoadMgr implements Writable {
             }
 
             putLoadJob(loadJob);
-        }
-    }
-
-    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
-        readLock();
-        try {
-            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
-        } finally {
-            readUnlock();
         }
     }
 

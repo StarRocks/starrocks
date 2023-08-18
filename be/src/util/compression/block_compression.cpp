@@ -34,6 +34,9 @@
 
 #include "util/compression/block_compression.h"
 
+#ifdef __x86_64__
+#include <libdeflate.h>
+#endif
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
 #include <snappy/snappy-sinksource.h>
@@ -44,7 +47,6 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "thirdparty/libdeflate/libdeflate.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 
@@ -967,6 +969,7 @@ private:
     const static int MEM_LEVEL = 8;
 };
 
+#ifdef __x86_64__
 class GzipBlockCompressionV2 final : public GzipBlockCompression {
 public:
     GzipBlockCompressionV2() : GzipBlockCompression() {}
@@ -984,14 +987,15 @@ public:
             return Status::OK();
         }
 
-        thread_local libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
+        thread_local std::unique_ptr<libdeflate_decompressor, void (*)(libdeflate_decompressor*)> decompressor{
+                libdeflate_alloc_decompressor(), libdeflate_free_decompressor};
         if (!decompressor) {
             return Status::InternalError("libdeflate_alloc_decompressor failed");
         }
 
         std::size_t out_len;
-        auto result =
-                libdeflate_gzip_decompress(decompressor, input.data, input.size, output->data, output->size, &out_len);
+        auto result = libdeflate_gzip_decompress(decompressor.get(), input.data, input.size, output->data, output->size,
+                                                 &out_len);
         if (result != LIBDEFLATE_SUCCESS) {
             return Status::InvalidArgument("libdeflate_gzip_decompress failed");
         }
@@ -999,6 +1003,7 @@ public:
         return Status::OK();
     }
 };
+#endif
 
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
@@ -1021,7 +1026,11 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZstdBlockCompression::instance();
         break;
     case CompressionTypePB::GZIP:
+#ifdef __x86_64__
         *codec = GzipBlockCompressionV2::instance();
+#else
+        *codec = GzipBlockCompression::instance();
+#endif
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();

@@ -204,6 +204,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.planNodeName = s;
     }
 
+    public String getPlanNodeName() {
+        return planNodeName;
+    }
+
     public PlanNodeId getId() {
         return id;
     }
