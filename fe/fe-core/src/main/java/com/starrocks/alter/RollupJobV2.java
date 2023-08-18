@@ -42,6 +42,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -373,6 +374,16 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             slot.setDesc(slotDesc);
         }
 
+        ExprSubstitutionMap smap = new ExprSubstitutionMap();
+        for (SlotRef slot : slots) {
+            SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
+            Preconditions.checkNotNull(slotDesc);
+            smap.getLhs().add(slot);
+            SlotRef slotRef = new SlotRef(slotDesc);
+            slotRef.setColumnName(slot.getColumnName());
+            smap.getRhs().add(slotRef);
+        }
+        Expr newExpr = defineExpr.clone(smap);
         // sourceScope must be set null tableName for its Field in RelationFields
         // because we hope slotRef can not be resolved in sourceScope but can be
         // resolved in outputScope to force to replace the node using outputExprs.
@@ -387,7 +398,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         SelectAnalyzer.RewriteAliasVisitor visitor =
                 new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
                         outputExprs, new ConnectContext());
-        Expr newExpr = defineExpr.clone();
         newExpr = newExpr.accept(visitor, null);
         newExpr = Expr.analyzeAndCastFold(newExpr);
         if (!newExpr.getType().equals(type)) {

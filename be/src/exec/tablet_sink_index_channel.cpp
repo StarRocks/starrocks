@@ -417,9 +417,10 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     } else {
         std::vector<uint32_t> filtered_indexes;
         RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
-        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filtered_indexes.size());
+        size_t filter_size = filtered_indexes.size();
+        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filter_size);
         auto req = _rpc_request.mutable_requests(0);
-        for (size_t i = 0; i < size; ++i) {
+        for (size_t i = 0; i < filter_size; ++i) {
             req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
         }
     }
@@ -512,7 +513,6 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
         filter[i] = !col.is_null(i) && col.value(i);
     }
 
-    // input->filter(filter);
     for (auto index : indexes) {
         if (filter[index]) {
             filtered_indexes.emplace_back(index);
