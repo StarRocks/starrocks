@@ -159,7 +159,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
-        prepare.computeScanRangeAssignment();
+        prepare.computeFragmentInstances();
 
         FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
@@ -217,8 +217,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Build topology
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
-        prepare.computeScanRangeAssignment();
-        prepare.computeFragmentExecParams();
+        prepare.computeFragmentInstances();
 
         // Assert
         Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
