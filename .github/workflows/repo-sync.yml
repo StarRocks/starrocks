@@ -42,6 +42,9 @@ jobs:
   pr-info:
     name: Add PR Information
     runs-on: [self-hosted, sync-normal]
+    env:
+      PR_ID: ${{ inputs.PR_ID }}
+      SYNC_PAT: ${{ secrets.SYNC_PAT }}
     outputs:
       assignees: ${{ steps.ori_pr_info.outputs.assignees }}
       body: ${{ steps.ori_pr_info.outputs.body }}
@@ -50,20 +53,8 @@ jobs:
       - name: Ori PR Info
         id: ori_pr_info
         run: |
-          set -x
-          info=`curl -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token ${{ secrets.SYNC_PAT }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/starrocks/starrocks/pulls/${{ inputs.PR_ID }} 2>/dev/null`
-          assignees=`echo ${info} | jq .assignee.login`
-          assignees=`echo $assignees | sed 's/"//g' | sed 's/ /, /g'`
-          assignees=andyziye
-          body=`echo ${info} | jq .body | sed 's#\n#<br />#g'`
-          title=`echo ${info} | jq .title | sed 's/.\(.*\)/\1/' | sed 's/\(.*\)./\1/'`
-          echo "assignees=${assignees}" >> $GITHUB_OUTPUT
-          echo "body=${body//\`/\\\`}" >> $GITHUB_OUTPUT || echo "body= " >> $GITHUB_OUTPUT
-          echo "title=${title//\`/\\\`}" >> $GITHUB_OUTPUT
+          cd /var/lib/elastic-service
+          ./lib/get_pr_info.sh 
 
   repo-sync:
     name: Repo Sync
