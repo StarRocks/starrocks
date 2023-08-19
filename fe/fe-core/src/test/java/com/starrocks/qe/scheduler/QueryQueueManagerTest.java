@@ -230,13 +230,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             // 3. Query for statistic.
+            connectContext.setStatisticsContext(false);
             connectContext.setStatisticsJob(true); // Mock statistics job.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
             GlobalVariable.setEnableQueryQueueStatistic(false);
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueStatistic(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+
             connectContext.setStatisticsJob(false);
+            GlobalVariable.setEnableQueryQueueStatistic(true);
+            Assert.assertFalse(manager.isEnableQueue(coordinator));
+
+            connectContext.setStatisticsContext(true);
+            GlobalVariable.setEnableQueryQueueStatistic(false);
+            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueStatistic(true);
+            Assert.assertTrue(manager.isEnableQueue(coordinator));
         }
     }
 
