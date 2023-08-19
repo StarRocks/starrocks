@@ -10,7 +10,7 @@ Broker Load supports single-table loads and multi-table loads. You can load one 
 
 Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 ## Background information
 

@@ -6,7 +6,7 @@ StarRocks supports data transformation at loading.
 
 This feature supports [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) but does not support [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 

@@ -4,7 +4,7 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 This topic describes how to load data from Apache Flink® to StarRocks.
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 ## Overview
 
