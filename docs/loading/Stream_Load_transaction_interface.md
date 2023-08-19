@@ -6,7 +6,7 @@ From v2.4 onwards, StarRocks provides a Stream Load transaction interface to imp
 
 This topic describes the Stream Load transaction interface and how to load data into StarRocks by using this interface.
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 ## Description
 
