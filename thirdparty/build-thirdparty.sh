@@ -221,6 +221,9 @@ build_thrift() {
 
 # llvm
 build_llvm() {
+    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=199309L"
+    export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
+
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
