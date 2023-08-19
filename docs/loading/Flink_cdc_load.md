@@ -6,7 +6,7 @@ StarRocks supports real-time data synchronization from MySQL within seconds, del
 
 This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 ## How it works
 

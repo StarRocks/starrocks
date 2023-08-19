@@ -6,7 +6,7 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks also supports partial updates and conditional updates.
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
