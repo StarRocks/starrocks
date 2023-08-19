@@ -300,7 +300,7 @@ build_llvm() {
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
     -DBUILD_SHARED_LIBS:BOOL=False \
-    -DCMAKE_BUILD_TYPE="RELEASE" \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
     # TODO(yueyang): Add more targets.
@@ -308,6 +308,8 @@ build_llvm() {
     ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+
+    restore_compile_flags
 }
 
 # protobuf
