@@ -58,12 +58,18 @@ Status JniScanner::do_open(RuntimeState* state) {
 void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
-    if (_jni_scanner_obj == nullptr) return;
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
-    _check_jni_exception(_jni_env, "Failed to close the off-heap table scanner.");
-    _jni_env->DeleteLocalRef(_jni_scanner_obj);
-    _jni_env->DeleteLocalRef(_jni_scanner_cls);
+    if (_jni_scanner_obj != nullptr) {
+        if (_jni_scanner_close != nullptr) {
+            _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
+        }
+        _jni_env->DeleteLocalRef(_jni_scanner_obj);
+        _jni_scanner_obj = nullptr;
+    }
+    if (_jni_scanner_cls != nullptr) {
+        _jni_env->DeleteLocalRef(_jni_scanner_cls);
+        _jni_scanner_cls = nullptr;
+    }
 }
 
 void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {}
@@ -71,17 +77,19 @@ void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {}
 Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
     // init jmethod
     _jni_scanner_open = _jni_env->GetMethodID(_jni_scanner_cls, "open", "()V");
-    DCHECK(_jni_scanner_open != nullptr);
-    _jni_scanner_get_next_chunk = _jni_env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
-    DCHECK(_jni_scanner_get_next_chunk != nullptr);
-    _jni_scanner_close = _jni_env->GetMethodID(_jni_scanner_cls, "close", "()V");
-    DCHECK(_jni_scanner_close != nullptr);
-    _jni_scanner_release_column = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
-    DCHECK(_jni_scanner_release_column != nullptr);
-    _jni_scanner_release_table = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
-    DCHECK(_jni_scanner_release_table != nullptr);
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to init off-heap table jni methods."));
+    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `open` jni method"));
 
+    _jni_scanner_get_next_chunk = _jni_env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
+    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `getNextOffHeapChunk` jni method"));
+
+    _jni_scanner_close = _jni_env->GetMethodID(_jni_scanner_cls, "close", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `close` jni method"));
+
+    _jni_scanner_release_column = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
+    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `releaseOffHeapColumnVector` jni method"));
+
+    _jni_scanner_release_table = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `releaseOffHeapTable` jni method"));
     return Status::OK();
 }
 
