@@ -2026,7 +2026,7 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
         std::vector<RowsetSharedPtr> dummy_rowsets;
         EditVersion full_version;
         ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets, &full_version).ok());
-        if (full_version.minor() == 1) {
+        if (full_version.minor_number() == 1) {
             break;
         }
         std::cerr << "waiting for compaction applied\n";
@@ -2698,7 +2698,7 @@ void TabletUpdatesTest::tablets_prepare(const TabletSharedPtr& tablet0, const Ta
     ASSERT_EQ(tablet0->updates()->max_version(), 6);
     EditVersion latest_applied_verison;
     tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
-    ASSERT_EQ(latest_applied_verison.major(), 5);
+    ASSERT_EQ(latest_applied_verison.major_number(), 5);
     LOG(INFO) << "commit partial rowset success";
 
     // create rowsets for tablet1
@@ -2831,7 +2831,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(b
         Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
         EditVersion latest_applied_verison;
         tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
-        ASSERT_EQ(latest_applied_verison.major(), 6);
+        ASSERT_EQ(latest_applied_verison.major_number(), 6);
     }
 
     ASSERT_TRUE(SnapshotManager::instance()
@@ -2877,7 +2877,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
             Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
             EditVersion latest_applied_verison;
             tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
-            ASSERT_EQ(latest_applied_verison.major(), 6);
+            ASSERT_EQ(latest_applied_verison.major_number(), 6);
         }
     }
 
@@ -2924,7 +2924,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
             Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
             EditVersion latest_applied_verison;
             tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
-            ASSERT_EQ(latest_applied_verison.major(), 6);
+            ASSERT_EQ(latest_applied_verison.major_number(), 6);
         }
         break;
     }
@@ -2940,7 +2940,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
             Status status = tablet0->updates()->get_applied_rowsets(6, &applied_rowsets, &version);
             EditVersion latest_applied_verison;
             tablet0->updates()->get_latest_applied_version(&latest_applied_verison);
-            ASSERT_EQ(latest_applied_verison.major(), 6);
+            ASSERT_EQ(latest_applied_verison.major_number(), 6);
         }
 
         for (const auto& rowset : snapshot_rowsets) {
@@ -3297,7 +3297,7 @@ void TabletUpdatesTest::test_snapshot_with_empty_rowset(bool enable_persistent_i
         std::vector<RowsetSharedPtr> rowsets;
         EditVersion full_version;
         ASSERT_TRUE(tablet1->updates()->get_applied_rowsets(12, &rowsets, &full_version).ok());
-        if (full_version.minor() == 1) {
+        if (full_version.minor_number() == 1) {
             break;
         }
         std::cerr << "waiting for compaction applied\n";
@@ -3443,7 +3443,7 @@ void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vec
         while (true) {
             EditVersion ev;
             tablet->updates()->get_latest_applied_version(&ev);
-            if (ev.major() == versions.back()) {
+            if (ev.major_number() == versions.back()) {
                 break;
             }
             SleepForMs(50);

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
@@ -41,6 +40,9 @@ public class JDBCTable extends Table {
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
+
+    public static final String ORIGINAL_TABLENAME = "original_tablename";
+    public static final String ORIGINAL_DBNAME = "original_dbname";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
@@ -87,9 +89,11 @@ public class JDBCTable extends Table {
 
         resourceName = properties.get(RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
+            if (properties.get(JDBCResource.USER) == null ||
+                    properties.get(JDBCResource.PASSWORD) == null) {
+                throw new DdlException("all catalog properties must be set");
+            }
             if (Strings.isNullOrEmpty(properties.get(JDBCResource.URI)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.USER)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.PASSWORD)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_URL)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.CHECK_SUM)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {
@@ -118,6 +122,9 @@ public class JDBCTable extends Table {
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {
+            if (!Strings.isNullOrEmpty(properties.get(ORIGINAL_DBNAME))) {
+                return String.join(".", catalogName, properties.get(ORIGINAL_DBNAME), properties.get(ORIGINAL_TABLENAME));
+            }
             return String.join(".", catalogName, dbName, name);
         } else {
             return Long.toString(id);

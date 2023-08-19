@@ -473,6 +473,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return materializedColumnExpr.clone();
     }
 
+    public Expr getMaterializedColumnExpr() {
+        return materializedColumnExpr;
+    }
     public void setMaterializedColumnExpr(Expr expr) {
         materializedColumnExpr = expr;
     }

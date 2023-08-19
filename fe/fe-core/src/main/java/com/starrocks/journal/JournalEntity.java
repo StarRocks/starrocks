@@ -118,6 +118,7 @@ import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TransactionIdInfo;
@@ -1017,6 +1018,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_MV_EPOCH_UPDATE:
                 data = MVEpoch.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS:
+                data = TableAddOrDropColumnsInfo.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME:
