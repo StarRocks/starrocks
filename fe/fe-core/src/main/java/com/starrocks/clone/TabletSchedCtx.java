@@ -809,25 +809,33 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
-        // We should avoid full clone task to run concurrently with replica drop task,
-        // otherwise it may cause replica lost in the following scenario:
-        // we have a tablet T with only one replica,
-        // t1: balancer move T from backend 10001 to backend 10002
-        // t2: after clone finished, redundant replica on 10001 will be dropped,
-        //     but this will only clean the meta from FE, replica is physically
-        //     dropped until next tablet report from BE
-        // t3: balancer schedule a task to move back T from backend 10002 to backend 10001
-        // t4: tablet report from 10001 received, and a replica drop task is sent to backend 10001
-        // t5: clone on backend 10001 finished, and a new replica of T is created on FE
-        // t6: replica drop task has been executed on backend 10001
-        // t7: after the second clone finished, redundant replica on 10002 will be dropped
-        // t8: replica of T is physically lost with only meta of replica on 10001 is left on FE
         try {
             db.writeLock();
             if (tabletStatus == TabletStatus.REPLICA_MISSING
                     || tabletStatus == TabletStatus.REPLICA_RELOCATING
                     || tabletStatus == TabletStatus.COLOCATE_MISMATCH
                     || (type == Type.BALANCE && !cloneTask.isLocal())) {
+                // We should avoid full clone task to run concurrently with replica drop task,
+                // otherwise it may cause replica lost in the following scenario:
+                // we have a tablet T with only one replica,
+                // t1: balancer move T from backend 10001 to backend 10002
+                // t2: after clone finished, redundant replica on 10001 will be dropped,
+                //     but this will only clean the meta from FE, replica is physically
+                //     dropped until next tablet report from BE
+                // t3: balancer schedule a task to move back T from backend 10002 to backend 10001
+                // t4: tablet report from 10001 received, and a replica drop task is sent to backend 10001
+                // t5: clone on backend 10001 finished, and a new replica of T is created on FE
+                // t6: replica drop task has been executed on backend 10001
+                // t7: after the second clone finished, redundant replica on 10002 will be dropped
+                // t8: replica of T is physically lost with only meta of replica on 10001 is left on FE
+                //
+                // If the timing of consecutive full clones is too close, we will delay the next full clone
+                // so that report handler will delete the src replica physically in time.
+                if (System.currentTimeMillis() - tablet.getLastFullCloneFinishedTimeMs() <
+                        Config.tablet_sched_consecutive_full_clone_delay_sec * 1000) {
+                    throw new SchedException(Status.SCHEDULE_RETRY, "consecutive full clone needs to delay");
+                }
+
                 Replica cloneReplica = new Replica(
                         GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
                         -1 /* version */, schemaHash,
@@ -1102,6 +1110,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);
+            tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
             GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
