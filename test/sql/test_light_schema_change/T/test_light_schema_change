@@ -16,13 +16,15 @@ insert into t1 values(2, 2, 3);
 select * from t1 order by k;
 
 alter table t1 add column k2 int key;
-select * from t1 order by k;
-select sleep(10);
+function: wait_alter_table_finish()
+
 select * from t1 order by k;
 insert into t1 values(3, 2, 3, 4);
 select * from t1 order by k;
-drop table t1;
-drop database test_light_schema_change;
+
 
 delete from t1 where v3>4;
 select * from t1 order by k;
+
+drop table t1;
+drop database test_light_schema_change;

@@ -13,27 +13,26 @@ insert into t1 values(1, 1);
 -- !result
 select * from t1 order by k;
 -- result:
-1 1
+1	1
 -- !result
 alter table t1 add column (v1 int, v2 int, v3 int);
 -- result:
 -- !result
 select * from t1 order by k;
 -- result:
-1 1 NULL NULL NULL
+1	1	None	None	None
 -- !result
 insert into t1 values(2, 2, 3, 4, 5);
 -- result:
 -- !result
 select * from t1 order by k;
 -- result:
-1 1 NULL NULL NULL
-2 2 3 4 5
+1	1	None	None	None
+2	2	3	4	5
 -- !result
 alter table t1 drop column v;
 -- result:
 -- !result
--- drop schema change column
 alter table t1 drop column v2;
 -- result:
 -- !result
@@ -42,41 +41,41 @@ insert into t1 values(2, 2, 3);
 -- !result
 select * from t1 order by k;
 -- result:
-1 NULL NULL
-2 3 5
+1	None	None
+2	2	3
+2	3	5
 -- !result
 alter table t1 add column k2 int key;
 -- result:
 -- !result
-select * from t1 order by k;
+function: wait_alter_table_finish()
 -- result:
-1 NULL NULL
-2 3 5
--- !result
-select sleep(10);
--- result:
+None
 -- !result
 select * from t1 order by k;
 -- result:
-1 NULL NULL NULL
-2 NULL 3 5
+1	None	None	None
+2	None	2	3
+2	None	3	5
 -- !result
 insert into t1 values(3, 2, 3, 4);
 -- result:
 -- !result
 select * from t1 order by k;
 -- result:
-1 NULL NULL NULL
-2 NULL 3 5
-3 2 3 4
+1	None	None	None
+2	None	2	3
+2	None	3	5
+3	2	3	4
 -- !result
 delete from t1 where v3>4;
 -- result:
 -- !result
 select * from t1 order by k;
 -- result:
-1 NULL NULL NULL
-3 2 3 4
+1	None	None	None
+2	None	2	3
+3	2	3	4
 -- !result
 drop table t1;
 -- result:
