@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,7 @@ import java.util.Map;
 
 public class PipeAnalyzer {
 
+    public static final String TASK_VARIABLES_PREFIX = "TASK.";
     public static final String PROPERTY_AUTO_INGEST = "auto_ingest";
     public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
@@ -79,6 +81,14 @@ public class PipeAnalyzer {
             return;
         }
         for (String propertyName : properties.keySet()) {
+            if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
+                // Task execution variable
+                String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
+                if (!VariableMgr.containsVariable(taskVariableName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
+                }
+                continue;
+            }
             if (!SUPPORTED_PROPERTIES.contains(propertyName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
             }

@@ -45,7 +45,6 @@ public class TaskBuilder {
         task.setDbName(desc.getDbName());
         task.setDefinition(desc.getSqlTask());
         task.setProperties(desc.getProperties());
-        task.setType(Constants.TaskType.EVENT_TRIGGERED);
         return task;
     }
 

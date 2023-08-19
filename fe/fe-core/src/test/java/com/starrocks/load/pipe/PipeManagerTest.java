@@ -14,6 +14,7 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
@@ -614,6 +615,24 @@ public class PipeManagerTest {
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         createPipe("create pipe p_auto_ingest properties('auto_ingest'='false') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+    }
+
+    @Test
+    public void testTaskProperties() throws Exception {
+        mockRepoExecutor();
+        String pipeName = "p_task_properties";
+        createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        Pipe pipe = getPipe(pipeName);
+        Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+        dropPipe(pipeName);
+
+        // default task execution variables
+        createPipe("create pipe p_task_properties " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        pipe = getPipe(pipeName);
+        Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
     }
 
     @Test
