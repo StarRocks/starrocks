@@ -279,7 +279,7 @@ public class SchemaChangeHandler extends AlterHandler {
             long baseIndexId = olapTable.getBaseIndexId();
             List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
-            lightSchemaChange = !isKey;
+            lightSchemaChange &= !isKey;
             if (isKey) {
                 throw new DdlException("Can not drop key column in Unique data model table");
             }
@@ -289,7 +289,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 long baseIndexId = olapTable.getBaseIndexId();
                 List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
                 boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
-                lightSchemaChange = !isKey;
+                lightSchemaChange &= !isKey;
                 boolean hasReplaceColumn = baseSchema.stream().map(Column::getAggregationType)
                         .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
@@ -300,7 +300,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
                 List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
                 boolean isKey = targetIndexSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
-                lightSchemaChange = !isKey;
+                lightSchemaChange &= !isKey;
                 boolean hasReplaceColumn = targetIndexSchema.stream().map(Column::getAggregationType)
                         .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
