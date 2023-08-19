@@ -737,4 +737,14 @@ public class PipeManagerTest {
         }
     }
 
+    @Test
+    public void testInspectPipes() throws Exception {
+        ctx.setDatabase(PIPE_TEST_DB);
+        createPipe("create pipe p_inspect as insert into tbl " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')");
+
+        String sql = "select inspect_all_pipes()";
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("p_inspect"));
+    }
 }

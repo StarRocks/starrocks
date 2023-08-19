@@ -34,10 +34,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -48,9 +48,9 @@ public class PipeManager {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @SerializedName(value = "pipes")
-    private Map<PipeId, Pipe> pipeMap = new HashMap<>();
+    private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
     @SerializedName(value = "nameToId")
-    private Map<Pair<Long, String>, PipeId> nameToId = new HashMap<>();
+    private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
     private final PipeRepo repo;
 
@@ -224,6 +224,19 @@ public class PipeManager {
         }
     }
 
+    public String getPipesOfDb(long dbId) {
+        try {
+            lock.readLock().lock();
+            List<Pipe> pipes = pipeMap.entrySet().stream()
+                    .filter(x -> x.getKey().getDbId() == dbId)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toList());
+            return GsonUtils.GSON.toJson(pipes);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void putPipe(Pipe pipe) {
         try {
             lock.writeLock().lock();
@@ -260,7 +273,12 @@ public class PipeManager {
 
     public Optional<Pipe> mayGetPipe(long id) {
         // TODO: optimize performance
-        return pipeMap.values().stream().filter(x -> x.getId() == id).findAny();
+        try {
+            lock.readLock().lock();
+            return pipeMap.values().stream().filter(x -> x.getId() == id).findAny();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public Optional<Pipe> mayGetPipe(PipeName name) {

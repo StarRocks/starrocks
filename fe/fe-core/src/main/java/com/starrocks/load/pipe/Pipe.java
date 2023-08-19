@@ -180,14 +180,11 @@ public class Pipe implements GsonPostProcessable {
         }
 
         try {
-            lock.writeLock().lock();
             lastPolledTime = System.currentTimeMillis() / 1000;
             pipeSource.poll();
         } catch (Throwable e) {
             recordPipeError("poll from source failed: " + e.getMessage());
             changeState(State.ERROR, true);
-        } finally {
-            lock.writeLock().unlock();
         }
     }
 
