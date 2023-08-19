@@ -35,9 +35,17 @@ public class BackendCoreStat {
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
         Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);
-        LOG.info("set numOfHardwareCoresOfBe of be({}) to {}, current cpuCores stats: {}", be, numOfCores,
+        LOG.info("set numOfHardwareCores of be({}) to {}, current cpuCores stats: {}", be, numOfCores,
                 numOfHardwareCoresPerBe);
         if (previous == null || previous != numOfCores) {
+            cachedAvgNumOfHardwareCores.set(-1);
+        }
+    }
+
+    public static void removeNumOfHardwareCoresOfBe(long be) {
+        Integer previous = numOfHardwareCoresPerBe.remove(be);
+        LOG.info("remove numOfHardwareCores of be({}), current cpuCores stats: {}", be, numOfHardwareCoresPerBe);
+        if (previous != null) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
     }
