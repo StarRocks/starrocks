@@ -1056,6 +1056,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
                     final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
                     globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                    break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                     SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();

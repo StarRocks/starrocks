@@ -258,7 +258,6 @@ public class SlotDescriptor {
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     -1, true);
             tSlotDescriptor.setIsOutputColumn(isOutputColumn);
-            return tSlotDescriptor;
         } else {
             /**
              * Refer to {@link Expr#treeToThrift}
@@ -271,12 +270,10 @@ public class SlotDescriptor {
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     -1, true);
             tSlotDescriptor.setIsOutputColumn(isOutputColumn);
-            return tSlotDescriptor;
-        }
-
-        if (column != null) {
-            LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
-            tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            if (column != null) {
+                LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
         }
 
         return tSlotDescriptor;
