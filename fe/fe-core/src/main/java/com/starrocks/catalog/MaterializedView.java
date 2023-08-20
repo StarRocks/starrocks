@@ -654,15 +654,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     @Override
-<<<<<<< HEAD
     public void onCreate() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            active = false;
-            return;
-=======
-    public void onReload() {
         try {
             boolean desiredActive = active;
             active = false;
@@ -670,7 +662,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             setActive(desiredActive && reloadActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
-            setInactiveAndReason("reload failed: " + e.getMessage());
+            setActive(false);
         }
     }
 
@@ -681,9 +673,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setInactiveAndReason("db not exists: " + dbId);
+            setActive(false);
             return false;
->>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
         }
         if (baseTableInfos == null) {
             baseTableInfos = Lists.newArrayList();
@@ -706,12 +697,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-<<<<<<< HEAD
                     active = false;
-=======
-                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
                     res = false;
->>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
