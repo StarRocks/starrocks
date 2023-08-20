@@ -14,17 +14,23 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collection;
+import java.util.List;
 
 import static java.lang.Math.max;
 
@@ -119,6 +125,85 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         } else {
             int precision = columnSize + max(-digits, 0);
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+        }
+    }
+
+    @Override
+    public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
+        String partitionNamesQuery = "SELECT PARTITION_DESCRIPTION FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
+                "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+        try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
+            ps.setString(1, databaseName);
+            ps.setString(2, tableName);
+            ResultSet rs = ps.executeQuery();
+            ImmutableList.Builder<String> list = ImmutableList.builder();
+            if (null != rs) {
+                while (rs.next()) {
+                    String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
+                            replace("'", "").split(",");
+                    for (String partitionName : partitionNames) {
+                        list.add(partitionName);
+                    }
+                }
+                return list.build();
+            } else {
+                return Lists.newArrayList();
+            }
+        } catch (SQLException | NullPointerException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    @Override
+    public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
+        String partitionColumnsQuery = "SELECT DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+        try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
+            ps.setString(1, databaseName);
+            ps.setString(2, tableName);
+            ResultSet rs = ps.executeQuery();
+            ImmutableList.Builder<String> list = ImmutableList.builder();
+            if (null != rs) {
+                while (rs.next()) {
+                    String partitionColumn = rs.getString("PARTITION_EXPRESSION")
+                            .replace("`", "");
+                    list.add(partitionColumn);
+                }
+                return list.build();
+            } else {
+                return Lists.newArrayList();
+            }
+        } catch (SQLException | NullPointerException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    public List<Partition> getPartitions(Connection connection, Table table) {
+        JDBCTable jdbcTable = (JDBCTable) table;
+        String partitionsQuery = "SELECT PARTITION_DESCRIPTION, " +
+                "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
+                "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+                "AND PARTITION_NAME IS NOT NULL";
+        try (PreparedStatement ps = connection.prepareStatement(partitionsQuery)) {
+            ps.setString(1, jdbcTable.getDbName());
+            ps.setString(2, jdbcTable.getJdbcTable());
+            ResultSet rs = ps.executeQuery();
+            ImmutableList.Builder<Partition> list = ImmutableList.builder();
+            if (null != rs) {
+                while (rs.next()) {
+                    String[] partitionNames = rs.getString("PARTITION_DESCRIPTION").
+                            replace("'", "").split(",");
+                    long createTime = rs.getDate("MODIFIED_TIME").getTime();
+                    for (String partitionName : partitionNames) {
+                        list.add(new Partition(partitionName, createTime));
+                    }
+                }
+                return list.build();
+            } else {
+                return Lists.newArrayList();
+            }
+        } catch (SQLException | NullPointerException e) {
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 }

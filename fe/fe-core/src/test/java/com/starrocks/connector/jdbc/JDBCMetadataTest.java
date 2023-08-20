@@ -23,6 +23,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -47,6 +48,9 @@ public class JDBCMetadataTest {
 
     @Mocked
     Connection connection;
+
+    @Mocked
+    JDBCTableIdCache jdbcTableIdCache;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -82,6 +86,7 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
 
+
         new Expectations() {
             {
                 driverManager.getConnection(anyString, anyString, anyString);
@@ -100,6 +105,17 @@ public class JDBCMetadataTest {
                 connection.getMetaData().getColumns("test", null, "tbl1", "%");
                 result = columnResult;
                 minTimes = 0;
+
+                JDBCTableName jdbcTablekey = JDBCTableName.of("catalog", "test", "tbl1");
+
+                Deencapsulation.invoke(jdbcTableIdCache, "containsTableId", jdbcTablekey);
+                result = true;
+                minTimes = 0;
+
+                Deencapsulation.invoke(jdbcTableIdCache, "getTableId", jdbcTablekey);
+                result = 100000;
+                minTimes = 0;
+
             }
         };
     }
@@ -180,4 +196,17 @@ public class JDBCMetadataTest {
         Table table = jdbcMetadata.getTable("test", "tbl1");
         Assert.assertNotNull(table);
     }
+
+    @Test
+    public void testCacheTableId() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Table table1 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table1.getId() == 100000);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
 }
