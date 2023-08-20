@@ -235,6 +235,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -350,18 +351,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-<<<<<<< HEAD
-            db.getTables().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
-=======
-            db.getTables().forEach(tbl -> {
+            for (Table tbl : ListUtils.union(db.getTables(), db.getHiveTables())) {
                 try {
-                    tbl.onReload();
+                    tbl.onCreate();
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", tbl, e);
                 }
-            });
->>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
+            }
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2781,25 +2777,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-<<<<<<< HEAD
     public void replayCreateTable(String dbName, Table table) {
         Database db = this.fullNameToDb.get(dbName);
         db.createTableWithLock(table, true);
-=======
-    public void replayCreateTable(CreateTableInfo info) {
-        Table table = info.getTable();
-        Database db = this.fullNameToDb.get(info.getDbName());
-        db.writeLock();
-        try {
-            db.registerTableUnlocked(table);
-            table.onReload();
-        } catch (Throwable e) {
-            LOG.error("replay create table failed: {}", table, e);
-        } finally {
-            db.writeUnlock();
-        }
->>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
-
         if (!isCheckpointThread()) {
             // add to inverted index
             if (table.isOlapOrCloudNativeTable()) {
@@ -5481,18 +5461,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-<<<<<<< HEAD
-            db.getMaterializedViews().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
-=======
-            db.getTables().forEach(tbl -> {
+            for (Table tbl : ListUtils.union(db.getMaterializedViews(), db.getHiveTables())) {
                 try {
-                    tbl.onReload();
+                    tbl.onCreate();
                 } catch (Throwable e) {
                     LOG.error("reload table failed: {}", tbl, e);
                 }
-            });
->>>>>>> 40464dba05 ([BugFix] catch exceptions on table reload (#29318))
+            }
         }
 
         // put built-in database into local metastore
