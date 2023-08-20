@@ -334,6 +334,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.PAIMON;
     }
 
+    public boolean isJDBCTable() {
+        return type == TableType.JDBC;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();

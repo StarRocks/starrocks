@@ -24,6 +24,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -68,6 +69,13 @@ public class PartitionUtilTest {
     public void testCreateHudiPartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", HiveMetaClient.HUDI_PARTITION_NULL_VALUE), partColumns, Table.TableType.HUDI);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+    }
+
+    @Test
+    public void testCreateJDBCPartitionKey() throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", JDBCTable.PARTITION_NULL_VALUE), partColumns, Table.TableType.JDBC);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
