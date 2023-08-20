@@ -34,9 +34,14 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
@@ -46,6 +51,9 @@ import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 public class SchemaChangeHandlerTest extends TestWithFeService {
@@ -176,14 +184,10 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
 
         //process agg drop key column with replace schema change, expect exception.
-        try {
-            String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
-            AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt);
-            Assertions.fail();
-        } catch (Exception e) {
-            // ignore
-        }
+        String dropKeyColStmtStr = "alter table test.sc_agg drop column new_k1";
+        AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
+        Assertions.assertThrows(Exception.class,
+                () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropKeyColStmt));
 
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
@@ -341,5 +345,54 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         } finally {
             db.readUnlock();
         }
+    }
+
+    @Test
+    public void testModifyTableAddOrDropColumns() {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("sc_dup");
+        // origin columns
+        Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+        }
+        List<Index> newIndexes = tbl.getCopiedIndexes();
+
+        Assertions.assertDoesNotThrow(
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 0, false));
+
+        Assertions.assertDoesNotThrow(
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 0, true));
+
+        tbl.setState(OlapTableState.ROLLUP);
+        Assertions.assertThrows(DdlException.class,
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 0, false));
+
+        Map<Long, LinkedList<Column>> indexSchemaMapInvalid2 = new HashMap<>(indexSchemaMap);
+
+        // value before key
+        indexSchemaMapInvalid2.get(tbl.getBaseIndexId()).add(0, new Column("kk", Type.INT));
+
+        Assertions.assertThrows(DdlException.class,
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 0, false));
+
+        Map<Long, LinkedList<Column>> indexSchemaMapInvalid3 = new HashMap<>(indexSchemaMap);
+
+        // not key
+        indexSchemaMapInvalid3.get(tbl.getBaseIndexId()).removeIf(Column::isKey);
+        Assertions.assertThrows(DdlException.class,
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 0, false));
+
+        Map<Long, LinkedList<Column>> emptyIndexMap = new HashMap<>();
+
+        Assertions.assertThrows(DdlException.class,
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 0, false));
+
     }
 }

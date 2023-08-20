@@ -169,7 +169,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         Set<String> newColNameSet = Sets.newHashSet(column.getName());
-        //only new table generate ColUniqueId, exist table do not.
+        // only new table generate ColUniqueId, exist table do not.
         if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
             column.setUniqueId(colUniqueIdSupplier.getAsInt());
         }
@@ -2100,14 +2100,13 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    // the invoker should keep table's write lock
+    // the invoker should keep write lock
     public void modifyTableAddOrDropColumns(Database db, OlapTable olapTable,
             Map<Long, LinkedList<Column>> indexSchemaMap,
             List<Index> indexes, long jobId, boolean isReplay)
             throws DdlException, NotImplementedException {
+        db.writeLock();
         try {
-            db.writeLock();
-
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
                 throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");

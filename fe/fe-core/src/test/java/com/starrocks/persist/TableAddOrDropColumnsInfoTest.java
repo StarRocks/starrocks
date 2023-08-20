@@ -24,11 +24,20 @@ public class TableAddOrDropColumnsInfoTest {
     public void test() {
         TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
                 Collections.emptyMap(), Collections.emptyList(), 0);
+
         Assert.assertEquals(1, info.getDbId());
         Assert.assertEquals(1, info.getTableId());
         Assert.assertEquals(0, info.getIndexes().size());
         Assert.assertEquals(0, info.getIndexSchemaMap().size());
         Assert.assertEquals(0, info.getJobId());
+
+        TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
+                Collections.emptyMap(), Collections.emptyList(), 0);
+
+        Assert.assertEquals(info.hashCode(), info2.hashCode());
+        Assert.assertEquals(info, info2);
+        Assert.assertNotNull(info.toString());
+
     }
 
 }
