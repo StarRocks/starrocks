@@ -62,8 +62,10 @@ import java.util.List;
 public class View extends Table {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
 
-    public static final int VIEW_STATUS_NORMAL = 0;
-    public static final int VIEW_STATUS_REBUILD = 2;
+    enum ViewStatus {
+        NORMAL,
+        INVALID,
+    }
 
     // The original SQL-string given as view definition. Set during analysis.
     // Corresponds to Hive's viewOriginalText.
@@ -90,7 +92,7 @@ public class View extends Table {
     private long sqlMode = 0L;
 
     @SerializedName(value = "status")
-    private int status = 0;
+    private ViewStatus status = ViewStatus.NORMAL;
 
     @SerializedName(value = "reason")
     private String reason = "";
@@ -128,7 +130,7 @@ public class View extends Table {
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
-        this.status = 0;
+        this.status = ViewStatus.NORMAL;
         this.reason = "";
     }
 
@@ -167,12 +169,12 @@ public class View extends Table {
     }
 
     public void setInvalid(String reason) {
-        this.status = VIEW_STATUS_REBUILD;
+        this.status = ViewStatus.INVALID;
         this.reason = reason;
     }
 
     public boolean isInvalid() {
-        return status == VIEW_STATUS_REBUILD;
+        return status == ViewStatus.INVALID;
     }
 
     public String getReason() {
