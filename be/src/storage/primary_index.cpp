@@ -1158,6 +1158,17 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
     return Status::OK();
 }
 
+Status PrimaryIndex::_build_persistent_values(uint32_t rowset_id, const UpdateInfos& info,
+                                              std::vector<uint64_t>* values) const {
+    for (auto i = 0; i < info._seg_ids.size(); i++) {
+        uint64_t base = ((uint64_t)(rowset_id + info._seg_ids[i])) << 32;
+        for (uint32_t j = info._idx_range[i].first; j < info._idx_range[i].second; j++) {
+            values->emplace_back(base + j);
+        }
+    }
+    return Status::OK();
+}
+
 const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                                   std::vector<Slice>* key_slices) const {
     if (pks.is_binary()) {
@@ -1171,6 +1182,27 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         }
         return reinterpret_cast<const Slice*>(key_slices->data());
     }
+}
+
+const Slice* PrimaryIndex::_build_persistent_keys(std::vector<const Column*>& key_cols,
+                                                  std::vector<std::pair<uint32_t, uint32_t>>& idx_ranges,
+                                                  std::vector<Slice>* key_slices) const {
+    DCHECK(key_cols.size() == idx_ranges.size());
+    for (auto i = 0; i < key_cols.size(); i++) {
+        if (key_cols[i]->is_binary()) {
+            const Slice* vkeys = reinterpret_cast<const Slice*>(key_cols[i]->raw_data());
+            for (size_t i = idx_ranges[i].first; i < idx_ranges[i].second; i++) {
+                key_slices->emplace_back(vkeys[i]);
+            }
+        } else {
+            const uint8_t* keys = key_cols[i]->raw_data();
+            for (size_t i = idx_ranges[i].first; i < idx_ranges[i].second; i++) {
+                key_slices->emplace_back(keys, _key_size);
+                keys += _key_size;
+            }
+        }
+    }
+    return reinterpret_cast<const Slice*>(key_slices->data());
 }
 
 Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
@@ -1208,6 +1240,38 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     return st;
 }
 
+Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rowset_id, UpdateInfos& info, DeletesMap* deletes,
+                                                   IOStat* stat) {
+    Status st;
+    uint32_t n = info.total_update_rows();
+    std::vector<Slice> keys;
+    std::vector<uint64_t> values;
+    values.reserve(n);
+    std::vector<uint64_t> old_values(n, NullIndexValue);
+    const Slice* vkeys = _build_persistent_keys(info._pk_columns, info._idx_range, &keys);
+    RETURN_IF_ERROR(_build_persistent_values(rowset_id, info, &values));
+    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
+                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
+    size_t row_id = 0;
+    size_t next_seg_begin_idx = 0;
+    for (auto i = 0; i < info._idx_range.size(); i++) {
+        next_seg_begin_idx += info._idx_range[i].second - info._idx_range[i].first;
+        uint32_t rssid = rowset_id + info._seg_ids[i];
+        while (row_id < next_seg_begin_idx) {
+            uint64_t old = old_values[row_id];
+            if ((old != NullIndexValue) && (old >> 32) == rssid) {
+                LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
+                st = Status::InternalError("found duplicate in upsert data");
+            }
+            if (old != NullIndexValue) {
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+            }
+            row_id++;
+        }
+    }
+    return st;
+}
+
 Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
     Status st;
     std::vector<Slice> keys;
@@ -1225,10 +1289,51 @@ Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* 
     return st;
 }
 
+Status PrimaryIndex::_erase_persistent_index(std::vector<const Column*>& key_cols, DeletesMap* deletes) {
+    Status st;
+    std::vector<Slice> keys;
+    size_t total_rows = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> idx_ranges;
+    for (auto& key_col : key_cols) {
+        total_rows += key_col->size();
+        idx_ranges.emplace_back(std::make_pair(0, key_col->size()));
+    }
+    std::vector<uint64_t> old_values(total_rows, NullIndexValue);
+    const Slice* vkeys = _build_persistent_keys(key_cols, idx_ranges, &keys);
+    st = _persistent_index->erase(total_rows, vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
+    if (!st.ok()) {
+        LOG(WARNING) << "erase persistent index failed";
+    }
+    for (unsigned long old : old_values) {
+        if (old != NullIndexValue) {
+            (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+        }
+    }
+    return st;
+}
+
 Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const {
     std::vector<Slice> keys;
     const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
     Status st = _persistent_index->get(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
+    if (!st.ok()) {
+        LOG(WARNING) << "failed get value from persistent index";
+    }
+    return st;
+}
+
+Status PrimaryIndex::_get_from_persistent_index(std::vector<const Column*>& key_cols,
+                                                std::vector<uint64_t>* rowids) const {
+    std::vector<Slice> keys;
+    size_t row_num = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> idx_ranges;
+    for (auto key_col : key_cols) {
+        row_num += key_col->size();
+        idx_ranges.emplace_back(std::make_pair(0, key_col->size()));
+    }
+    rowids->resize(row_num);
+    const Slice* vkeys = _build_persistent_keys(key_cols, idx_ranges, &keys);
+    Status st = _persistent_index->get(row_num, vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
     if (!st.ok()) {
         LOG(WARNING) << "failed get value from persistent index";
     }
@@ -1304,6 +1409,19 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return st;
 }
 
+Status PrimaryIndex::upsert(uint32_t rowset_id, UpdateInfos& info, DeletesMap* deletes, IOStat* stat) {
+    Status st;
+    if (_persistent_index != nullptr) {
+        st = _upsert_into_persistent_index(rowset_id, info, deletes, stat);
+    } else {
+        for (auto i = 0; i < info._seg_ids.size(); i++) {
+            _pkey_to_rssid_rowid->upsert(rowset_id + info._seg_ids[i], info._rowid_start[i], *(info._pk_columns[i]),
+                                         info._idx_range[i].first, info._idx_range[i].second, deletes);
+        }
+    }
+    return st;
+}
+
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                   const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
@@ -1339,6 +1457,19 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     return st;
 }
 
+Status PrimaryIndex::erase(std::vector<const Column*>& key_cols, DeletesMap* deletes) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
+    if (_persistent_index != nullptr) {
+        st = _erase_persistent_index(key_cols, deletes);
+    } else {
+        for (auto key_col : key_cols) {
+            _pkey_to_rssid_rowid->erase(*key_col, 0, key_col->size(), deletes);
+        }
+    }
+    return st;
+}
+
 Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) const {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
@@ -1346,6 +1477,19 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
         st = _get_from_persistent_index(key_col, rowids);
     } else {
         _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
+    }
+    return st;
+}
+
+Status PrimaryIndex::get(std::vector<const Column*>& key_cols, std::vector<uint64_t>* rowids) const {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    Status st;
+    if (_persistent_index != nullptr) {
+        st = _get_from_persistent_index(key_cols, rowids);
+    } else {
+        for (auto key_col : key_cols) {
+            _pkey_to_rssid_rowid->get(*key_col, 0, key_col->size(), rowids);
+        }
     }
     return st;
 }

@@ -1062,6 +1062,221 @@ bool TabletUpdates::check_delta_column_generate_from_version(EditVersion begin_v
     return false;
 }
 
+Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset, uint32_t rowset_id,
+                                                  int32_t condition_column, EditVersion& latest_applied_version,
+                                                  DeletesMap& new_deletes, int64_t* full_row_size, size_t* delete_op) {
+    auto manager = StorageEngine::instance()->update_manager();
+    auto tablet_id = _tablet.tablet_id();
+    auto state_entry =
+            manager->update_state_cache().get(strings::Substitute("$0_S1", tablet_id, rowset->rowset_id().to_string()));
+    auto index_entry = manager->index_cache().get(tablet_id);
+    DCHECK(state_entry != nullptr);
+    DCHECK(index_entry != nullptr);
+
+    auto& state = state_entry->value();
+    auto& index = index_entry->value();
+
+    if (state_entry == nullptr || index_entry == nullptr) {
+        std::string msg =
+                strings::Substitute("_apply_normal_rowset_commit_batch error: get state_entry and index_entry failed");
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
+
+    Status st;
+    if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
+        std::vector<uint32_t> upsert_ids;
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            state.load_upserts(rowset.get(), i);
+            auto& upserts = state.upserts();
+            if (upserts[i] != nullptr) {
+                std::unique_ptr<Column> delete_pks = nullptr;
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks,
+                                 full_row_size);
+                if (!st.ok()) {
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    return Status::InternalError(msg);
+                }
+                upsert_ids.emplace_back(i);
+                manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                manager->index_cache().update_object_size(index_entry,
+                                                          index.memory_usage() + upserts[i]->memory_usage());
+                if (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) ||
+                    delete_pks != nullptr) {
+                    st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), upserts,
+                                    index, tablet_id, &new_deletes);
+                    if (!st.ok()) {
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        return st;
+                    }
+                    if (delete_pks != nullptr) {
+                        index.erase(*delete_pks, &new_deletes);
+                    }
+
+                    for (const auto& upsert_id : upsert_ids) {
+                        state.release_upserts(upsert_id);
+                    }
+                    upsert_ids.clear();
+                    manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                }
+            }
+        }
+        if (!upsert_ids.empty()) {
+            st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), state.upserts(), index,
+                            tablet_id, &new_deletes);
+            if (!st.ok()) {
+                std::string msg =
+                        strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                            st.to_string(), debug_string());
+                LOG(ERROR) << msg;
+                return st;
+            }
+            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+        }
+        for (auto& id : upsert_ids) {
+            state.release_upserts(id);
+        }
+
+        // two states
+        // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
+        // 2. pure upsert. no delete files, the following logic will be skip
+        for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
+            state.load_deletes(rowset.get(), i);
+            auto& deletes = state.deletes();
+            *delete_op += deletes[i]->size();
+            index.erase(*deletes[i], &new_deletes);
+            state.release_deletes(i);
+        }
+        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+    } else {
+        uint32_t delfile_num = rowset->rowset_meta()->get_meta_pb().delfile_idxes_size();
+        uint32_t upsert_num = rowset->num_segments();
+        DCHECK(rowset->num_delete_files() == delfile_num);
+
+        uint32_t loaded_delfile = 0;
+        uint32_t loaded_upsert = 0;
+        uint32_t i = 0;
+        while (i < delfile_num + upsert_num) {
+            uint32_t del_idx = delfile_num + upsert_num;
+            if (loaded_delfile < delfile_num) {
+                del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
+            }
+            std::vector<uint32_t> upsert_ids;
+            while (i < del_idx) {
+                state.load_upserts(rowset.get(), loaded_upsert);
+                auto& upserts = state.upserts();
+                if (upserts[loaded_upsert] != nullptr) {
+                    // used for auto increment delete-partial update conflict
+                    std::unique_ptr<Column> delete_pks = nullptr;
+                    // apply partial rowset segment
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index,
+                                     delete_pks, full_row_size);
+                    if (!st.ok()) {
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        return st;
+                    }
+                    manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                    upsert_ids.emplace_back(loaded_upsert);
+
+                    // consume upserts memory in advance
+                    manager->index_cache().update_object_size(
+                            index_entry, index.memory_usage() + upserts[loaded_upsert]->memory_usage());
+                    if (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) ||
+                        delete_pks != nullptr) {
+                        // apply multiple segment at once to reduce disk io
+                        st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(),
+                                        upserts, index, tablet_id, &new_deletes);
+                        if (!st.ok()) {
+                            std::string msg = strings::Substitute(
+                                    "_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                    st.to_string(), debug_string());
+                            LOG(ERROR) << msg;
+                            return st;
+                        }
+                        if (delete_pks != nullptr) {
+                            index.erase(*delete_pks, &new_deletes);
+                        }
+                        for (const auto& upsert_id : upsert_ids) {
+                            state.release_upserts(upsert_id);
+                        }
+                        upsert_ids.clear();
+                        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                    }
+                }
+                i++;
+                loaded_upsert++;
+            }
+            if (!upsert_ids.empty()) {
+                st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), state.upserts(), index,
+                                tablet_id, &new_deletes);
+                if (!st.ok()) {
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    return st;
+                }
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            }
+            for (auto& id : upsert_ids) {
+                state.release_upserts(id);
+            }
+            manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+
+            // TODO
+            // support batch erase
+            std::vector<uint32_t> delete_ids;
+            std::vector<const Column*> delete_cols;
+            while (loaded_delfile < delfile_num) {
+                state.load_deletes(rowset.get(), loaded_delfile);
+                auto& deletes = state.deletes();
+                *delete_op += deletes[loaded_delfile]->size();
+                delete_ids.emplace_back(loaded_delfile);
+                loaded_delfile++;
+                i++;
+                uint32_t next_del_idx = 0;
+                if (loaded_delfile < delfile_num) {
+                    next_del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
+                }
+                manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                if (next_del_idx != i) {
+                    break;
+                } else {
+                    if (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level)) {
+                        for (auto id : delete_ids) {
+                            delete_cols.emplace_back(deletes[id].get());
+                        }
+                        index.erase(delete_cols, &new_deletes);
+                        delete_ids.clear();
+                    }
+                }
+            }
+
+            if (!delete_ids.empty()) {
+                std::vector<const Column*> delete_cols;
+                auto& deletes = state.deletes();
+                for (auto id : delete_ids) {
+                    delete_cols.emplace_back(deletes[id].get());
+                }
+                index.erase(delete_cols, &new_deletes);
+                delete_ids.clear();
+            }
+        }
+    }
+    return Status::OK();
+}
+
 void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_info, const RowsetSharedPtr& rowset) {
     auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
@@ -1169,72 +1384,27 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
 
     int64_t full_row_size = 0;
     int64_t full_rowset_size = 0;
-    if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
-        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            state.load_upserts(rowset.get(), i);
-            auto& upserts = state.upserts();
-            if (upserts[i] != nullptr) {
-                // used for auto increment delete-partial update conflict
-                std::unique_ptr<Column> delete_pks = nullptr;
-                // apply partial rowset segment
-                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks,
-                                 &full_row_size);
-                if (!st.ok()) {
-                    std::string msg =
-                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                                st.to_string(), debug_string());
-                    failure_handler(msg, true);
-                    return;
-                }
-                st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(), upserts, index,
-                                tablet_id, &new_deletes);
-                if (!st.ok()) {
-                    std::string msg =
-                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                                st.to_string(), debug_string());
-                    failure_handler(msg, true);
-                    return;
-                }
-                manager->index_cache().update_object_size(index_entry, index.memory_usage());
-                if (delete_pks != nullptr) {
-                    index.erase(*delete_pks, &new_deletes);
-                }
-            }
-            state.release_upserts(i);
-        }
-
-        // two states
-        // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
-        // 2. pure upsert. no delete files, the following logic will be skip
-        for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-            state.load_deletes(rowset.get(), i);
-            auto& deletes = state.deletes();
-            delete_op += deletes[i]->size();
-            index.erase(*deletes[i], &new_deletes);
-            state.release_deletes(i);
+    bool enable_batch_apply = config::enable_batch_apply;
+    if (enable_batch_apply) {
+        st = _update_index_batch_segment(rowset, rowset_id, conditional_column, latest_applied_version, new_deletes,
+                                         &full_row_size, &delete_op);
+        if (!st.ok()) {
+            std::string msg = strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                  st.to_string(), debug_string());
+            failure_handler(msg, true);
+            return;
         }
     } else {
-        uint32_t delfile_num = rowset->rowset_meta()->get_meta_pb().delfile_idxes_size();
-        uint32_t upsert_num = rowset->num_segments();
-        DCHECK(rowset->num_delete_files() == delfile_num);
-
-        uint32_t loaded_delfile = 0;
-        uint32_t loaded_upsert = 0;
-        uint32_t i = 0;
-        while (i < delfile_num + upsert_num) {
-            uint32_t del_idx = delfile_num + upsert_num;
-            if (loaded_delfile < delfile_num) {
-                del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
-            }
-            while (i < del_idx) {
-                state.load_upserts(rowset.get(), loaded_upsert);
+        if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
+            for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+                state.load_upserts(rowset.get(), i);
                 auto& upserts = state.upserts();
-                if (upserts[loaded_upsert] != nullptr) {
+                if (upserts[i] != nullptr) {
                     // used for auto increment delete-partial update conflict
                     std::unique_ptr<Column> delete_pks = nullptr;
                     // apply partial rowset segment
-                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index,
-                                     delete_pks, &full_row_size);
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks,
+                                     &full_row_size);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1242,7 +1412,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         failure_handler(msg, true);
                         return;
                     }
-                    st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
+                    st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(),
                                     upserts, index, tablet_id, &new_deletes);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
@@ -1256,19 +1426,78 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         index.erase(*delete_pks, &new_deletes);
                     }
                 }
-                i++;
-                loaded_upsert++;
                 state.release_upserts(i);
             }
-            if (loaded_delfile < delfile_num) {
-                DCHECK(i == del_idx);
-                state.load_deletes(rowset.get(), loaded_delfile);
+
+            // two states
+            // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
+            // 2. pure upsert. no delete files, the following logic will be skip
+            for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
+                state.load_deletes(rowset.get(), i);
                 auto& deletes = state.deletes();
-                delete_op += deletes[loaded_delfile]->size();
-                index.erase(*deletes[loaded_delfile], &new_deletes);
-                state.release_deletes(loaded_delfile);
-                i++;
-                loaded_delfile++;
+                delete_op += deletes[i]->size();
+                index.erase(*deletes[i], &new_deletes);
+                state.release_deletes(i);
+            }
+        } else {
+            uint32_t delfile_num = rowset->rowset_meta()->get_meta_pb().delfile_idxes_size();
+            uint32_t upsert_num = rowset->num_segments();
+            DCHECK(rowset->num_delete_files() == delfile_num);
+
+            uint32_t loaded_delfile = 0;
+            uint32_t loaded_upsert = 0;
+            uint32_t i = 0;
+            while (i < delfile_num + upsert_num) {
+                uint32_t del_idx = delfile_num + upsert_num;
+                if (loaded_delfile < delfile_num) {
+                    del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
+                }
+                while (i < del_idx) {
+                    state.load_upserts(rowset.get(), loaded_upsert);
+                    auto& upserts = state.upserts();
+                    if (upserts[loaded_upsert] != nullptr) {
+                        // used for auto increment delete-partial update conflict
+                        std::unique_ptr<Column> delete_pks = nullptr;
+                        // apply partial rowset segment
+                        st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version,
+                                         index, delete_pks, &full_row_size);
+                        if (!st.ok()) {
+                            std::string msg = strings::Substitute(
+                                    "_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                    st.to_string(), debug_string());
+                            failure_handler(msg, true);
+                            return;
+                        }
+                        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                        st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
+                                        upserts, index, tablet_id, &new_deletes);
+                        if (!st.ok()) {
+                            std::string msg = strings::Substitute(
+                                    "_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                    st.to_string(), debug_string());
+                            failure_handler(msg, true);
+                            return;
+                        }
+                        if (delete_pks != nullptr) {
+                            index.erase(*delete_pks, &new_deletes);
+                        }
+                        state.release_upserts(loaded_upsert);
+                        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
+                    }
+                    i++;
+                    loaded_upsert++;
+                }
+                if (loaded_delfile < delfile_num) {
+                    DCHECK(i == del_idx);
+                    state.load_deletes(rowset.get(), loaded_delfile);
+                    auto& deletes = state.deletes();
+                    delete_op += deletes[loaded_delfile]->size();
+                    index.erase(*deletes[loaded_delfile], &new_deletes);
+                    state.release_deletes(loaded_delfile);
+                    i++;
+                    loaded_delfile++;
+                }
             }
         }
     }
@@ -1606,6 +1835,128 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                   << iostat->print_str();
     }
 
+    return Status::OK();
+}
+
+// do update for multiple segment
+// There is a lot of duplication between the following code and the previous function(_do_update), the reason is we
+// can disable the enhancement and keep origin logic if we set enable_batch_apply to false if there are some serious
+// bug. So we can change config to rollback this logic. And the duplicate logic will be deleted when the code is running
+// stable.
+Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upsert_ids, int32_t condition_column,
+                                 int64_t read_version, const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
+                                 int64_t tablet_id, DeletesMap* new_deletes) {
+    auto batch_upsert = [&]() -> Status {
+        std::vector<uint32_t> rowid_start(upsert_ids.size(), 0);
+        std::vector<std::pair<uint32_t, uint32_t>> idx_range;
+        std::vector<uint32_t> ids(upsert_ids.begin(), upsert_ids.end());
+        std::vector<const Column*> key_cols;
+        for (auto id : ids) {
+            idx_range.emplace_back(std::make_pair(0, upserts[id]->size()));
+            key_cols.emplace_back(upserts[id].get());
+        }
+        UpdateInfos info(std::move(ids), std::move(rowid_start), std::move(key_cols), std::move(idx_range));
+        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+        MonotonicStopWatch watch;
+        watch.start();
+        Status st = index.upsert(rowset_id, info, new_deletes, iostat.get());
+        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                  << iostat->print_str();
+        return st;
+    };
+
+    if (condition_column >= 0) {
+        auto tablet_column = _tablet.tablet_schema().column(condition_column);
+        std::vector<uint32_t> read_column_ids;
+        read_column_ids.push_back(condition_column);
+
+        size_t row_num = 0;
+        std::vector<const Column*> key_cols;
+        for (auto& id : upsert_ids) {
+            key_cols.emplace_back(upserts[id].get());
+            row_num += upserts[id]->size();
+        }
+        std::vector<uint64_t> old_rowids(row_num);
+        RETURN_IF_ERROR(index.get(key_cols, &old_rowids));
+        bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+        if (!non_old_value) {
+            std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+            size_t num_default = 0;
+            vector<uint32_t> idxes;
+            RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+            std::vector<std::unique_ptr<Column>> old_columns(1);
+            auto old_unordered_column =
+                    ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            old_columns[0] = old_unordered_column->clone_empty();
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, num_default > 0, old_rowids_by_rssid,
+                                              &old_columns, nullptr));
+            auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
+
+            std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+            for (auto& upsert_id : upsert_ids) {
+                std::vector<uint32_t> rowids;
+                for (int j = 0; j < upserts[upsert_id]->size(); ++j) {
+                    rowids.push_back(j);
+                }
+                new_rowids_by_rssid[rowset_id + upsert_id] = rowids;
+            }
+            std::vector<std::unique_ptr<Column>> new_columns(1);
+            auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            new_columns[0] = new_column->clone_empty();
+            RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
+                                              nullptr));
+
+            DCHECK(old_column->size() == new_column->size());
+            DCHECK(old_column->size() == row_num);
+
+            std::vector<std::pair<uint32_t, uint32_t>> idx_range;
+            std::vector<uint32_t> seg_ids;
+            std::vector<const Column*> key_cols;
+            std::vector<uint32_t> rowid_start;
+
+            DeletesMap condition_deletes;
+            size_t row_idx = 0;
+            for (auto upsert_id : upsert_ids) {
+                int idx_begin = 0;
+                int upsert_idx_step = 0;
+                for (int j = 0; j < upserts[upsert_id]->size(); ++j) {
+                    if (num_default > 0 && idxes[row_idx] == 0) {
+                        upsert_idx_step++;
+                    } else {
+                        int r = old_column->compare_at(row_idx, row_idx, *new_columns[0].get(), -1);
+                        if (r > 0) {
+                            key_cols.emplace_back(upserts[upsert_id].get());
+                            seg_ids.emplace_back(upsert_id);
+                            idx_range.emplace_back(std::make_pair(idx_begin, idx_begin + upsert_idx_step));
+                            idx_begin = j + 1;
+                            upsert_idx_step = 0;
+                            condition_deletes[rowset_id + upsert_id].push_back(j);
+                        } else {
+                            upsert_idx_step++;
+                        }
+                    }
+                    row_idx++;
+                }
+            }
+            rowid_start.resize(seg_ids.size());
+            rowid_start.assign(seg_ids.size(), 0);
+            UpdateInfos info(std::move(seg_ids), std::move(rowid_start), std::move(key_cols), std::move(idx_range));
+            std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+            RETURN_IF_ERROR(index.upsert(rowset_id, info, new_deletes, iostat.get()));
+            for (auto [rsid, seg_row_ids] : condition_deletes) {
+                for (auto row_id : seg_row_ids) {
+                    (*new_deletes)[rsid].emplace_back(row_id);
+                }
+            }
+
+        } else {
+            RETURN_IF_ERROR(batch_upsert());
+        }
+
+    } else {
+        RETURN_IF_ERROR(batch_upsert());
+    }
     return Status::OK();
 }
 

@@ -389,6 +389,14 @@ private:
                       const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                       DeletesMap* new_deletes);
 
+    Status _update_index_batch_segment(const RowsetSharedPtr& rowset, uint32_t rowset_id, int32_t condition_column,
+                                       EditVersion& latest_applied_verison, DeletesMap& new_deletes,
+                                       int64_t* full_row_size, size_t* delete_op);
+
+    Status _do_update(uint32_t rowset_id, std::vector<uint32_t>& upsert_ids, int32_t condition_column,
+                      int64_t read_version, const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
+                      int64_t tablet_id, DeletesMap* new_deletes);
+
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
 

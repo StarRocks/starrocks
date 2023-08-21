@@ -1049,4 +1049,6 @@ CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 
+CONF_mBool(enable_batch_apply, "true");
+
 } // namespace starrocks::config

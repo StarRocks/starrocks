@@ -31,6 +31,33 @@ class PersistentIndexMetaLockGuard;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
+class UpdateInfos {
+public:
+    explicit UpdateInfos(std::vector<uint32_t> seg_ids, std::vector<uint32_t> rowid_start,
+                         std::vector<const Column*> pk_columns, std::vector<std::pair<uint32_t, uint32_t>> idx_range)
+             : _seg_ids(std::move(seg_ids)),
+               _rowid_start(std::move(rowid_start)),
+               _pk_columns(std::move(pk_columns)),
+               _idx_range(std::move(idx_range)) {}
+
+    uint32_t total_update_rows() {
+        uint32_t n = 0;
+        for (auto& range : _idx_range) {
+            n += range.second - range.first;
+        }
+        return n;
+    }
+
+    uint32_t row_num(uint32_t col_idx) {
+        return _idx_range[col_idx].second - _idx_range[col_idx].first;
+    }
+
+    std::vector<uint32_t> _seg_ids;
+    std::vector<uint32_t> _rowid_start;
+    std::vector<const Column*> _pk_columns;
+    std::vector<std::pair<uint32_t, uint32_t>> _idx_range;
+};
+
 // An index to lookup a record's position(rowset->segment->rowid) by primary key.
 // It's only used to handle updates/deletes in the write pipeline for now.
 // Use a simple in-memory hash_map implementation for demo purpose.
@@ -71,6 +98,8 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
+    Status upsert(uint32_t rowset_id, UpdateInfos& info, DeletesMap* deletes, IOStat* stat);
+
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid doesn't exist, this indicates that the row of output rowset is
@@ -104,7 +133,11 @@ public:
     // [not thread-safe]
     Status erase(const Column& pks, DeletesMap* deletes);
 
+    Status erase(std::vector<const Column*>& key_cols, DeletesMap* deletes);
+
     Status get(const Column& pks, std::vector<uint64_t>* rowids) const;
+
+    Status get(std::vector<const Column*>& key_cols, std::vector<uint64_t>* rowids) const;
 
     Status prepare(const EditVersion& version, size_t n);
 
@@ -150,7 +183,13 @@ private:
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
 
+    Status _build_persistent_values(uint32_t rssid, const UpdateInfos& info, std::vector<uint64_t>* values) const;
+
     const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                        std::vector<Slice>* key_slices) const;
+
+    const Slice* _build_persistent_keys(std::vector<const Column*>& key_cols,
+                                        std::vector<std::pair<uint32_t, uint32_t>>& idx_ranges,
                                         std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
@@ -158,9 +197,15 @@ private:
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
+    Status _upsert_into_persistent_index(uint32_t rowset_id, UpdateInfos& info, DeletesMap* deletes, IOStat* stat);
+
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 
+    Status _erase_persistent_index(std::vector<const Column*>& key_cols, DeletesMap* deletes);
+
     Status _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
+
+    Status _get_from_persistent_index(std::vector<const Column*>& key_cols, std::vector<uint64_t>* rowids) const;
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
