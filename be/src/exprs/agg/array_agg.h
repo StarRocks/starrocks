@@ -109,21 +109,8 @@ struct ArrayAggAggregateStateV2 {
         }
         (*data_columns)[index]->append(column, offset, count);
     }
-<<<<<<< HEAD
-    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
-        if (UNLIKELY(index >= data_columns->size())) {
-            if (ctx != nullptr) {
-                auto s = fmt::format("index {} is larger than column size {}.", index, data_columns->size());
-                ctx->set_error(s.c_str(), false);
-            }
-            return;
-        }
-        DCHECK((*data_columns)[index]->is_nullable());
-        (*data_columns)[index]->append_nulls(count);
-    }
-=======
+
     void update_nulls(FunctionContext* ctx, size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
->>>>>>> e8d5a127b3 ([BugFix] array_agg process cancelled (#29464))
 
     // release the trailing N-1 order-by columns
     void release_order_by_columns() const {
