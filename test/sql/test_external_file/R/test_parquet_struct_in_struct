@@ -61,6 +61,10 @@ select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56')
 856	9145	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
 956	9045	{"c0":"56","c1":"45"}	{"c0":"56","c_struct":{"c0":"56","c1":"45"}}
 -- !result
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct_struct.c_struct.c0 = c_struct.c0;
+-- result:
+200
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:
 0

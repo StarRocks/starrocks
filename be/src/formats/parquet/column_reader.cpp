@@ -139,7 +139,7 @@ public:
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
-    bool try_to_use_dict_filter(ExprContext* ctx, bool is_output_column, const SlotId slotId,
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override {
         if (sub_field_path.size() != layer) {
             return false;
@@ -152,7 +152,7 @@ public:
         if (_column_all_pages_dict_encoded()) {
             if (_dict_filter_ctx == nullptr) {
                 _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
-                _dict_filter_ctx->is_output_column = is_output_column;
+                _dict_filter_ctx->is_decode_needed = is_decode_needed;
                 _dict_filter_ctx->sub_field_path = sub_field_path;
                 _dict_filter_ctx->slot_id = slotId;
             }
@@ -188,7 +188,7 @@ public:
         if (_dict_filter_ctx == nullptr) {
             dst->swap_column(*src);
         } else {
-            if (_dict_filter_ctx->is_output_column) {
+            if (_dict_filter_ctx->is_decode_needed) {
                 ColumnPtr& dict_values = dst;
                 dict_values->resize(0);
 
@@ -839,7 +839,7 @@ public:
         }
     }
 
-    bool try_to_use_dict_filter(ExprContext* ctx, bool is_output_column, const SlotId slotId,
+    bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                 const std::vector<std::string>& sub_field_path, const size_t& layer) override {
         if (sub_field_path.size() <= layer) {
             return false;
@@ -852,7 +852,7 @@ public:
         if (_child_readers[sub_field] == nullptr) {
             return false;
         }
-        return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_output_column, slotId, sub_field_path,
+        return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path,
                                                                  layer + 1);
     }
 
