@@ -722,7 +722,7 @@ public class RoutineLoadMgr implements Writable {
         }
     }
 
-    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
         readLock();
         try {
             return warehouseLoadStatusInfoBuilder.buildFromJobs(idToRoutineLoadJob.values());

@@ -523,7 +523,7 @@ public class StreamLoadMgr {
         }
     }
 
-    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
         readLock();
         try {
             return warehouseLoadStatusInfoBuilder.buildFromJobs(idToStreamLoadTask.values());

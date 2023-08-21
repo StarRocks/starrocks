@@ -135,8 +135,9 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testGetWarehousesEmpty() throws IOException {
-        Map<String, WarehouseInfo> infos = fetchWarehouseInfos();
-        assertThat(infos.values()).containsOnlyOnce(new WarehouseInfo(WarehouseManager.DEFAULT_WAREHOUSE_NAME, 0L));
+        Map<Long, WarehouseInfo> infos = fetchWarehouseInfos();
+        assertThat(infos.values()).containsOnlyOnce(
+                new WarehouseInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME));
     }
 
     @Test
@@ -194,7 +195,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         );
 
         long startTimestampMs = System.currentTimeMillis();
-        Map<String, WarehouseInfo> expectedWhToWhInfo = prepareWarehouseJobExecutingInfo(whToJobInfo);
+        Map<Long, WarehouseInfo> expectedWhToWhInfo = prepareWarehouseJobExecutingInfo(whToJobInfo);
         long afterTimestampMs = System.currentTimeMillis();
 
         // Add statistics insert jobs.
@@ -205,26 +206,26 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         // ------------------------------------------------------------------------------------
         // Case 1. The warehouse#1 is not in the warehouse manager.
         // ------------------------------------------------------------------------------------
-        Map<String, WarehouseInfo> whToWhInfo = fetchWarehouseInfos();
+        Map<Long, WarehouseInfo> whToWhInfo = fetchWarehouseInfos();
         Assert.assertEquals(2, whToWhInfo.size());
 
         // Check the finished timestamp, it occurs in prepareWarehouseJobExecutingInfo,
         // which should be between [startTimestampMs, afterTimestampMs].
-        whToWhInfo.forEach((wh, whInfo) -> {
+        whToWhInfo.forEach((whId, whInfo) -> {
             assertThat(whInfo.getLastFinishedJobTimestampMs())
                     .isGreaterThanOrEqualTo(startTimestampMs)
                     .isLessThanOrEqualTo(afterTimestampMs);
             // Record the timestamp to expected.
-            expectedWhToWhInfo.get(wh).updateLastFinishedJobTimeMs(whInfo.getLastFinishedJobTimestampMs());
+            expectedWhToWhInfo.get(whId).updateLastFinishedJobTimeMs(whInfo.getLastFinishedJobTimestampMs());
         });
         // The warehouse#1 hasn't been in the warehouse manager, so WarehouseInfo.id is ABSENT_ID.
-        assertThat(whToWhInfo.get(whs.get(1).getName()).getId()).isEqualTo(WarehouseInfo.ABSENT_ID);
+        assertThat(whToWhInfo.get(whs.get(1).getId()).getWarehouse()).isEqualTo(WarehouseInfo.ABSENT_NAME);
         // Set id of warehouse#1 to ABSENT_ID temporarily, to compare the whole info below.
-        expectedWhToWhInfo.get(whs.get(1).getName()).setId(WarehouseInfo.ABSENT_ID);
+        expectedWhToWhInfo.get(whs.get(1).getId()).setWarehouse(WarehouseInfo.ABSENT_NAME);
 
         assertThat(whToWhInfo).containsExactlyInAnyOrderEntriesOf(expectedWhToWhInfo);
         // Reset id of warehouse#1.
-        expectedWhToWhInfo.get(whs.get(1).getName()).setId(1);
+        expectedWhToWhInfo.get(whs.get(1).getId()).setWarehouse("wh-1");
 
         // ------------------------------------------------------------------------------------
         // Case 2. All the warehouses are in the warehouse manager.
@@ -260,6 +261,12 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testGetWarehousesWithMultipleFEs() throws IOException {
+        List<Warehouse> whs = ImmutableList.of(
+                new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, 1L, null),
+                new LocalWarehouse(1, "wh-1", 2L, null),
+                new LocalWarehouse(2, "wh-2", 2L, null));
+        mockWarehouses(whs);
+
         List<Frontend> frontends = ImmutableList.of(
                 new Frontend(FrontendNodeType.FOLLOWER, "FE-1", "127.0.0.1", 9010),
                 new Frontend(FrontendNodeType.FOLLOWER, "FE-2", "127.0.0.2", 9010),
@@ -285,12 +292,12 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                         new WarehouseInfo("wh-2", 2, 16, 17, 18, 19, 14L)
                 )
         );
-        Map<String, WarehouseInfo> expectedWhToInfos = Maps.newHashMap();
+        Map<Long, WarehouseInfo> expectedWhToInfos = Maps.newHashMap();
         whInfosPerFE.stream().flatMap(Collection::stream).forEach(newInfo ->
-                expectedWhToInfos.compute(newInfo.getWarehouse(), (wh, prevInfo) -> {
+                expectedWhToInfos.compute(newInfo.getId(), (wh, prevInfo) -> {
                     WarehouseInfo info = prevInfo;
                     if (prevInfo == null) {
-                        info = new WarehouseInfo(newInfo.getWarehouse(), newInfo.getId());
+                        info = new WarehouseInfo(newInfo.getId(), newInfo.getWarehouse());
                     }
                     info.increaseNumUnfinishedQueryJobs(newInfo.getNumUnfinishedQueryJobs());
                     info.increaseNumUnfinishedLoadJobs(newInfo.getNumUnfinishedLoadJobs());
@@ -338,7 +345,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
             }
         };
 
-        Map<String, WarehouseInfo> infos = fetchWarehouseInfos();
+        Map<Long, WarehouseInfo> infos = fetchWarehouseInfos();
         assertThat(infos).containsExactlyInAnyOrderEntriesOf(expectedWhToInfos);
     }
 
@@ -431,19 +438,19 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
-    private Map<String, WarehouseInfo> prepareWarehouseJobExecutingInfo(Map<Warehouse, JobExecutingInfo> whToInfo)
+    private Map<Long, WarehouseInfo> prepareWarehouseJobExecutingInfo(Map<Warehouse, JobExecutingInfo> whToInfo)
             throws UserException {
-        Map<String, WarehouseInfo> whToWhInfo = whToInfo.keySet().stream().collect(Collectors.toMap(
-                Warehouse::getName,
+        Map<Long, WarehouseInfo> whToWhInfo = whToInfo.keySet().stream().collect(Collectors.toMap(
+                Warehouse::getId,
                 WarehouseInfo::fromWarehouse
         ));
-        WarehouseInfo defaultWhInfo = whToWhInfo.get(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        WarehouseInfo defaultWhInfo = whToWhInfo.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         for (Map.Entry<Warehouse, JobExecutingInfo> whAndJobInfo : whToInfo.entrySet()) {
             Warehouse wh = whAndJobInfo.getKey();
             JobExecutingInfo jobInfo = whAndJobInfo.getValue();
 
-            WarehouseInfo whInfo = whToWhInfo.get(wh.getName());
+            WarehouseInfo whInfo = whToWhInfo.get(wh.getId());
 
             prepareJobInfo(whInfo, defaultWhInfo, wh, jobInfo.finishedInfo, true);
             prepareJobInfo(whInfo, defaultWhInfo, wh, jobInfo.unfinishedInfo, false);
@@ -466,9 +473,9 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
 
         // Add job info to metric and manager.
-        WarehouseMetricMgr.increaseUnfinishedQueries(wh.getName(), jobInfo.numQueryJobs * deltaFactor);
-        WarehouseMetricMgr.increaseUnfinishedBackupJobs(wh.getName(), jobInfo.numBackupJobs * deltaFactor);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(wh.getName(), jobInfo.numRestoreJobs * deltaFactor);
+        WarehouseMetricMgr.increaseUnfinishedQueries(wh.getId(), jobInfo.numQueryJobs * deltaFactor);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(wh.getId(), jobInfo.numBackupJobs * deltaFactor);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(wh.getId(), jobInfo.numRestoreJobs * deltaFactor);
         addLoadJobs(wh.getId(), jobInfo.numBrokerLoadJobs, isFinished, this::genBrokerLoadJob);
         addLoadJobs(wh.getId(), jobInfo.numSparkLoadJobs, isFinished, this::genSparkLoadJob);
         addInsertLoadJobs(wh.getId(), jobInfo.numInsertLoadJobs, isFinished, false);
@@ -569,7 +576,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
-    private Map<String, WarehouseInfo> fetchWarehouseInfos() throws IOException {
+    private Map<Long, WarehouseInfo> fetchWarehouseInfos() throws IOException {
 
         Request request = new Request.Builder()
                 .get()
@@ -587,7 +594,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
 
             return res.getResult().getWarehouses().stream()
                     .collect(Collectors.toMap(
-                            WarehouseInfo::getWarehouse,
+                            WarehouseInfo::getId,
                             Function.identity()
                     ));
         }

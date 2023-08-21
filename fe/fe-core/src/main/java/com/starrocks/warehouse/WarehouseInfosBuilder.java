@@ -22,7 +22,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.Map;
 
 public class WarehouseInfosBuilder {
-    private final Map<String, WarehouseInfo> warehouseToInfo = Maps.newHashMap();
+    private final Map<Long, WarehouseInfo> warehouseToInfo = Maps.newHashMap();
 
     public static WarehouseInfosBuilder makeBuilderFromMetricAndMgrs() {
         WarehouseInfosBuilder builder = new WarehouseInfosBuilder();
@@ -45,29 +45,29 @@ public class WarehouseInfosBuilder {
     WarehouseInfosBuilder() {
     }
 
-    public Map<String, WarehouseInfo> build() {
+    public Map<Long, WarehouseInfo> build() {
         return warehouseToInfo;
     }
 
-    public WarehouseInfosBuilder withNumUnfinishedQueries(Map<String, Long> warehouseToDelta) {
+    public WarehouseInfosBuilder withNumUnfinishedQueries(Map<Long, Long> warehouseToDelta) {
         return withUpdater(warehouseToDelta, WarehouseInfo::increaseNumUnfinishedQueryJobs);
     }
 
-    public WarehouseInfosBuilder withNumUnfinishedBackupJobs(Map<String, Long> warehouseToDelta) {
+    public WarehouseInfosBuilder withNumUnfinishedBackupJobs(Map<Long, Long> warehouseToDelta) {
         return withUpdater(warehouseToDelta, WarehouseInfo::increaseNumUnfinishedBackupJobs);
     }
 
-    public WarehouseInfosBuilder withNumUnfinishedRestoreJobs(Map<String, Long> warehouseToDelta) {
+    public WarehouseInfosBuilder withNumUnfinishedRestoreJobs(Map<Long, Long> warehouseToDelta) {
         return withUpdater(warehouseToDelta, WarehouseInfo::increaseNumUnfinishedRestoreJobs);
     }
 
-    public WarehouseInfosBuilder withLastFinishedJobTimestampMs(Map<String, Long> warehouseToTimestampMs) {
+    public WarehouseInfosBuilder withLastFinishedJobTimestampMs(Map<Long, Long> warehouseToTimestampMs) {
         return withUpdater(warehouseToTimestampMs, WarehouseInfo::updateLastFinishedJobTimeMs);
     }
 
-    public WarehouseInfosBuilder withLoadStatusInfo(Map<String, WarehouseLoadStatusInfo> warehouseToLoadInfo) {
-        warehouseToLoadInfo.forEach((warehouse, loadInfo) -> {
-            WarehouseInfo info = warehouseToInfo.computeIfAbsent(warehouse, WarehouseInfo::new);
+    public WarehouseInfosBuilder withLoadStatusInfo(Map<Long, WarehouseLoadStatusInfo> warehouseToLoadInfo) {
+        warehouseToLoadInfo.forEach((warehouseId, loadInfo) -> {
+            WarehouseInfo info = warehouseToInfo.computeIfAbsent(warehouseId, WarehouseInfo::new);
             info.increaseNumUnfinishedLoadJobs(loadInfo.getNumUnfinishedJobs());
             info.updateLastFinishedJobTimeMs(loadInfo.getLastFinishedJobTimeMs());
         });
@@ -75,10 +75,10 @@ public class WarehouseInfosBuilder {
     }
 
     public WarehouseInfosBuilder withWarehouseInfo(WarehouseInfo info) {
-        if (!warehouseToInfo.containsKey(info.getWarehouse())) {
-            warehouseToInfo.put(info.getWarehouse(), info);
+        if (!warehouseToInfo.containsKey(info.getId())) {
+            warehouseToInfo.put(info.getId(), info);
         } else {
-            WarehouseInfo destInfo = warehouseToInfo.get(info.getWarehouse());
+            WarehouseInfo destInfo = warehouseToInfo.get(info.getId());
             destInfo.increaseNumUnfinishedQueryJobs(info.getNumUnfinishedQueryJobs());
             destInfo.increaseNumUnfinishedLoadJobs(info.getNumUnfinishedLoadJobs());
             destInfo.increaseNumUnfinishedBackupJobs(info.getNumUnfinishedBackupJobs());
@@ -93,10 +93,10 @@ public class WarehouseInfosBuilder {
         void accept(T1 t1, T2 t2);
     }
 
-    private WarehouseInfosBuilder withUpdater(Map<String, Long> warehouseToValue,
+    private WarehouseInfosBuilder withUpdater(Map<Long, Long> warehouseIdToValue,
                                               BiConsumer<WarehouseInfo, Long> updater) {
-        warehouseToValue.forEach((warehouse, delta) -> {
-            WarehouseInfo info = warehouseToInfo.computeIfAbsent(warehouse, WarehouseInfo::new);
+        warehouseIdToValue.forEach((warehouseId, delta) -> {
+            WarehouseInfo info = warehouseToInfo.computeIfAbsent(warehouseId, WarehouseInfo::new);
             updater.accept(info, delta);
         });
 

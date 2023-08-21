@@ -434,7 +434,7 @@ public class RestoreJob extends AbstractJob {
      */
     private void checkAndPrepareMeta() {
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), 1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouseId(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -1263,7 +1263,7 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
-            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
+            WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouseId(), -1L);
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1429,7 +1429,7 @@ public class RestoreJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled, current state: " + state.name());
         cancelInternal(false);
         MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
-        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouse(), -1L);
+        WarehouseMetricMgr.increaseUnfinishedRestoreJobs(getCurrentWarehouseId(), -1L);
         return Status.OK;
     }
 

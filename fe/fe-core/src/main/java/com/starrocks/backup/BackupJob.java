@@ -370,7 +370,7 @@ public class BackupJob extends AbstractJob {
         status = new Status(ErrCode.COMMON_ERROR, "user cancelled");
         cancelInternal();
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
-        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouseId(), -1L);
         return Status.OK;
     }
 
@@ -441,7 +441,7 @@ public class BackupJob extends AbstractJob {
 
     private void prepareAndSendSnapshotTask() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
-        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), 1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouseId(), 1L);
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             status = new Status(ErrCode.NOT_FOUND, "database " + dbId + " does not exist");
@@ -746,7 +746,7 @@ public class BackupJob extends AbstractJob {
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
-        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouse(), -1L);
+        WarehouseMetricMgr.increaseUnfinishedBackupJobs(getCurrentWarehouseId(), -1L);
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {

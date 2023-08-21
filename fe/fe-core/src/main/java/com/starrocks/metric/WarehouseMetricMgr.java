@@ -31,40 +31,38 @@ public class WarehouseMetricMgr {
     private static final String UNFINISHED_RESTORE_JOB = "unfinished_restore_job";
     private static final String LAST_FINISHED_JOB_TIMESTAMP = "last_finished_job_timestamp";
 
-    private WarehouseMetricMgr() {}
+    private WarehouseMetricMgr() {
+    }
 
-    private static final ConcurrentMap<String, LongCounterMetric> UNFINISHED_QUERY_COUNTER_MAP =
-            new ConcurrentHashMap<>();
-    private static final ConcurrentMap<String, LongCounterMetric> UNFINISHED_BACKUP_JOB_COUNTER_MAP =
-            new ConcurrentHashMap<>();
-    private static final ConcurrentMap<String, LongCounterMetric> UNFINISHED_RESTORE_JOB_COUNTER_MAP =
-            new ConcurrentHashMap<>();
-    private static final ConcurrentMap<String, GaugeMetricImpl<Long>> LAST_FINISHED_JOB_TIMESTAMP_COUNTER_MAP =
+    private static final ConcurrentMap<Long, LongCounterMetric> UNFINISHED_QUERY_COUNTER_MAP = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Long, LongCounterMetric> UNFINISHED_BACKUP_JOB_COUNTER_MAP = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Long, LongCounterMetric> UNFINISHED_RESTORE_JOB_COUNTER_MAP = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Long, GaugeMetricImpl<Long>> LAST_FINISHED_JOB_TIMESTAMP_COUNTER_MAP =
             new ConcurrentHashMap<>();
 
-    public static Map<String, Long> getUnfinishedQueries() {
+    public static Map<Long, Long> getUnfinishedQueries() {
         return metricMapToValueMap(UNFINISHED_QUERY_COUNTER_MAP);
     }
 
-    public static Map<String, Long> getUnfinishedBackupJobs() {
+    public static Map<Long, Long> getUnfinishedBackupJobs() {
         return metricMapToValueMap(UNFINISHED_BACKUP_JOB_COUNTER_MAP);
     }
 
-    public static Map<String, Long> getUnfinishedRestoreJobs() {
+    public static Map<Long, Long> getUnfinishedRestoreJobs() {
         return metricMapToValueMap(UNFINISHED_RESTORE_JOB_COUNTER_MAP);
     }
 
-    public static Map<String, Long> getLastFinishedJobTimestampMs() {
+    public static Map<Long, Long> getLastFinishedJobTimestampMs() {
         return metricMapToValueMap(LAST_FINISHED_JOB_TIMESTAMP_COUNTER_MAP);
     }
 
-    public static void increaseUnfinishedQueries(String warehouse, Long delta) {
+    public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
         if (delta < 0) {
-            setLastFinishedJobTimestamp(warehouse, System.currentTimeMillis());
+            setLastFinishedJobTimestamp(warehouseId, System.currentTimeMillis());
         }
 
         LongCounterMetric metric = getOrCreateMetric(
-                warehouse,
+                warehouseId,
                 UNFINISHED_QUERY_COUNTER_MAP,
                 UNFINISHED_QUERY,
                 () -> new LongCounterMetric(UNFINISHED_QUERY, Metric.MetricUnit.REQUESTS,
@@ -73,13 +71,13 @@ public class WarehouseMetricMgr {
         metric.increase(delta);
     }
 
-    public static void increaseUnfinishedBackupJobs(String warehouse, Long delta) {
+    public static void increaseUnfinishedBackupJobs(Long warehouseId, Long delta) {
         if (delta < 0) {
-            setLastFinishedJobTimestamp(warehouse, System.currentTimeMillis());
+            setLastFinishedJobTimestamp(warehouseId, System.currentTimeMillis());
         }
 
         LongCounterMetric metric = getOrCreateMetric(
-                warehouse,
+                warehouseId,
                 UNFINISHED_BACKUP_JOB_COUNTER_MAP,
                 UNFINISHED_BACKUP_JOB,
                 () -> new LongCounterMetric(UNFINISHED_BACKUP_JOB, Metric.MetricUnit.REQUESTS,
@@ -88,13 +86,13 @@ public class WarehouseMetricMgr {
         metric.increase(delta);
     }
 
-    public static void increaseUnfinishedRestoreJobs(String warehouse, Long delta) {
+    public static void increaseUnfinishedRestoreJobs(Long warehouseId, Long delta) {
         if (delta < 0) {
-            setLastFinishedJobTimestamp(warehouse, System.currentTimeMillis());
+            setLastFinishedJobTimestamp(warehouseId, System.currentTimeMillis());
         }
 
         LongCounterMetric metric = getOrCreateMetric(
-                warehouse,
+                warehouseId,
                 UNFINISHED_RESTORE_JOB_COUNTER_MAP,
                 UNFINISHED_RESTORE_JOB,
                 () -> new LongCounterMetric(UNFINISHED_RESTORE_JOB, Metric.MetricUnit.REQUESTS,
@@ -103,9 +101,9 @@ public class WarehouseMetricMgr {
         metric.increase(delta);
     }
 
-    private static void setLastFinishedJobTimestamp(String warehouse, Long timestamp) {
+    private static void setLastFinishedJobTimestamp(Long warehouseId, Long timestamp) {
         GaugeMetricImpl<Long> metric = getOrCreateMetric(
-                warehouse,
+                warehouseId,
                 LAST_FINISHED_JOB_TIMESTAMP_COUNTER_MAP,
                 LAST_FINISHED_JOB_TIMESTAMP,
                 () -> new GaugeMetricImpl<>(LAST_FINISHED_JOB_TIMESTAMP, Metric.MetricUnit.MICROSECONDS,
@@ -114,25 +112,25 @@ public class WarehouseMetricMgr {
         metric.setValue(timestamp);
     }
 
-    private static <T extends Metric<Long>> T getOrCreateMetric(String warehouse, Map<String, T> metricMap,
+    private static <T extends Metric<Long>> T getOrCreateMetric(Long warehouseId, Map<Long, T> metricMap,
                                                                 String metricName, Supplier<T> metricSupplier) {
-        if (!metricMap.containsKey(warehouse)) {
+        if (!metricMap.containsKey(warehouseId)) {
             synchronized (WarehouseMetricMgr.class) {
-                if (!metricMap.containsKey(warehouse)) {
+                if (!metricMap.containsKey(warehouseId)) {
                     T metric = metricSupplier.get();
-                    metric.addLabel(new MetricLabel("warehouse", warehouse));
+                    metric.addLabel(new MetricLabel("warehouse", warehouseId.toString()));
 
-                    metricMap.put(warehouse, metric);
+                    metricMap.put(warehouseId, metric);
                     MetricRepo.addMetric(metric);
 
-                    LOG.info("Add {} metric, warehouse is {}", metricName, warehouse);
+                    LOG.info("Add {} metric, warehouse is {}", metricName, warehouseId);
                 }
             }
         }
-        return metricMap.get(warehouse);
+        return metricMap.get(warehouseId);
     }
 
-    private static <T extends Metric<Long>> Map<String, Long> metricMapToValueMap(Map<String, T> metricMap) {
+    private static <T extends Metric<Long>> Map<Long, Long> metricMapToValueMap(Map<Long, T> metricMap) {
         return metricMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getValue()));
     }

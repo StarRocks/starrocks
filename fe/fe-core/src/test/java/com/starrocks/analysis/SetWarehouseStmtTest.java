@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.starrocks.common.util.UUIDUtil;
@@ -28,7 +27,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -36,7 +34,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 
@@ -60,6 +57,9 @@ public class SetWarehouseStmtTest {
         AnalyzeTestUtil.analyzeSuccess(sql);
     }
 
+    /**
+     * Mock {@link WarehouseManager#getWarehouse(String)} and {@link WarehouseManager#warehouseExists(String)}.
+     */
     @Test
     public void testSetWarehouse(@Mocked WarehouseManagerEpack warehouseMgr) throws Exception {
 
@@ -70,18 +70,15 @@ public class SetWarehouseStmtTest {
             }
         };
 
-        new Expectations() {
-            {
-                warehouseMgr.warehouseExists("aaa");
-                result = true;
-                minTimes = 0;
-            }
-        };
-
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(String warehouseName) {
                 return new LocalWarehouse(12343L, "aaa", 11L, "no comments");
+            }
+
+            @Mock
+            public boolean warehouseExists(String warehouseName) {
+                return true;
             }
         };
 

@@ -22,10 +22,10 @@ import java.util.Collection;
 import java.util.Map;
 
 public class WarehouseLoadInfoBuilder {
-    private final Map<String, Long> warehouseToRemovedJobLastFinishedTimeMs = Maps.newConcurrentMap();
+    private final Map<Long, Long> warehouseToRemovedJobLastFinishedTimeMs = Maps.newConcurrentMap();
 
-    public <T extends LoadJobWithWarehouse> Map<String, WarehouseLoadStatusInfo> buildFromJobs(Collection<T> jobs) {
-        Map<String, WarehouseLoadStatusInfo> warehouseToInfo = Maps.newHashMap();
+    public <T extends LoadJobWithWarehouse> Map<Long, WarehouseLoadStatusInfo> buildFromJobs(Collection<T> jobs) {
+        Map<Long, WarehouseLoadStatusInfo> warehouseToInfo = Maps.newHashMap();
         for (T job : jobs) {
             if (job.isInternalJob()) {
                 continue;
@@ -34,7 +34,7 @@ public class WarehouseLoadInfoBuilder {
             long warehouseId = job.getCurrentWarehouseId();
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
             WarehouseLoadStatusInfo info =
-                    warehouseToInfo.computeIfAbsent(warehouse.getName(), k -> new WarehouseLoadStatusInfo());
+                    warehouseToInfo.computeIfAbsent(warehouse.getId(), k -> new WarehouseLoadStatusInfo());
             if (job.isFinal()) {
                 info.updateLastFinishedJobTimeMs(job.getFinishTimestampMs());
             } else {
@@ -43,12 +43,12 @@ public class WarehouseLoadInfoBuilder {
         }
 
         // Merge warehouseToRemovedTaskLastFinishedTimeMs to warehouseToInfo.
-        warehouseToRemovedJobLastFinishedTimeMs.forEach((warehouse, removedTaskLastFinishedTimeMs) -> {
-            if (warehouseToInfo.containsKey(warehouse)) {
-                WarehouseLoadStatusInfo info = warehouseToInfo.get(warehouse);
+        warehouseToRemovedJobLastFinishedTimeMs.forEach((warehouseId, removedTaskLastFinishedTimeMs) -> {
+            if (warehouseToInfo.containsKey(warehouseId)) {
+                WarehouseLoadStatusInfo info = warehouseToInfo.get(warehouseId);
                 info.updateLastFinishedJobTimeMs(removedTaskLastFinishedTimeMs);
             } else {
-                warehouseToInfo.put(warehouse, new WarehouseLoadStatusInfo(0L, removedTaskLastFinishedTimeMs));
+                warehouseToInfo.put(warehouseId, new WarehouseLoadStatusInfo(0L, removedTaskLastFinishedTimeMs));
             }
         });
 
@@ -61,9 +61,7 @@ public class WarehouseLoadInfoBuilder {
         }
 
         long warehouseId = job.getCurrentWarehouseId();
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-
-        warehouseToRemovedJobLastFinishedTimeMs.compute(warehouse.getName(), (k, lastFinishedTimeMs) -> {
+        warehouseToRemovedJobLastFinishedTimeMs.compute(warehouseId, (k, lastFinishedTimeMs) -> {
             if (lastFinishedTimeMs == null) {
                 return job.getFinishTimestampMs();
             } else {

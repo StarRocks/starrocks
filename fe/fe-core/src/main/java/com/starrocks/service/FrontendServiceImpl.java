@@ -2185,7 +2185,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetWarehousesResponse getWarehouses(TGetWarehousesRequest request) throws TException {
-        Map<String, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
+        Map<Long, WarehouseInfo> warehouseToInfo = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs().build();
         List<TWarehouseInfo> warehouseInfos = warehouseToInfo.values().stream()
                 .map(WarehouseInfo::toThrift)
                 .collect(Collectors.toList());

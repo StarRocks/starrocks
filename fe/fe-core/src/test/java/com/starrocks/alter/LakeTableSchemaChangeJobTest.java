@@ -59,6 +59,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -101,21 +102,25 @@ public class LakeTableSchemaChangeJobTest {
         warehouseMgr = new WarehouseManagerEpack();
     }
 
+    /**
+     * Mock {@link WarehouseManager#getWarehouse(String)}.
+     */
     @Before
     public void before() throws Exception {
         new Expectations() {
             {
-                warehouseMgr.getWarehouse(anyString);
-                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
-                minTimes = 0;
-            }
-
-            {
                 connectContext.getCurrentWarehouseId();
                 result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 minTimes = 0;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 

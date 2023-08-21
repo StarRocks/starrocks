@@ -20,10 +20,11 @@ import com.starrocks.thrift.TWarehouseInfo;
 import java.util.Objects;
 
 public class WarehouseInfo {
-    public static final long ABSENT_ID = -1L;
+    public static final String ABSENT_NAME = "UNKNOWN";
+    private static final long ABSENT_ID = -1L;
 
     @SerializedName(value = "warehouse")
-    String warehouse;
+    String warehouse = ABSENT_NAME;
 
     @SerializedName(value = "id")
     private long id = ABSENT_ID;
@@ -42,13 +43,13 @@ public class WarehouseInfo {
     public WarehouseInfo() {
     }
 
-    public WarehouseInfo(String warehouse) {
-        this.warehouse = warehouse;
+    public WarehouseInfo(long id) {
+        this(id, ABSENT_NAME);
     }
 
-    public WarehouseInfo(String warehouse, long id) {
-        this.warehouse = warehouse;
+    public WarehouseInfo(long id, String warehouse) {
         this.id = id;
+        this.warehouse = warehouse;
     }
 
     public WarehouseInfo(String warehouse, long id, long numUnfinishedQueryJobs, long numUnfinishedLoadJobs,
@@ -82,12 +83,12 @@ public class WarehouseInfo {
         lastFinishedJobTimestampMs = Math.max(lastFinishedJobTimestampMs, timestampMs);
     }
 
-    public String getWarehouse() {
-        return warehouse;
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
     }
 
-    public void setId(long id) {
-        this.id = id;
+    public String getWarehouse() {
+        return warehouse;
     }
 
     public long getId() {
@@ -126,7 +127,7 @@ public class WarehouseInfo {
     }
 
     public static WarehouseInfo fromThrift(TWarehouseInfo tinfo) {
-        WarehouseInfo info = new WarehouseInfo(tinfo.getWarehouse());
+        WarehouseInfo info = new WarehouseInfo(tinfo.getId());
         info.id = tinfo.getId();
         info.numUnfinishedQueryJobs = tinfo.getNum_unfinished_query_jobs();
         info.numUnfinishedLoadJobs = tinfo.getNum_unfinished_load_jobs();
@@ -137,7 +138,7 @@ public class WarehouseInfo {
     }
 
     public static WarehouseInfo fromWarehouse(Warehouse wh) {
-        return new WarehouseInfo(wh.getName(), wh.getId());
+        return new WarehouseInfo(wh.getId(), wh.getName());
     }
 
     @Override

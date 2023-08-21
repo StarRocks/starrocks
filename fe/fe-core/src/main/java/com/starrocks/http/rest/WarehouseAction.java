@@ -45,7 +45,7 @@ public class WarehouseAction extends RestBaseAction {
         List<WarehouseInfo> infosFromOtherFEs = GlobalStateMgr.getCurrentState().getWarehouseInfosFromOtherFEs();
         infosFromOtherFEs.forEach(warehouseInfoBuilder::withWarehouseInfo);
 
-        Map<String, WarehouseInfo> warehouseInfo = warehouseInfoBuilder.build();
+        Map<Long, WarehouseInfo> warehouseInfo = warehouseInfoBuilder.build();
         RestSuccessBaseResult<Result> res = new RestSuccessBaseResult<>(new Result(warehouseInfo.values()));
 
         response.setContentType("application/json");

@@ -218,6 +218,7 @@ public class LoadManagerTest {
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
                         "An internal warehouse contains all compute nodes in this system");
+                minTimes = 0;
             }
         };
 

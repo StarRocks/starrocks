@@ -793,7 +793,7 @@ public class LoadMgr implements Writable {
         }
     }
 
-    public Map<String, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
         readLock();
         try {
             return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());

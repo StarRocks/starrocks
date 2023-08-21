@@ -124,9 +124,9 @@ public abstract class AbstractJob implements Writable {
         this.repoId = repoId;
     }
 
-    public String getCurrentWarehouse() {
+    public long getCurrentWarehouseId() {
         // TODO(lzh): pass the current warehouse.
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        return WarehouseManager.DEFAULT_WAREHOUSE_ID;
     }
 
     public JobType getType() {
