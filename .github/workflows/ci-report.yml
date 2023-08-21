@@ -111,7 +111,7 @@ jobs:
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
-            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
               --cover /var/local/env/empty_cov_result --github-token ${{ secrets.PAT }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
@@ -237,14 +237,15 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             mkdir be && cd be
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml .
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . || true
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . || true
           else
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
-            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
               --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.PAT }} --pr ${PR_NUMBER} \
-              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
           fi
 
       - name: Publish UT Report
@@ -259,20 +260,27 @@ jobs:
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
-          report_paths: ./be/ut_coverage.xml
+          report_paths: ./be/be_ut_coverage.xml
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.publish_report.outcome == 'success'
+        env:
+          be_path: ${{ github.workspace }}/be
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${{ github.workspace }}/be/be_ut_coverage.xml --github-token ${{ secrets.PAT }} \
-            --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura
-          rm -rf coverchecker
-          rm -rf ci-tools
+          if [[ -e "${be_path}/diff.txt" ]]; then
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${be_path}/be_ut_coverage.xml --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
+              --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
+              -d ${be_path}/diff.txt -dt file
+          else
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.PAT }} --pr ${PR_NUMBER} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
+          fi
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
