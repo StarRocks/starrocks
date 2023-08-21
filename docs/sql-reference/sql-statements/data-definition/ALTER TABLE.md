@@ -19,17 +19,17 @@ alter_clause1[, alter_clause2, ...]
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
-- schema change: adds, drops, or reorder columns, or modify column type.
-- rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
+- schema change: adds, drops, or reorders columns, or modifies column type.
+- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
 - comment: modifies the table comment (supported from v3.1 onwards).
 
 > **NOTE**
 >
-> - Schema change, rollup, and partition cannot be used in one ALTER TABLE statement.
-> - Schema change, rollup, and swap are asynchronous operations and are returned if the task is submitted successfully. User can use the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
-> - Partition, rename, and index are synchronous operations, and a command return indicates that the execution is finished.
+> - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
+> - Schema change and rollup are asynchronous operations and are returned if the task is submitted successfully. Users can run the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
+> - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Modify partition
 
