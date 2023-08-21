@@ -185,6 +185,7 @@ public class ConnectContext {
 
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
+    protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
 
@@ -661,6 +662,14 @@ public class ConnectContext {
 
     public void setStatisticsJob(boolean statisticsJob) {
         isStatisticsJob = statisticsJob;
+    }
+
+    public boolean isNeedQueued() {
+        return needQueued;
+    }
+
+    public void setNeedQueued(boolean needQueued) {
+        this.needQueued = needQueued;
     }
 
     public ConnectContext getParent() {
