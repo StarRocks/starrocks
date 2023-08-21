@@ -72,6 +72,19 @@ public class LoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+        try {
+            executeWithoutPasswordInternal(request, response);
+        } catch (DdlException e) {
+            TransactionResult resp = new TransactionResult();
+            resp.status = ActionStatus.FAILED;
+            resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            LOG.warn(e);
+
+            sendResult(request, response, resp);
+        }
+    }
+
+    public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException {
 
         // A 'Load' request must have 100-continue header
         if (!request.getRequest().headers().contains(HttpHeaders.Names.EXPECT)) {

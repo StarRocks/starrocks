@@ -15,11 +15,17 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
@@ -33,7 +39,9 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -45,6 +53,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1692,5 +1702,95 @@ public class AuthorizationMgrTest {
         authorizationMgr.loadV2(reader);
 
         Assert.assertNotNull(authorizationMgr.getRolePrivilegeCollection("test_persist_role0"));
+    }
+
+    @Test
+    public void testUpgradePrivilege(@Mocked HiveMetastore hiveMetastore) throws Exception {
+        String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
+        Assert.assertTrue(stmt instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+
+        new Expectations() {
+            {
+                hiveMetastore.getAllDatabaseNames();
+                result = Lists.newArrayList("db");
+                minTimes = 0;
+
+                hiveMetastore.getAllTableNames("db");
+                result = Lists.newArrayList("tbl");
+                minTimes = 0;
+            }
+        };
+
+        MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb((String) any, (String) any);
+                result = new com.starrocks.catalog.Database(0, "db");
+                minTimes = 0;
+
+                metadataMgr.getTable((String) any, (String) any, (String) any);
+                result = HiveTable.builder().setHiveTableName("tbl")
+                        .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
+                minTimes = 0;
+            }
+        };
+
+        ctx.getGlobalStateMgr().changeCatalog(ctx, "hive_catalog_1");
+
+        MetaContext.get().setStarRocksMetaVersion(3);
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user test_upgrade_priv", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant create database on catalog hive_catalog_1 to test_upgrade_priv", ctx), ctx);
+        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
+        new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                "hive_catalog_1", PrivilegeType.CREATE_DATABASE);
+
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        UserPrivilegeCollectionV2 userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
+
+        Assert.assertThrows(AccessDeniedException.class, () ->
+                new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        "hive_catalog_1", PrivilegeType.USAGE));
+        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
+        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
+                Lists.newArrayList("hive_catalog_1"));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user test_upgrade_priv_2", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant create table on database db to test_upgrade_priv_2", ctx), ctx);
+        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
+        userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
+        Assert.assertThrows(AccessDeniedException.class, () ->
+                new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        "hive_catalog_1", PrivilegeType.USAGE));
+        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
+        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
+                Lists.newArrayList("hive_catalog_1"));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user test_upgrade_priv_3", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on table db.tbl to test_upgrade_priv_3", ctx), ctx);
+        setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
+        userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
+
+        Assert.assertThrows(AccessDeniedException.class, () ->
+                new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        "hive_catalog_1", PrivilegeType.USAGE));
+        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
+        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
+                Lists.newArrayList("hive_catalog_1"));
     }
 }

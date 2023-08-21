@@ -773,7 +773,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     } else {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
-
+    RETURN_IF_ERROR(check_has_error());
     // For agg function column is non-nullable and table is empty
     // sum(zero_row) should be null, not 0.
     if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
@@ -857,6 +857,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
 
     _num_pass_through_rows += result_chunk->num_rows();
@@ -906,6 +907,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
@@ -1331,7 +1333,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 }
             }
         }
-
+        RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 
         // If there is null key, output it last
@@ -1349,7 +1351,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     } else {
                         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
-
+                    RETURN_IF_ERROR(check_has_error());
                     ++read_index;
                 } else {
                     // Output null key in next round

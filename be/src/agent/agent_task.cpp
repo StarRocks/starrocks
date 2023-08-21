@@ -144,7 +144,9 @@ static void unify_finish_agent_task(TStatusCode::type status_code, const std::ve
     finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
-    remove_task_info(task_type, signature);
+    size_t task_queue_size = remove_task_info(task_type, signature);
+    LOG(INFO) << "Remove task success. type=" << task_type << ", signature=" << signature
+              << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
