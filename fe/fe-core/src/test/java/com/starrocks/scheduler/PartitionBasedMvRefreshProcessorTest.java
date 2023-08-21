@@ -1825,7 +1825,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             Assert.assertTrue(plan.contains("partitions=2/2\n" +
                     "     rollup: list_partition_tbl1"));
         }

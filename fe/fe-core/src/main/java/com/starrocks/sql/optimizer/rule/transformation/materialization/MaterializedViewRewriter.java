@@ -1921,6 +1921,8 @@ public class MaterializedViewRewriter {
         MatchMode matchMode = MatchMode.NOT_MATCH;
         if (queryTables.size() == mvTables.size() && Sets.newHashSet(queryTables).containsAll(mvTables)) {
             matchMode = MatchMode.COMPLETE;
+        } else if (queryTables.size() > mvTables.size() && queryTables.containsAll(mvTables)) {
+            matchMode = MatchMode.QUERY_DELTA;
         } else if (queryTables.size() < mvTables.size() && Sets.newHashSet(mvTables).containsAll(queryTables)) {
             matchMode = MatchMode.VIEW_DELTA;
         }
