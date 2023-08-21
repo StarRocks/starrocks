@@ -447,8 +447,7 @@ public class Column implements Writable {
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
-        } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
-                getPrimitiveType() != PrimitiveType.BITMAP) {
+        } else if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
@@ -552,8 +551,13 @@ public class Column implements Writable {
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
+<<<<<<< HEAD
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
+=======
+        }
+        if (defaultValue != null && !type.isOnlyMetricType()) {
+>>>>>>> d1d528b59a ([BugFix] Fix bug only metric type default value should be null (#29510))
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");

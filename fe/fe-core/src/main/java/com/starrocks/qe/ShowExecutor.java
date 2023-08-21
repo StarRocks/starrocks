@@ -925,7 +925,10 @@ public class ShowExecutor {
                 final String columnType = col.getType().canonicalName().toLowerCase();
                 final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                 final String isKey = col.isKey() ? "YES" : "NO";
-                final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                String defaultValue = FeConstants.NULL_STRING;
+                if (!col.getType().isOnlyMetricType()) {
+                    defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                }
                 final String aggType = col.getAggregationType() == null
                         || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
                 if (showStmt.isVerbose()) {
