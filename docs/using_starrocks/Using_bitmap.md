@@ -89,9 +89,9 @@ Take the calculation of page UVs as an example.
 
     After data is loaded:
 
-    * In the row `page_id = 1, visit_date = '2020-06-23 01:30:30'`, the `visit_user` field contains three bitmap elements (13, 23, 33).
-    * In the row `page_id = 1, visit_date = '2020-06-23 02:30:30'`, the `visit_user` field contains one bitmap element (13).
-    * In the row `page_id = 2, visit_date = '2020-06-23 01:30:30'`, the `visit_user` field contains one bitmap element (23).
+    * In the row `page_id = 1, visit_date = '2020-06-23 01:30:30'`, the `visit_users` field contains three bitmap elements (13, 23, 33).
+    * In the row `page_id = 1, visit_date = '2020-06-23 02:30:30'`, the `visit_users` field contains one bitmap element (13).
+    * In the row `page_id = 2, visit_date = '2020-06-23 01:30:30'`, the `visit_users` field contains one bitmap element (23).
 
    Load data from a local file:
 
@@ -108,7 +108,7 @@ Take the calculation of page UVs as an example.
     ```sql
     SELECT page_id, count(distinct visit_users) FROM page_uv GROUP BY page_id;
     +-----------+------------------------------+
-    |  page_id  | count(DISTINCT `visit_user`) |
+    |  page_id  | count(DISTINCT `visit_users`)|
     +-----------+------------------------------+
     |         1 |                            3 |
     |         2 |                            1 |
