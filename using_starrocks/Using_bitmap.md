@@ -89,7 +89,7 @@ select page, count(distinct user_id) as uv from table group by page;
 
     - 在 page_id = 1， visit_date = '2020-06-23 01:30:30' 数据行，`visit_users` 字段包含 3 个 bitmap 元素（13，23，33）；
     - 在 page_id = 1， visit_date = '2020-06-23 02:30:30' 的数据行，`visit_users` 字段包含 1 个 bitmap 元素（13）；
-    - 在 page_id = 2， visit_date = '2020-06-23 01:30:30' 的数据行，`visit_user` 字段包含 1 个 bitmap 元素（23）。
+    - 在 page_id = 2， visit_date = '2020-06-23 01:30:30' 的数据行，`visit_users` 字段包含 1 个 bitmap 元素（23）。
 
     采用本地文件导入：
 
@@ -107,7 +107,7 @@ select page, count(distinct user_id) as uv from table group by page;
     select page_id, count(distinct visit_users) from page_uv group by page_id;
 
     +-----------+------------------------------+
-    |  page_id  | count(DISTINCT `visit_user`) |
+    |  page_id  | count(DISTINCT `visit_users`) |
     +-----------+------------------------------+
     |         1 |                            3 |
     +-----------+------------------------------+
