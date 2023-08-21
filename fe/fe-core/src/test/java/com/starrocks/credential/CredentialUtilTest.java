@@ -64,7 +64,7 @@ public class CredentialUtilTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(JDBCResource.PASSWORD, "7758258");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("77******58", properties.get(JDBCResource.PASSWORD));
+        Assert.assertFalse(properties.containsKey(JDBCResource.PASSWORD));
     }
 
     @Test

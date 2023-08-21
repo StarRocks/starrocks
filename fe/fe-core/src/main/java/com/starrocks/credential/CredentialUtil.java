@@ -54,13 +54,14 @@ public class CredentialUtil {
         // Mask for iceberg rest catalog credential
         doMask(properties, IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX);
 
-        // Mask for jdbc catalog's password
-        doMask(properties, JDBCResource.PASSWORD);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
         properties.remove(AzureCloudConfigurationFactory.AZURE_PATH_KEY);
+
+        // Remove for jdbc catalog's password
+        properties.remove(JDBCResource.PASSWORD);
 
         // do mask
         properties.computeIfPresent(configKey, (key, value) -> {
