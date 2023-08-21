@@ -1759,12 +1759,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testProjectConstant() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE test_map_array (\n" +
+        String tableName = "test_tbl_project_constant";
+        starRocksAssert.withTable(String.format("CREATE TABLE %s(\n" +
                 "                            k1 date,\n" +
                 "                            k2 varchar(20),\n" +
                 "                            v3 int)\n" +
                 "                        DUPLICATE KEY(k1)\n" +
-                "                        DISTRIBUTED BY HASH(k1);");
+                "                        DISTRIBUTED BY HASH(k1);", tableName));
 
         // MV1: Projection MV
         {
@@ -1774,10 +1775,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, k2, v3 " +
-                            "FROM test_map_array\n");
+                            "FROM " + tableName);
             {
                 String query = "SELECT 'hehe', k1, k2" +
-                        " FROM test_map_array ";
+                        " FROM " + tableName;
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertContains(plan, mvName);
             }
@@ -1790,12 +1791,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
                             "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                             "REFRESH ASYNC \n" +
                             "AS SELECT k1, sum(v3) as sum_v3 \n" +
-                            "FROM test_map_array\n" +
+                            "FROM " + tableName + "\n" +
                             "GROUP BY k1");
 
             {
-                String query = "SELECT 'hehe', k1, sum(v3) as sum_v1 " +
-                        " FROM test_map_array group by 'hehe', k1";
+                String query = String.format("SELECT 'hehe', k1, sum(v3) as sum_v1 " +
+                        " FROM %s group by 'hehe', k1", tableName);
                 String plan = getFragmentPlan(query);
                 PlanTestBase.assertContains(plan, mvName);
             }
