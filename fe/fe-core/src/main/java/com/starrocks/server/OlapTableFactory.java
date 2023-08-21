@@ -348,6 +348,15 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
+            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (properties != null) {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
+                            properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                        throw new DdlException("Primary key table does not support storage medium cool down currently.");
+                    }
+                }
+            }
+
             if (properties != null) {
                 try {
                     PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
