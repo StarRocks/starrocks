@@ -234,35 +234,8 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
-        try {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
             getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnCatalog(userIdentity, roleIds, catalogName);
-        } catch (AccessDeniedException e1) {
-            try {
-                getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(userIdentity, roleIds, catalogName, "*");
-            } catch (AccessDeniedException e2) {
-                try {
-                    getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnAnyTable(userIdentity, roleIds,
-                            catalogName, "*");
-                } catch (AccessDeniedException e3) {
-                    if (CatalogMgr.isInternalCatalog(catalogName)) {
-                        try {
-                            getInstance().getAccessControlOrDefault(catalogName)
-                                    .checkAnyActionOnAnyView(userIdentity, roleIds, "*");
-                        } catch (AccessDeniedException e4) {
-                            try {
-                                getInstance().getAccessControlOrDefault(catalogName)
-                                        .checkAnyActionOnAnyMaterializedView(userIdentity, roleIds, "*");
-                            } catch (AccessDeniedException e5) {
-                                getInstance().getAccessControlOrDefault(catalogName)
-                                        .checkAnyActionOnAnyFunction(userIdentity, roleIds, null);
-                            }
-                        }
-                    } else {
-                        throw new AccessDeniedException(ErrorReport.reportCommon(null,
-                                ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ANY IN CATALOG " + catalogName));
-                    }
-                }
-            }
         }
     }
 
