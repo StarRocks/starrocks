@@ -752,6 +752,13 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation)
                         .append("\n");
             }
+            if (ConnectContext.get() != null) {
+                if (ConnectContext.get().getSessionVariable().isRewrittenVectorPlan()) {
+                    output.append(prefix).append("VECTORINDEX: ON").append("\n");
+                } else {
+                    output.append(prefix).append("VECTORINDEX: OFF").append("\n");
+                }
+            }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
                         getExplainString(conjuncts)).append("\n");

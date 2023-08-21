@@ -94,6 +94,32 @@ struct TabletReaderParams {
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
 
+    // vector index params
+    int64_t k;
+
+    std::vector<float> query_vector;
+
+    std::string vector_distance_column_name;
+
+    bool use_vector_index = false;
+
+    int vector_column_id;
+
+	// IndexMeta index_meta;
+    SlotId vector_slot_id;
+
+    std::map<std::string, std::string> query_params;
+
+    double vector_range;
+
+    int result_order;
+
+    bool use_ivfpq = false;
+
+    double pq_refine_factor;
+
+    double k_factor;
+
 public:
     std::string to_string() const;
 };

@@ -133,6 +133,18 @@ enum TTimeUnit {
     MINUTE = 4;
 }
 
+struct TVectorSearchOptions {
+  1: optional i64 vector_limit_k;
+  2: optional string vector_distance_column_name;
+  3: optional list<string> query_vector;
+  4: optional map<string, string> query_params;
+  5: optional double vector_range;
+  6: optional i32 result_order;
+  7: optional bool use_ivfpq;
+  8: optional double pq_refine_factor;
+  9: optional double k_factor;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
@@ -252,7 +264,7 @@ struct TQueryOptions {
   85: optional TSpillMode spill_mode;
 
   82: optional TSpillOptions spill_options;
-  
+
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
@@ -318,6 +330,9 @@ struct TQueryOptions {
   140: optional string catalog;
 
   141: optional i32 datacache_evict_probability;
+
+  150: optional bool enable_use_ann;
+  151: optional TVectorSearchOptions vector_search_options;
 }
 
 

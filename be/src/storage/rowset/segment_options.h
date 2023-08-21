@@ -104,6 +104,29 @@ public:
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
 
+    int64_t k;
+    std::vector<float> query_vector;
+
+    bool use_vector_index = false;
+
+    std::string vector_distance_column_name;
+
+    int vector_column_id;
+
+    SlotId vector_slot_id;
+
+    std::map<std::string, std::string> query_params;
+
+    double vector_range;
+
+    int result_order;
+
+    bool use_ivfpq;
+
+    double pq_refine_factor;
+
+    double k_factor;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

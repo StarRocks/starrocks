@@ -6347,6 +6347,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
+
+        if (context.bracketHint() != null) {
+            functionCallExpr.setFunctionHint(((Identifier) visit(context.bracketHint().identifier().get(0))).getValue());
+        }
         return SyntaxSugars.parse(functionCallExpr);
     }
 

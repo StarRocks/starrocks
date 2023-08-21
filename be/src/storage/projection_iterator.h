@@ -26,4 +26,7 @@ namespace starrocks {
 // columns in the order `c3`, `c1`.
 ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child);
 
+ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child,
+        bool _has_vector_index_search, int vector_column_id, SlotId vector_slot_id, std::string vector_distance_column_name);
+
 } //  namespace starrocks

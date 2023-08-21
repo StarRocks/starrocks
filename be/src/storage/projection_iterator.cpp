@@ -28,6 +28,16 @@ public:
         build_index_map(this->_schema, _child->schema());
     }
 
+    ProjectionIterator(Schema schema, ChunkIteratorPtr child, bool has_vector_index_search,
+            int vector_column_id, SlotId vector_slot_id, std::string vector_distance_column_name)
+        : ChunkIterator(std::move(schema), child->chunk_size()), _child(std::move(child)) {
+        build_index_map(this->_schema, _child->schema());
+        _has_vector_index_search = has_vector_index_search;
+        _vector_column_id = vector_column_id;
+        _vector_slot_id = vector_slot_id;
+        _vector_distance_column_name = vector_distance_column_name;
+    }
+
     void close() override;
 
     size_t merged_rows() const override { return _child->merged_rows(); }
@@ -50,11 +60,16 @@ protected:
 
 private:
     void build_index_map(const Schema& output, const Schema& input);
+    FieldPtr _make_field(size_t i);
 
     ChunkIteratorPtr _child;
     // mapping from index of column in output chunk to index of column in input chunk.
     std::vector<size_t> _index_map;
     ChunkPtr _chunk;
+    bool _has_vector_index_search = false;
+    int _vector_column_id;
+    SlotId _vector_slot_id;
+    std::string _vector_distance_column_name;
 };
 
 void ProjectionIterator::build_index_map(const Schema& output, const Schema& input) {
@@ -84,6 +99,12 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
         for (size_t i = 0; i < _index_map.size(); i++) {
             chunk->get_column_by_index(i).swap(input_columns[_index_map[i]]);
         }
+        if (_has_vector_index_search) {
+            std::shared_ptr<Column> distance_column = FloatColumn::create();
+            distance_column.swap(_chunk->get_column_by_name(_vector_distance_column_name));
+            chunk->append_vector_column(distance_column,
+                    _make_field(_vector_column_id), _vector_slot_id);
+        }
     }
 #ifndef NDEBUG
     if (st.ok()) {
@@ -105,6 +126,17 @@ void ProjectionIterator::close() {
 
 ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child) {
     return std::make_shared<ProjectionIterator>(schema, child);
+}
+
+ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child,
+        bool _has_vector_index_search, int vector_column_id, SlotId vector_slot_id, std::string vector_distance_column_name) {
+    return std::make_shared<ProjectionIterator>(schema, child, _has_vector_index_search, vector_column_id,
+            vector_slot_id, vector_distance_column_name);
+}
+
+
+FieldPtr ProjectionIterator::_make_field(size_t i) {
+    return std::make_shared<Field>(i, _vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
 } // namespace starrocks

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -54,6 +55,12 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
+    }
+
+    // Only for UT
+    public LogicalOlapScanOperator(Table table, Projection projection, long limit) {
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, Maps.newHashMap(), Maps.newHashMap(), limit, null,
+                projection);
     }
 
     public LogicalOlapScanOperator(

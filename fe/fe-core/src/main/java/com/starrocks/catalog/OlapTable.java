@@ -212,6 +212,10 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfColumns")
     protected Set<ColumnId> bfColumns;
 
+    // distance columns for vector
+    @SerializedName(value = "distanceColumns")
+    protected Set<String> distanceColumns;
+
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
@@ -274,6 +278,7 @@ public class OlapTable extends Table {
         super(type);
 
         this.bfColumns = null;
+        this.distanceColumns = null;
         this.bfFpp = 0;
 
         this.colocateGroup = null;
@@ -1538,6 +1543,10 @@ public class OlapTable extends Table {
         return bfColumns;
     }
 
+    public Set<String> getDistanceColumns() {
+        return distanceColumns;
+    }
+
     public Set<String> getBfColumnNames() {
         if (bfColumns == null) {
             return null;
@@ -1573,6 +1582,10 @@ public class OlapTable extends Table {
     public void setBloomFilterInfo(Set<ColumnId> bfColumns, double bfFpp) {
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
+    }
+
+    public void setDistanceColumnsInfo(Set<String> distanceColumns) {
+        this.bfColumns = bfColumns;
     }
 
     public void setIndexes(List<Index> indexes) {
@@ -2650,7 +2663,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             return -1;
         }
-        return tableProperty.getCompressionLevel();   
+        return tableProperty.getCompressionLevel();
     }
 
     public void setPartitionLiveNumber(int number) {

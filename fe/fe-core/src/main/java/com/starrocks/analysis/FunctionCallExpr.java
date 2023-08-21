@@ -34,6 +34,8 @@
 
 package com.starrocks.analysis;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -55,6 +57,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
@@ -63,6 +66,8 @@ public class FunctionCallExpr extends Expr {
     private FunctionName fnName;
     // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
+
+    private Optional<String> functionHint = Optional.empty();
 
     // check analytic function
     private boolean isAnalyticFnCall = false;
@@ -435,6 +440,14 @@ public class FunctionCallExpr extends Expr {
         this.nondeterministicId = nondeterministicId;
     }
 
+    public void setFunctionHint(String functionHint) {
+        this.functionHint = Optional.of(StringUtils.upperCase(functionHint));
+    }
+
+    public Optional<String> getFunctionHint() {
+        return functionHint;
+    }
+
     public boolean isNondeterministicBuiltinFnName() {
         return FunctionSet.nonDeterministicFunctions.contains(fnName.getFunction().toLowerCase());
     }
@@ -455,7 +468,8 @@ public class FunctionCallExpr extends Expr {
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
                 && nondeterministicId.equals(o.nondeterministicId)
-                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements())
+                && functionHint == o.functionHint;
     }
 
     /**

@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -29,6 +30,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.VectorIndexParams.CommonIndexParamKey;
+import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
@@ -45,6 +48,7 @@ import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -79,11 +83,16 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.catalog.FunctionSet.VECTOR_COMPUTE_FUNCTIONS;
+
 public class StatementPlanner {
     private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
+
+    private static final String VECTOR_FUNCTION_PREFIX = "approx_";
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
         if (session instanceof HttpConnectContext) {
@@ -197,6 +206,7 @@ public class StatementPlanner {
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
         QueryStatement queryStmt = (QueryStatement) stmt;
+//        checkVectorIndex(queryStmt, session);
         QueryRelation query = (QueryRelation) queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         // 1. Build Logical plan
@@ -226,6 +236,16 @@ public class StatementPlanner {
                     columnRefFactory);
         }
 
+        // TODO: avoid relying on session variables for performing tricks
+        String vectorFunction = session.getSessionVariable().getANNType().toLowerCase();
+        if (VECTOR_COMPUTE_FUNCTIONS.contains(vectorFunction) && !session.getSessionVariable().isRewrittenVectorPlan()) {
+            String msg = String.format(
+                    "%s is used but the given query cannot trigger vector index scan, " +
+                            "please consider using brute-force search or adjusting your usage of %s",
+                    vectorFunction, vectorFunction);
+            throw new SemanticException(msg);
+        }
+
         try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
             // 3. Build fragment exec plan
             /*
@@ -249,6 +269,8 @@ public class StatementPlanner {
                                                     PlannerMetaLocker plannerMetaLocker) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
+
+//        checkVectorIndex(queryStmt, session);
 
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -295,6 +317,16 @@ public class StatementPlanner {
                         columnRefFactory);
             }
 
+            // TODO: avoid relying on session variables for performing tricks
+            String vectorFunction = session.getSessionVariable().getANNType().toLowerCase();
+            if (VECTOR_COMPUTE_FUNCTIONS.contains(vectorFunction) && !session.getSessionVariable().isRewrittenVectorPlan()) {
+                String msg = String.format(
+                        "%s is used but the given query cannot trigger vector index scan, " +
+                                "please consider using brute-force search or adjusting your usage of %s",
+                        vectorFunction, vectorFunction);
+                throw new SemanticException(msg);
+            }
+
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
                 // SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
@@ -323,6 +355,47 @@ public class StatementPlanner {
         }
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
                 "schema of %s had been updated frequently during the plan generation", updatedTables);
+    }
+
+    private static boolean checkAndSetVectorIndex(OlapTable olapTable, SessionVariable sessionVariable) {
+        String annType = sessionVariable.getANNType();
+        for (Index index : olapTable.getIndexes()) {
+            if (index.getIndexType() == IndexDef.IndexType.VECTOR) {
+                Map<String, String> indexProperties = index.getProperties();
+                String metricType = indexProperties.get(CommonIndexParamKey.METRIC_TYPE.name().toLowerCase(Locale.ROOT));
+                String indexType = indexProperties.get(CommonIndexParamKey.INDEX_TYPE.name().toLowerCase(Locale.ROOT));
+
+                if (!isValidMetricType(metricType, annType)) {
+                    sessionVariable.setEnableUseANN(false);
+                    return false;
+                }
+
+                if (VectorIndexType.IVFPQ.name().equalsIgnoreCase(indexType)) {
+                    sessionVariable.setUseIVFPQ(true);
+                }
+
+                sessionVariable.setEnableUseANN(true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isValidMetricType(String metricType, String annType) {
+        return (VECTOR_FUNCTION_PREFIX + metricType).equalsIgnoreCase(annType);
+    }
+
+    private static void checkVectorIndex(QueryStatement queryStmt, ConnectContext session) {
+        Set<OlapTable> olapTables = Sets.newHashSet();
+        AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+        boolean hasVectorIndex = false;
+        for (OlapTable olapTable : olapTables) {
+            if (checkAndSetVectorIndex(olapTable, session.getSessionVariable())) {
+                hasVectorIndex = true;
+                break;
+            }
+        }
+        session.getSessionVariable().setEnableUseANN(hasVectorIndex);
     }
 
     public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {

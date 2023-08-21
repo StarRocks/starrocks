@@ -236,10 +236,29 @@ public class PlanFragmentBuilder {
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
                                               boolean hasOutputFragment) {
+        // filter vector function name
+        List<ColumnRefOperator> newOutputColumns = new ArrayList<>();
+        if (connectContext.getSessionVariable().isEnableUseANN()) {
+            for (ColumnRefOperator outputColumn : outputColumns) {
+                if (FunctionSet.VECTOR_COMPUTE_FUNCTIONS.contains(outputColumn.getName()) &&
+                        !connectContext.getSessionVariable().isUseIVFPQ()) {
+                    for (ColumnRefOperator columnRefOperator : columnRefFactory.getColumnRefs()) {
+                        if (columnRefOperator.getName()
+                                .equalsIgnoreCase(connectContext.getSessionVariable().getVectorDistanceColumnName())) {
+                            newOutputColumns.add(columnRefOperator);
+                        }
+                    }
+                } else {
+                    newOutputColumns.add(outputColumn);
+                }
+            }
+        } else {
+            newOutputColumns = outputColumns;
+        }
         UKFKConstraintsCollector.collectColumnConstraints(plan);
-        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns);
+        ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, newOutputColumns);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
-                outputColumns, hasOutputFragment);
+                newOutputColumns, hasOutputFragment);
         execPlan.setPlanCount(plan.getPlanCount());
         return finalizeFragments(execPlan, resultSinkType);
     }

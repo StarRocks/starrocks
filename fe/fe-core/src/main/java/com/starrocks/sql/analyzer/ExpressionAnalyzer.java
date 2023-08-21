@@ -89,6 +89,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariable.ANNAlgorithmType;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -118,6 +119,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -1027,10 +1029,10 @@ public class ExpressionAnalyzer {
             checkFunction(fnName, node, argumentTypes);
             if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
                 // For the typeof function, the parameter type of the function is the result of this function.
-                // At this time, the parameter type has been obtained. You can directly replace the current 
-                // function with StringLiteral. However, since the parent node of the current node in ast 
-                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is 
-                // stored in the parameter of the function, so that the StringLiteral can be obtained in the 
+                // At this time, the parameter type has been obtained. You can directly replace the current
+                // function with StringLiteral. However, since the parent node of the current node in ast
+                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is
+                // stored in the parameter of the function, so that the StringLiteral can be obtained in the
                 // subsequent rule rewriting, and then the typeof can be replaced.
                 Type originType = argumentTypes[0];
                 argumentTypes[0] = Type.STRING;
@@ -1232,10 +1234,45 @@ public class ExpressionAnalyzer {
                 }
             }
 
+            if (FunctionSet.VECTOR_COMPUTE_FUNCTIONS.contains(fnName)) {
+                if (node.getFunctionHint().isPresent()) {
+                    // Set vector index parameters
+                    String functionHint = node.getFunctionHint().get();
+                    // Hints that are not brute and default enable EnableUseAnn by default
+                    if (!(functionHint.equalsIgnoreCase(ANNAlgorithmType.TYPE_BRUTE) ||
+                            functionHint.equalsIgnoreCase(ANNAlgorithmType.TYPE_DEFAULT))) {
+                        setVectorSessionVariable(session, node);
+                    } else {
+                        session.getSessionVariable().setEnableUseANN(false);
+                    }
+                    session.getSessionVariable().setANNType(functionHint.toUpperCase(Locale.ROOT));
+                } else {
+                    session.getSessionVariable().setANNType(fnName.toUpperCase(Locale.ROOT));
+                    setVectorSessionVariable(session, node);
+                }
+            }
+
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             return null;
+        }
+
+        private void setVectorSessionVariable(ConnectContext session, FunctionCallExpr node) {
+            session.getSessionVariable().setEnableUseANN(true);
+
+            // Set query_vector for ann searcher
+            if (node.getParams().exprs().size() == 2) {
+                // thrift doesn't have a float type, so we use string to prevent precision loss
+                if (node.getParams().exprs().get(0) instanceof ArrayExpr) {
+                    session.getSessionVariable().setQueryVector(node.getParams().exprs().get(0).childrenToSql());
+                    return;
+                } else if (node.getParams().exprs().get(0) instanceof StringLiteral) {
+                    session.getSessionVariable().setQueryVector(
+                            Arrays.asList(((StringLiteral) node.getParams().exprs().get(0)).getValue().split(",")));
+                    return;
+                }
+            }
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {

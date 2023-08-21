@@ -670,6 +670,19 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.tablet_schema = options.tablet_schema;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.k = options.k;
+    seg_options.query_vector = options.query_vector;
+    seg_options.vector_distance_column_name = options.vector_distance_column_name;
+    seg_options.vector_column_id = options.vector_column_id;
+    seg_options.vector_slot_id = options.vector_slot_id;
+    seg_options.query_params = options.query_params;
+    seg_options.vector_range = options.vector_range;
+    seg_options.result_order = options.result_order;
+    seg_options.use_ivfpq = options.use_ivfpq;
+    seg_options.pq_refine_factor = options.pq_refine_factor;
+    seg_options.k_factor = options.k_factor;
+
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

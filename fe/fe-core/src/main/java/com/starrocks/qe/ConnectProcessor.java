@@ -313,6 +313,9 @@ public class ConnectProcessor {
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
             }
+            long endParserTimestamp = System.currentTimeMillis();
+            long parserTimeMs = endParserTimestamp - ctx.getAuditEventBuilder().build().timestamp;
+            ctx.getAuditEventBuilder().setParserTime(parserTimeMs);
 
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
