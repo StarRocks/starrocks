@@ -494,8 +494,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
-        } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
-                getPrimitiveType() != PrimitiveType.BITMAP) {
+        } else if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         } else if (isMaterializedColumn()) {
             sb.append("AS " + materializedColumnExpr.toSql() + " ");
@@ -604,8 +603,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         }
-        if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
-                getPrimitiveType() != PrimitiveType.BITMAP) {
+        if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         if (isMaterializedColumn()) {
