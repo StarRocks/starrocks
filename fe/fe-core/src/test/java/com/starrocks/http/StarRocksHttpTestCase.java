@@ -85,6 +85,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public abstract class StarRocksHttpTestCase {
@@ -108,8 +109,13 @@ public abstract class StarRocksHttpTestCase {
     private static long testReplicaId2 = 2001;
     private static long testReplicaId3 = 2002;
 
+<<<<<<< HEAD
     protected static final long TEST_DB_ID = 100L;
     protected static final long TEST_TABLE_ID = 200L;
+=======
+    protected static long testDbId = 100L;
+    private static long testTableId = 200L;
+>>>>>>> 5df983ccd3 ([BugFix] show_data rest api support cloudnative table (#29473))
     private static long testPartitionId = 201L;
     public static long testIndexId = TEST_TABLE_ID; // the base indexid == tableid
     private static long tabletId = 400L;
@@ -218,6 +224,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
             db.registerTableUnlocked(esTable);
+            ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
+            nameToDb.put(db.getFullName(), db);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -264,6 +272,10 @@ public abstract class StarRocksHttpTestCase {
 
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
+
+                    globalStateMgr.getFullNameToDb();
+                    minTimes = 0;
+                    result = nameToDb;
                 }
             };
 
