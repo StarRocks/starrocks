@@ -155,7 +155,8 @@ public class IndexDef implements ParseNode {
             String indexColName = column.getName();
             PrimitiveType colType = column.getPrimitiveType();
             if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
+                    colType.isFixedPointType() || colType.isDecimalV3Type() ||
+                    colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
                 throw new SemanticException(colType + " is not supported in bitmap index. "
                         + "invalid column: " + indexColName);
             } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
