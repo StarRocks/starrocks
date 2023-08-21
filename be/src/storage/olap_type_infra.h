@@ -34,6 +34,7 @@ namespace starrocks {
 #define APPLY_FOR_BITMAP_INDEX_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)          \
     APPLY_FOR_TYPE_TIME(M)             \
+<<<<<<< HEAD
     M(OLAP_FIELD_TYPE_UNSIGNED_INT)    \
     M(OLAP_FIELD_TYPE_FLOAT)           \
     M(OLAP_FIELD_TYPE_DOUBLE)          \
@@ -42,6 +43,15 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_BOOL)            \
     M(OLAP_FIELD_TYPE_DECIMAL)         \
     M(OLAP_FIELD_TYPE_DECIMAL_V2)
+=======
+    M(TYPE_UNSIGNED_INT)               \
+    M(TYPE_FLOAT)                      \
+    M(TYPE_DOUBLE)                     \
+    M(TYPE_CHAR)                       \
+    M(TYPE_VARCHAR)                    \
+    M(TYPE_BOOLEAN)                    \
+    APPLY_FOR_TYPE_DECIMAL(M)
+>>>>>>> 128f53af11 ([Enhancement] Add bitmap index for decimal (#29529))
 
 // Types that support bloomfilter(exclude tinyint/float/double)
 #define APPLY_FOR_BLOOMFILTER_TYPE(M) \
@@ -52,6 +62,7 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_CHAR)           \
     M(OLAP_FIELD_TYPE_VARCHAR)
 
+<<<<<<< HEAD
 // These types should be synced with FieldType in olap_common.h
 #define APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)         \
@@ -59,6 +70,13 @@ namespace starrocks {
     M(OLAP_FIELD_TYPE_DECIMAL32)           \
     M(OLAP_FIELD_TYPE_DECIMAL64)           \
     M(OLAP_FIELD_TYPE_DECIMAL128)
+=======
+// These types should be synced with LogicalType in olap_common.h
+#define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
+    APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
+    M(TYPE_JSON)                        \
+    M(TYPE_VARBINARY)
+>>>>>>> 128f53af11 ([Enhancement] Add bitmap index for decimal (#29529))
 
 #define APPLY_FOR_UNSIGN_OLAP_FIELD_TYPE(M) \
     M(OLAP_FIELD_TYPE_UNSIGNED_INT)         \
