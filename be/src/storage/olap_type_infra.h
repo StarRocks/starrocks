@@ -54,8 +54,7 @@ namespace starrocks {
     M(TYPE_CHAR)                       \
     M(TYPE_VARCHAR)                    \
     M(TYPE_BOOLEAN)                    \
-    M(TYPE_DECIMAL)                    \
-    M(TYPE_DECIMALV2)
+    APPLY_FOR_TYPE_DECIMAL(M)
 
 // Types that support bloomfilter(exclude tinyint/float/double)
 #define APPLY_FOR_BLOOMFILTER_TYPE(M) \
@@ -70,9 +69,6 @@ namespace starrocks {
 #define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
     M(TYPE_JSON)                        \
-    M(TYPE_DECIMAL32)                   \
-    M(TYPE_DECIMAL64)                   \
-    M(TYPE_DECIMAL128)                  \
     M(TYPE_VARBINARY)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
