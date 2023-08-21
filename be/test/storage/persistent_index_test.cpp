@@ -601,7 +601,12 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
     config::l0_max_file_size = l0_max_file_size;
 }
 
+<<<<<<< HEAD
 TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
+=======
+PARALLEL_TEST(PersistentIndexTest, test_l0_max_memory_usage) {
+    write_pindex_bf = false;
+>>>>>>> f29250727d (fix ut conflict)
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
     const std::string kIndexFile = "./PersistentIndexTest_test_l0_max_memory_usage/index.l0.0.0";
@@ -658,6 +663,7 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     }
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 
+    write_pindex_bf = true;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
