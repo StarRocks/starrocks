@@ -660,6 +660,10 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            if (node.getView().isInvalid()) {
+                throw new SemanticException("View " + node.getName() + " need re-build, " + node.getView().getReason());
+            }
+
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
@@ -683,6 +687,27 @@ public class QueryAnalyzer {
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
+            }
+
+            // check view schema
+            Map<String, Column> columns = node.getView().getColumns().stream()
+                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c));
+
+            for (Field field : fields) {
+                String name = field.getName().toLowerCase();
+                if (!columns.containsKey(name)) {
+                    throw new SemanticException(
+                            "Found undefined column[%s] from View[%s]'s query, " +
+                                    "please check the source table has been modified", field.getName(),
+                            node.getName().toSql());
+                }
+
+                Column column = columns.get(name);
+                if (!column.getType().matchesType(field.getType())) {
+                    throw new SemanticException("The type of column[%s] on View[%s] is different with query, " +
+                            "please check the source table has been modified", column.getName(),
+                            node.getName().toSql());
+                }
             }
 
             if (session.getDumpInfo() != null) {
