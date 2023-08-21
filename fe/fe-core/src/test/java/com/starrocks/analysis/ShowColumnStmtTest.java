@@ -26,6 +26,7 @@ public class ShowColumnStmtTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+        Config.default_replication_num = 1;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -38,7 +39,9 @@ public class ShowColumnStmtTest {
                 .withTable("create table test_default\n" +
                         "(id varchar(255) default (uuid()))\n" +
                         "distributed by hash(id)\n" +
-                        "PROPERTIES ( \"replication_num\" = \"1\" )");
+                        "PROPERTIES ( \"replication_num\" = \"1\" )")
+                .withTable("create table test_only_metric_default (a int,b hll hll_union," +
+                "c bitmap bitmap_union,d percentile percentile_union) distributed by hash(a);");
     }
 
     @AfterClass
@@ -61,6 +64,19 @@ public class ShowColumnStmtTest {
         ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
+    }
+
+    @Test
+    public void testOnlyMetricTypeDefaultValue() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "show full columns from test_only_metric_default;";
+        ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(0).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(1).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(2).get(5));
+        Assert.assertEquals(FeConstants.NULL_STRING, resultSet.getResultRows().get(3).get(5));
     }
 
 }
