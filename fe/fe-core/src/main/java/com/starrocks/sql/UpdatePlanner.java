@@ -85,7 +85,7 @@ public class UpdatePlanner {
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
-                if (updateStmt.usePartialUpdate() && !column.isMaterializedColumn() &&
+                if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                         !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                     // When using partial update, skip columns which aren't key column and not be assign, except for
                     // generated column

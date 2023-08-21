@@ -26,14 +26,14 @@ import java.util.Map;
 public class AddColumnsClause extends AlterTableColumnClause {
     private final List<ColumnDef> columnDefs;
 
-    private ColumnPosition materializedColumnPos = null;
+    private ColumnPosition generatedColumnPos = null;
 
-    public ColumnPosition getMaterializedColumnPos() {
-        return materializedColumnPos;
+    public ColumnPosition getGeneratedColumnPos() {
+        return generatedColumnPos;
     }
 
-    public void setMaterializedColumnPos(ColumnPosition colPos) {
-        this.materializedColumnPos = colPos;
+    public void setGeneratedColumnPos(ColumnPosition colPos) {
+        this.generatedColumnPos = colPos;
     }
 
     public List<ColumnDef> getColumnDefs() {

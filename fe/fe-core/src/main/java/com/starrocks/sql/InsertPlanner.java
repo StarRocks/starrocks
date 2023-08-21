@@ -139,8 +139,8 @@ public class InsertPlanner {
             optExprBuilder = fillKeyPartitionsColumn(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
         }
 
-        //5. Fill in the materialized columns
-        optExprBuilder = fillMaterializedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+        //5. Fill in the generated columns
+        optExprBuilder = fillGeneratedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
         //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
@@ -312,7 +312,7 @@ public class InsertPlanner {
             }
 
             Column targetColumn = fullSchema.get(columnIdx);
-            if (targetColumn.isMaterializedColumn()) {
+            if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
@@ -368,7 +368,7 @@ public class InsertPlanner {
             }
 
             Column targetColumn = baseSchema.get(columnIdx);
-            if (targetColumn.isMaterializedColumn()) {
+            if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
             if (insertStatement.getTargetColumnNames() == null) {
@@ -410,7 +410,7 @@ public class InsertPlanner {
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
-    private OptExprBuilder fillMaterializedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
+    private OptExprBuilder fillGeneratedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                                    List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                                    ConnectContext session) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
@@ -420,9 +420,9 @@ public class InsertPlanner {
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
-            if (targetColumn.isMaterializedColumn()) {
+            if (targetColumn.isGeneratedColumn()) {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
-                Expr expr = targetColumn.materializedColumnExpr();
+                Expr expr = targetColumn.generatedColumnExpr();
                 ExpressionAnalyzer.analyzeExpression(expr,
                     new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                         insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
@@ -475,7 +475,7 @@ public class InsertPlanner {
 
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
-                if (targetColumn.isMaterializedColumn()) {
+                if (targetColumn.isGeneratedColumn()) {
                     continue;
                 }
 

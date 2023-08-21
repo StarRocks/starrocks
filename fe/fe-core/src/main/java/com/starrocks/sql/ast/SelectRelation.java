@@ -81,7 +81,7 @@ public class SelectRelation extends QueryRelation {
 
     /**
      *  materializeExpressionToColumnRef stores the mapping relationship
-     *  between materialized expressions and materialized columns
+     *  between generated expressions and generated columns
      */
     private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
