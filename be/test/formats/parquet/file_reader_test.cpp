@@ -670,6 +670,7 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
     (tupleDescriptor->slots())[1] = new_slot;
     ctx->tuple_desc = tupleDescriptor;
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->materialized_columns[1].decode_needed = false;
     ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
 
     return ctx;

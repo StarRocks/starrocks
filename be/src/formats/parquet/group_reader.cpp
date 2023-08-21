@@ -191,7 +191,6 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
 
 void GroupReader::_process_columns_and_conjunct_ctxs() {
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
-    const auto& slots = _param.tuple_desc->slots();
     int read_col_idx = 0;
 
     for (auto& column : _param.read_cols) {
@@ -199,8 +198,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
             for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                 std::vector<std::string> sub_field_path;
-                if (_try_to_use_dict_filter(column, ctx, sub_field_path,
-                                            slots[column.col_idx_in_chunk]->is_output_column())) {
+                if (_try_to_use_dict_filter(column, ctx, sub_field_path, column.decode_needed)) {
                     _use_as_dict_filter_column(read_col_idx, slot_id, sub_field_path);
                 } else {
                     _left_conjunct_ctxs.emplace_back(ctx);
@@ -223,7 +221,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 }
 
 bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                          std::vector<std::string>& sub_field_path, bool is_output_column) {
+                                          std::vector<std::string>& sub_field_path, bool is_decode_needed) {
     const Expr* root_expr = ctx->root();
     std::vector<std::vector<std::string>> subfields;
     root_expr->get_subfields(&subfields);
@@ -238,7 +236,7 @@ bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column
         sub_field_path = subfields[0];
     }
 
-    if (_column_readers[column.slot_id]->try_to_use_dict_filter(ctx, is_output_column, column.slot_id, sub_field_path,
+    if (_column_readers[column.slot_id]->try_to_use_dict_filter(ctx, is_decode_needed, column.slot_id, sub_field_path,
                                                                 0)) {
         return true;
     } else {
