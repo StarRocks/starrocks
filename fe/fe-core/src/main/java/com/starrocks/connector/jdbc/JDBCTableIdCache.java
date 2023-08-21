@@ -12,18 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
 
-#include <mutex>
-#include <set>
+package com.starrocks.connector.jdbc;
 
-#include "gen_cpp/AgentService_types.h"
+import java.util.concurrent.ConcurrentHashMap;
 
-namespace starrocks {
+public class JDBCTableIdCache {
+    private static ConcurrentHashMap<JDBCTableName, Integer> tableIdCache = new ConcurrentHashMap();
 
-std::pair<bool, size_t> register_task_info(TTaskType::type task_type, int64_t signature);
-std::vector<uint8_t> batch_register_task_info(const std::vector<const TAgentTaskRequest*>& tasks);
-size_t remove_task_info(TTaskType::type task_type, int64_t signature);
-std::map<TTaskType::type, std::set<int64_t>> count_all_tasks();
+    public static Boolean containsTableId(JDBCTableName tableKey) {
+        return tableIdCache.containsKey(tableKey);
+    }
 
-} // namespace starrocks
+    public static void putTableId(JDBCTableName tableKey, Integer tableId) {
+        tableIdCache.put(tableKey, tableId);
+    }
+
+    public static Integer getTableId(JDBCTableName tableKey) {
+        return tableIdCache.get(tableKey);
+    }
+}
