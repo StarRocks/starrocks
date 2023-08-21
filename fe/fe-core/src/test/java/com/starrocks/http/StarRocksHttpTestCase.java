@@ -85,6 +85,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public abstract class StarRocksHttpTestCase {
@@ -218,6 +219,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
             db.registerTableUnlocked(esTable);
+            ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
+            nameToDb.put(db.getFullName(), db);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -264,6 +267,10 @@ public abstract class StarRocksHttpTestCase {
 
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
+
+                    globalStateMgr.getFullNameToDb();
+                    minTimes = 0;
+                    result = nameToDb;
                 }
             };
 
