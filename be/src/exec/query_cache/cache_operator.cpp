@@ -337,7 +337,7 @@ void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<C
         num_rows += chunk->num_rows();
     }
     _cache_probe_bytes_counter->update(num_bytes);
-    _cache_probe_chunks_counter->update(num_rows);
+    _cache_probe_chunks_counter->update(chunks.size());
     _cache_probe_rows_counter->update(num_rows);
     _probe_tablets.insert(tablet_id);
 }

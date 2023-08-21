@@ -235,6 +235,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -350,8 +351,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
+            for (Table tbl : ListUtils.union(db.getTables(), db.getHiveTables())) {
+                try {
+                    tbl.onCreate();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            }
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2731,7 +2737,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(jdbcTable, false)) {
@@ -2755,7 +2761,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getId()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
             if (!db.createTableWithLock(table, false)) {
@@ -2774,7 +2780,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayCreateTable(String dbName, Table table) {
         Database db = this.fullNameToDb.get(dbName);
         db.createTableWithLock(table, true);
-
         if (!isCheckpointThread()) {
             // add to inverted index
             if (table.isOlapOrCloudNativeTable()) {
@@ -5456,8 +5461,13 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().forEach(Table::onCreate);
-            db.getHiveTables().forEach(Table::onCreate);
+            for (Table tbl : ListUtils.union(db.getMaterializedViews(), db.getHiveTables())) {
+                try {
+                    tbl.onCreate();
+                } catch (Throwable e) {
+                    LOG.error("reload table failed: {}", tbl, e);
+                }
+            }
         }
 
         // put built-in database into local metastore

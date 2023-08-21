@@ -439,12 +439,18 @@ public class GrantsTo {
                     continue;
                 }
 
-                if (objectType.equals(ObjectType.VIEW) && table.isView()) {
-                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
-                } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW) && table.isMaterializedView()) {
-                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
-                } else if (!table.isView() && !table.isMaterializedView()) {
-                    objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                if (objectType.equals(ObjectType.VIEW)) {
+                    if (table.isView()) {
+                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                    }
+                } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
+                    if (table.isMaterializedView()) {
+                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                    }
+                } else {
+                    if (!table.isView() && !table.isMaterializedView()) {
+                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                    }
                 }
             }
         } else {
