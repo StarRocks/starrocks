@@ -307,7 +307,7 @@ public:
                 if (val == -1) {
                     col->append_nulls(1);
                 } else {
-                    col->append_datum(Datum(val));
+                    col->append_datum(vectorized::Datum(val));
                 }
             };
             append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
@@ -950,8 +950,8 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
 
 static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& tablet, int64_t version,
                                                          const vector<vector<int64_t>>& all_cols) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    TabletReader reader(tablet, Version(0, version), schema);
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -964,7 +964,7 @@ static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& 
             if (val == -1) {
                 col->append_nulls(1);
             } else {
-                col->append_datum(Datum(val));
+                col->append_datum(vectorized::Datum(val));
             }
         };
         append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
