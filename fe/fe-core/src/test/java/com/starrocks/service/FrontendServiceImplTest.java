@@ -171,7 +171,7 @@ public class FrontendServiceImplTest {
     public void testGetLoadTxnStatus() throws Exception {
         starRocksAssert.withDatabase("test_table").useDatabase("test_table")
                 .withTable("CREATE TABLE `pk_table` (\n" +
-                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `k1` date NOT NULL COMMENT \"\",\n" +
                         "  `v1` int(11) NULL COMMENT \"\",\n" +
                         "  `v2` int(11) NULL COMMENT \"\"\n" +
                         ") ENGINE=OLAP \n" +
