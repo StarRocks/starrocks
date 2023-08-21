@@ -70,10 +70,12 @@ select pipe_name, state from information_schema.pipes where database_name = 'db_
 -- result:
 p1	FINISHED
 -- !result
-select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
     from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
-p1	/test_pipe/3c75f91c3d8f11eeabf7c9d28a9636a8/col_not_null.parquet	1617	FINISHED
+p1	col_not_null.parquet	1617	FINISHED
 -- !result
 drop pipe p1;
 -- result:
@@ -81,7 +83,9 @@ drop pipe p1;
 select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result
-select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
     from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 -- result:
 -- !result

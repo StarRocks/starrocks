@@ -32,11 +32,15 @@ function: wait_for_pipe_finish('db_${uuid0}', 'p1')
 
 select count(*) from t1;
 select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
-select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
     from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
 
 
 drop pipe p1;
 select pipe_name, state from information_schema.pipes where database_name = 'db_${uuid0}' and pipe_name = 'p1';
-select pipe_name, parse_url(file_name, 'FILE'), file_size, load_state
+select pipe_name, 
+        split(parse_url(file_name, 'FILE'), '/')[4], 
+        file_size, load_state
     from information_schema.pipe_files where database_name = 'db_${uuid0}' and pipe_name = 'p1';
