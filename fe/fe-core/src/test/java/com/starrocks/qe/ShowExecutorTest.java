@@ -1225,7 +1225,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowCreateExternalCatalogWithMask() throws AnalysisException, DdlException {
-        // More mask logic please write in CloudCredentialUtilTest
+        // More mask logic please write in CredentialUtilTest
         new MockUp<CatalogMgr>() {
             @Mock
             public Catalog getCatalogByName(String name) {
