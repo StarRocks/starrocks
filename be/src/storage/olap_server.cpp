@@ -49,6 +49,7 @@
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/publish_version_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
@@ -91,6 +92,10 @@ Status StorageEngine::start_bg_threads() {
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
+
+    // start thread for check finish publish version
+    _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
+    Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
 
     _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
