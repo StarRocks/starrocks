@@ -110,7 +110,7 @@ jobs:
       - name: Behavior Changed
         if: >
           contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior')
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 'behavior_changed'
