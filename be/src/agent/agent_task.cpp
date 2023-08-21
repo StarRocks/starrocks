@@ -46,6 +46,7 @@ static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash,
     Status st = StorageEngine::instance()->tablet_manager()->report_tablet_info(tablet_info);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to get tablet info, status=" << st.to_string() << " signature=" << signature;
+        LOG(WARNING) << "Fail to get tablet info, status=" << st.to_string() << " signature=" << signature;
         status = STARROCKS_ERROR;
     }
     return status;
