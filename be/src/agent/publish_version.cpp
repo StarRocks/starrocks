@@ -60,6 +60,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     span->SetAttribute("txn_id", transaction_id);
     auto scoped = trace::Scope(span);
 
+    bool enable_sync_publish = publish_version_req.enable_sync_publish;
     size_t num_partition = publish_version_req.partition_version_infos.size();
     size_t num_active_tablet = 0;
     std::vector<std::map<TabletInfo, RowsetSharedPtr>> partitions(num_partition);
@@ -72,6 +73,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     span->SetAttribute("num_tablet", num_active_tablet);
     std::vector<TabletPublishVersionTask> tablet_tasks(num_active_tablet);
     size_t tablet_idx = 0;
+
     for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
         for (auto& itr : partitions[i]) {
             auto& task = tablet_tasks[tablet_idx++];
@@ -150,6 +152,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     finish_task.__isset.tablet_versions = true;
     auto& error_tablet_ids = finish_task.error_tablet_ids;
     auto& tablet_versions = finish_task.tablet_versions;
+    auto& tablet_publish_versions = finish_task.tablet_publish_versions;
     tablet_versions.reserve(tablet_tasks.size());
     for (auto& task : tablet_tasks) {
         if (!task.st.ok()) {
@@ -157,6 +160,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
             if (st.ok()) {
                 st = task.st;
             }
+        } else {
+            auto& pair = tablet_publish_versions.emplace_back();
+            pair.__set_tablet_id(task.tablet_id);
+            pair.__set_version(task.version);
         }
     }
     // return tablet and its version which has already finished.
@@ -174,7 +181,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 LOG(WARNING) << fmt::format("publish_version tablet not found tablet_id: {}, version: {} txn_id: {}",
                                             tablet_info.tablet_id, partition_version.version, transaction_id);
             } else {
-                const int64_t max_continuous_version = tablet->max_continuous_version();
+                const int64_t max_continuous_version =
+                        enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
                 if (max_continuous_version > 0) {
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);
