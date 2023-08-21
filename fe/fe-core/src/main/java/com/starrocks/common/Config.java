@@ -304,7 +304,7 @@ public class Config extends ConfigBase {
      * max history task num kept
      */
     @ConfField(mutable = true)
-    public static int task_runs_max_history_number = 10000;
+    public static int task_runs_max_history_number = 2000;
 
     /**
      * The max keep time of some kind of jobs.
