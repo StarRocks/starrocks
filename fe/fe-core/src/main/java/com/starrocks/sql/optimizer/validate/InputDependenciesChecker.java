@@ -24,12 +24,15 @@ import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import org.apache.commons.collections4.MapUtils;
 
 import java.util.List;
 
@@ -73,8 +76,10 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
 
         private void checkOptWithoutChild(OptExpression optExpression) {
             RowOutputInfo rowOutputInfo = optExpression.getRowOutputInfo();
+            Operator operator = optExpression.getOp();
             // only need check operator with projection
-            if (MapUtils.isNotEmpty(rowOutputInfo.getColOutputInfo())) {
+            if (operator instanceof LogicalScanOperator || operator instanceof PhysicalScanOperator
+                    || operator instanceof LogicalValuesOperator || operator instanceof PhysicalValuesOperator) {
                 ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
                 ColumnRefSet usedCols = new ColumnRefSet();
                 for (ColumnOutputInfo col : rowOutputInfo.getColumnOutputInfo()) {
