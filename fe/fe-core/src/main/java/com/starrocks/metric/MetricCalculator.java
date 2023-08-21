@@ -57,6 +57,9 @@ public class MetricCalculator extends TimerTask {
     private long lastQueryAnalysisErrCounter = -1;
     private long lastQueryTimeOutCounter = -1;
 
+    private long lastRootQueryCounter = -1;
+    private long lastRootRequestCounter = -1;
+    private long lastRootQueryErrCounter = -1;
     private long lastQueryEventTime = -1;
 
     @Override
@@ -74,6 +77,11 @@ public class MetricCalculator extends TimerTask {
             lastQueryInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
             lastQueryAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
             lastQueryTimeOutCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
+
+            lastRootQueryCounter = MetricRepo.COUNTER_ROOT_QUERY_ALL.getValue();
+            lastRootRequestCounter = MetricRepo.COUNTER_ROOT_REQUEST_ALL.getValue();
+            lastRootQueryErrCounter = MetricRepo.COUNTER_ROOT_QUERY_ERR.getValue();
+
             lastQueryEventTime = System.currentTimeMillis() * 1000000;
             return;
         }
@@ -86,17 +94,35 @@ public class MetricCalculator extends TimerTask {
         MetricRepo.GAUGE_QUERY_PER_SECOND.setValue(qps < 0 ? 0.0 : qps);
         lastQueryCounter = currentQueryCounter;
 
+        // root qps
+        long currentRootQueryCounter = MetricRepo.COUNTER_ROOT_QUERY_ALL.getValue();
+        double rootQps = (double) (currentRootQueryCounter - lastRootQueryCounter) / interval;
+        MetricRepo.GAUGE_ROOT_QUERY_PER_SECOND.setValue(rootQps < 0 ? 0.0 : rootQps);
+        lastRootQueryCounter = currentRootQueryCounter;
+
         // rps
         long currentRequestCounter = MetricRepo.COUNTER_REQUEST_ALL.getValue();
         double rps = (double) (currentRequestCounter - lastRequestCounter) / interval;
         MetricRepo.GAUGE_REQUEST_PER_SECOND.setValue(rps < 0 ? 0.0 : rps);
         lastRequestCounter = currentRequestCounter;
 
+        // root rps
+        long currentRootRequestCounter = MetricRepo.COUNTER_ROOT_REQUEST_ALL.getValue();
+        double rootRps = (double) (currentRootRequestCounter - lastRootRequestCounter) / interval;
+        MetricRepo.GAUGE_ROOT_REQUEST_PER_SECOND.setValue(rootRps < 0 ? 0.0 : rootRps);
+        lastRootRequestCounter = currentRootRequestCounter;
+
         // err rate
         long currentErrCounter = MetricRepo.COUNTER_QUERY_ERR.getValue();
         double errRate = (double) (currentErrCounter - lastQueryErrCounter) / interval;
         MetricRepo.GAUGE_QUERY_ERR_RATE.setValue(errRate < 0 ? 0.0 : errRate);
         lastQueryErrCounter = currentErrCounter;
+
+        // root err rate
+        long currentRootErrCounter = MetricRepo.COUNTER_ROOT_QUERY_ERR.getValue();
+        double rootErrRate = (double) (currentRootErrCounter - lastRootQueryErrCounter) / interval;
+        MetricRepo.GAUGE_ROOT_QUERY_ERR_RATE.setValue(rootErrRate < 0 ? 0.0 : rootErrRate);
+        lastRootQueryErrCounter = currentRootErrCounter;
 
         // internal err rate
         long currentInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();

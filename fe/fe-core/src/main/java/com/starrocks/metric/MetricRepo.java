@@ -120,6 +120,13 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
 
+    public static LongCounterMetric COUNTER_ROOT_REQUEST_ALL;
+    public static LongCounterMetric COUNTER_ROOT_QUERY_ALL;
+    public static LongCounterMetric COUNTER_ROOT_QUERY_ERR;
+    public static LongCounterMetric COUNTER_ROOT_QUERY_TIMEOUT;
+    public static LongCounterMetric COUNTER_ROOT_QUERY_SUCCESS;
+    public static LongCounterMetric COUNTER_ROOT_SLOW_QUERY;
+
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -218,6 +225,10 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_INTERNAL_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_ANALYSIS_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_TIMEOUT_RATE;
+
+    public static GaugeMetricImpl<Double> GAUGE_ROOT_QUERY_PER_SECOND;
+    public static GaugeMetricImpl<Double> GAUGE_ROOT_REQUEST_PER_SECOND;
+    public static GaugeMetricImpl<Double> GAUGE_ROOT_QUERY_ERR_RATE;
 
     // these query latency is different from HISTO_QUERY_LATENCY, for these only summarize the latest queries, but HISTO_QUERY_LATENCY summarizes all queries.
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEAN;
@@ -374,6 +385,18 @@ public final class MetricRepo {
         GAUGE_QUERY_ERR_RATE.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_ERR_RATE);
 
+        GAUGE_ROOT_QUERY_PER_SECOND = new GaugeMetricImpl<>("root_qps", MetricUnit.NOUNIT, "query from root per second");
+        GAUGE_ROOT_QUERY_PER_SECOND.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ROOT_QUERY_PER_SECOND);
+
+        GAUGE_ROOT_REQUEST_PER_SECOND = new GaugeMetricImpl<>("root_rps", MetricUnit.NOUNIT, "request from root per second");
+        GAUGE_ROOT_REQUEST_PER_SECOND.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ROOT_REQUEST_PER_SECOND);
+
+        GAUGE_ROOT_QUERY_ERR_RATE = new GaugeMetricImpl<>("root_query_err_rate", MetricUnit.NOUNIT, "query from root error rate");
+        GAUGE_ROOT_QUERY_ERR_RATE.setValue(0.0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ROOT_QUERY_ERR_RATE);
+
         GAUGE_QUERY_INTERNAL_ERR_RATE =
                 new GaugeMetricImpl<>("query_internal_err_rate", MetricUnit.NOUNIT, "query internal error rate");
         GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(0.0);
@@ -499,6 +522,18 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
         COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
+        COUNTER_ROOT_REQUEST_ALL = new LongCounterMetric("root_request_total", MetricUnit.REQUESTS, "root total request");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_REQUEST_ALL);
+        COUNTER_ROOT_QUERY_ALL = new LongCounterMetric("root_query_total", MetricUnit.REQUESTS, "root total query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_QUERY_ALL);
+        COUNTER_ROOT_QUERY_ERR = new LongCounterMetric("root_query_err", MetricUnit.REQUESTS, "root total error query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_QUERY_ERR);
+        COUNTER_ROOT_QUERY_TIMEOUT = new LongCounterMetric("root_query_timeout", MetricUnit.REQUESTS, "root total timeout query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_QUERY_TIMEOUT);
+        COUNTER_ROOT_QUERY_SUCCESS = new LongCounterMetric("root_query_success", MetricUnit.REQUESTS, "root total success query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_QUERY_SUCCESS);
+        COUNTER_ROOT_SLOW_QUERY = new LongCounterMetric("root_slow_query", MetricUnit.REQUESTS, "root total slow query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROOT_SLOW_QUERY);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
