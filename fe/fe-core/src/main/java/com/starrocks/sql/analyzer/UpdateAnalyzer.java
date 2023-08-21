@@ -132,8 +132,8 @@ public class UpdateAnalyzer {
                     break;
                 }
 
-                if (col.isMaterializedColumn()) {
-                    throw new SemanticException("materialized column cannot be updated: " + col.getName());
+                if (col.isGeneratedColumn()) {
+                    throw new SemanticException("generated column cannot be updated: " + col.getName());
                 }
 
                 if (assign.getExpr() instanceof DefaultValueExpr) {
@@ -147,8 +147,8 @@ public class UpdateAnalyzer {
                 item = new SelectListItem(assign.getExpr(), col.getName());
                 selectList.addItem(item);
                 assignColumnList.add(col);
-            } else if (col.isMaterializedColumn()) {
-                Expr expr = col.materializedColumnExpr();
+            } else if (col.isGeneratedColumn()) {
+                Expr expr = col.generatedColumnExpr();
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
                 selectList.addItem(item);
@@ -166,12 +166,12 @@ public class UpdateAnalyzer {
         }
 
         /*
-         * The Substitution here is needed because the materialized column
+         * The Substitution here is needed because the generated column
          * needed to be re-calculated by the 'new value' of the ref column,
          * which is the specified expression in UPDATE statment.
          */
         for (Column column : table.getBaseSchema()) {
-            if (!column.isMaterializedColumn()) {
+            if (!column.isGeneratedColumn()) {
                 continue;
             }
 
