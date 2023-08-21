@@ -54,7 +54,7 @@ struct ColumnDictFilterContext {
     // preds transformed from `_conjunct_ctxs` for each dict filter column
     ColumnPredicate* predicate;
     // is output column ? if just used for filter, decode is no need
-    bool is_output_column;
+    bool is_decode_needed;
     SlotId slot_id;
     std::vector<std::string> sub_field_path;
     ObjectPool obj_pool;
@@ -103,7 +103,7 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual bool try_to_use_dict_filter(ExprContext* ctx, bool is_output_column, const SlotId slotId,
+    virtual bool try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
                                         const std::vector<std::string>& sub_field_path, const size_t& layer) {
         return false;
     }

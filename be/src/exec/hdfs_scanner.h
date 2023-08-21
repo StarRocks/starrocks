@@ -135,6 +135,8 @@ struct HdfsScannerParams {
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
     std::unordered_set<SlotId> conjunct_slots;
+    // slot used by conjunct_ctxs
+    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
     bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
@@ -197,6 +199,7 @@ struct HdfsScannerContext {
         SlotId slot_id;
         std::string col_name;
         SlotDescriptor* slot_desc;
+        bool decode_needed = true;
 
         std::string formated_col_name(bool case_sensitive) {
             return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);

@@ -35,4 +35,7 @@ select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56')
 
 select * from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct.c0 in ('56', '57') and c0 < 1000;
 
+-- filed is not output column but in conjunct of multi-slot, decode is needed
+select count(*) from struct_in_struct where c_struct_struct.c_struct.c0 in ('55', '56') and c_struct_struct.c_struct.c0 = c_struct.c0;
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_struct/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
