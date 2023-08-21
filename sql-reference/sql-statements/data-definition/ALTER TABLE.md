@@ -22,10 +22,11 @@ alter_clause1[, alter_clause2, ...]
 * index: 修改索引(目前支持 bitmap 索引)。
 * swap: 原子替换两张表。
 
-> 说明：
+> **说明**
 >
 > * partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-> * rollup、schema change 和 swap 是异步操作，可使用 [SHOW ALTER](../data-manipulation/SHOW%20ALTER.md) 语句查看进度。partition、rename 和 index 是同步操作，命令返回表示执行完毕。
+> * rollup、schema change 是异步操作，命令提交成功即返回结果，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) 语句查看相关操作的进度。
+> * partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
 
 ### 操作 partition 相关语法
 
@@ -476,7 +477,7 @@ SWAP WITH table_name;
 
 ### rollup
 
-1. 创建 index: example_rollup_index，基于 base index（k1, k2, k3, v1, v2）。列式存储。
+1. 创建 index `example_rollup_index`，基于 base index（k1, k2, k3, v1, v2），列式存储。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -484,7 +485,7 @@ SWAP WITH table_name;
     PROPERTIES("storage_type"="column");
     ```
 
-2. 创建 index: example_rollup_index2，基于 example_rollup_index（k1, k3, v1, v2）。
+2. 创建 index `example_rollup_index2`，基于 example_rollup_index（k1, k3, v1, v2）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -492,15 +493,15 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-3. 创建 index: example_rollup_index3，基于 base index (k1, k2, k3, v1), 自定义 rollup 超时时间一小时。
+3. 创建 index `example_rollup_index3`，基于 base index (k1, k2, k3, v1), 自定义 rollup 超时时间一小时。
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD ROLLUP example_rollup_index(k1, k3, v1)
+    ADD ROLLUP example_rollup_index3(k1, k3, v1)
     PROPERTIES("storage_type"="column", "timeout" = "3600");
     ```
 
-4. 删除 index: example_rollup_index2。
+4. 删除 index `example_rollup_index2`。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -509,7 +510,7 @@ SWAP WITH table_name;
 
 ### Schema Change
 
-1. 向 example_rollup_index 的 col1 后添加一个 key 列 new_col(非聚合模型)。
+1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合模型）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -517,7 +518,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-2. 向 example_rollup_index 的 col1 后添加一个 value 列 new_col(非聚合模型)。
+2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合模型）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -525,7 +526,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-3. 向 example_rollup_index 的 col1 后添加一个 key 列 new_col(聚合模型)。
+3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合模型）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -533,7 +534,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-4. 向 example_rollup_index 的 col1 后添加一个 value 列 new_col SUM 聚合类型(聚合模型)。
+4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合模型）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -541,7 +542,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-5. 向 example_rollup_index 添加多列(聚合模型)。
+5. 向 `example_rollup_index` 添加多列（聚合模型）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -549,7 +550,7 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-6. 从 example_rollup_index 删除一列。
+6. 从 `example_rollup_index` 删除一列。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -557,21 +558,21 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-7. 修改 base index 的 col1 列的类型为 BIGINT，并移动到 col2 列后面。
+7. 修改 base index 的 `col1` 列的类型为 BIGINT，并移动到 `col2` 列后面。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN col1 BIGINT DEFAULT "1" AFTER col2;
     ```
 
-8. 修改 base index 的 val1 列最大长度。原 val1 为 (val1 VARCHAR(32) REPLACE DEFAULT "abc")。
+8. 修改 base index 的 `val1` 列最大长度。原 `val1` 为 (`val1 VARCHAR(32) REPLACE DEFAULT "abc"`)。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN val1 VARCHAR(64) REPLACE DEFAULT "abc";
     ```
 
-9. 重新排序 example_rollup_index 中的列（设原列顺序为：k1, k2, k3, v1, v2）。
+9. 重新排序 `example_rollup_index` 中的列（设原列顺序为：k1, k2, k3, v1, v2）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -638,19 +639,19 @@ SWAP WITH table_name;
 
 ### rename
 
-1. 将名为 table1 的表修改为 table2。
+1. 将名为 `table1` 的表修改为 `table2`。
 
     ```sql
     ALTER TABLE table1 RENAME table2;
     ```
 
-2. 将表 example_table 中名为 rollup1 的 rollup index 修改为 rollup2。
+2. 将表 `example_table` 中名为 `rollup1` 的 rollup index 修改为 `rollup2`。
 
     ```sql
     ALTER TABLE example_table RENAME ROLLUP rollup1 rollup2;
     ```
 
-3. 将表 example_table 中名为 p1 的 partition 修改为 p2。
+3. 将表 `example_table` 中名为 `p1` 的 partition 修改为 `p2`。
 
     ```sql
     ALTER TABLE example_table RENAME PARTITION p1 p2;
@@ -658,14 +659,14 @@ SWAP WITH table_name;
 
 ### index
 
-1. 在 table1 上为 siteid 创建 bitmap 索引。
+1. 在 `table1` 上为 `siteid` 创建 `bitmap` 索引。
 
     ```sql
     ALTER TABLE table1
     ADD INDEX index_name (siteid) [USING BITMAP] COMMENT 'balabala';
     ```
 
-2. 删除 table1 上的 siteid 列的 bitmap 索引。
+2. 删除 `table1` 上的 `siteid` 列的 bitmap 索引。
 
     ```sql
     ALTER TABLE table1 DROP INDEX index_name;
@@ -673,7 +674,7 @@ SWAP WITH table_name;
 
 ### swap
 
-将 table1 与 table2 原子替换。
+将 `table1` 与 `table2` 原子替换。
 
 ```sql
 ALTER TABLE table1 SWAP WITH table2;
