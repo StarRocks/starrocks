@@ -6,7 +6,6 @@ Release date: August 18, 2023
 
 ## New Features
 
-- Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
 - Supports Azure Blob Storage for [shared-data clusters](../deployment/deploy_shared_data.md).
 - Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
 - Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
@@ -41,7 +40,7 @@ Release date: August 7, 2023
 
 - Supports accessing views created on tables within [Hive catalogs](../data_source/catalog/hive_catalog.md).
 - Supports accessing Parquet-formatted Iceberg v2 tables.
-- [Preview] Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+- Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
 - [Preview] Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
 - [Preview] Supports performing analytics on streaming data stored in Apache Paimon by using [Paimon catalogs](../data_source/catalog/paimon_catalog.md).
 
