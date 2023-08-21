@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 564add176e ([Enhancement] Prevent all refresh tables from waiting for a table to complete (#29337))
 
 package com.starrocks.connector.hive;
 
@@ -121,6 +137,29 @@ public class CachingHiveMetastoreTest {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testRefreshTableSync() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        Assert.assertEquals(1, cachingHiveMetastore.tableNameLockMap.size());
     }
 
     @Test
