@@ -4,7 +4,7 @@
 
 ## Before you begin
 
-- [Create a Kubernetes cluster](../sr_operator#create-kubernetes-cluster).
+- [Create a Kubernetes cluster](./sr_operator#create-kubernetes-cluster).
 - [Install Helm](https://helm.sh/docs/intro/quickstart/).
 
 ## Procedure
@@ -13,7 +13,7 @@
    1. Add the Helm Chart Repo.
 
       ```Bash
-      helm repo add starrocks-community https://starrocks.github.io/helm-charts
+      helm repo add starrocks-community https://starrocks.github.io/starrocks-kubernetes-operator
       ```
 
    2. Update the Helm Chart Repo to the latest version.
@@ -26,11 +26,13 @@
 
       ```Bash
       $ helm search repo starrocks-community
-      NAME                                      CHART VERSION        APP VERSION        DESCRIPTION                                       
-      starrocks-community/kube-starrocks        1.6.1                2.5.4              kube-starrocks collects Kubernetes manifests, s...
+      NAME                                    CHART VERSION    APP VERSION  DESCRIPTION
+      starrocks-community/kube-starrocks      1.8.0            3.1-latest   kube-starrocks includes two subcharts, starrock...
+      starrocks-community/operator            1.8.0            1.8.0        A Helm chart for StarRocks operator
+      starrocks-community/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
       ```
 
-2. Use the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
+2. Use the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
    1. Deployment with default configurations
 
       Run the following command to deploy the StarRocks Operator and the StarRocks cluster which consists of one FE and one BE:
@@ -39,21 +41,15 @@
       $ helm install starrocks starrocks-community/kube-starrocks
       # If the following result is returned, the StarRocks Operator and StarRocks cluster are being deployed.
       NAME: starrocks
-      LAST DEPLOYED: Tue Apr 11 12:11:12 2023
-      NAMESPACE: default
+      LAST DEPLOYED: Tue Aug 15 15:12:00 2023
+      NAMESPACE: starrocks
       STATUS: deployed
       REVISION: 1
-      NOTES:
-      1. Get the application URL by running these commands:
-        
-      kube-starrocks has been installed, Check its status by running:
-      kubectl --namespace default get starrockscluster -l "cluster=kube-starrocks"
-        
-      Visit https://github.com/starrocks for instructions on how to create & configure.
+      TEST SUITE: None
       ```
 
    2. Deployment with custom configurations
-      - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart.
+      - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** of the Helm Chart.
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
 
         ```Bash
@@ -85,10 +81,6 @@
 
   You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](./sr_operator.md#access-starrocks-cluster).
 
-  > **NOTICE**
-  >
-  > The StarRocks cluster is located in the namespace `default`.
-
 - Manage StarRocks operator and StarRocks cluster
 
   - If you need to update the configurations of the StarRocks operator and StarRocks cluster, see [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/).
@@ -100,4 +92,4 @@
 
 - Search Helm Chart maintained by StarRocks on Artifact Hub
 
-  See [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
+  See  [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks).
