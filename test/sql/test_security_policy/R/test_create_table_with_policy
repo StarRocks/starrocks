@@ -33,7 +33,7 @@ CREATE TABLE `t0` (
   `v3` bigint(20) NULL COMMENT ""
 ) ENGINE=OLAP
 DUPLICATE KEY(`v1`, `v2`, `v3`)
-WITH ROW ACCESS POLICY rp
+WITH ROW ACCESS POLICY rp on (v1)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "1",
@@ -51,7 +51,7 @@ select * from sys.policy_references where POLICY_DATABASE="test_create_table_wit
 -- result:
 test_create_table_with_policy	mp	Column Masking	default_catalog	test_create_table_with_policy	v	a
 -- !result
-create view v2 with row access policy rp as select * from t0;
+create view v2 with row access policy rp on(v1) as select * from t0;
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="v2";
@@ -97,7 +97,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-create materialized view mv2 with row access policy rp distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t2;
+create materialized view mv2 with row access policy rp on(v1) distributed by hash(v1) buckets 10 REFRESH ASYNC as select * from t2;
 -- result:
 -- !result
 select * from sys.policy_references where POLICY_DATABASE="test_create_table_with_policy" and REF_OBJECT_NAME="mv2";

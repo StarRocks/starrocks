@@ -547,7 +547,7 @@ public class SecurityPolicyMgr {
 
     public void replayRevokeRowAccessPolicyContext(ApplyOrRevokeRowAccessPolicyLog applyRowAccessPolicyInfo) {
         TableUID tableUID = applyRowAccessPolicyInfo.getTable();
-        if (applyRowAccessPolicyInfo.getRowAccessPolicyContext() == null) {
+        if (applyRowAccessPolicyInfo.getRowAccessPolicyContext().policyId == null) {
             policyContextMap.computeIfPresent(tableUID, (k, v) -> {
                 v.clearRowAccessPolicy();
                 return v;

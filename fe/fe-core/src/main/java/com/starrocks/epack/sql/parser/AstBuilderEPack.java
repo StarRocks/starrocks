@@ -228,10 +228,10 @@ public class AstBuilderEPack extends AstBuilder {
         QualifiedName qualifiedName = getQualifiedName(context.policyName);
         PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
 
-        List<String> columnList = null;
+        List<String> columnList = new ArrayList<>();
         if (context.identifierList() != null) {
             List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-            columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+            columnList.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
         }
 
         return new WithColumnMaskingPolicy(policyName, columnList, createPos(context));
@@ -242,10 +242,10 @@ public class AstBuilderEPack extends AstBuilder {
         QualifiedName qualifiedName = getQualifiedName(context.policyName);
         PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
 
-        List<String> columnList = null;
+        List<String> columnList = new ArrayList<>();
         if (context.identifierList() != null) {
             List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-            columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+            columnList.addAll(identifierList.stream().map(Identifier::getValue).collect(toList()));
         }
 
         return new WithRowAccessPolicy(policyName, columnList, createPos(context));

@@ -57,7 +57,7 @@ public class WithRowAccessPolicy implements ParseNode {
         }
         policyId = policy.getPolicyId();
 
-        if (onColumns != null && policy.getArgNames().size() != onColumns.size()) {
+        if (policy.getArgNames().size() != onColumns.size()) {
             throw new SemanticException("The number of on columns does not match " +
                     "the number of parameters required by the policy");
         }
