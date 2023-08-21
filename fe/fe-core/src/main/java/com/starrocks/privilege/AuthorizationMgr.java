@@ -218,8 +218,8 @@ public class AuthorizationMgr {
 
     // called by initBuiltinRolesAndUsers()
     protected void initPrivilegeCollections(PrivilegeCollectionV2 collection, ObjectType objectType,
-                                          List<PrivilegeType> actionList,
-                                          List<String> tokens, boolean isGrant) throws PrivilegeException {
+                                            List<PrivilegeType> actionList,
+                                            List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
         if (tokens != null) {
             object = Collections.singletonList(provider.generateObject(objectType, tokens, globalStateMgr));
@@ -1729,7 +1729,9 @@ public class AuthorizationMgr {
                     }
 
                     // upgrade meta to current version
-                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
+                    if (!userIdentity.equals(UserIdentity.ROOT)) {
+                        ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
+                    }
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
                 // 1 json for num roles
@@ -1777,7 +1779,6 @@ public class AuthorizationMgr {
                         rolePrivilegeCollection.typeToPrivilegeEntryList
                                 = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
                     } else {
-
                         Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = collectionDeprecate.getTypeToPrivilegeEntryList();
                         for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
                             rolePrivilegeCollection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
@@ -1785,7 +1786,9 @@ public class AuthorizationMgr {
                     }
 
                     // upgrade meta to current version
-                    ret.provider.upgradePrivilegeCollection(rolePrivilegeCollection, ret.pluginId, ret.pluginVersion);
+                    if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                        ret.provider.upgradePrivilegeCollection(rolePrivilegeCollection, ret.pluginId, ret.pluginVersion);
+                    }
                     ret.roleIdToPrivilegeCollection.put(roleId, rolePrivilegeCollection);
                 }
             } catch (SRMetaBlockEOFException eofException) {
