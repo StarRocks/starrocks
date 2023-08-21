@@ -1,5 +1,28 @@
 # StarRocks version 3.1
 
+## 3.1.1
+
+发布日期：2023 年 8 月 18 日
+
+## 新增特性
+
+- [存算分离架构](../deployment/deploy_shared_data.md)下，支持数据存储在 Azure Blob Storage 上。
+- 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
+- 支持[窗口函数](../sql-reference/sql-functions/Window_function.md) COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP。
+
+## 功能优化
+
+对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](../reference/System_variable.md) `ENABLE_STRICT_TYPE` 控制是否打开隐式转换（默认取值为 `false`）。
+
+## 问题修复
+
+修复了如下问题：
+
+- 向多副本的表中导入数据时，如果某些分区没有数据，则会写入很多无用日志。 [#28824](https://github.com/StarRocks/starrocks/issues/28824)
+- 主键模型表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 某个 Tablet 出现某种 ERROR 状态之后触发 Clone 操作，会导致磁盘使用上升。 [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- Compaction 会触发冷数据写入 Local Cache。 [#28831](https://github.com/StarRocks/starrocks/pull/28831)
+
 ## 3.1.0
 
 发布日期：2023 年 8 月 7 日
@@ -17,7 +40,7 @@
 
 - 支持访问 [Hive Catalog](../data_source/catalog/hive_catalog.md) 内的视图。
 - 支持访问 Parquet 格式的 Iceberg v2 数据表。
-- 【公测中】支持[写出数据到 Parquet 格式的 Iceberg 表](../data_source/catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
+- 支持[写出数据到 Parquet 格式的 Iceberg 表](../data_source/catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
 - 【公测中】支持通过外部 [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) 访问 Elasticsearch，简化外表创建等过程。
 - 【公测中】支持 [Paimon catalog](../data_source/catalog/paimon_catalog.md)，帮助用户使用 StarRocks 对流式数据进行湖分析。
 
