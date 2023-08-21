@@ -67,8 +67,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public static final long NEVER_REFRESH = -1;
     private final boolean enableListNameCache;
     protected final IHiveMetastore metastore;
-
-    private Map<HiveTableName, Long> lastAccessTimeMap;
+    private final Map<HiveTableName, Long> lastAccessTimeMap;
+    // Used to synchronize the refreshTable process
+    protected final Map<HiveTableName, String> tableNameLockMap;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
@@ -105,6 +106,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        this.tableNameLockMap = Maps.newConcurrentMap();
 
         databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -335,9 +337,19 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+    public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
                                                              boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
+        tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
+        String lockStr = tableNameLockMap.get(hiveTableName);
+        synchronized (lockStr) {
+            return refreshTableWithoutSync(hiveDbName, hiveTblName, hiveTableName, onlyCachedPartitions);
+        }
+    }
+
+    public List<HivePartitionName> refreshTableWithoutSync(String hiveDbName, String hiveTblName,
+                                                           HiveTableName hiveTableName,
+                                                           boolean onlyCachedPartitions) {
         Table updatedTable;
         try {
             updatedTable = loadTable(hiveTableName);
