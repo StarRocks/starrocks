@@ -102,6 +102,28 @@ jobs:
           echo "You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
+  behavior-check:
+    runs-on: ubuntu-latest
+    if: >
+      !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
+    steps:
+      - name: Behavior Changed
+        if: >
+          contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 'behavior_changed'
+
+      - name: Behavior Changed
+        if: >
+          always() && 
+          contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
+          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior') &&
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 'behavior_changed'
+
   automerge-check:
     runs-on: ubuntu-latest
     needs: backport-check
