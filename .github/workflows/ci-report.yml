@@ -263,7 +263,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
         with:
-          check_name: 'BE UT Coverage Report'
+          check_name: 'BE UT Report'
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
