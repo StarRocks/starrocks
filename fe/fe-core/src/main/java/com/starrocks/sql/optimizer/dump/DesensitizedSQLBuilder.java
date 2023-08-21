@@ -544,8 +544,8 @@ public class DesensitizedSQLBuilder {
             } else if (column.getDefaultValue() != null && column.getPrimitiveType() != PrimitiveType.HLL &&
                     column.getPrimitiveType() != PrimitiveType.BITMAP) {
                 sb.append("DEFAULT \"").append(column.getDefaultValue()).append("\" ");
-            } else if (column.isMaterializedColumn()) {
-                sb.append("AS ").append(visit(column.getMaterializedColumnExpr()));
+            } else if (column.isGeneratedColumn()) {
+                sb.append("AS ").append(visit(column.getGeneratedColumnExpr()));
             }
             return sb.toString();
         }

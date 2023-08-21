@@ -84,15 +84,15 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final Map<String, Expr> defineExprs;
-    private final TAlterTabletMaterializedColumnReq materializedColumnReq;
+    private final TAlterTabletMaterializedColumnReq generatedColumnReq;
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
                                                     int baseSchemaHash, long version, long jobId,
-                                                    TAlterTabletMaterializedColumnReq materializedColumnReq) {
+                                                    TAlterTabletMaterializedColumnReq generatedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0, materializedColumnReq);
+                null, TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
@@ -114,7 +114,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId, TAlterTabletMaterializedColumnReq materializedColumnReq) {
+                             long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -132,7 +132,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         this.tabletType = tabletType;
         this.txnId = txnId;
 
-        this.materializedColumnReq = materializedColumnReq;
+        this.generatedColumnReq = generatedColumnReq;
     }
 
     public long getBaseTabletId() {
@@ -176,9 +176,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.addToMaterialized_view_params(mvParam);
             }
         }
-        req.setMaterialized_column_req(materializedColumnReq);
+        req.setMaterialized_column_req(generatedColumnReq);
 
-        // TODO: merge `materializedColumnReq`'s query options into this later.
+        // TODO: merge `generatedColumnReq`'s query options into this later.
         if (defineExprs != null && defineExprs.size() > 0) {
             // we need this thing, otherwise some expr evalution will fail in BE
             TQueryGlobals queryGlobals = new TQueryGlobals();
