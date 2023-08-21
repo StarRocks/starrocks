@@ -411,7 +411,8 @@ jobs:
 
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
-    needs: INFO
+    needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
+    if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
