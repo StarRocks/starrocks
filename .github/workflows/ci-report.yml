@@ -214,7 +214,8 @@ jobs:
     needs: INFO
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
-      branch: ${{ needs.INFO.outputs.BASE_REF }}
+      BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: CLEAN
         run: |
@@ -227,18 +228,24 @@ jobs:
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Download BE UT XML
         id: download-ut-xml
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/UT-Report/${PR_NUMBER}
+          oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/ASAN/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
-            mkdir be && cd be
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . || true
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . || true
+            cd be
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . -f 1>/dev/null
+            echo "base_version=`cat base_version.txt`" >> $GITHUB_OUTPUT
           else
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
@@ -251,7 +258,7 @@ jobs:
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v3
         id: publish_report
-        if: steps.download-ut-xml.outputs.size != '0'
+        if: steps.download-ut-xml.outcome == 'success' && steps.download-ut-xml.outputs.size != '0'
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -262,6 +269,13 @@ jobs:
           commit: ${{ github.event.workflow_run.head_sha }}
           report_paths: ./be/be_ut_coverage.xml
 
+      - name: Checkout PR Code
+        env:
+          CODE_PATH: ${{ github.workspace }}
+          BASE_VERSION: ${{ steps.download-ut-xml.outputs.base_version }}
+        run: |
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
+
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.publish_report.outcome == 'success'
@@ -271,16 +285,29 @@ jobs:
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          if [[ -e "${be_path}/diff.txt" ]]; then
-            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${be_path}/be_ut_coverage.xml --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
-              --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
-              -d ${be_path}/diff.txt -dt file
-          else
-            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.PAT }} --pr ${PR_NUMBER} \
-              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
-          fi
+          java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            --cover ${be_path}/be_ut_coverage.xml --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
+            --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
+            -d ${be_path}/diff.txt -dt file
+
+      # total coverage
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/be/be_ut_coverage.xml
+          dry_run: false
+          name: be-total
+          fail_ci_if_error: false
+          verbose: true
+          override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
+          override_branch: ${{ needs.INFO.outputs.BASE_REF }}
+          override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
