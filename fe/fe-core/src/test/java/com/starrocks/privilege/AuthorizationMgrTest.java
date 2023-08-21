@@ -1752,45 +1752,51 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
         new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 "hive_catalog_1", PrivilegeType.CREATE_DATABASE);
-
-        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        UserPrivilegeCollectionV2 userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
-
         Assert.assertThrows(AccessDeniedException.class, () ->
                 new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                         "hive_catalog_1", PrivilegeType.USAGE));
-        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
-        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
-                Lists.newArrayList("hive_catalog_1"));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_upgrade_priv_2", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant create table on database db to test_upgrade_priv_2", ctx), ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
-        userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
         Assert.assertThrows(AccessDeniedException.class, () ->
                 new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                         "hive_catalog_1", PrivilegeType.USAGE));
-        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
-        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
-                Lists.newArrayList("hive_catalog_1"));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user test_upgrade_priv_3", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on table db.tbl to test_upgrade_priv_3", ctx), ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
-        userPrivilegeCollectionV2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
-
         Assert.assertThrows(AccessDeniedException.class, () ->
                 new NativeAccessControl().checkCatalogAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                         "hive_catalog_1", PrivilegeType.USAGE));
-        authorizationMgr.provider.upgradePrivilegeCollection(userPrivilegeCollectionV2, (short) 1, (short) 1);
-        authorizationMgr.checkAction(userPrivilegeCollectionV2, ObjectType.CATALOG, PrivilegeType.USAGE,
+
+
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        masterGlobalStateMgr.saveRBACPrivilege(image.getDataOutputStream());
+        masterGlobalStateMgr.loadRBACPrivilege(image.getDataInputStream());
+
+        AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        UserPrivilegeCollectionV2 up1 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv", "%"));
+        UserPrivilegeCollectionV2 up2 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_2", "%"));
+        UserPrivilegeCollectionV2 up3 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_upgrade_priv_3", "%"));
+
+        authorizationMgr.checkAction(up1, ObjectType.CATALOG, PrivilegeType.USAGE,
                 Lists.newArrayList("hive_catalog_1"));
+        authorizationMgr.checkAction(up2, ObjectType.CATALOG, PrivilegeType.USAGE,
+                Lists.newArrayList("hive_catalog_1"));
+        authorizationMgr.checkAction(up3, ObjectType.CATALOG, PrivilegeType.USAGE,
+                Lists.newArrayList("hive_catalog_1"));
+
+        masterGlobalStateMgr.saveRBACPrivilege(image.getDataOutputStream());
+        masterGlobalStateMgr.loadRBACPrivilege(image.getDataInputStream());
     }
 }

@@ -1,8 +1,8 @@
 # Build toolchains on centos7, dev-env image can be built based on this image for centos7
-#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/centos7-toolchains.Dockerfile -t toolchains-centos7:latest docker/dockerfiles/toolchains/
+#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-centos7.Dockerfile -t toolchains-centos7:latest docker/dockerfiles/toolchains/
 
-ARG GCC_INSTALL_HOME=/opt/gcc/usr
-ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz
+ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-11/root/usr
+ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-11.3.0/gcc-11.3.0.tar.gz
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG MAVEN_VERSION=3.6.3
 ARG MAVEN_INSTALL_HOME=/opt/maven

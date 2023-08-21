@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -71,9 +72,9 @@ public class UniqueConstraintTest {
     }
 
     @Test
-    public void testParseException() throws AnalysisException {
+    public void testParseException() {
         String constraintDescs = "hive_catalog.db1.table1.col1, col2, hive_catalog.db1.table2.col3";
-        exception.expect(AnalysisException.class);
+        exception.expect(SemanticException.class);
         exception.expectMessage("unique constraint column should be in same table");
         UniqueConstraint.parse(constraintDescs);
     }

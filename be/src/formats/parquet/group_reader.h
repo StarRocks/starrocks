@@ -49,6 +49,7 @@ struct GroupReaderParam {
         const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
 
         SlotId slot_id;
+        bool decode_needed;
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -111,7 +112,7 @@ public:
     void _process_columns_and_conjunct_ctxs();
 
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
-                                 std::vector<std::string>& sub_field_path, bool is_output_column);
+                                 std::vector<std::string>& sub_field_path, bool is_decode_needed);
 
     void _init_read_chunk();
 
