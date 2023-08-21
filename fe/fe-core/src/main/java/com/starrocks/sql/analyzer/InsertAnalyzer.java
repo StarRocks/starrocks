@@ -182,9 +182,9 @@ public class InsertAnalyzer {
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (insertStmt.getTargetColumnNames() == null) {
             if (table instanceof OlapTable) {
-                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutMaterializedColumn());
+                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns =
-                        ((OlapTable) table).getBaseSchemaWithoutMaterializedColumn().stream()
+                        ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
                             .map(Column::getName).collect(Collectors.toSet());
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
@@ -198,8 +198,8 @@ public class InsertAnalyzer {
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
                 }
-                if (column.isMaterializedColumn()) {
-                    throw new SemanticException("materialized column '%s' can not be specified", colName);
+                if (column.isGeneratedColumn()) {
+                    throw new SemanticException("generated column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
@@ -211,7 +211,7 @@ public class InsertAnalyzer {
         for (Column column : table.getBaseSchema()) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !column.isMaterializedColumn() &&
+                    !column.isAutoIncrement() && !column.isGeneratedColumn() &&
                     !mentionedColumns.contains(column.getName())) {
                 String msg = "";
                 for (String s : mentionedColumns) {

@@ -360,7 +360,7 @@ createTableStatement
 
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
-    (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)?
+    (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     (withMaskingPolicy)?
     comment?
     ;
@@ -375,7 +375,7 @@ defaultDesc
     : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
     ;
 
-materializedColumnDesc
+generatedColumnDesc
     : AS expression
     ;
 

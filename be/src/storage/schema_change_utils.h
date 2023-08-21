@@ -46,7 +46,7 @@ public:
 
     RuntimeState* get_runtime_state() { return _state; }
 
-    std::unordered_map<int, ExprContext*>* get_mc_exprs() { return &_mc_exprs; }
+    std::unordered_map<int, ExprContext*>* get_gc_exprs() { return &_gc_exprs; }
 
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
@@ -54,12 +54,12 @@ public:
     bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema, const Schema& new_schema,
                          MemPool* mem_pool);
 
-    Status fill_materialized_columns(ChunkPtr& new_chunk);
+    Status fill_generated_columns(ChunkPtr& new_chunk);
 
     void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
 
-    Status append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
-                                       const std::vector<uint32_t>& all_ref_columns_ids, int base_schema_columns);
+    Status append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
+                                    const std::vector<uint32_t>& all_ref_columns_ids, int base_schema_columns);
 
     const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
     std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
@@ -77,7 +77,7 @@ private:
     ObjectPool _obj_pool;
     RuntimeState* _state = nullptr;
     // columnId -> expr
-    std::unordered_map<int, ExprContext*> _mc_exprs;
+    std::unordered_map<int, ExprContext*> _gc_exprs;
 
     bool _has_mv_expr_context{false};
     // base table's slot_id to index mapping
