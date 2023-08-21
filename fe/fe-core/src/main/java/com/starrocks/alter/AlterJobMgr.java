@@ -102,6 +102,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -981,6 +982,10 @@ public class AlterJobMgr {
                 String.format("based table %s swapped", origTblName));
         LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
                 String.format("based table %s swapped", newTblName));
+        MetadataMgr.inactiveViews(
+                Lists.newArrayList(new TableName(db.getOriginName(), newTblName),
+                        new TableName(db.getOriginName(), origTblName)),
+                "table [" + origTblName + "] swapped with table [" + newTblName + "]");
 
         swapTableInternal(db, origTable, olapNewTbl);
 
