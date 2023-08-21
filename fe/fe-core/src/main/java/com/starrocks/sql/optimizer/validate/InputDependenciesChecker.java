@@ -77,7 +77,6 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         private void checkOptWithoutChild(OptExpression optExpression) {
             RowOutputInfo rowOutputInfo = optExpression.getRowOutputInfo();
             Operator operator = optExpression.getOp();
-            // only need check operator with projection
             if (operator instanceof LogicalScanOperator || operator instanceof PhysicalScanOperator
                     || operator instanceof LogicalValuesOperator || operator instanceof PhysicalValuesOperator) {
                 ColumnRefSet inputCols = ColumnRefSet.createByIds(rowOutputInfo.getOriginalColOutputInfo().keySet());
@@ -92,7 +91,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
                     usedCols.except(col.getColumnRef().getUsedColumns());
                 }
-                checkInputCols(inputCols, rowOutputInfo.getUsedColumnRefSet(), optExpression);
+                checkInputCols(inputCols, usedCols, optExpression);
             }
         }
 
