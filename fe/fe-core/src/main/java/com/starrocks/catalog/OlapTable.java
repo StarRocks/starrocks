@@ -195,7 +195,7 @@ public class OlapTable extends Table {
         /* This state means table is updating table meta during alter operation(SCHEMA_CHANGE
          * or ROLLUP).
          * The query plan which is generate during this state is invalid because the meta
-         * during the creation of the logical plan and the physical plan might be inconsistent. 
+         * during the creation of the logical plan and the physical plan might be inconsistent.
         */
         UPDATING_META
     }
@@ -958,7 +958,7 @@ public class OlapTable extends Table {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
-    
+
             if (chooseBackendsArbitrary) {
                 backendsPerBucketSeq = Lists.newArrayList();
             }
@@ -967,7 +967,7 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-    
+
                 // replicas
                 List<Long> beIds;
                 if (chooseBackendsArbitrary) {
@@ -1005,7 +1005,7 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
-    
+
                 // replicas
                 List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
@@ -2891,7 +2891,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             return -1;
         }
-        return tableProperty.getCompressionLevel();   
+        return tableProperty.getCompressionLevel();
     }
 
     public void setPartitionLiveNumber(int number) {
