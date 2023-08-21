@@ -37,6 +37,7 @@
 #include "common/config.h"
 #include "data_consumer.h"
 #include "runtime/routine_load/data_consumer_group.h"
+#include "util/await.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -163,13 +164,17 @@ Status DataConsumerPool::start_bg_worker() {
 #endif
 
         uint32_t interval = 60;
+        Awaitility await;
+        // timeout in `interval` seconds and check every 200ms
+        await.timeout(interval * 1000L * 1000).interval(200 * 1000);
         while (true) {
             if (*is_closed) {
                 return;
             }
 
             _clean_idle_consumer_bg();
-            sleep(interval);
+            // block until timeout or *is_closed is true
+            await.until([&is_closed] { return *is_closed; });
         }
     });
     Thread::set_thread_name(_clean_idle_consumer_thread, "clean_idle_cm");
