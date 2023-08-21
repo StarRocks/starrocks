@@ -1541,4 +1541,28 @@ public class CreateTableTest {
                 ");";
         Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
     }
+
+    @Test
+    public void testPrimaryKeyNotSupportCoolDown() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.`primary1_table_not support_cool_down`\n" +
+                                "             ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "             primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "             PARTITION BY range(k1)\n" +
+                                "             (\n" +
+                                "                 PARTITION p1 VALUES LESS THAN (\"2021-01-02\"),\n" +
+                                "                 PARTITION p2 VALUES LESS THAN (\"2021-08-18\"),\n" +
+                                "                 PARTITION p3 VALUES LESS THAN (\"2022-08-17\"),\n" +
+                                "                 PARTITION p4 VALUES LESS THAN (\"2022-08-18\"),\n" +
+                                "                 PARTITION p5 VALUES LESS THAN (\"2022-08-19\"),\n" +
+                                "                 PARTITION p6 VALUES LESS THAN (\"2023-08-18\"),\n" +
+                                "                 PARTITION p7 VALUES LESS THAN (\"2024-08-18\")\n" +
+                                "             ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "  PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 year\");"
+                ));
+    }
 }
