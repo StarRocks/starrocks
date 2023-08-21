@@ -59,6 +59,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
+#include "util/await.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -533,6 +534,9 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
 
 void FragmentMgr::cancel_worker() {
     LOG(INFO) << "FragmentMgr cancel worker start working.";
+    Awaitility await;
+    // timeout in 1 second and check every 200ms
+    await.timeout(1000 * 1000).interval(200 * 1000);
     while (!_stop) {
         std::vector<TUniqueId> to_delete;
         DateTimeValue now = DateTimeValue::local_time();
@@ -549,8 +553,8 @@ void FragmentMgr::cancel_worker() {
             LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
 
-        // check every 1 seconds
-        sleep(1);
+        // block until timeout or _stop is true
+        await.until([this] { return _stop; });
     }
     LOG(INFO) << "FragmentMgr cancel worker is going to exit.";
 }
