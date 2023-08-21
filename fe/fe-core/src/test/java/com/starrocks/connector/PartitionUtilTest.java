@@ -70,6 +70,21 @@ public class PartitionUtilTest {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", HiveMetaClient.HUDI_PARTITION_NULL_VALUE), partColumns, Table.TableType.HUDI);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("1", res.get(0));
+        Assert.assertEquals("a", res.get(1));
+        Assert.assertEquals("3.0", res.get(2));
+        Assert.assertEquals(HiveMetaClient.HUDI_PARTITION_NULL_VALUE, res.get(3));
+
+
+        partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns, Table.TableType.HUDI);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+        res = PartitionUtil.fromPartitionKey(partitionKey);
+        Assert.assertEquals("1", res.get(0));
+        Assert.assertEquals("a", res.get(1));
+        Assert.assertEquals("3.0", res.get(2));
+        Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, res.get(3));
     }
 
     @Test
