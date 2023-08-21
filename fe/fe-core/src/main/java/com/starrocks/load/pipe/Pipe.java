@@ -73,6 +73,7 @@ public class Pipe implements GsonPostProcessable {
 
     public static final int DEFAULT_POLL_INTERVAL = 10;
     public static final long DEFAULT_BATCH_SIZE = 1 << 30;
+    public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
     private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
@@ -144,14 +145,21 @@ public class Pipe implements GsonPostProcessable {
             switch (key.toLowerCase()) {
                 case PipeAnalyzer.PROPERTY_POLL_INTERVAL: {
                     this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_POLL_INTERVAL));
+                    break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
                     pipeSource.setAutoIngest(
                             VariableMgr.parseBooleanVariable(properties.get(PipeAnalyzer.PROPERTY_AUTO_INGEST)));
+                    break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
                     pipeSource.setBatchSize(
                             ParseUtil.parseDataVolumeStr(properties.get(PipeAnalyzer.PROPERTY_BATCH_SIZE)));
+                    break;
+                }
+                case PipeAnalyzer.PROPERTY_BATCH_FILES: {
+                    pipeSource.setBatchFiles(Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_BATCH_FILES)));
+                    break;
                 }
                 default: {
                     // task execution variables
@@ -226,7 +234,7 @@ public class Pipe implements GsonPostProcessable {
         GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         long dbId = getPipeId().getDbId();
         List<PipeFileRecord> loadingFiles =
-                pipeSource.getFileListRepo().listFilesByState(FileListRepo.PipeFileState.LOADING);
+                pipeSource.getFileListRepo().listFilesByState(FileListRepo.PipeFileState.LOADING, -1);
 
         if (CollectionUtils.isEmpty(loadingFiles)) {
             recovered = true;

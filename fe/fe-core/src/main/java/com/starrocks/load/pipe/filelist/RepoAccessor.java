@@ -48,10 +48,10 @@ public class RepoAccessor {
         }
     }
 
-    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state) {
+    public List<PipeFileRecord> listFilesByState(long pipeId, FileListRepo.PipeFileState state, long limit) {
         List<PipeFileRecord> res = null;
         try {
-            String sql = buildListFileByState(pipeId, state);
+            String sql = buildListFileByState(pipeId, state, limit);
             List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
@@ -142,10 +142,12 @@ public class RepoAccessor {
         return FileListTableRepo.SELECTED_STAGED_FILES + where;
     }
 
-    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state) {
-        String sql = String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
-                pipeId, Strings.quote(state.toString()));
-        return sql;
+    protected String buildListFileByState(long pipeId, FileListRepo.PipeFileState state, long limit) {
+        return limit <= 0 ?
+                String.format(FileListTableRepo.SELECT_FILES_BY_STATE,
+                        pipeId, Strings.quote(state.toString())) :
+                String.format(FileListTableRepo.SELECT_FILES_BY_STATE_WITH_LIMIT,
+                        pipeId, Strings.quote(state.toString()), limit);
     }
 
     protected String buildDeleteByPipe(long pipeId) {

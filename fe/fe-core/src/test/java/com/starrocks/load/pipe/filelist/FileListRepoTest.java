@@ -150,7 +150,7 @@ public class FileListRepoTest {
         Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1", sql);
 
         // list unloaded files
-        sql = RepoAccessor.getInstance().buildListFileByState(1, FileListRepo.PipeFileState.UNLOADED);
+        sql = RepoAccessor.getInstance().buildListFileByState(1, FileListRepo.PipeFileState.UNLOADED, 0);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
@@ -243,8 +243,8 @@ public class FileListRepoTest {
         Assert.assertTrue(accessor.listAllFiles().isEmpty());
 
         // listUnloadedFiles
-        Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED).isEmpty());
-        Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED).isEmpty());
+        Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+        Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
 
         // selectStagedFiles
         PipeFileRecord record = new PipeFileRecord();

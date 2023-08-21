@@ -261,7 +261,7 @@ public class PipeManagerTest {
             }
 
             @Mock
-            public List<PipeFileRecord> listFilesByState(FileListRepo.PipeFileState state) {
+            public List<PipeFileRecord> listFilesByState(FileListRepo.PipeFileState state, long limit) {
                 return records.stream().filter(x -> x.getLoadState().equals(state)).collect(Collectors.toList());
             }
 
@@ -308,7 +308,7 @@ public class PipeManagerTest {
         FilePipeSource source = (FilePipeSource) p1.getPipeSource();
 
         FileListRepo repo = source.getFileListRepo();
-        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
+        Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
     }
 
     @Test
@@ -368,7 +368,7 @@ public class PipeManagerTest {
             AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser("alter pipe p3 retry all", ctx);
             p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
             List<PipeFileRecord> unloadedFiles =
-                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assert.assertEquals(1, unloadedFiles.size());
         }
     }
@@ -611,6 +611,8 @@ public class PipeManagerTest {
     public void testProperty() throws Exception {
         createPipe("create pipe p_batch_size properties('batch_size'='10GB') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_batch_files properties('batch_files'='100') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         createPipe("create pipe p_poll_interval properties('poll_interval'='100') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         createPipe("create pipe p_auto_ingest properties('auto_ingest'='false') " +
@@ -706,7 +708,7 @@ public class PipeManagerTest {
             Assert.assertFalse(pipe.isRunnable());
 
             pipe.recovery();
-            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR).size());
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
             Assert.assertTrue(pipe.isRecovered());
             Assert.assertTrue(pipe.isRunnable());
         }
@@ -714,7 +716,7 @@ public class PipeManagerTest {
         // recover when transaction committed
         {
             FileListRepo repo = pipe.getPipeSource().getFileListRepo();
-            repo.updateFileState(repo.listFilesByState(FileListRepo.PipeFileState.ERROR),
+            repo.updateFileState(repo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0),
                     FileListRepo.PipeFileState.LOADING, "insert-label");
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
@@ -731,7 +733,7 @@ public class PipeManagerTest {
             Assert.assertFalse(pipe.isRunnable());
 
             pipe.recovery();
-            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED).size());
+            Assert.assertEquals(1, repo.listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
             Assert.assertTrue(pipe.isRecovered());
             Assert.assertTrue(pipe.isRunnable());
         }
@@ -739,12 +741,14 @@ public class PipeManagerTest {
 
     @Test
     public void testInspectPipes() throws Exception {
-        ctx.setDatabase(PIPE_TEST_DB);
+        ConnectContext newCtx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        newCtx.setDatabase(PIPE_TEST_DB);
+        newCtx.setThreadLocalInfo();
         createPipe("create pipe p_inspect as insert into tbl " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')");
 
         String sql = "select inspect_all_pipes()";
-        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
         Assert.assertTrue(plan.contains("p_inspect"));
     }
 }

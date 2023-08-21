@@ -37,6 +37,10 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String FILE_LIST_TABLE_NAME = "pipe_file_list";
     protected static final String FILE_LIST_FULL_NAME = FILE_LIST_DB_NAME + "." + FILE_LIST_TABLE_NAME;
 
+    // Split the records into batches, to avoid build a tremendous SQL
+    public static final int SELECT_BATCH_SIZE = 20;
+    public static final int WRITE_BATCH_SIZE = 2000;
+
     // NOTE: why not use the (pipe_id, file_name, file_version) as primary key since it's unique
     // Because current primary key implementation limit the length to 128
     protected static final String FILE_LIST_TABLE_CREATE =
@@ -70,6 +74,9 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
+    protected static final String SELECT_FILES_BY_STATE_WITH_LIMIT =
+            SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s LIMIT %d";
+
     protected static final String UPDATE_FILE_STATE =
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `error_info` = %s WHERE ";
 
@@ -88,19 +95,16 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE `pipe_id` = %d";
 
     @Override
-    public List<PipeFileRecord> listFilesByState(PipeFileState state) {
-        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state);
+    public List<PipeFileRecord> listFilesByState(PipeFileState state, long limit) {
+        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state, limit);
     }
 
     @Override
     public void stageFiles(List<PipeFileRecord> records) {
-        // Split the records into batches, to avoid build a tremendous SQL
-        final int selectBatchSize = 20;
-        final int writeBatchSize = 2000;
         records.forEach(file -> file.pipeId = pipeId.getId());
 
         List<PipeFileRecord> stagingFile = new ArrayList<>();
-        for (List<PipeFileRecord> batch : ListUtils.partition(records, selectBatchSize)) {
+        for (List<PipeFileRecord> batch : ListUtils.partition(records, SELECT_BATCH_SIZE)) {
             List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(batch);
             List<PipeFileRecord> newFiles = ListUtils.subtract(batch, stagedFiles);
             if (CollectionUtils.isEmpty(newFiles)) {
@@ -108,7 +112,7 @@ public class FileListTableRepo extends FileListRepo {
             }
             stagingFile.addAll(newFiles);
 
-            if (stagingFile.size() >= writeBatchSize) {
+            if (stagingFile.size() >= WRITE_BATCH_SIZE) {
                 RepoAccessor.getInstance().addFiles(stagingFile);
                 LOG.info("stage {} files into file-list, pipe={}, newFiles={}",
                         stagingFile.size(), pipeId, stagingFile);

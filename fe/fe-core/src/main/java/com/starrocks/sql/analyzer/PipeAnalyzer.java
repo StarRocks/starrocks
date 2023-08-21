@@ -54,12 +54,14 @@ public class PipeAnalyzer {
     public static final String PROPERTY_AUTO_INGEST = "auto_ingest";
     public static final String PROPERTY_POLL_INTERVAL = "poll_interval";
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
+    public static final String PROPERTY_BATCH_FILES = "batch_files";
 
     public static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
+                    .add(PROPERTY_BATCH_FILES)
                     .build();
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -115,6 +117,18 @@ public class PipeAnalyzer {
                     if (value < 0) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                                 PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                    }
+                    break;
+                }
+                case PROPERTY_BATCH_FILES: {
+                    int value = -1;
+                    try {
+                        value = Integer.parseInt(valueStr);
+                    } catch (NumberFormatException ignored) {
+                    }
+                    if (value < 1 || value > 1024) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                PROPERTY_BATCH_FILES + " should in [1, 1024]");
                     }
                     break;
                 }
