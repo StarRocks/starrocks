@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.epack.alter.AlterJobExecutorEPack;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -58,7 +59,7 @@ import java.util.Map;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
-public class AlterMVJobExecutor extends AlterJobExecutor {
+public class AlterMVJobExecutor extends AlterJobExecutorEPack {
     @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
         String newMvName = clause.getNewTableName();

@@ -52,7 +52,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -279,9 +278,10 @@ public class MaterializedViewAnalyzer {
         /**
          * Retrieve all the tables from the input query statement and do normalization: if the query statement
          * contains views, retrieve the contained tables in the view recursively.
+         *
          * @param queryStatement : the input statement which need retrieve
          * @param context        : the session connect context
-         * @return               : Retrieve all the tables from the input query statement and do normalization.
+         * @return : Retrieve all the tables from the input query statement and do normalization.
          */
         private Map<TableName, Table> getNormalizedBaseTables(QueryStatement queryStatement, ConnectContext context) {
             Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
@@ -298,6 +298,7 @@ public class MaterializedViewAnalyzer {
         /**
          * Retrieve all the tables from the input query statement :
          * - if the query statement contains views, retrieve the contained tables in the view recursively.
+         *
          * @param queryStatement : the input statement which need retrieve
          * @param context        : the session connect context
          * @return
@@ -619,10 +620,11 @@ public class MaterializedViewAnalyzer {
 
         /**
          * Resolve the materialized view's partition expr's slot ref.
-         * @param slotRef           : the materialized view's partition expr's slot ref
-         * @param connectContext    : connect context of the current session.
-         * @param queryStatement    : the sub query statment that contains the partition column slot ref
-         * @return                  : return the resolved partition column slot ref.
+         *
+         * @param slotRef        : the materialized view's partition expr's slot ref
+         * @param connectContext : connect context of the current session.
+         * @param queryStatement : the sub query statment that contains the partition column slot ref
+         * @return : return the resolved partition column slot ref.
          */
         private Expr resolvePartitionExprOfSlotRef(SlotRef slotRef,
                                                    ConnectContext connectContext,
@@ -905,88 +907,12 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-<<<<<<< HEAD
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
-                                                        ConnectContext context) {
-            statement.getMvName().normalization(context);
-            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
-            final String newMvName = statement.getNewMvName();
-            if (newMvName != null) {
-                if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name " + newMvName,
-                            statement.getMvName().getPos());
-                }
-            } else if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
-                    throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
-                }
-                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-                    final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
-                    if (intervalLiteral != null) {
-                        long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
-                        if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value: " + step,
-                                    async.getPos());
-                        }
-                        final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
-                        try {
-                            RefreshTimeUnit.valueOf(unit);
-                        } catch (IllegalArgumentException e) {
-                            String msg =
-                                    String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
-                                            Arrays.asList(RefreshTimeUnit.values()));
-                            throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
-                        }
-                    }
-                }
-            } else if (statement.getModifyTablePropertiesClause() != null) {
-                TableName mvName = statement.getMvName();
-                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
-                if (db == null) {
-                    throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
-                }
-                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
-                if (table == null) {
-                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
-                }
-                if (!(table instanceof MaterializedView)) {
-                    throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
-                }
-            } else if (statement.getStatus() != null) {
-                String status = statement.getStatus();
-                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
-                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
-                }
-            } else if (statement.getSwapTable() != null) {
-                // skip
-            } else if (statement.getOps() != null) {
-                TableName mvName = statement.getMvName();
-                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
-                if (db == null) {
-                    throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
-                }
-                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
-                if (table == null) {
-                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
-                }
-                if (!(table instanceof MaterializedView)) {
-                    throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
-                }
-
-                AlterTableClauseVisitorEPack alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitorEPack();
-                alterTableClauseAnalyzerVisitor.setTable(table);
-                alterTableClauseAnalyzerVisitor.analyze(statement.getOps().get(0), context);
-            } else {
-                throw new SemanticException("Unsupported modification for materialized view");
-=======
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
             TableName mvName = statement.getMvName();
             MetaUtils.normalizationTableName(context, mvName);
             Table table = MetaUtils.getTable(statement.getMvName());
             if (!(table instanceof MaterializedView)) {
                 throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
->>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
             }
 
             AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor();

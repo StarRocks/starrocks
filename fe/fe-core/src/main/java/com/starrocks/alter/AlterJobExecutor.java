@@ -19,12 +19,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-<<<<<<< HEAD
 import com.starrocks.catalog.InternalCatalog;
-=======
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
->>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.AlterViewInfo;
@@ -40,10 +37,7 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
->>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -74,12 +68,8 @@ import org.apache.logging.log4j.Logger;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
-<<<<<<< HEAD
-    private static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
-    protected String catalog;
-=======
     protected static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
->>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
+    protected String catalog;
     protected Database db;
     protected Table table;
 

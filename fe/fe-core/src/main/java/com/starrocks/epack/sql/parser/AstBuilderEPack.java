@@ -43,8 +43,8 @@ import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -61,7 +61,6 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -161,11 +160,11 @@ public class AstBuilderEPack extends AstBuilder {
                 (AlterMaterializedViewStmt) super.visitAlterMaterializedViewStatement(context);
 
         if (context.applyMaskingPolicyClause() != null) {
-            AlterClause alterClause = (AlterClause) visit(context.applyMaskingPolicyClause());
-            alterMaterializedViewStmt.setOps(Collections.singletonList(alterClause));
+            AlterTableClause alterClause = (AlterTableClause) visit(context.applyMaskingPolicyClause());
+            alterMaterializedViewStmt.setAlterTableClause(alterClause);
         } else if (context.applyRowAccessPolicyClause() != null) {
-            AlterClause alterClause = (AlterClause) visit(context.applyRowAccessPolicyClause());
-            alterMaterializedViewStmt.setOps(Collections.singletonList(alterClause));
+            AlterTableClause alterClause = (AlterTableClause) visit(context.applyRowAccessPolicyClause());
+            alterMaterializedViewStmt.setAlterTableClause(alterClause);
         }
 
         return alterMaterializedViewStmt;
@@ -578,7 +577,6 @@ public class AstBuilderEPack extends AstBuilder {
         return new ShowClustersStmt(whName, createPos(context));
     }
 
-    
     // ---------------------------------------- Failover Group Statement ---------------------------------------------------
 
     @Override
@@ -592,10 +590,10 @@ public class AstBuilderEPack extends AstBuilder {
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
         Map<String, String> properties = getProperties(context.properties());
-        String comment = context.comment() == null ? null : 
+        String comment = context.comment() == null ? null :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
 
-        return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName, catalogNames, 
+        return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName, catalogNames,
                 databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
     }
 
@@ -691,6 +689,7 @@ public class AstBuilderEPack extends AstBuilder {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
         }
     }
+
     // add/drop be or cn with warehouse
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {

@@ -106,11 +106,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
         super.visitAlterMaterializedViewStatement(statement, context);
-        if (statement.getOps() != null) {
-            for (AlterClause alterClause : statement.getOps()) {
-                checkAlterClausePolicyApply(alterClause, context);
-            }
-        }
+        checkAlterClausePolicyApply(statement.getAlterTableClause(), context);
         return null;
     }
 
