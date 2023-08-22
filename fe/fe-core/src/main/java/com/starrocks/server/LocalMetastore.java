@@ -71,7 +71,6 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -2553,8 +2552,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         // PRIMARY_KEYS table does not support local migration.
                         if (dataProperty.getStorageMedium() == TStorageMedium.SSD
                                 && dataProperty.getCooldownTimeMs() < currentTimeMs
-                                && olapTable.getState() == OlapTable.OlapTableState.NORMAL
-                                && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                                && olapTable.getState() == OlapTable.OlapTableState.NORMAL) {
                             // expire. change to HDD.
                             // record and change when holding write lock
                             Multimap<Long, Long> multimap = changedPartitionsMap.get(dbId);
