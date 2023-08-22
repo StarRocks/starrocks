@@ -482,4 +482,42 @@ public class OrderByTest extends PlanTestBase {
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 1: v1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTopNFilter() throws Exception {
+        String sql = "select * from test_all_type_not_null order by t1a limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: t1a)");
+
+        // TopN filter only works in no-nullable column
+        sql = "select * from test_all_type order by t1a limit 10";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // only first order by column can use top n filter
+        sql = "select * from test_all_type_not_null order by t1a, t1b limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC, [2, SMALLINT, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+    }
+
+    @Test
+    public void testGroupByOrderBy() throws Exception {
+        String sql = "select v2,v3,v2 from t0 group by 1,2,3 order by 1,2,3";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC");
+    }
+>>>>>>> 7f775a769d ([BugFix] Fix orderby column duplicate check (#29594))
 }
