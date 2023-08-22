@@ -167,6 +167,7 @@ public class PostgresSchemaResolverTest {
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assert.assertEquals("\"test\".\"tbl1\"", table.getName());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
