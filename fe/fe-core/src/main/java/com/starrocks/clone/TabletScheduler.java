@@ -56,6 +56,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -65,6 +66,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -1344,6 +1346,59 @@ public class TabletScheduler extends FrontendDaemon {
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
     }
 
+    /*
+     * The key idea for disk balance filter for primary key tablet is following:
+     * 1. Cross nodes balance is always schedulable.
+     * 2. Get the max last report tablets time of all backends.
+     * 3. For the primary key tablet, if the partition lastest visible version
+     *    time is larger than max last reported tablets, it means that the lastest
+     *    tablet info has not been reported, the tablet is unschedulable.
+     * 4. For the primary key tablet, get the max rowset creation time
+     *    of all replica which updated in tablets reported.
+     * 5. Check (now - maxRowsetCreationTime) is greater than Config.primary_key_disk_schedule_time
+    */
+    private List<TabletSchedCtx> filterUnschedulableTablets(List<TabletSchedCtx> alternativeTablets) {
+        List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
+        for (TabletSchedCtx schedCtx : alternativeTablets) {
+            long dbId = schedCtx.getDbId();
+            long partitionId = schedCtx.getPartitionId();
+            long tableId = schedCtx.getTblId();
+            long tabletId = schedCtx.getTabletId();
+            long indexId = schedCtx.getIndexId();
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            Table tbl = null;
+            db.readLock();
+            try {
+                tbl = db.getTable(tableId);
+            } finally {
+                db.readUnlock();
+            }
+
+            if (!(tbl instanceof OlapTable)) {
+                newAlternativeTablets.add(schedCtx);
+                continue;
+            }
+
+            if (schedCtx.getSrcReplica().getBackendId() != schedCtx.getDestBackendId()) {
+                // schedulable if the dest node is different
+                newAlternativeTablets.add(schedCtx);
+                continue;
+            }
+
+            OlapTable olaptable = (OlapTable) tbl;
+            if (ReportHandler.migratableTablet(db, olaptable, partitionId, indexId, tabletId)) {
+                newAlternativeTablets.add(schedCtx);
+            }
+        }
+
+        return newAlternativeTablets;
+    }
+
     /**
      * Try to select some alternative tablets for balance. Add them to pendingTablets with priority LOW,
      * and waiting to be scheduled.
@@ -1354,7 +1409,8 @@ public class TabletScheduler extends FrontendDaemon {
             return;
         }
 
-        List<TabletSchedCtx> alternativeTablets = rebalancer.selectAlternativeTablets();
+        List<TabletSchedCtx> tmpAlternativeTablets = rebalancer.selectAlternativeTablets();
+        List<TabletSchedCtx> alternativeTablets = filterUnschedulableTablets(tmpAlternativeTablets);
         for (TabletSchedCtx tabletCtx : alternativeTablets) {
             addTablet(tabletCtx, false);
         }
