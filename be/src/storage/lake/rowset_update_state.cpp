@@ -451,7 +451,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 }
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet) {
+                                          Tablet* tablet, std::vector<std::string>* orphan_files) {
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
     auto root_path = tablet->metadata_root_location();
@@ -512,6 +512,8 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     // rename segment file
     for (int i = 0; i < rowset_meta->segments_size(); i++) {
         if (need_rename[i]) {
+            // after rename, add old segment to orphan files, for gc later.
+            orphan_files->push_back(rowset_meta->segments(i));
             rowset_meta->set_segments(i, op_write.rewrite_segments(i));
         }
     }
