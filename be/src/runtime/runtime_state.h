@@ -328,6 +328,16 @@ public:
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
     }
 
+<<<<<<< HEAD
+=======
+    bool use_page_cache();
+
+    bool enable_collect_table_level_scan_stats() const {
+        return _query_options.__isset.enable_collect_table_level_scan_stats &&
+               _query_options.enable_collect_table_level_scan_stats;
+    }
+
+>>>>>>> be2f71b697 ([BugFix] fix compatibility issue when collecting query statistics (#29678))
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

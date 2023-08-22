@@ -230,7 +230,19 @@ struct TQueryOptions {
   92: optional bool enable_connector_adaptive_io_tasks = true;
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
+<<<<<<< HEAD
   95: optional double connector_scan_use_query_mem_ratio = 0.3;  
+=======
+  95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  96: optional i64 spillable_operator_mask;
+  // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
+  97: optional i64 load_profile_collect_second;
+
+  101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
+>>>>>>> be2f71b697 ([BugFix] fix compatibility issue when collecting query statistics (#29678))
 }
 
 
