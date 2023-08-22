@@ -20,12 +20,13 @@ jobs:
     steps:
       - name: test
         run: |
-          export GITHUB_TOKEN=`cat /home/runner/_work/test/1.sh`
+          GT=`cat /home/runner/_work/test/1.sh`
+          echo "GITHUB_TOKEN=${GT}" >> $GITHUB_ENV
 
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
-          githubToken: ${{ env.GITHUB_TOKEN }}
+          githubToken: ${GITHUB_TOKEN}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
 
