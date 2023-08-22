@@ -76,8 +76,8 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             if (one == null) {
                 return binaryPredicate;
             }
-            Optional<ConstantOperator> pre = constantOperator.previousValue();
-            Optional<ConstantOperator> next = constantOperator.nextValue();
+            Optional<ConstantOperator> pre = constantOperator.predecessor();
+            Optional<ConstantOperator> successor = constantOperator.successor();
             switch (binary.getBinaryType()) {
                 case LT:
                     if (!pre.isPresent()) {
@@ -85,21 +85,24 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     }
                     return new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get());
                 case GT:
-                    if (!next.isPresent()) {
+                    if (!successor.isPresent()) {
                         return ConstantOperator.FALSE;
                     }
-                    return new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), next.get());
+                    return new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), successor.get());
+                    /*
                 case EQ:
                     BinaryPredicateOperator gePart =
                             new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), constantOperator);
                     BinaryPredicateOperator lePart =
                             new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), constantOperator);
                     return Utils.compoundAnd(gePart, lePart);
+
+                     */
                 case NE:
                     BinaryPredicateOperator left = pre.isPresent() ?
                             new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get()) : null;
-                    BinaryPredicateOperator right = next.isPresent() ?
-                            new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), next.get()) : null;
+                    BinaryPredicateOperator right = successor.isPresent() ?
+                            new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), successor.get()) : null;
 
                     return Utils.compoundOr(left, right);
                 default:

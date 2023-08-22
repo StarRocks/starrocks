@@ -98,8 +98,8 @@ public class ColumnRangePredicate extends RangePredicate {
                     continue;
                 } else if (range.lowerBoundType() == BoundType.CLOSED
                         && range.upperBoundType() == BoundType.OPEN
-                        && range.lowerEndpoint().nextValue().isPresent()
-                        && range.upperEndpoint().equals(range.lowerEndpoint().nextValue().get())) {
+                        && range.lowerEndpoint().successor().isPresent()
+                        && range.upperEndpoint().equals(range.lowerEndpoint().successor().get())) {
                     orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
                     continue;
                 }

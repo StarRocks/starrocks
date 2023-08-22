@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.Utils;
@@ -90,6 +91,7 @@ public class OrRangePredicate extends RangePredicate {
                         arguments.add(predicate.getChild(1));
                     } else {
                         // must be InPredicateOperator
+                        Preconditions.checkState(predicate instanceof InPredicateOperator);
                         arguments.addAll(predicate.getChildren().subList(1, predicate.getChildren().size()));
                     }
                 }
