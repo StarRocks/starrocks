@@ -403,7 +403,7 @@ public class TaskManagerTest {
     @Test
     public void testForceGC() {
         TaskRunManager taskRunManager = new TaskRunManager();
-        for (int i = 0; i < 100; i ++) {
+        for (int i = 0; i < 100; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setQueryId("test" + i);
             taskRunStatus.setTaskName("test" + i);
@@ -412,6 +412,7 @@ public class TaskManagerTest {
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
         Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getAllHistory().size());
+        Config.task_runs_max_history_number = 10000;
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
