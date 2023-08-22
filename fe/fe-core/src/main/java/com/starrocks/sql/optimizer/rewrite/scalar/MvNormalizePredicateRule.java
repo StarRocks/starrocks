@@ -109,15 +109,6 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                 default:
                     break;
             }
-        } else {
-            // Normalize left and right, eg: `a < b` should be the same with `b > a`.
-            ScalarOperator l = binary.getChild(0);
-            ScalarOperator r = binary.getChild(1);
-            if (SCALAR_OPERATOR_COMPARATOR.compare(l, r) > 0) {
-                return binary.commutative();
-            } else {
-                return binaryPredicate;
-            }
         }
         return binaryPredicate;
     }
