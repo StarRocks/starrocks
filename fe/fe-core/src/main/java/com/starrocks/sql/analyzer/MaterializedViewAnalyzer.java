@@ -21,7 +21,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -57,7 +56,6 @@ import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -65,13 +63,11 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -100,7 +96,6 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -910,6 +905,7 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
                                                         ConnectContext context) {
             statement.getMvName().normalization(context);
@@ -983,7 +979,19 @@ public class MaterializedViewAnalyzer {
                 alterTableClauseAnalyzerVisitor.analyze(statement.getOps().get(0), context);
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
+=======
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
+            TableName mvName = statement.getMvName();
+            MetaUtils.normalizationTableName(context, mvName);
+            Table table = MetaUtils.getTable(statement.getMvName());
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
+>>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
             }
+
+            AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor();
+            alterTableClauseAnalyzerVisitor.setTable(table);
+            alterTableClauseAnalyzerVisitor.analyze(statement.getAlterTableClause(), context);
             return null;
         }
 

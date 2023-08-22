@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
-
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
-
+public class ManualRefreshSchemeDesc extends RefreshSchemeClause {
     public ManualRefreshSchemeDesc(MaterializedView.RefreshMoment moment, NodePosition pos) {
         super(MaterializedView.RefreshType.MANUAL, pos, moment);
     }
-
 }
 

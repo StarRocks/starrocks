@@ -23,12 +23,14 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -44,22 +46,27 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -96,6 +103,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         String newTableName = clause.getNewTableName();
         if (Strings.isNullOrEmpty(newTableName)) {
             throw new SemanticException("New Table name is not set");
+        }
+        if (table.getName().equals(newTableName)) {
+            throw new SemanticException("Same table name " + newTableName, clause.getPos());
         }
         FeNameFormat.checkTableName(newTableName);
         return null;
@@ -732,6 +742,42 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         final List<String> partitionNames = clause.getPartitionNames();
         if (partitionNames.stream().anyMatch(Strings::isNullOrEmpty)) {
             throw new SemanticException("there are empty partition name");
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitRefreshSchemeClause(RefreshSchemeClause refreshSchemeDesc, ConnectContext context) {
+        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
+            throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
+        }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
+            if (intervalLiteral != null) {
+                long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
+                if (step <= 0) {
+                    throw new SemanticException("Unsupported negative or zero step value: " + step,
+                            async.getPos());
+                }
+                final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
+                try {
+                    MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.RefreshTimeUnit.valueOf(unit);
+                } catch (IllegalArgumentException e) {
+                    String msg = String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
+                            Arrays.asList(MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor.RefreshTimeUnit.values()));
+                    throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, ConnectContext context) {
+        String status = clause.getStatus();
+        if (!AlterMaterializedViewStatusClause.SUPPORTED_MV_STATUS.contains(status)) {
+            throw new SemanticException("Unsupported modification for materialized view status:" + status);
         }
         return null;
     }

@@ -45,6 +45,11 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobExecutor;
+import com.starrocks.alter.AlterMVJobExecutor;
+>>>>>>> 1ab67549d4 (Refactor alter materialized view statement executor to eliminate code coupling (#29619))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -207,7 +212,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
@@ -2768,7 +2773,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionInfo baseDistribution = distributionDesc.toDistributionInfo(baseSchema);
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
-        RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
         if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
@@ -3218,7 +3223,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void alterMaterializedView(AlterMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        stateMgr.getAlterJobMgr().processAlterMaterializedView(stmt);
+        new AlterMVJobExecutor().process(stmt, ConnectContext.get());
     }
 
     private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)

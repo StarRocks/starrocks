@@ -15,6 +15,10 @@
 package com.starrocks.alter;
 
 public class AlterJobException extends RuntimeException {
+    public AlterJobException(String message) {
+        super(message);
+    }
+
     public AlterJobException(String message, Throwable e) {
         super(message, e);
     }

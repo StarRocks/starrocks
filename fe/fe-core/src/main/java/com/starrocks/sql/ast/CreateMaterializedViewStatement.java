@@ -50,7 +50,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     private boolean ifNotExists;
     private String comment;
-    private RefreshSchemeDesc refreshSchemeDesc;
+    private RefreshSchemeClause refreshSchemeDesc;
     private ExpressionPartitionDesc expressionPartitionDesc;
     private Map<String, String> properties;
     private QueryStatement queryStatement;
@@ -78,7 +78,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            String comment,
-                                           RefreshSchemeDesc refreshSchemeDesc,
+                                           RefreshSchemeClause refreshSchemeDesc,
                                            ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
@@ -144,11 +144,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.comment = comment;
     }
 
-    public RefreshSchemeDesc getRefreshSchemeDesc() {
+    public RefreshSchemeClause getRefreshSchemeDesc() {
         return refreshSchemeDesc;
     }
 
-    public void setRefreshSchemeDesc(RefreshSchemeDesc refreshSchemeDesc) {
+    public void setRefreshSchemeDesc(RefreshSchemeClause refreshSchemeDesc) {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 

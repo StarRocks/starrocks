@@ -50,7 +50,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -542,7 +542,7 @@ public class CreateMaterializedViewTest {
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
                 UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+        RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
         Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
     }
 
@@ -1275,7 +1275,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
             Assert.assertNotNull(asyncRefreshSchemeDesc.getStartTime());
@@ -1303,7 +1303,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -1324,7 +1324,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
