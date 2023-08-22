@@ -17,10 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Replace
     steps:
+      - name: test
+        run: |
+          export GITHUB_TOKEN=`cat /home/runner/_work/test/1.sh`
+
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          githubToken: ${GITHUB_TOKEN}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
 
