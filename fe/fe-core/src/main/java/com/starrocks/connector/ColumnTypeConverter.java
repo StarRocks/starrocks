@@ -514,7 +514,6 @@ public class ColumnTypeConverter {
             return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
         public Type visit(TinyIntType tinyIntType) {
             return ScalarType.createType(PrimitiveType.TINYINT);
         }
