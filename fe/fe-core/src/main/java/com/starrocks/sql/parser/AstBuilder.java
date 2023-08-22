@@ -120,6 +120,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -129,6 +130,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -269,7 +271,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ReorderColumnsClause;
@@ -1529,7 +1531,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
 
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
         ExpressionPartitionDesc expressionPartitionDesc = null;
         DistributionDesc distributionDesc = null;
@@ -1552,7 +1554,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (refreshSchemeDesc != null) {
                     throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("REFRESH"), clausePos);
                 }
-                refreshSchemeDesc = ((RefreshSchemeDesc) visit(desc.refreshSchemeDesc()));
+                refreshSchemeDesc = ((RefreshSchemeClause) visit(desc.refreshSchemeDesc()));
             }
 
             // process partition by
@@ -1652,35 +1654,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.AlterMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
-        String newMvName = null;
+        AlterTableClause alterTableClause = null;
+
         if (context.tableRenameClause() != null) {
-            newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
+            alterTableClause = (TableRenameClause) visit(context.tableRenameClause());
         }
+
         // process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() != null) {
-            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+            alterTableClause = ((RefreshSchemeClause) visit(context.refreshSchemeDesc()));
+            if (alterTableClause instanceof AsyncRefreshSchemeDesc) {
+                AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) alterTableClause;
+                checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
+            }
         }
-        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
-        }
-        ModifyTablePropertiesClause modifyTablePropertiesClause = null;
+
         if (context.modifyTablePropertiesClause() != null) {
-            modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
+            alterTableClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
         }
-        String status = null;
+
         if (context.statusDesc() != null) {
-            status = context.statusDesc().getText();
+            String status = context.statusDesc().getText();
+            alterTableClause = new AlterMaterializedViewStatusClause(status, createPos(context));
         }
         // swap table
-        SwapTableClause swapTableClause = null;
         if (context.swapTableClause() != null) {
-            swapTableClause = (SwapTableClause) visit(context.swapTableClause());
+            alterTableClause = (SwapTableClause) visit(context.swapTableClause());
         }
-        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
-                swapTableClause,
-                createPos(context));
+        return new AlterMaterializedViewStmt(mvName, alterTableClause, createPos(context));
     }
 
     @Override
