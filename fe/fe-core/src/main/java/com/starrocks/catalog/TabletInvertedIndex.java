@@ -856,11 +856,21 @@ public class TabletInvertedIndex {
     }
 
     public long getTabletCount() {
-        return this.tabletMetaMap.size();
+        readLock();
+        try {
+            return this.tabletMetaMap.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public long getReplicaCount() {
-        return this.replicaMetaTable.size();
+        readLock();
+        try {
+            return this.replicaMetaTable.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     // just for test
