@@ -1230,7 +1230,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
-    private boolean enableCollectTableLevelScanStats = false;
+    private boolean enableCollectTableLevelScanStats = true;
 
     private int exprChildrenLimit = -1;
 
