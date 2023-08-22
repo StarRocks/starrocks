@@ -141,8 +141,12 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.starrocks.StarRocksRepository;
+=======
+import com.starrocks.credential.CredentialUtil;
+>>>>>>> 555b4b8b7d ([Enhancement] Improve credential mask util (#29615))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -2863,10 +2867,16 @@ public class GlobalStateMgr {
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+<<<<<<< HEAD
             CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
+=======
+            CredentialUtil.maskCredential(clonedFileProperties);
+            addTableComment(sb, table);
+
+>>>>>>> 555b4b8b7d ([Enhancement] Improve credential mask util (#29615))
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");

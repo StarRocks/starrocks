@@ -100,7 +100,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -2608,7 +2608,7 @@ public class ShowExecutor {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
-        CloudCredentialUtil.maskCloudCredential(clonedConfig);
+        CredentialUtil.maskCredential(clonedConfig);
         // Properties
         createCatalogSql.append("PROPERTIES (")
                 .append(new PrintableMap<>(clonedConfig, " = ", true, true))
