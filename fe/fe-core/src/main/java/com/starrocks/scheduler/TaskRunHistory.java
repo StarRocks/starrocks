@@ -21,6 +21,7 @@ public class TaskRunHistory {
     }
 
     public void forceGC() {
+<<<<<<< HEAD
         if (historyDeque.size() >= Config.task_runs_max_history_number) {
             int startIndex = historyDeque.size() - Config.task_runs_max_history_number;
             int currentIndex = 0;
@@ -32,6 +33,12 @@ public class TaskRunHistory {
                 currentIndex++;
             }
         }
+=======
+        List<TaskRunStatus> allHistory = getAllHistory();
+        int startIndex = Config.task_runs_max_history_number;
+        allHistory.subList(startIndex, allHistory.size())
+                .forEach(taskRunStatus -> removeTask(taskRunStatus.getQueryId()));
+>>>>>>> 1af445d086 ([BugFix] Fix bug remove task_runs slow (#29621))
     }
 
     public long getTaskRunCount() {
