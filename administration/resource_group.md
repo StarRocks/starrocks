@@ -115,16 +115,18 @@ classifier D (user='Alice', query_type in ('insert','select')）
 
 ### 开启资源组
 
-通过设置相应会话变量开启 Pipeline 引擎以及资源组功能。
+要使用资源组，需通过设置相应会话变量启用 Pipeline 引擎。
 
 ```sql
+-- 在当前 Session 启用 Pipeline 引擎。
 SET enable_pipeline_engine = true;
-SET enable_resource_group = true;
+-- 全局启用 Pipeline 引擎。
+SET GLOBAL enable_pipeline_engine = true;
 ```
 
 > **说明**
 >
-> 如果需要设置全局变量，需要运行 `SET GLOBAL enable_resource_group = true;`。
+> 自 v3.1.0 起，默认启用资源组功能。会话变量 `enable_resource_group` 弃用。
 
 ### 创建资源组和分类器
 

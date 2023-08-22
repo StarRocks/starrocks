@@ -20,10 +20,10 @@ StarRocks 提供了两种预防工具处理大查询——资源组和查询队�
 
 资源组可以自动识别和终止大查询。在创建资源组时，您可以指定单个查询可以使用的 CPU 时间、内存使用量或 Scan 行数的上限。在命中资源组的所有查询中，任何要求更多资源的查询都将被拒绝执行并返回错误。详细信息，请参阅 [资源隔离](../administration/resource_group.md)。
 
-在创建资源组之前，执行以下语句启用资源组功能：
+在创建资源组之前，执行以下语句启用资源组功能依赖的 Pipeline 引擎功能：
 
 ```SQL
-SET GLOBAL enable_resource_group = true;
+SET GLOBAL enable_pipeline_engine = true;
 ```
 
 以下示例创建了一个名为 `bigQuery` 的资源组，将 CPU 时间上限限制为 `100` 秒，扫描行数上限为 `100000`，内存使用上限为 `1073741824` 字节（1 GB）：
