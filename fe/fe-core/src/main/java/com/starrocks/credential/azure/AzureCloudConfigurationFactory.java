@@ -17,7 +17,7 @@ package com.starrocks.credential.azure;
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 
 import java.util.Map;
 
@@ -104,6 +104,6 @@ public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
         if (path == null) {
             return new AzureStoragePath("", "");
         }
-        return CloudCredentialUtil.parseAzureStoragePath(path);
+        return CredentialUtil.parseAzureStoragePath(path);
     }
 }

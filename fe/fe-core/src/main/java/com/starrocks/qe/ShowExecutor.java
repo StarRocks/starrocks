@@ -104,7 +104,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
@@ -2901,7 +2901,7 @@ public class ShowExecutor {
             createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
         }
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
-        CloudCredentialUtil.maskCloudCredential(clonedConfig);
+        CredentialUtil.maskCredential(clonedConfig);
         // Properties
         createCatalogSql.append("PROPERTIES (")
                 .append(new PrintableMap<>(clonedConfig, " = ", true, true))
