@@ -207,12 +207,9 @@ public class MvRewriteTestBase {
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
 
-        cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts values(3, \"dept_name3\")");
+        cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100), (2, 1, \"emp_name1\", 120), (3, 1, " +
+                "\"emp_name1\", 150);");
+        cluster.runSql("test", "insert into depts values(1, \"dept_name1\"), (2, \"dept_name2\"), (3, \"dept_name3\")");
         cluster.runSql("test", "insert into dependents values(1, \"dependent_name1\")");
         cluster.runSql("test", "insert into locations values(1, \"location1\")");
         cluster.runSql("test", "insert into t0 values(1, 2, 3)");
@@ -233,12 +230,12 @@ public class MvRewriteTestBase {
                 "PARTITION p4 VALUES [(\"4\"), (\"5\")),\n" +
                 "PARTITION p5 VALUES [(\"5\"), (\"6\")),\n" +
                 "PARTITION p6 VALUES [(\"6\"), (\"7\")))\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 6\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
-        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)," +
-                " (1,3,1),(1,3,2),(1,3,3)\n" +
+        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)" +
+                " ,(1,3,1),(1,3,2),(1,3,3)\n" +
                 " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
                 " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 

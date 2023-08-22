@@ -494,7 +494,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                        !snapshotOlapTable.getPartitionNames().contains(partitionName));
+                        !snapshotOlapTable.getVisiblePartitionNames().contains(partitionName));
             }
         }
         if (!changedTablePartitionInfos.isEmpty()) {
@@ -780,7 +780,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // Force refresh
         if (force && start == null && end == null) {
             if (mvPartitionInfo instanceof SinglePartitionInfo) {
-                return materializedView.getPartitionNames();
+                return materializedView.getVisiblePartitionNames();
             } else {
                 return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
             }
@@ -790,7 +790,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvPartitionInfo instanceof SinglePartitionInfo) {
             // non-partitioned materialized view
             if (force || isNonPartitionedMVNeedToRefresh()) {
-                return materializedView.getPartitionNames();
+                return materializedView.getVisiblePartitionNames();
             }
         } else if (mvPartitionInfo instanceof ExpressionRangePartitionInfo) {
             // range partitioned materialized views
@@ -1032,9 +1032,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 if (snapshotTable.isOlapOrCloudNativeTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
+<<<<<<< HEAD
                     if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
                         Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
                         if (!snapShotOlapTable.getPartitionNames().equals(partitionNames)) {
+=======
+                    PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
+                    if (snapshotPartitionInfo instanceof SinglePartitionInfo) {
+                        Set<String> partitionNames = ((OlapTable) table).getVisiblePartitionNames();
+                        if (!snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames)) {
+>>>>>>> fd5e150560 (Only check visible partitiion names for materialized views (#29620))
                             // there is partition rename
                             return true;
                         }
@@ -1344,7 +1351,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // do nothing.
             } else {
                 if (table.isNativeTableOrMaterializedView()) {
-                    tableNamePartitionNames.put(table, ((OlapTable) table).getPartitionNames());
+                    tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
                 } else if (table.isHiveTable()) {
                     tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 } else if (table.isView()) {
