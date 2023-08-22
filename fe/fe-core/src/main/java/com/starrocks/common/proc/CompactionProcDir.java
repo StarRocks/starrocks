@@ -22,15 +22,22 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utils.RestClient;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 public class CompactionProcDir implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES;
+    private static final Logger LOG = LogManager.getLogger(CompactionProcDir.class);
 
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("RunningCompactionTasks").add("WaitingCompactionTasks");
+                .add("BackendId").add("TotalRunningNum").add("BaseRunningNum").add("CumuRunningNum")
+                .add("UpdateRunningNum").add("TotalWaitingNum").add("BaseWaitingNum").add("CumuWaitingNum")
+                .add("RunningDetails").add("WaitingDetails");
         TITLE_NAMES = builder.build();
     }
 
@@ -48,10 +55,40 @@ public class CompactionProcDir implements ProcNodeInterface {
         result.setNames(TITLE_NAMES);
 
         for (Long backendId : clusterInfoService.getBackendIds(false)) {
-            String runningTaskUrl;
-            String waitingTaskUrl;
+            String runningTaskUrl = "N/A";
+            String waitingTaskUrl = "N/A";
+            String totalRunningNum = "N/A";
+            String baseRunningNum = "N/A";
+            String cumuRunningNum = "N/A";
+            String updateRunningNum = "N/A";
+            String totalWaitingNum = "N/A";
+            String baseWaitingNum = "N/A";
+            String cumuWaitingNum = "N/A";
             if (backendId != null) {
                 Backend backend = clusterInfoService.getBackend(backendId);
+                RestClient client = new RestClient(5000);
+                String res;
+                try {
+                    res = client.httpGet(String.format(
+                            "http://%s:%d/api/compaction/show_num",
+                            backend.getHost(),
+                            backend.getHttpPort()));
+                    String[] taskNumArr = res.split(" ");
+                    if (taskNumArr.length == 7) {
+                        totalRunningNum = taskNumArr[0];
+                        baseRunningNum = taskNumArr[1];
+                        cumuRunningNum = taskNumArr[2];
+                        updateRunningNum = taskNumArr[3];
+                        totalWaitingNum = taskNumArr[4];
+                        baseWaitingNum = taskNumArr[5];
+                        cumuWaitingNum = taskNumArr[6];
+                    } else {
+                        LOG.error("Failed to get backend: {} compaction task num info {}", backendId, res);
+                    }
+                } catch (IOException e) {
+                    LOG.error("Failed to get backend: {} compaction task num info", backendId, e);
+                }
+
                 runningTaskUrl = String.format(
                         "http://%s:%d/api/compaction/running/show",
                         backend.getHost(),
@@ -59,13 +96,13 @@ public class CompactionProcDir implements ProcNodeInterface {
                 waitingTaskUrl = String.format("http://%s:%d/api/compaction/waiting/show",
                         backend.getHost(),
                         backend.getHttpPort());
-            } else {
-                runningTaskUrl = "N/A";
-                waitingTaskUrl = "N/A";
+
             }
-            result.addRow(Arrays.asList(String.valueOf(backendId), runningTaskUrl, waitingTaskUrl));
+            result.addRow(Arrays.asList(String.valueOf(backendId), totalRunningNum, baseRunningNum, cumuRunningNum,
+                    updateRunningNum, totalWaitingNum, baseWaitingNum, cumuWaitingNum, runningTaskUrl, waitingTaskUrl));
         }
 
         return result;
     }
 }
+

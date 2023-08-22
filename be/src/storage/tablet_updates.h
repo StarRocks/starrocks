@@ -202,6 +202,8 @@ public:
 
     bool get_running_task_status(CompactionManager::RunningCompactionMetric& update_metric);
 
+    bool has_running_task();
+
     void get_compaction_status(std::string* json_result);
 
     // Remove version whose creation time is less than |expire_time|.

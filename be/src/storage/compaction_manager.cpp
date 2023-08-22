@@ -612,4 +612,50 @@ Status CompactionManager::get_waiting_tasks_status(std::vector<WaitingCompaction
     return Status::OK();
 }
 
+Status CompactionManager::get_compaction_task_num(CompactionTaskNum& compaction_task_num) {
+    // get running task num
+    {
+        std::lock_guard lg(_tasks_mutex);
+        compaction_task_num.running_total_num = running_tasks_num();
+        for (auto& task : _running_tasks) {
+            if (task->compaction_type() == CUMULATIVE_COMPACTION) {
+                compaction_task_num.running_cumu_num++;
+            } else if (task->compaction_type() == BASE_COMPACTION) {
+                compaction_task_num.running_base_num++;
+            } else {
+                return Status::InvalidArgument(fmt::format("unknown compaction type {}", task->compaction_type()));
+            }
+        }
+    }
+    // get running task num of update compaction
+    std::vector<TabletSharedPtr> tablets;
+    StorageEngine::instance()->tablet_manager()->get_all_tablets(&tablets);
+    for (const auto& tablet : tablets) {
+        if (tablet->updates() == nullptr) {
+            // not primary key tablet
+            continue;
+        }
+        if (tablet->updates()->has_running_task()) {
+            compaction_task_num.running_update_num++;
+        }
+    }
+    compaction_task_num.running_total_num += compaction_task_num.running_update_num;
+
+    // get waiting task num
+    {
+        std::lock_guard lg(_candidates_mutex);
+        compaction_task_num.waiting_total_num = _compaction_candidates.size();
+        for (auto& candidate : _compaction_candidates) {
+            if (candidate.type == CUMULATIVE_COMPACTION) {
+                compaction_task_num.waiting_cumu_num++;
+            } else if (candidate.type == BASE_COMPACTION) {
+                compaction_task_num.waiting_base_num++;
+            } else {
+                return Status::InvalidArgument(fmt::format("unknown compaction type {}", candidate.type));
+            }
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

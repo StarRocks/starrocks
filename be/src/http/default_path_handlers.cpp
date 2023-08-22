@@ -195,8 +195,8 @@ void add_waiting_compaction_output(std::vector<CompactionManager::WaitingCompact
 
 void running_compaction_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     if (!config::enable_event_based_compaction_framework) {
-        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use size "
-                     "tiered compaction framework instead.\n";
+        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use new event "
+                     "base compaction framework instead.\n";
         return;
     }
 
@@ -212,8 +212,8 @@ void running_compaction_handler(const WebPageHandler::ArgumentMap& args, std::st
 
 void waiting_compaction_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     if (!config::enable_event_based_compaction_framework) {
-        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use size "
-                     "tiered compaction framework instead.\n";
+        (*output) << "The overall compaction status is not supported for old compaction framework yet. Please use new event "
+                     "base compaction framework instead.\n";
         return;
     }
 

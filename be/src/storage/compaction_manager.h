@@ -47,10 +47,10 @@ public:
         int64_t tablet_id = 0;
         std::string start_time;
         std::string algorithm;
-        size_t input_rowset_num;
-        size_t input_segment_num;
+        size_t input_rowset_num = 0;
+        size_t input_segment_num = 0;
         std::string input_data_size;
-        size_t compaction_score;
+        size_t compaction_score = 0;
         std::string progress;
         std::vector<std::string> input_rowsets;
     };
@@ -60,7 +60,21 @@ public:
         int64_t partition_id = 0;
         int64_t tablet_id = 0;
         std::string start_time;
-        size_t compaction_score;
+        size_t compaction_score = 0;
+    };
+
+    struct CompactionTaskNum{
+        size_t running_total_num = 0;
+        size_t running_base_num = 0;
+        size_t running_cumu_num = 0;
+        size_t running_update_num = 0;
+        size_t waiting_total_num = 0;
+        size_t waiting_base_num = 0;
+        size_t waiting_cumu_num = 0;
+
+        std::string to_string(){
+            return strings::Substitute("$0 $1 $2 $3 $4 $5 $6",running_total_num,running_base_num,running_cumu_num,running_update_num,waiting_total_num,waiting_base_num,waiting_cumu_num);
+        }
     };
 
     void init_max_task_num(int32_t num);
@@ -89,7 +103,6 @@ public:
     void get_running_status(std::string* json_result);
 
     uint16_t running_tasks_num() {
-        std::lock_guard lg(_tasks_mutex);
         return _running_tasks.size();
     }
 
@@ -139,6 +152,8 @@ public:
 
     Status get_waiting_tasks_status(std::vector<WaitingCompactionMetric>& base_metric,
                                     std::vector<WaitingCompactionMetric>& cumu_metric);
+
+    Status get_compaction_task_num(CompactionTaskNum& compaction_task_num);
 
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;

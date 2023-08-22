@@ -221,6 +221,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/show", show_compaction_action);
     _http_handlers.emplace_back(show_compaction_action);
 
+    auto* show_compaction_num_action = new CompactionAction(CompactionActionType::SHOW_NUM);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/show_num", show_compaction_num_action);
+    _http_handlers.emplace_back(show_compaction_num_action);
+
     auto* run_compaction_action = new CompactionAction(CompactionActionType::RUN_COMPACTION);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compact", run_compaction_action);
     _http_handlers.emplace_back(run_compaction_action);

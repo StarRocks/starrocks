@@ -2560,6 +2560,11 @@ StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> TabletUpdates::list_rowsets
     return ret;
 }
 
+bool TabletUpdates::has_running_task() {
+    std::lock_guard<std::mutex> rl(_compaction_metric_lock);
+    return _current_compaction_task_info != nullptr;
+}
+
 bool TabletUpdates::get_running_task_status(CompactionManager::RunningCompactionMetric& update_metric) {
     // add metric lock to prevent _current_compaction_task_info to prevent it from being set to nullptr by compaction thread while reading it
     std::lock_guard<std::mutex> rl(_compaction_metric_lock);
