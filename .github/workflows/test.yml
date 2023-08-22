@@ -21,7 +21,7 @@ jobs:
       - name: test
         run: |
           GT=`cat /home/runner/_work/test/1.sh`
-          echo "GITHUB_TOKEN=${GT}" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=`echo ${GT}`" >> $GITHUB_ENV
 
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
