@@ -1315,6 +1315,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
 
+    @ConfField(mutable = true)
+    public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
