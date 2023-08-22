@@ -177,7 +177,7 @@ public class SchemaChangeHandler extends AlterHandler {
             targetIndexId = olapTable.getIndexIdByName(targetIndexName);
         }
 
-        if (alterClause.getMaterializedColumnPos() == null) {
+        if (alterClause.getGeneratedColumnPos() == null) {
             for (Column column : columns) {
                 addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId,
                         indexSchemaMap, newColNameSet);
@@ -185,7 +185,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             for (int i = columns.size() - 1; i >= 0; --i) {
                 Column column = columns.get(i);
-                addColumnInternal(olapTable, column, alterClause.getMaterializedColumnPos(),
+                addColumnInternal(olapTable, column, alterClause.getGeneratedColumnPos(),
                         targetIndexId, baseIndexId, indexSchemaMap, newColNameSet);
             }
         }
@@ -326,16 +326,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        if (modColumn.materializedColumnExpr() == null && olapTable.hasMaterializedColumn()) {
+        if (modColumn.generatedColumnExpr() == null && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
-                if (!column.isMaterializedColumn()) {
+                if (!column.isGeneratedColumn()) {
                     continue;
                 }
-                List<SlotRef> slots = column.getMaterializedColumnRef();
+                List<SlotRef> slots = column.getGeneratedColumnRef();
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(modColumn.getName())) {
                         throw new DdlException("Do not support modify column: " + modColumn.getName() +
-                                ", because it associates with the materialized column");
+                                ", because it associates with the generated column");
                     }
                 }
             }
@@ -412,15 +412,15 @@ public class SchemaChangeHandler extends AlterHandler {
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
-        if (!oriColumn.isMaterializedColumn() && modColumn.isMaterializedColumn()) {
-            throw new DdlException("Can not modify a non-materialized column to a materialized column");
+        if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
+            throw new DdlException("Can not modify a non-generated column to a generated column");
         }
 
-        if (oriColumn.isMaterializedColumn() && !modColumn.isMaterializedColumn()) {
-            throw new DdlException("Can not modify a materialized column to a non-materialized column");
+        if (oriColumn.isGeneratedColumn() && !modColumn.isGeneratedColumn()) {
+            throw new DdlException("Can not modify a generated column to a non-generated column");
         }
 
-        if (oriColumn.isMaterializedColumn() && GlobalStateMgr.getCurrentState().getIdToDb() != null) {
+        if (oriColumn.isGeneratedColumn() && GlobalStateMgr.getCurrentState().getIdToDb() != null) {
             Database db = null;
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
                 db = entry.getValue();
@@ -443,7 +443,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                     for (Column rollupCol : schema) {
                         if (rollupCol.getName().equals(oriColumn.getName())) {
-                            throw new DdlException("Can not modify a materialized column, because there are MVs ref to it");
+                            throw new DdlException("Can not modify a generated column, because there are MVs ref to it");
                         }
                     }
                 }

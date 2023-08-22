@@ -103,11 +103,11 @@ public interface ParserErrorMsg {
     @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN")
     String autoIncrementForbid(String a0, String a1);
 
-    @BaseMessage("Column ''{0}'' can not be MATERIALIZED COLUMN when {1}")
-    String materializedColumnForbid(String a0, String a1);
+    @BaseMessage("Column ''{0}'' can not be GENERATED COLUMN when {1}")
+    String generatedColumnForbid(String a0, String a1);
 
     @BaseMessage("{0} can not be set when {1}")
-    String materializedColumnLimit(String a0, String a1);
+    String generatedColumnLimit(String a0, String a1);
 
     @BaseMessage("No tables used")
     String noTableUsed();
