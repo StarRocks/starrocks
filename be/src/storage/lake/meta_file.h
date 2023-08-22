@@ -38,7 +38,7 @@ public:
     // append delvec to builder's buffer
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write);
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::vector<std::string>& orphan_files);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
@@ -50,6 +50,8 @@ public:
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
     bool has_update_index() const { return _has_update_index; }
+    // collect files that need to removed
+    std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
 
 private:
     // update delvec in tablet meta
@@ -71,6 +73,8 @@ private:
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
+    // ready to be removed
+    std::shared_ptr<std::vector<std::string>> _trash_files;
 };
 
 class MetaFileReader {
