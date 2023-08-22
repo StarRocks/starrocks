@@ -53,6 +53,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1177,6 +1178,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalSchemaScan(OptExpression optExpression, ExecPlan context) {
             PhysicalSchemaScanOperator node = (PhysicalSchemaScanOperator) optExpression.getOp();
 
+            SystemTable table = (SystemTable) node.getTable();
             context.getDescTbl().addReferencedTable(node.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
@@ -1194,6 +1196,7 @@ public class PlanFragmentBuilder {
 
             SchemaScanNode scanNode = new SchemaScanNode(context.getNextNodeId(), tupleDescriptor);
 
+            scanNode.setCatalogName(table.getCatalogName());
             scanNode.setFrontendIP(FrontendOptions.getLocalHostAddress());
             scanNode.setFrontendPort(Config.rpc_port);
             scanNode.setUser(context.getConnectContext().getQualifiedUser());

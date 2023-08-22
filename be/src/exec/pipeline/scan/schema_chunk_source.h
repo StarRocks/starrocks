@@ -17,8 +17,8 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/scan/olap_schema_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/scan/schema_scan_context.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -28,12 +28,12 @@ class SchemaScanner;
 
 namespace pipeline {
 
-class OlapSchemaChunkSource final : public ChunkSource {
+class SchemaChunkSource final : public ChunkSource {
 public:
-    OlapSchemaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                          const OlapSchemaScanContextPtr& ctx);
+    SchemaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                      const SchemaScanContextPtr& ctx);
 
-    ~OlapSchemaChunkSource() override;
+    ~SchemaChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
@@ -47,7 +47,7 @@ private:
     const TupleDescriptor* _dest_tuple_desc;
     std::unique_ptr<SchemaScanner> _schema_scanner;
 
-    OlapSchemaScanContextPtr _ctx;
+    SchemaScanContextPtr _ctx;
 
     RuntimeProfile::Counter* _filter_timer = nullptr;
 

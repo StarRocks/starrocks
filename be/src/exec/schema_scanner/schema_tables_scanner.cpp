@@ -57,6 +57,9 @@ SchemaTablesScanner::~SchemaTablesScanner() = default;
 Status SchemaTablesScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
     TAuthInfo auth_info;
+    if (nullptr != _param->catalog) {
+        auth_info.__set_catalog_name(*(_param->catalog));
+    }
     if (nullptr != _param->db) {
         auth_info.__set_pattern(*(_param->db));
     }

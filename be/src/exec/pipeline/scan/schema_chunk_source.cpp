@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/scan/olap_schema_chunk_source.h"
+#include "exec/pipeline/scan/schema_chunk_source.h"
 
 #include <boost/algorithm/string.hpp>
 
@@ -21,13 +21,13 @@
 
 namespace starrocks::pipeline {
 
-OlapSchemaChunkSource::OlapSchemaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                             const OlapSchemaScanContextPtr& ctx)
+SchemaChunkSource::SchemaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                     const SchemaScanContextPtr& ctx)
         : ChunkSource(op, runtime_profile, std::move(morsel), ctx->get_chunk_buffer()), _ctx(ctx) {}
 
-OlapSchemaChunkSource::~OlapSchemaChunkSource() = default;
+SchemaChunkSource::~SchemaChunkSource() = default;
 
-Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
+Status SchemaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _dest_tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->tuple_id());
     if (_dest_tuple_desc == nullptr) {
@@ -84,9 +84,9 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
     return _schema_scanner->start(state);
 }
 
-void OlapSchemaChunkSource::close(RuntimeState* state) {}
+void SchemaChunkSource::close(RuntimeState* state) {}
 
-Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
 
@@ -162,8 +162,7 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
     return Status::OK();
 }
 
-const workgroup::WorkGroupScanSchedEntity* OlapSchemaChunkSource::_scan_sched_entity(
-        const workgroup::WorkGroup* wg) const {
+const workgroup::WorkGroupScanSchedEntity* SchemaChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }

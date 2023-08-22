@@ -24,8 +24,10 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class UserPrivilegesSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.USER_PRIVILEGES_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.USER_PRIVILEGES_ID,
                 "user_privileges",
                 Table.TableType.SCHEMA,
                 builder()

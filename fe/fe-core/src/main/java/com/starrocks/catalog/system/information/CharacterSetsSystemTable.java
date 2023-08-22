@@ -23,8 +23,10 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class CharacterSetsSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.CHARACTER_SETS_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.CHARACTER_SETS_ID,
                 "character_sets",
                 Table.TableType.SCHEMA,
                 builder()

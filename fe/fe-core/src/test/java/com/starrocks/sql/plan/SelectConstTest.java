@@ -71,8 +71,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testValuesNodePredicate() throws Exception {
-        assertPlanContains("select database()", "<slot 2> : DATABASE()");
-        assertPlanContains("select schema()", "<slot 2> : SCHEMA()");
+        assertPlanContains("select database()", "<slot 2> : 'test'");
+        assertPlanContains("select schema()", "<slot 2> : 'test'");
         assertPlanContains("select user()", "<slot 2> : USER()");
         assertPlanContains("select current_user()", "<slot 2> : CURRENT_USER()");
         assertPlanContains("select connection_id()", "<slot 2> : CONNECTION_ID()");

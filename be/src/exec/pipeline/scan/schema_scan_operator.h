@@ -17,19 +17,19 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
-#include "exec/pipeline/scan/olap_schema_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/scan/schema_scan_context.h"
 #include "exec/schema_scan_node.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::pipeline {
 
-class OlapSchemaScanOperatorFactory final : public ScanOperatorFactory {
+class SchemaScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    OlapSchemaScanOperatorFactory(int32_t id, ScanNode* schema_scan_node, size_t dop, const TPlanNode& t_node,
-                                  ChunkBufferLimiterPtr buffer_limiter);
+    SchemaScanOperatorFactory(int32_t id, ScanNode* schema_scan_node, size_t dop, const TPlanNode& t_node,
+                              ChunkBufferLimiterPtr buffer_limiter);
 
-    ~OlapSchemaScanOperatorFactory() override = default;
+    ~SchemaScanOperatorFactory() override = default;
 
     bool with_morsels() const override { return true; }
 
@@ -40,16 +40,16 @@ public:
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
 
 private:
-    OlapSchemaScanContextPtr _ctx;
+    SchemaScanContextPtr _ctx;
     BalancedChunkBuffer _chunk_buffer;
 };
 
-class OlapSchemaScanOperator final : public ScanOperator {
+class SchemaScanOperator final : public ScanOperator {
 public:
-    OlapSchemaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                           ScanNode* scan_node, OlapSchemaScanContextPtr ctx);
+    SchemaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
+                       SchemaScanContextPtr ctx);
 
-    ~OlapSchemaScanOperator() override;
+    ~SchemaScanOperator() override;
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
@@ -68,6 +68,6 @@ private:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
 
-    OlapSchemaScanContextPtr _ctx;
+    SchemaScanContextPtr _ctx;
 };
 } // namespace starrocks::pipeline

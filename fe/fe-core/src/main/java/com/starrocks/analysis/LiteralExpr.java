@@ -94,6 +94,8 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 break;
             case CHAR:
             case VARCHAR:
+            case BINARY:
+            case VARBINARY:
             case HLL:
                 literalExpr = new StringLiteral(value);
                 break;
