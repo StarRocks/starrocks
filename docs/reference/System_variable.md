@@ -275,6 +275,10 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Used for MySQL client compatibility. No practical usage.
 
+* enable_strict_type (v3.1 and later)
+
+  Whether to allow implicit conversions for all compound predicates and for all expressions in the WHERE clause. Default value: `false`.
+
 * force_streaming_aggregate
 
   Used to control whether the aggregation node enables streaming aggregation for computing. The default value is false, meaning the feature is not enabled.
@@ -337,9 +341,9 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
 
-* `log_rejected_record_num` (v3.1 and later)
+* log_rejected_record_num (v3.1 and later)
 
-  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
+  Specifies the maximum number of unqualified data rows that can be logged. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
   
   * The value `0` specifies that data rows that are filtered out will not be logged.
   * The value `-1` specifies that all data rows that are filtered out will be logged.
