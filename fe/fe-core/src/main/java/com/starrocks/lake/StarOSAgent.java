@@ -78,9 +78,9 @@ public class StarOSAgent {
 
     protected StarClient client;
     protected String serviceId;
-    private Map<String, Long> workerToId;
-    private Map<Long, Long> workerToBackend;
-    private ReentrantReadWriteLock rwLock;
+    protected Map<String, Long> workerToId;
+    protected Map<Long, Long> workerToBackend;
+    protected ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
         serviceId = "";
@@ -303,7 +303,7 @@ public class StarOSAgent {
     }
 
     // remove previous worker with same backend id
-    private void tryRemovePreviousWorker(long backendId) {
+    protected void tryRemovePreviousWorker(long backendId) {
         long prevWorkerId = getWorkerIdByBackendIdInternal(backendId);
         if (prevWorkerId < 0) {
             return;

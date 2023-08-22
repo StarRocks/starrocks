@@ -111,12 +111,23 @@ public class LocalWarehouse extends Warehouse {
         starOSAgent.deleteWorkerGroup(workerGroupId);
     }
 
-    private void dropNodeFromSystem() {
+    private void dropNodeFromSystem() throws DdlException {
         List<ComputeNode> nodes = GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream().
                 filter(cn -> cn.getWarehouseId() == this.getId()).collect(Collectors.toList());
 
         for (ComputeNode node : nodes) {
-            GlobalStateMgr.getCurrentSystemInfo().removeNodeById(node.getId());
+            try {
+                GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(node.getHost(), node.getHeartbeatPort());
+                GlobalStateMgr.getCurrentSystemInfo().dropBackend(node.getHost(), node.getHeartbeatPort(), false);
+            } catch (DdlException e) {
+                if (e.getMessage().contains("compute node does not exists")
+                        || e.getMessage().contains("backend does not exists")) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
         }
     }
+
 }

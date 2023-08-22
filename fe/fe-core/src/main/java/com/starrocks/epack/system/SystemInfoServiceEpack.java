@@ -209,6 +209,10 @@ public class SystemInfoServiceEpack extends SystemInfoService {
     public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
 
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+        if (droppedBackend == null) {
+            throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
+        }
+
         if (needCheckUnforce) {
             try {
                 checkUnforce(droppedBackend);

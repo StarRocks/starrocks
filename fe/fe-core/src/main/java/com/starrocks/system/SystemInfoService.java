@@ -1179,9 +1179,5 @@ public class SystemInfoService implements GsonPostProcessable {
         throw new DdlException("not implemented");
     }
 
-    public void removeNodeById(long nodeId) {
-        idToBackendRef.remove(nodeId);
-        idToComputeNodeRef.remove(nodeId);
-    }
 }
 
