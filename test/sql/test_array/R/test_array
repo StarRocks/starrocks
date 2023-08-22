@@ -49,6 +49,8 @@ None
 None
 None
 -- !result
+
+
 -- name: testArrayTopN
 CREATE TABLE array_top_n
     (c1 int,
@@ -100,11 +102,13 @@ select * from array_top_n order by c2[1] limit 4,10;
 select * from array_top_n order by c2[1] limit 5,10;
 -- result:
 -- !result
+
 -- name: test_array_test01
 select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
 -- result:
 []	[]	["abc"]	[123.0,null,1.0]	["abc",null]
 -- !result
+
 -- name: testArrayPredicate
 CREATE TABLE array_data_type
     (c1 int,
@@ -178,4 +182,12 @@ select c4 > c5 from array_data_type;
 0
 0
 1
+-- !result
+select * from (select array_map(x -> x*2 + x*2, [1,3]) col1) t1 join (select array_map(x -> x*2 + x*2, c3) col2 from  array_data_type) t2;
+-- result:
+[4,12]	None
+[4,12]	[88,44,132]
+[4,12]	None
+[4,12]	[88,44,132]
+[4,12]	[88,44,132]
 -- !result
