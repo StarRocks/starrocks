@@ -522,3 +522,4 @@ select * from t0 where (case when ship_code is null then true when not 3 then fa
 select * from t0 where (case when ship_code is null then true when not null then false end) is null;
 select * from t0 where (case when ship_code is null then true when null then false end) is null;
 select * from t0 where (case when ship_code is null then true when 0 then false end) is null;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3  end in (2, 3, null)) is null;

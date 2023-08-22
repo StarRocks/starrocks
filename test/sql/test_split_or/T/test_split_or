@@ -127,3 +127,7 @@ select count(*) from low_card_duplicate where (c0 = 1 and c1 = 'YBzFH') or (c2 =
 select count(*) from low_card_duplicate where c0 = 1 or c2 = 'M' or c1 = 'vI7jmgbw' or c3 = 'shenzhen';
 
 select count(*) from low_card_duplicate t1 join low_card_duplicate t2 where (t1.c0 <=> 1 or t1.c1 is null) and (t2.c0 > 1 and (t2.c2 = 'Hy' or t2.c1 = 'vRLFJG'));
+
+select count(*) from low_card_duplicate where c4 in ('hangzhou', null) or c3 in ('shenzhen', null);
+
+
