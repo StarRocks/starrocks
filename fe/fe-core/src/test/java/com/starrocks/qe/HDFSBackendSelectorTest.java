@@ -150,6 +150,23 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
             Assert.assertTrue(Math.abs(entry.getValue() - avg) < variance);
         }
+
+        // test empty compute nodes
+        workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                ImmutableMap.of(),
+                true
+        );
+        selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+        try {
+            selector.computeScanRangeAssignment();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
     }
 
     @Test
