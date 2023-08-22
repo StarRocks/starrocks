@@ -111,7 +111,7 @@ show partitions from ss;
 .*p203409.*
 .*p203410.*
 -- !result
--- name: test_automatic_partition_in_new_node
+-- name: test_automatic_partition_in_new_node @sequential
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
@@ -473,7 +473,7 @@ show partitions from ss;
 .*p203409.*
 .*p203410.*
 -- !result
--- name: test_multi_fragment_open_new_node_channel
+-- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 -- result:
 -- !result
