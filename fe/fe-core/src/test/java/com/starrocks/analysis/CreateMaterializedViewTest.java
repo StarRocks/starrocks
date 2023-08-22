@@ -1522,7 +1522,7 @@ public class CreateMaterializedViewTest {
         }
 
         MaterializedView baseInactiveMv = ((MaterializedView) testDb.getTable("base_inactive_mv"));
-        baseInactiveMv.setActive(false);
+        baseInactiveMv.setInactiveAndReason("");
 
         String sql2 = "create materialized view mv_from_base_inactive_mv " +
                 "partition by k1 " +
@@ -1556,7 +1556,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsHasStar"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Table baseTable = testDb.getTable("tbl1");
@@ -1649,7 +1649,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias1"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
@@ -1680,7 +1680,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias2"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
