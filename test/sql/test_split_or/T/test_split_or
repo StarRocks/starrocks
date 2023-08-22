@@ -103,8 +103,9 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 	 (9984300,'AjO','nfdM','shenzhen','beijing',0.06842731,0.00706409630241519048),
 	 (9997790,'n','3RnN','beijing','hangzhou',0.074448854,0.00444001051569349003);
 
-analyze table low_card_duplicate;
-set SCAN_OR_TO_UNION_THRESHOLD = 50;
+[UC] analyze table low_card_duplicate;
+[UC] set SCAN_OR_TO_UNION_THRESHOLD = 50;
+[UC] set SELECT_RATIO_THRESHOLD = 1000;
 
 select count(*) from low_card_duplicate where c0 <=> 1 or c1 is null;
 
@@ -127,3 +128,10 @@ select count(*) from low_card_duplicate where (c0 = 1 and c1 = 'YBzFH') or (c2 =
 select count(*) from low_card_duplicate where c0 = 1 or c2 = 'M' or c1 = 'vI7jmgbw' or c3 = 'shenzhen';
 
 select count(*) from low_card_duplicate t1 join low_card_duplicate t2 where (t1.c0 <=> 1 or t1.c1 is null) and (t2.c0 > 1 and (t2.c2 = 'Hy' or t2.c1 = 'vRLFJG'));
+
+select count(*) from low_card_duplicate where c4 in ('hangzhou', null) or c3 in ('shenzhen', null);
+
+select count(*) from low_card_duplicate where c4 in ('hangzhou', cast(1 as string)) or c3 in ('shenzhen', null);
+
+
+
