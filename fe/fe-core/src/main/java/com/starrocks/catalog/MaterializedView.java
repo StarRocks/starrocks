@@ -602,7 +602,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Set<String> result = Sets.newHashSet();
 
         // If there are new added partitions, add it into refresh result.
-        for (String partitionName : baseTable.getPartitionNames()) {
+        for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
                 // TODO: use `mvBaseTableVisibleVersionMap` to check whether base table has been refreshed or not instead of
@@ -618,7 +618,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
                 // Once there is a partition deleted, refresh all partitions.
-                return baseTable.getPartitionNames();
+                return baseTable.getVisiblePartitionNames();
             }
             BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
             if (mvRefreshedPartitionInfo == null) {
@@ -1273,7 +1273,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     = tableProperty.getQueryRewriteConsistencyMode();
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 case LOOSE:
                     return Sets.newHashSet();
                 case CHECKED:
@@ -1316,14 +1316,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Sets.newHashSet();
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 }
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true, isQueryRewrite);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                return getPartitionNames();
+                return getVisiblePartitionNames();
             }
         }
         return Sets.newHashSet();
@@ -1374,7 +1374,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Sets.newHashSet();
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 }
             }
             if (baseTable.getTableIdentifier().equals(refBaseTable.getTableIdentifier())) {
@@ -1383,7 +1383,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // If the non ref table has already changed, need refresh all materialized views' partitions.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                return getPartitionNames();
+                return getVisiblePartitionNames();
             }
         }
 
@@ -1396,7 +1396,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return getPartitionNames();
+            return getVisiblePartitionNames();
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
