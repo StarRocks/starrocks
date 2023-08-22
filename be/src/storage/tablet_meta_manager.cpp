@@ -1261,6 +1261,30 @@ Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId table
                 dcgs->push_back(std::move(dcg_ptr));
                 return true;
             });
+
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
+        return st;
+    }
+    return Status::OK();
+}
+
+Status TabletMetaManager::scan_tablet_delta_column_group(KVStore* meta, TTabletId tablet_id,
+                                                         DeltaColumnGroupList* dcgs) {
+    std::string lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t dummy_segment_id;
+                                      int64_t decode_version;
+                                      decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
+                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                                      CHECK(dcgs != nullptr);
+                                      dcgs->push_back(std::move(dcg_ptr));
+                                      return true;
+                                  });
     if (!st.ok()) {
         LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
         return st;

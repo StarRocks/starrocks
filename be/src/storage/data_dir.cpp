@@ -52,6 +52,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
 #include "util/defer_op.h"
@@ -464,6 +465,75 @@ void DataDir::perform_path_gc_by_tablet() {
     LOG(INFO) << "finished one time path gc by tablet.";
 }
 
+bool DataDir::_need_gc_delta_column_files(
+        const std::string& path, int64_t tablet_id,
+        std::unordered_map<int64_t, std::unordered_set<std::string>>& delta_column_files) {
+    TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
+    if (tablet == nullptr || tablet->keys_type() != KeysType::PRIMARY_KEYS ||
+        tablet->tablet_state() != TABLET_RUNNING) {
+        return false;
+    }
+    if (delta_column_files.count(tablet_id) == 0) {
+        // load dcg file list
+        DeltaColumnGroupList dcgs;
+        if (tablet->updates()->need_apply()) {
+            // if this tablet has apply task to handle, skip it, because it can't get latest dcgs
+            return false;
+        }
+        auto st = TabletMetaManager::scan_tablet_delta_column_group(_kv_store, tablet_id, &dcgs);
+        if (!st.ok()) {
+            LOG(WARNING) << "scan tablet delta column group failed, tablet_id: " << tablet_id << ", st: " << st;
+            return false;
+        }
+        auto& files = delta_column_files[tablet_id];
+        for (const auto& dcg : dcgs) {
+            const auto& column_files = dcg->relative_column_files();
+            files.insert(column_files.begin(), column_files.end());
+        }
+    }
+    std::string filename = std::filesystem::path(path).filename().string();
+    return delta_column_files[tablet_id].count(filename) == 0;
+}
+
+static bool is_delta_column_file(const std::string& path) {
+    StringPiece sp(path);
+    if (sp.ends_with(".cols")) {
+        return true;
+    }
+    return false;
+}
+
+void DataDir::perform_delta_column_files_gc() {
+    std::unique_lock<std::mutex> lck(_check_path_mutex);
+    _cv.wait(lck, [this] { return _stop_bg_worker || !_all_check_dcg_files.empty(); });
+    if (_stop_bg_worker) {
+        return;
+    }
+    LOG(INFO) << "start to do delta column files gc.";
+    std::unordered_map<int64_t, std::unordered_set<std::string>> delta_column_files;
+    int counter = 0;
+    for (auto& path : _all_check_dcg_files) {
+        ++counter;
+        if (config::path_gc_check_step > 0 && counter % config::path_gc_check_step == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(config::path_gc_check_step_interval_ms));
+        }
+        TTabletId tablet_id = -1;
+        TSchemaHash schema_hash = -1;
+        bool is_valid = _tablet_manager->get_tablet_id_and_schema_hash_from_path(path, &tablet_id, &schema_hash);
+        if (!is_valid) {
+            LOG(WARNING) << "unknown path:" << path;
+            continue;
+        }
+        if (tablet_id > 0 && schema_hash > 0) {
+            if (_need_gc_delta_column_files(path, tablet_id, delta_column_files)) {
+                _process_garbage_path(path);
+            }
+        }
+    }
+    _all_check_dcg_files.clear();
+    LOG(INFO) << "finished one time delta column files gc.";
+}
+
 void DataDir::perform_path_gc_by_rowsetid() {
     // init the set of valid path
     // validate the path in data dir
@@ -511,8 +581,8 @@ void DataDir::perform_path_gc_by_rowsetid() {
 void DataDir::perform_path_scan() {
     {
         std::unique_lock<std::mutex> lck(_check_path_mutex);
-        if (!_all_check_paths.empty()) {
-            LOG(INFO) << "_all_check_paths is not empty when path scan.";
+        if (!_all_check_paths.empty() || !_all_check_dcg_files.empty()) {
+            LOG(INFO) << "_all_check_paths or _all_check_dcg_files is not empty when path scan.";
             return;
         }
         LOG(INFO) << "start to scan data dir path:" << _path;
@@ -554,19 +624,18 @@ void DataDir::perform_path_scan() {
                         continue;
                     }
                     for (const auto& rowset_file : rowset_files) {
-                        StringPiece sp(rowset_file);
-                        if (sp.ends_with(".cols")) {
-                            // ".col" isn't gc here, because it links with delta column group,
-                            // So it will be removed when delta column group is removed from rocksdb
-                            continue;
-                        }
                         std::string rowset_file_path = tablet_schema_hash_path + "/" + rowset_file;
-                        _all_check_paths.insert(rowset_file_path);
+                        if (is_delta_column_file(rowset_file)) {
+                            _all_check_dcg_files.insert(rowset_file_path);
+                        } else {
+                            _all_check_paths.insert(rowset_file_path);
+                        }
                     }
                 }
             }
         }
-        LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size();
+        LOG(INFO) << "scan data dir path:" << _path << " finished. path size:" << _all_check_paths.size()
+                  << " dcg file size: " << _all_check_dcg_files.size();
     }
     _cv.notify_one();
 }
