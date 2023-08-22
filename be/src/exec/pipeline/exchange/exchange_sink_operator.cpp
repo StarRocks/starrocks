@@ -106,11 +106,13 @@ private:
     void _prepare_pass_through();
 
     ExchangeSinkOperator* _parent;
-
     const TNetworkAddress _brpc_dest_addr;
     const TUniqueId _fragment_instance_id;
     const PlanNodeId _dest_node_id;
 
+    // This host ip is used to check if brpc destination host is local.
+    // It is used to determine if exchange_pass_through needs to take effect
+    std::string _brpc_dest_real_ip;
     const bool _enable_exchange_pass_through;
     // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
     // because local data isn't accessed by remote network.
@@ -135,7 +137,8 @@ private:
 };
 
 bool ExchangeSinkOperator::Channel::is_local() {
-    if (BackendOptions::get_localhost() != _brpc_dest_addr.hostname) {
+    // use ip to check if is local
+    if (BackendOptions::get_localhost() != _brpc_dest_real_ip) {
         return false;
     }
     if (config::brpc_port != _brpc_dest_addr.port) {
@@ -165,6 +168,15 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         LOG(WARNING) << "there is no brpc destination address's hostname"
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
+    }
+
+    // try to convert hostname to real ip
+    _brpc_dest_real_ip = _brpc_dest_addr.hostname;
+    if (!is_valid_ip(_brpc_dest_addr.hostname)) {
+        _brpc_dest_real_ip = hostname_to_ip(_brpc_dest_addr.hostname);
+        if (_brpc_dest_real_ip == "") {
+            LOG(WARNING) << "failed to get ip from host " << _brpc_dest_addr.hostname;
+        }
     }
 
     // _brpc_timeout_ms = std::min(3600, state->query_options().query_timeout) * 1000;
