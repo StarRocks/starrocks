@@ -91,12 +91,17 @@ public class NegateFilterShuttle extends ScalarOperatorVisitor<ScalarOperator, V
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
+        boolean containsNullValue = predicate.getChildren().stream().skip(1).anyMatch(ScalarOperator::isNullable);
         ScalarOperator negation = new InPredicateOperator(!predicate.isNotIn(), predicate.getChildren());
-        if (predicate.getChild(0).isNullable()) {
-            ScalarOperator isNull = new IsNullPredicateOperator(predicate.getChild(0));
-            return new CompoundPredicateOperator(CompoundType.OR, negation, isNull);
+        if (containsNullValue) {
+            return new CompoundPredicateOperator(CompoundType.OR, negation, new IsNullPredicateOperator(predicate));
         } else {
-            return negation;
+            if (predicate.getChild(0).isNullable()) {
+                ScalarOperator isNull = new IsNullPredicateOperator(predicate.getChild(0));
+                return new CompoundPredicateOperator(CompoundType.OR, negation, isNull);
+            } else {
+                return negation;
+            }
         }
     }
 
