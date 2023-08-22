@@ -586,6 +586,12 @@ Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment
     return st.is_not_found() ? Status::OK() : st;
 }
 
+Status TabletManager::delete_del(int64_t tablet_id, std::string_view del_name) {
+    erase_metacache(del_name);
+    auto st = fs::delete_file(del_location(tablet_id, del_name));
+    return st.is_not_found() ? Status::OK() : st;
+}
+
 StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
     std::vector<std::string> objects{};
     // TODO: construct prefix in LocationProvider
@@ -793,6 +799,9 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
+    // collect trash files, and remove them by background threads
+    auto trash_files = log_applier->trash_files();
+
     CHECK_EQ(1, txns_size);
     auto tablet_id = tablet->id();
     auto txn_id = txns[0];
@@ -807,6 +816,22 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
                 auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
                 LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
                                          << r;
+            }
+        }
+        // Delete trash_file files
+        if (nullptr != trash_files) {
+            for (const auto& trash_file : *trash_files) {
+                if (is_del(trash_file)) {
+                    auto r = tablet_mgr->delete_del(tablet_id, trash_file);
+                    LOG_IF(WARNING, !r.ok())
+                            << "Fail to delete " << tablet_mgr->del_location(tablet_id, trash_file) << ": " << r;
+                } else if (is_segment(trash_file)) {
+                    auto r = tablet_mgr->delete_segment(tablet_id, trash_file);
+                    LOG_IF(WARNING, !r.ok())
+                            << "Fail to delete " << tablet_mgr->segment_location(tablet_id, trash_file) << ": " << r;
+                } else {
+                    LOG(ERROR) << "Unknown file: " << trash_file << " tablet_id: " << tablet_id;
+                }
             }
         }
     };
@@ -854,6 +879,10 @@ void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_s
             for (const auto& segment : txn_log->op_write().rowset().segments()) {
                 auto st = delete_segment(tablet_id, segment);
                 LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+            for (const auto& del_file : txn_log->op_write().dels()) {
+                auto st = delete_del(tablet_id, del_file);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << del_file << ": " << st;
             }
         }
         if (txn_log->has_op_compaction()) {
