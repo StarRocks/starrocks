@@ -43,6 +43,7 @@ import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -413,10 +414,9 @@ public class ColumnTypeConverter {
             return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(TinyIntType tinyIntType) {
-        //    return ScalarType.createType(PrimitiveType.TINYINT);
-        //}
+        public Type visit(TinyIntType tinyIntType) {
+            return ScalarType.createType(PrimitiveType.TINYINT);
+        }
 
         public Type visit(SmallIntType smallIntType) {
             return ScalarType.createType(PrimitiveType.SMALLINT);

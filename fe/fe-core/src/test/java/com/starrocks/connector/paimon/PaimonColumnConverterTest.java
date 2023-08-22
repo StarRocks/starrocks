@@ -84,8 +84,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(result, srType);
     }
 
-
-    @Ignore
+    @Test
     public void testConvertTinyInt() {
         TinyIntType paimonType = new TinyIntType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
