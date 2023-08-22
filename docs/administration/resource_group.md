@@ -159,7 +159,7 @@ SET GLOBAL enable_pipeline_engine = true;
 
 > **NOTE**
 >
-> From v3.1.0 onwards, Resource Group is enabled by default.
+> From v3.1.0 onwards, Resource Group is enabled by default, and the session variable `enable_resource_group` is deprecated.
 
 ### Create resource groups and classifiers
 
