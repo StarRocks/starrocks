@@ -1987,4 +1987,50 @@ public class MvRewriteTest extends MvRewriteTestBase {
             }
         }
     }
+
+    @Test
+    public void testProjectConstant() throws Exception {
+        String tableName = "test_tbl_project_constant";
+        starRocksAssert.withTable(String.format("CREATE TABLE %s(\n" +
+                "                            k1 date,\n" +
+                "                            k2 varchar(20),\n" +
+                "                            v3 int)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        DISTRIBUTED BY HASH(k1);", tableName));
+
+        // MV1: Projection MV
+        {
+            String mvName = "mv_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, k2, v3 " +
+                            "FROM " + tableName);
+            {
+                String query = "SELECT 'hehe', k1, k2" +
+                        " FROM " + tableName;
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+        // MV2: Aggregation MV
+        {
+            String mvName = "mv_aggregation_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, sum(v3) as sum_v3 \n" +
+                            "FROM " + tableName + "\n" +
+                            "GROUP BY k1");
+
+            {
+                String query = String.format("SELECT 'hehe', k1, sum(v3) as sum_v1 " +
+                        " FROM %s group by 'hehe', k1", tableName);
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+    }
 }
