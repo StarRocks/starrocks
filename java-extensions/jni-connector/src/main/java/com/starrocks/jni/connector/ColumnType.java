@@ -191,7 +191,7 @@ public class ColumnType {
             }
             break;
             default: {
-                // convert decimal(x,y) to decimalll
+                // convert decimal(x,y) to decimal
                 if (t.startsWith("decimal")) {
                     t = "decimal";
                 }

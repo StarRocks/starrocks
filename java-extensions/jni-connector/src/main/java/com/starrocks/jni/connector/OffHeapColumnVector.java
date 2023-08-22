@@ -222,11 +222,11 @@ public class OffHeapColumnVector {
     }
 
     public void putByte(int rowId, byte value) {
-        Platform.putByte(null, data + (long) rowId, value);
+        Platform.putByte(null, data + rowId, value);
     }
 
     public byte getByte(int rowId) {
-        return Platform.getByte(null, data + (long) rowId);
+        return Platform.getByte(null, data + rowId);
     }
 
     public int appendBoolean(boolean v) {
