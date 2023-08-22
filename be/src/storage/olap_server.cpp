@@ -749,6 +749,8 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+        // perform dcg files gc
+        ((DataDir*)arg)->perform_delta_column_files_gc();
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {
