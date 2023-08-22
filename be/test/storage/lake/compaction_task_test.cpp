@@ -771,15 +771,15 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
     starrocks::config::disable_storage_page_cache = true;
-    global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     // Pagecache is turned on by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
-    exec_env->init(paths);
+    starrocks::config::disable_storage_page_cache = true;
+    exec_env->init_mem_tracker();
+    starrocks::ExecEnv::init(exec_env, paths);
 
     int r = RUN_ALL_TESTS();
 
@@ -791,9 +791,7 @@ int main(int argc, char** argv) {
     starrocks::StorageEngine::instance()->stop();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
-    exec_env->stop();
-    exec_env->destroy();
-    global_env->stop();
+    starrocks::ExecEnv::destroy(exec_env);
 
     starrocks::shutdown_logging();
 
