@@ -638,8 +638,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         }
 
-        OlapTable olapTable = (OlapTable) this;
-        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+        return true;
     }
 
     public boolean hasAutoIncrementColumn() {
