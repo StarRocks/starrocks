@@ -52,6 +52,14 @@ Status DirManager::init() {
         } else {
             iter++;
         }
+        auto iter_tmp = iter;
+        for (; iter_tmp != spill_local_storage_paths.end(); ++iter_tmp) {
+            if (is_same_disk(path, iter_tmp->path)) {
+                return Status::InvalidArgument(fmt::format(
+                        "spill_local_storage_dir {} has the same disk path with {}, please use another path", path,
+                        iter_tmp->path));
+            }
+        }
     }
     if (spill_local_storage_paths.empty()) {
         return Status::InvalidArgument("cannot find available spill_local_storage_dir");
@@ -83,6 +91,7 @@ Status DirManager::init() {
             if (is_same_disk(spill_dir_path, storage_path)) {
                 max_dir_size = max_dir_size * max_dir_size_ratio;
                 // do not consider multi spill directory on the same disk
+                // we will return error state during initialize
                 break;
             }
         }

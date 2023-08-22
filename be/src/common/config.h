@@ -879,7 +879,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.3"); // 30%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
