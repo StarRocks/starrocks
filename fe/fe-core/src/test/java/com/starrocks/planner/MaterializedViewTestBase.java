@@ -286,7 +286,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         public MVRewriteChecker nonMatch(String targetMV) {
             Assert.assertTrue(this.rewritePlan != null);
-            Assert.assertFalse(this.rewritePlan.contains(targetMV));
+            Assert.assertFalse(this.rewritePlan, this.rewritePlan.contains(targetMV));
             return this;
         }
 
