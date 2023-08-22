@@ -1,0 +1,26 @@
+name: TEST PR CHECKER
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'branch-[0-9].[0-9]'
+
+    types:
+      - opened
+      - reopened
+      - edited
+
+jobs:
+
+  sync-checker:
+    runs-on: ubuntu-latest
+    name: Replace
+    steps:
+      - name: Replace Pull Request Body
+        uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
+        with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          find: '[x] Yes, this PR will result in a change in behavior.'
+          replace: '[ ] Yes, this PR will result in a change in behavior.'
+
