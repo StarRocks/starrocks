@@ -43,7 +43,7 @@ SET time_zone = "Asia/Shanghai";
 SET GLOBAL query_mem_limit = 137438953472;
 ```
 
-只支持全局生效的变量包括：
+以下变量仅支持全局生效，不支持设置为会话级别生效。您必须使用 `SET GLOBAL <var_name> = xxx;`，不能使用 `SET <var_name> = xxx;`，否则返回错误。
 
 * activate_all_roles_on_login
 * character_set_database
