@@ -28,6 +28,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -348,11 +349,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
-            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                if (properties != null) {
-                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
-                            properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            if (properties != null) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
                         throw new DdlException("Primary key table does not support storage medium cool down currently.");
+                    }
+                    if (partitionInfo instanceof ListPartitionInfo) {
+                        throw new DdlException("List partition table does not support storage medium cool down currently.");
                     }
                 }
             }

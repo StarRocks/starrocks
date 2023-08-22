@@ -127,7 +127,8 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
                 DataProperty.getInferredDefaultDataProperty(), false);
         Preconditions.checkNotNull(partitionDataProperty);
 
-        if (tableProperties != null && tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+        if (tableProperties != null && partitionKeyDesc != null
+                && tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
             PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
             if (partitionKeyDesc.isMax()) {
