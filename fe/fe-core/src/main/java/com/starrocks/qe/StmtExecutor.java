@@ -482,11 +482,11 @@ public class StmtExecutor {
             if (parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
 
-                final boolean isStatisticsJob = context.isStatisticsJob() || AnalyzerUtils.isStatisticsJob(context, parsedStmt);
+                context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+                final boolean isStatisticsJob = context.isStatisticsJob();
                 if (!isStatisticsJob) {
                     WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouseId(), 1L);
                 }
-                context.setStatisticsJob(isStatisticsJob);
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
@@ -1733,7 +1733,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            context.setStatisticsJob(context.isStatisticsJob() || AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+            context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             if (!targetTable.isIcebergTable()) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
