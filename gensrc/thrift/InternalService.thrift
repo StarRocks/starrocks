@@ -216,6 +216,8 @@ struct TQueryOptions {
   97: optional i64 load_profile_collect_second;
 
   101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
 }
 
 
