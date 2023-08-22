@@ -26,6 +26,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -37,6 +39,9 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
+import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class MvRewriteTest extends MvRewriteTestBase {
     @Test
@@ -958,7 +963,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "    GROUP BY\n" +
                 "        col1,\n" +
                 "        dt;");
-        cluster.runSql("test", "insert into test_base_tbl values('2022-08-16', 1, 1, 1, 'a')");
         refreshMaterializedView("test", "test_cache_mv1");
 
         {
@@ -1743,10 +1747,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "                \"storage_format\" = \"DEFAULT\",\n" +
                 "                \"enable_persistent_index\" = \"false\"\n" +
                 "                );");
-        cluster.runSql("test", "insert into sync_tbl_t1 values ('2022-05-01',1,2,3), " +
-                "('2022-05-01',2,2,2), ('2022-05-01',3,2,3);");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW sync_mv1 AS " +
-                "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;");
+        String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);

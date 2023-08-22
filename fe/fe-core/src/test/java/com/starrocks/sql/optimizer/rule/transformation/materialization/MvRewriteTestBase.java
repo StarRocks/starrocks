@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -54,7 +53,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -63,7 +61,6 @@ import org.junit.BeforeClass;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 
 public class MvRewriteTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -387,36 +384,6 @@ public class MvRewriteTestBase {
         }
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
-        }
-    }
-
-    protected void waitingRollupJobV2Finish() throws Exception {
-        // waiting alterJobV2 finish
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        //Assert.assertEquals(1, alterJobs.size());
-
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
-                continue;
-            }
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            }
-        }
-    }
-
-    protected void waitForSchemaChangeAlterJobFinish() throws Exception {
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                LOG.info(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
     }
 }
