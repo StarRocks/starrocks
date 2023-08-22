@@ -203,11 +203,7 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
-<<<<<<< HEAD
-        ./storage/lake/compaction_task_test.cpp
         ./storage/lake/rowset_test.cpp
-=======
->>>>>>> 0f08cc4107 ([UT] Fix flaky tests when running in parallel with gtest-parallel (#28308))
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
