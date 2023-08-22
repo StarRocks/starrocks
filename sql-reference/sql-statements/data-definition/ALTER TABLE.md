@@ -29,7 +29,7 @@ alter_clause1[, alter_clause2, ...]
 > **说明**
 >
 > * partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-> * rollup、schema change 是异步操作，命令提交成功即返回结果，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) 语句查看相关操作的进度。
+> * rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) 语句查看操作的进度。
 > * partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
 
 ### 操作 partition 相关语法
