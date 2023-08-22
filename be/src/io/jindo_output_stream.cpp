@@ -26,12 +26,14 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
     Status status = io::check_jindo_status(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_write";
+        jdo_freeContext(jdo_write_ctx);
         return Status::IOError("");
     }
     // 128MB
     if (size > 134217728) {
         RETURN_IF_ERROR(flush());
     }
+    jdo_freeContext(jdo_write_ctx);
     return Status::OK();
 }
 
@@ -41,8 +43,10 @@ Status JindoOutputStream::flush() {
     Status status = io::check_jindo_status(jdo_write_ctx);
     if (UNLIKELY(!status.ok())) {
         LOG(ERROR) << "Failed to execute jdo_flush";
+        jdo_freeContext(jdo_write_ctx);
         return Status::IOError("");
     }
+    jdo_freeContext(jdo_write_ctx);
     return Status::OK();
 }
 

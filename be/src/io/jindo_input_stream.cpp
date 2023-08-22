@@ -38,6 +38,7 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
         if (UNLIKELY(!read_status.ok())) {
             LOG(ERROR) << fmt::format("Failed to read the file {}, offset = {}, length = {}", _file_path, _offset,
                                       bytes_to_read);
+            jdo_freeContext(jdo_read_ctx);
             return read_status;
         }
         jdo_freeContext(jdo_read_ctx);
@@ -76,6 +77,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
         if (UNLIKELY(!file_exist)) {
             std::string msg = fmt::format("File {} does not exist, request offset = {}", _file_path, _offset);
             LOG(ERROR) << msg;
+            jdo_freeContext(jdo_ctx);
             return Status::IOError(msg);
         }
 
@@ -84,6 +86,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
         Status get_status = check_jindo_status(jdo_ctx);
         if (UNLIKELY(!get_status.ok())) {
             LOG(ERROR) << fmt::format("Failed to get the size of file {}", _file_path);
+            jdo_freeContext(jdo_ctx);
             return get_status;
         }
         jdo_freeContext(jdo_ctx);
