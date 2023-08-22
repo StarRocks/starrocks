@@ -801,6 +801,11 @@ void TabletUpdates::_check_for_apply() {
     }
 }
 
+bool TabletUpdates::need_apply() const {
+    std::lock_guard wl(_lock);
+    return _apply_version_idx + 1 < _edit_version_infos.size();
+}
+
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     // only 1 thread at max is running this method
