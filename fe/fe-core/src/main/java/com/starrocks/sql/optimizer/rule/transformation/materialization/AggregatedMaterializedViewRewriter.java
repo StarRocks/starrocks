@@ -231,6 +231,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                                                  Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
                                                  ColumnRefSet originalColumnSet,
                                                  AggregateFunctionRewriter aggregateFunctionRewriter) {
+        if (scalarOp.isConstantRef()) {
+            return scalarOp;
+        }
         equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
         equationRewriter.setOutputMapping(columnMapping);
         ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(scalarOp);
