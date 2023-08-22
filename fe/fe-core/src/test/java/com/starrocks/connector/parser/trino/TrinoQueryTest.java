@@ -330,6 +330,14 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select element_at(c1, 2) from test_array";
         assertPlanContains(sql, "2: c1[2]");
+
+        sql = "select element_at(array[1,2,3], 1, 0)";
+        try {
+            getFragmentPlan(sql);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("element_at function must have 2 arguments"));
+        }
     }
 
     @Test
