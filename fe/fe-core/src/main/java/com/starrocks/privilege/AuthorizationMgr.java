@@ -724,7 +724,9 @@ public class AuthorizationMgr {
             short pluginVersion) throws PrivilegeException {
         userWriteLock();
         try {
-            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            if (!user.equals(UserIdentity.ROOT)) {
+                provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            }
             userToPrivilegeCollection.put(user, privilegeCollection);
             invalidateUserInCache(user);
             LOG.info("replayed update user {}", user);
@@ -1188,7 +1190,9 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                }
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
                     roleNameToId.put(privilegeCollection.getName(), roleId);
@@ -1248,7 +1252,9 @@ public class AuthorizationMgr {
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
                 // Actually privilege collection is useless here, but we still record it for further usage
-                provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                }
                 roleIdToPrivilegeCollection.remove(roleId);
                 roleNameToId.remove(privilegeCollection.getName());
                 LOG.info("replayed drop role {}", roleId);
