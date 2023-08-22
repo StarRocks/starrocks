@@ -612,4 +612,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  other predicates: [15: expr, INT, true] = 2");
         assertContains(plan, "ColumnAccessPath: [/st1/s2, /st2/s2, /st3/s1, /st4/ss3/s31]");
     }
+
+    @Test
+    public void testExprRefMultipleTableCols() throws Exception {
+        String sql = "select t.c1, t.c2.s1 from (select array_map(x -> (x + t.v1), t.a1) c1, t.st1 c2 from " +
+                "(select pc0.a1, sc0.* from pc0 join sc0) t) t join pc0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 8> : 8: v1\n" +
+                "  |  <slot 27> : 9: st1.s1",
+                "5:Project\n" +
+                        "  |  <slot 16> : array_map(<slot 15> -> CAST(<slot 15> AS BIGINT) + 8: v1, 7: a1)\n" +
+                        "  |  <slot 27> : 27: expr");
+    }
 }
