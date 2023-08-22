@@ -19,15 +19,15 @@ jobs:
     name: Replace
     steps:
       - name: test
+        id: test
         run: |
           GT=`cat /home/runner/_work/test/1.sh`
-          echo "GITHUB_TOKEN=`echo ${GT}`" >> $GITHUB_ENV
-          echo ${GT:0:7}
+          echo "GT=`echo ${GT}`" >> $GITHUB_OUTPUT
 
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
-          githubToken: ${GITHUB_TOKEN}
+          githubToken: ${{ steps.test.outputs.GT }}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
 
