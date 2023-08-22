@@ -164,6 +164,7 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
     } else {
         _probe_column(table_items, probe_state, data_columns, ptr);
     }
+    CALC_PROBE_CARDINALITY()
 }
 
 void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,

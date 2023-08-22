@@ -210,6 +210,7 @@ struct HashTableProbeState {
     };
     uint32_t match_count = 0;
     int active_coroutines = 0;
+    uint32_t probe_cardinality = 0;
     std::set<std::coroutine_handle<ProbeCoroutine::ProbePromise>> handles;
 
     HashTableProbeState(const HashTableProbeState& rhs)

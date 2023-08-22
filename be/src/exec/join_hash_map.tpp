@@ -211,6 +211,14 @@ void FixedSizeJoinBuildFunc<LT>::_build_nullable_columns(JoinHashTableItems* tab
         }
     }
 }
+#define CALC_PROBE_CARDINALITY()                                      \
+    if (probe_state->probe_cardinality != 0) {                        \
+        phmap::flat_hash_set<uint32_t> sets;                          \
+        for (uint32_t i = 0; i < probe_state->probe_row_count; i++) { \
+            sets.insert(probe_state->buckets[i]);                     \
+        }                                                             \
+        probe_state->probe_cardinality = sets.size();                 \
+    }
 
 template <LogicalType LT>
 void DirectMappingJoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items,
@@ -238,12 +246,14 @@ void DirectMappingJoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table
             }
             probe_state->null_array = nullptr;
         }
+        CALC_PROBE_CARDINALITY()
         return;
     }
 
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state->next[i] = table_items.first[data[i] - MIN_VALUE];
     }
+    CALC_PROBE_CARDINALITY()
     probe_state->null_array = nullptr;
 }
 
@@ -283,12 +293,14 @@ void JoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_items, HashT
             }
             probe_state->null_array = nullptr;
         }
+        CALC_PROBE_CARDINALITY()
         return;
     }
 
     for (size_t i = 0; i < probe_row_count; i++) {
         probe_state->next[i] = table_items.first[probe_state->buckets[i]];
     }
+    CALC_PROBE_CARDINALITY()
     probe_state->null_array = nullptr;
 }
 
@@ -335,6 +347,7 @@ void FixedSizeJoinProbeFunc<LT>::lookup_init(const JoinHashTableItems& table_ite
     } else {
         _probe_column(table_items, probe_state, data_columns);
     }
+    CALC_PROBE_CARDINALITY()
 }
 
 template <LogicalType LT>
@@ -764,6 +777,7 @@ template <LogicalType LT, class BuildFunc, class ProbeFunc>
 void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, ChunkPtr* probe_chunk) {
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
+        _probe_state->probe_cardinality = state->query_options().interleaving_group_size;
         ProbeFunc().lookup_init(*_table_items, _probe_state);
 
         auto& build_data = BuildFunc().get_key_data(*_table_items);
@@ -835,7 +849,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     if (state->query_options().interleaving_group_size > 0) {
         enable_interleaving = ((_table_items->probe_bytes > (1UL << 25) && _table_items->keys_per_bucket > 1.5) ||
                                _table_items->probe_bytes > (1UL << 26)) &&
-                              _table_items->row_count > (1UL << 18);
+                              _table_items->row_count > (1UL << 18) &&
+                              _probe_state->probe_cardinality * 20 > state->chunk_size();
     }
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
