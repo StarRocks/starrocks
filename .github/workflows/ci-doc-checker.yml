@@ -86,3 +86,21 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+
+  behavior-unchange:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    steps:
+      - name: Replace Pull Request Body
+        uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
+        with:
+          githubToken: ${{ secrets.PAT }}
+          find: '[x] Yes, this PR will result in a change in behavior.'
+          replace: '[ ] Yes, this PR will result in a change in behavior.'
+
+      - name: Replace Pull Request Body
+        uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
+        with:
+          githubToken: ${{ secrets.PAT }}
+          find: '[ ] No, this PR will not result in a change in behavior.'
+          replace: '[x] No, this PR will not result in a change in behavior.'

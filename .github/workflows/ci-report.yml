@@ -24,7 +24,8 @@ jobs:
   INFO:
     runs-on: [ self-hosted, quick ]
     if: >
-      github.event.workflow_run.event == 'pull_request'
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
@@ -270,6 +271,7 @@ jobs:
           report_paths: ./be/be_ut_coverage.xml
 
       - name: Checkout PR Code
+        if: steps.publish_report.outcome == 'success'
         env:
           CODE_PATH: ${{ github.workspace }}
           BASE_VERSION: ${{ steps.download-ut-xml.outputs.base_version }}
