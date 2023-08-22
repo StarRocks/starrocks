@@ -29,6 +29,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
 /**
  * representation of MySQL information schema table metadata,
  */
@@ -39,8 +41,16 @@ public class SystemTable extends Table {
 
     private final TSchemaTableType schemaTableType;
 
+    private final String catalogName;
+
     public SystemTable(long id, String name, TableType type, List<Column> baseSchema, TSchemaTableType schemaTableType) {
+        this(DEFAULT_INTERNAL_CATALOG_NAME, id, name, type, baseSchema, schemaTableType);
+    }
+
+    public SystemTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
+                       TSchemaTableType schemaTableType) {
         super(id, name, type, baseSchema);
+        this.catalogName = catalogName;
         this.schemaTableType = schemaTableType;
     }
 
@@ -73,6 +83,10 @@ public class SystemTable extends Table {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public static class Builder {

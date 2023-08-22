@@ -460,6 +460,22 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testGetTableNames() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCatalog_name("default_catalog");
+        params.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        params.setCurrent_user_ident(tUserIdentity);
+
+        TGetTablesResult result = impl.getTableNames(params);
+        Assert.assertEquals(13, result.tables.size());
+    }
+
+    @Test
     public void testListTableStatus() throws TException {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TListTableStatusResult result = impl.listTableStatus(buildListTableStatusParam());
