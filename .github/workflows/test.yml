@@ -25,7 +25,7 @@ jobs:
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
-          githubToken: ${GITHUB_TOKEN}
+          githubToken: ${{ env.GITHUB_TOKEN }}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
 
