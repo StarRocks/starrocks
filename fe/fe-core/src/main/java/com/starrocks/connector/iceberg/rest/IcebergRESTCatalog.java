@@ -60,6 +60,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     // This parameter we don't expose to user, just some people are using docker hosted tabular, it's url may
     // not the "https://api.tabular.io/ws"
     public static final String KEY_ENABLE_TABULAR_SUPPORT = "enable_tabular_support";
+    public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
 
     private final Configuration conf;
     private final RESTCatalog delegate;
