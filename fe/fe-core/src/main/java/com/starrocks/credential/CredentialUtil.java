@@ -24,12 +24,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
 
-public class CloudCredentialUtil {
-    public static final Logger LOG = LogManager.getLogger(CloudCredentialUtil.class);
+public class CredentialUtil {
+    public static final Logger LOG = LogManager.getLogger(CredentialUtil.class);
 
     private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
 
-    public static void maskCloudCredential(Map<String, String> properties) {
+    public static void maskCredential(Map<String, String> properties) {
         // Mask for aws's credential
         doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
@@ -50,7 +50,8 @@ public class CloudCredentialUtil {
     private static void doMask(Map<String, String> properties, String configKey) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
         properties.remove(AzureCloudConfigurationFactory.AZURE_PATH_KEY);
-        // Remove password of jdbc catalog
+
+        // Remove for jdbc catalog's password
         properties.remove(JDBCResource.PASSWORD);
 
         // do mask
