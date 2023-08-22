@@ -521,4 +521,13 @@ public class OrderByTest extends PlanTestBase {
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
     }
+
+    @Test
+    public void testGroupByOrderBy() throws Exception {
+        String sql = "select v2,v3,v2 from t0 group by 1,2,3 order by 1,2,3";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC");
+    }
 }
