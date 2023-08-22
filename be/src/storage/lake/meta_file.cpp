@@ -39,7 +39,9 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
-        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
+        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {
+    _trash_files = std::make_shared<std::vector<std::string>>();
+}
 
 void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
@@ -55,19 +57,26 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
     }
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::vector<std::string>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+    // collect trash files
+    for (const auto& orphan_file : orphan_files) {
+        _trash_files->push_back(orphan_file);
+    }
+    for (const auto& del_file : op_write.dels()) {
+        _trash_files->push_back(del_file);
+    }
     _has_update_index = true;
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
     // delete input rowsets
     std::stringstream del_range_ss;
-    std::vector<std::pair<uint32_t, uint32_t> > delete_delvec_sid_range;
+    std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
     struct Finder {
         uint32_t id;
         bool operator()(const uint32_t rowid) const { return rowid == id; }

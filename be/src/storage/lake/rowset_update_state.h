@@ -62,7 +62,8 @@ public:
     Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
                 const MetaFileBuilder* builder, bool need_check_conflict);
 
-    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
+    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
+                           std::vector<std::string>* orphan_files);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
