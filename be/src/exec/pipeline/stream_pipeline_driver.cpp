@@ -37,7 +37,7 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
     StatusOr<DriverState> resturn_state = Status::OK();
     DeferOp defer([&]() {
         if (return_status.ok()) {
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+            _update_statistics(runtime_state, total_chunks_moved, total_rows_moved, time_spent);
         }
     });
 
@@ -186,7 +186,7 @@ StatusOr<DriverState> StreamPipelineDriver::_handle_finish_operators(RuntimeStat
     StatusOr<DriverState> resturn_state = Status::OK();
     DeferOp defer([&]() {
         if (return_status.ok()) {
-            _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+            _update_statistics(runtime_state, total_chunks_moved, total_rows_moved, time_spent);
         }
     });
 

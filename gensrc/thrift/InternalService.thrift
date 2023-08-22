@@ -212,6 +212,8 @@ struct TQueryOptions {
   96: optional i64 spillable_operator_mask;
 
   101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
 }
 
 
