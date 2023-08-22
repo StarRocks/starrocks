@@ -36,9 +36,11 @@
 
 #include <memory>
 
+#include "exec/workgroup/scan_executor.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
+#include "util/bthreads/executor.h"
 
 namespace starrocks {
 
@@ -105,7 +107,8 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
 }
 
 void FlushToken::shutdown() {
-    _flush_token->shutdown();
+    // _flush_token->shutdown(false);
+    _flush_token->close();
 }
 
 void FlushToken::cancel(const Status& st) {
@@ -117,6 +120,7 @@ void FlushToken::cancel(const Status& st) {
 }
 
 Status FlushToken::wait() {
+    // _flush_token->wait(false);
     _flush_token->wait();
     std::lock_guard l(_status_lock);
     return _status;
@@ -138,10 +142,12 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
     int max_threads = std::max(data_dir_num * min_threads, min_threads);
-    return ThreadPoolBuilder("memtable_flush") // mem table flush
-            .set_min_threads(min_threads)
-            .set_max_threads(max_threads)
-            .build(&_flush_pool);
+    RETURN_IF_ERROR(ThreadPoolBuilder("memtable_flush") // mem table flush
+                            .set_min_threads(min_threads)
+                            .set_max_threads(max_threads)
+                            .build(&_flush_pool));
+    _executor = std::make_unique<bthreads::ThreadPoolExecutor>(_flush_pool.get(), kDontTakeOwnership);
+    return {};
 }
 
 Status MemTableFlushExecutor::update_max_threads(int max_threads) {
@@ -153,7 +159,8 @@ Status MemTableFlushExecutor::update_max_threads(int max_threads) {
 }
 
 std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
+    return std::make_unique<FlushToken>(
+            std::make_unique<workgroup::ThreadPoolTaskToken>(_flush_pool->new_token(execution_mode)));
 }
 
 } // namespace starrocks

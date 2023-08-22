@@ -211,6 +211,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
+    public static final String ENABLE_INSERT_RESOURCE_GROUP = "enable_insert_resource_group";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -1225,7 +1227,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VarAttr(name = ENABLE_INSERT_RESOURCE_GROUP, flag = VariableMgr.INVISIBLE)
+    private boolean enableInsertResourceGroup = false;
+
     private int exprChildrenLimit = -1;
+
+    public boolean isEnableInsertResourceGroup() {
+        return enableInsertResourceGroup;
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;

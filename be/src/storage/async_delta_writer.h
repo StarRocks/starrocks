@@ -110,7 +110,7 @@ private:
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);
 
-    Status _init();
+    Status _init(const DeltaWriterOptions& opt);
     void _close();
 
     std::shared_ptr<DeltaWriter> _writer;

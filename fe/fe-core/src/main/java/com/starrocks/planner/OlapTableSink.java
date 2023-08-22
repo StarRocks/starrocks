@@ -120,6 +120,7 @@ public class OlapTableSink extends DataSink {
     private final boolean enablePipelineLoad;
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
+    private boolean enableResourceGroup;
 
     private boolean nullExprInAutoIncrement;
     private boolean missAutoIncrementColumn;
@@ -182,6 +183,7 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
+        tSink.setEnable_resource_group(enableResourceGroup);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
@@ -197,6 +199,8 @@ public class OlapTableSink extends DataSink {
             }
         }
     }
+
+    public void setEnableResourceGroup(boolean value) { this.enableResourceGroup = value; }
 
     public void setMissAutoIncrementColumn() {
         this.missAutoIncrementColumn = true;

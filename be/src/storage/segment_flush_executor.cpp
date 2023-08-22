@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
+SegmentFlushToken::SegmentFlushToken(std::unique_ptr<workgroup::TaskToken> flush_pool_token,
                                      std::shared_ptr<starrocks::DeltaWriter> delta_writer)
         : _flush_token(std::move(flush_pool_token)), _writer(std::move(delta_writer)) {}
 
@@ -119,7 +119,9 @@ Status SegmentFlushExecutor::update_max_threads(int max_threads) {
 
 std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(
         const std::shared_ptr<starrocks::DeltaWriter>& delta_writer, ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode), delta_writer);
+    auto pool_token = _flush_pool->new_token(execution_mode);
+    auto task_token = std::make_unique<workgroup::ThreadPoolTaskToken>(std::move(pool_token));
+    return std::make_unique<SegmentFlushToken>(std::move(task_token), delta_writer);
 }
 
 } // namespace starrocks

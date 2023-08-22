@@ -112,9 +112,11 @@ Status ThreadPoolToken::submit_func(std::function<void()> f, ThreadPool::Priorit
     return submit(std::make_shared<FunctionRunnable>(std::move(f)), pri);
 }
 
-void ThreadPoolToken::shutdown() {
+void ThreadPoolToken::shutdown(bool check) {
     std::unique_lock l(_pool->_lock);
-    _pool->check_not_pool_thread_unlocked();
+    if (check) {
+        _pool->check_not_pool_thread_unlocked();
+    }
 
     // Clear the queue under the lock, but defer the releasing of the tasks
     // outside the lock, in case there are concurrent threads wanting to access
@@ -164,9 +166,11 @@ void ThreadPoolToken::shutdown() {
     l.unlock();
 }
 
-void ThreadPoolToken::wait() {
+void ThreadPoolToken::wait(bool check) {
     std::unique_lock l(_pool->_lock);
-    _pool->check_not_pool_thread_unlocked();
+    if (check) {
+        _pool->check_not_pool_thread_unlocked();
+    }
     _not_running_cond.wait(l, [&]() { return !is_active(); });
 }
 

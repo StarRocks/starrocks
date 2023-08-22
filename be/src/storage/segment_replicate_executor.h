@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
@@ -78,7 +79,7 @@ private:
 
 class ReplicateToken {
 public:
-    ReplicateToken(std::unique_ptr<ThreadPoolToken> sync_pool_token, const DeltaWriterOptions* opt);
+    ReplicateToken(std::unique_ptr<workgroup::TaskToken> sync_pool_token, const DeltaWriterOptions* opt);
     ~ReplicateToken() = default;
 
     Status submit(std::unique_ptr<SegmentPB> segment, bool eos);
@@ -118,7 +119,7 @@ private:
 
     void _sync_segment(std::unique_ptr<SegmentPB> segment, bool eos);
 
-    std::unique_ptr<ThreadPoolToken> _replicate_token;
+    std::unique_ptr<workgroup::TaskToken> _replicate_token;
 
     mutable SpinLock _status_lock;
     // Records the current flush status of the tablet.

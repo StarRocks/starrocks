@@ -16,7 +16,10 @@
 
 #include <fmt/format.h>
 
+#include "common/config.h"
+#include "exec/workgroup/scan_executor.h"
 #include "runtime/current_thread.h"
+#include "storage/delta_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 
@@ -80,16 +83,20 @@ StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWr
         return res.status();
     }
     auto w = std::make_unique<AsyncDeltaWriter>(private_type(0), std::move(res).value());
-    RETURN_IF_ERROR(w->_init());
+    RETURN_IF_ERROR(w->_init(opt));
     return std::move(w);
 }
 
-Status AsyncDeltaWriter::_init() {
+Status AsyncDeltaWriter::_init(const DeltaWriterOptions& opt) {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return Status::InternalError("StorageEngine::instance() is NULL");
     }
     bthread::ExecutionQueueOptions opts;
-    opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    if (opt.enable_resource_group) {
+        opts.executor = ExecEnv::GetInstance()->scan_executor();
+    } else {
+        opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    }
     if (UNLIKELY(opts.executor == nullptr)) {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }
@@ -97,7 +104,12 @@ Status AsyncDeltaWriter::_init() {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     if (replica_state() == Secondary) {
-        _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        if (opt.enable_resource_group) {
+            auto task_token = ExecEnv::GetInstance()->scan_executor()->new_token("seg_flush_token");
+            _segment_flush_executor = std::make_unique<SegmentFlushToken>(std::move(task_token), _writer);
+        } else {
+            _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        }
         if (_segment_flush_executor == nullptr) {
             return Status::InternalError("SegmentFlushExecutor init failed");
         }
