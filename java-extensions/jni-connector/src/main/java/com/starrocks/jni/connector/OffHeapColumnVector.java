@@ -215,6 +215,20 @@ public class OffHeapColumnVector {
         ++numNulls;
     }
 
+    public int appendByte(byte v) {
+        reserve(elementsAppended + 1);
+        putByte(elementsAppended, v);
+        return elementsAppended++;
+    }
+
+    public void putByte(int rowId, byte value) {
+        Platform.putByte(null, data + rowId, value);
+    }
+
+    public byte getByte(int rowId) {
+        return Platform.getByte(null, data + rowId);
+    }
+
     public int appendBoolean(boolean v) {
         reserve(elementsAppended + 1);
         putBoolean(elementsAppended, v);
@@ -432,6 +446,9 @@ public class OffHeapColumnVector {
         }
 
         switch (typeValue) {
+            case TINYINT:
+                appendByte(o.getByte());
+                break;
             case BOOLEAN:
                 appendBoolean(o.getBoolean());
                 break;
@@ -515,6 +532,9 @@ public class OffHeapColumnVector {
 
         ColumnType.TypeValue typeValue = type.getTypeValue();
         switch (typeValue) {
+            case TINYINT:
+                sb.append(getByte(i));
+                break;
             case BOOLEAN:
                 sb.append(getBoolean(i));
                 break;
