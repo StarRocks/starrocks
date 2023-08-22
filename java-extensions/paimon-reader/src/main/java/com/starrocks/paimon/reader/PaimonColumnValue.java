@@ -98,4 +98,9 @@ public class PaimonColumnValue implements ColumnValue {
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
 
     }
+
+    @Override
+    public byte getByte() {
+        return (byte) fieldData;
+    }
 }
