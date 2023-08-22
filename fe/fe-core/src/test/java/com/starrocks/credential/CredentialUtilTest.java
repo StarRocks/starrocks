@@ -15,7 +15,6 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.junit.Assert;
