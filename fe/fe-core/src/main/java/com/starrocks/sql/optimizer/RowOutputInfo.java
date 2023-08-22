@@ -132,6 +132,10 @@ public class RowOutputInfo {
         return Lists.newArrayList(chooseOutputMap().values());
     }
 
+    public List<ColumnOutputInfo> getCommonColInfo() {
+        return Lists.newArrayList(commonColInfo.values());
+    }
+
     public List<ColumnRefOperator> getOutputColRefs() {
         return chooseOutputMap().values().stream().map(e -> e.getColumnRef()).collect(Collectors.toList());
     }
