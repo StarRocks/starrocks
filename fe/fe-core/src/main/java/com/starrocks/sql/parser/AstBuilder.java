@@ -941,18 +941,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         new FunctionCallExpr(functionName, new ArrayList<>()));
             }
         }
-        final StarRocksParser.MaterializedColumnDescContext materializedColumnDescContext =
-                context.materializedColumnDesc();
+        final StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
+                context.generatedColumnDesc();
         Expr expr = null;
-        if (materializedColumnDescContext != null) {
+        if (generatedColumnDescContext != null) {
             if (isAllowNull != null && isAllowNull == false) {
-                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Materialized Column"));
+                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Generated Column"));
             }
             if (isKey) {
-                throw new ParsingException(PARSER_ERROR_MSG.isKey("Materialized Column"));
+                throw new ParsingException(PARSER_ERROR_MSG.isKey("Generated Column"));
             }
 
-            expr = (Expr) visit(materializedColumnDescContext.expression());
+            expr = (Expr) visit(generatedColumnDescContext.expression());
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
@@ -3529,22 +3529,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         ;
         properties = getProperties(context.properties());
 
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (rollupName != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("rollupName", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 
             if (columnPosition != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("columnPosition", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("columnPosition", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 
             if (properties.size() != 0) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("properties", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
         }
@@ -3566,16 +3566,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.autoIncrementForbid(columnDef.getName(), "ADD"),
                         columnDef.getPos());
             }
-            if (columnDef.isMaterializedColumn()) {
+            if (columnDef.isGeneratedColumn()) {
                 if (rollupName != null) {
                     throw new ParsingException(
-                            PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                            PARSER_ERROR_MSG.generatedColumnLimit("rollupName", "ADD GENERATED COLUMN"),
                             columnDef.getPos());
                 }
     
                 if (properties.size() != 0) {
                     throw new ParsingException(
-                            PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                            PARSER_ERROR_MSG.generatedColumnLimit("properties", "ADD GENERATED COLUMN"),
                             columnDef.getPos());
                 }
             }
@@ -3612,15 +3612,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (rollupName != null) {
-                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName",
-                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                throw new ParsingException(PARSER_ERROR_MSG.generatedColumnLimit("rollupName",
+                        "MODIFY GENERATED COLUMN"), columnDef.getPos());
             }
 
             if (columnPosition != null) {
-                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition",
-                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                throw new ParsingException(PARSER_ERROR_MSG.generatedColumnLimit("columnPosition",
+                        "MODIFY GENERATED COLUMN"), columnDef.getPos());
             }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),

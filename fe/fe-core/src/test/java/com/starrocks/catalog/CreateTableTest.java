@@ -383,13 +383,13 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column must be nullable column.",
                 () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
@@ -415,13 +415,13 @@ public class CreateTableTest {
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other generated columns",
                 () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE AS (array_avg(array_data)), \n"
                         + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column don't support aggregation function",
                 () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc BIGINT AS (sum(id)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"

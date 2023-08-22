@@ -31,7 +31,7 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 
 ChunkChanger::~ChunkChanger() {
     _schema_mapping.clear();
-    for (auto it : _mc_exprs) {
+    for (auto it : _gc_exprs) {
         if (it.second != nullptr) {
             it.second->close(_state);
         }
@@ -481,8 +481,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
     return true;
 }
 
-Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
-    if (_mc_exprs.size() == 0) {
+Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
+    if (_gc_exprs.size() == 0) {
         return Status::OK();
     }
 
@@ -491,7 +491,7 @@ Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
         new_chunk->set_slot_id_to_index(i, i);
     }
 
-    for (auto it : _mc_exprs) {
+    for (auto it : _gc_exprs) {
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(new_chunk.get()));
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
@@ -502,7 +502,7 @@ Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
-            // materialized column must be a nullable column. If tmp is not nullable column,
+            // generated column must be a nullable column. If tmp is not nullable column,
             // new_chunk can not swap it directly
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
@@ -541,10 +541,10 @@ Status ChunkChanger::prepare() {
     return Status::OK();
 }
 
-Status ChunkChanger::append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
-                                                 const std::vector<uint32_t>& all_ref_columns_ids,
-                                                 int base_schema_columns) {
-    if (_mc_exprs.size() == 0) {
+Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
+                                              const std::vector<uint32_t>& all_ref_columns_ids,
+                                              int base_schema_columns) {
+    if (_gc_exprs.size() == 0) {
         return Status::OK();
     }
 
@@ -556,7 +556,7 @@ Status ChunkChanger::append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr&
 
     auto tmp_new_chunk = new_chunk->clone_empty();
 
-    for (auto it : _mc_exprs) {
+    for (auto it : _gc_exprs) {
         // cid for new partial schema
         int cid = it.first - base_schema_columns;
         ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(read_chunk.get()));
@@ -569,7 +569,7 @@ Status ChunkChanger::append_materialized_columns(ChunkPtr& read_chunk, ChunkPtr&
         } else if (tmp->is_nullable()) {
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
         } else {
-            // materialized column must be a nullable column. If tmp is not nullable column,
+            // generated column must be a nullable column. If tmp is not nullable column,
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
@@ -621,9 +621,9 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
                                         ChunkChanger* chunk_changer,
                                         const MaterializedViewParamMap& materialized_view_param_map,
                                         bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
-                                        std::unordered_set<int>* materialized_column_idxs) {
+                                        std::unordered_set<int>* generated_column_idxs) {
     std::map<ColumnId, ColumnId> base_to_new;
-    bool is_modify_materialized_column = false;
+    bool is_modify_generated_column = false;
     for (int i = 0; i < new_schema.num_columns(); ++i) {
         const TabletColumn& new_column = new_schema.column(i);
         std::string column_name(new_column.name());
@@ -657,20 +657,19 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         }
 
         int32_t column_index = base_schema.field_index(column_name);
-        // if materialized_column_idxs contain column_index, it means that
-        // MODIFY MATERIALIZED COLUMN is executed. The value for the new schema
+        // if generated_column_idxs contain column_index, it means that
+        // MODIFY GENERATED COLUMN is executed. The value for the new schema
         // must be re-compute by the new expression so the column mapping can not be set.
-        if (column_index >= 0 && ((materialized_column_idxs == nullptr) ||
-                                  materialized_column_idxs->find(column_index) == materialized_column_idxs->end())) {
+        if (column_index >= 0 && ((generated_column_idxs == nullptr) ||
+                                  generated_column_idxs->find(column_index) == generated_column_idxs->end())) {
             column_mapping->ref_column = column_index;
             base_to_new[column_index] = i;
             continue;
         }
 
-        if (!is_modify_materialized_column) {
-            is_modify_materialized_column =
-                    (materialized_column_idxs != nullptr) &&
-                    (materialized_column_idxs->find(column_index) != materialized_column_idxs->end());
+        if (!is_modify_generated_column) {
+            is_modify_generated_column = (generated_column_idxs != nullptr) &&
+                                         (generated_column_idxs->find(column_index) != generated_column_idxs->end());
         }
 
         // to handle new added column
@@ -749,7 +748,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         } else {
             auto& new_column = new_schema.column(i);
             auto& ref_column = base_schema.column(column_mapping->ref_column);
-            if (new_column.type() != ref_column.type() || is_modify_materialized_column) {
+            if (new_column.type() != ref_column.type() || is_modify_generated_column) {
                 *sc_directly = true;
                 return Status::OK();
             } else if (is_decimalv3_field_type(new_column.type()) &&
