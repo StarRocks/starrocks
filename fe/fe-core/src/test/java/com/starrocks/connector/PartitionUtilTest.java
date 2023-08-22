@@ -23,6 +23,7 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PartitionKey;
@@ -35,6 +36,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -85,6 +87,20 @@ public class PartitionUtilTest {
         Assert.assertEquals("a", res.get(1));
         Assert.assertEquals("3.0", res.get(2));
         Assert.assertEquals(HiveMetaClient.PARTITION_NULL_VALUE, res.get(3));
+    }
+
+    @Test
+    public void testCreateIcebergPartitionKey() throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", IcebergApiConverter.PARTITION_NULL_VALUE), partColumns, Table.TableType.ICEBERG);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+    }
+
+    @Test
+    public void testCreateDeltaLakePartitionKey() throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns, Table.TableType.DELTALAKE);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
