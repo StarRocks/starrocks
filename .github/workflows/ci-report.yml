@@ -105,7 +105,7 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             mkdir fe && cd fe
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
           else
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
@@ -412,7 +412,7 @@ jobs:
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
     needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: always() && needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
