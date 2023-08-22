@@ -944,6 +944,17 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     }
     TRACE("found best tablet $0", best_tablet->tablet_id());
 
+    // The concurrency of migration and compaction will lead to inconsistency between the meta and
+    // primary index cache of the new tablet. So we should abort the compaction for the old tablet
+    // when executing migration.
+    std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
+    if (!rlock.owns_lock()) {
+        return Status::InternalError("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id());
+    }
+    if (Tablet::check_migrate(best_tablet)) {
+        return Status::InternalError("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id());
+    }
+
     Status res;
     int64_t duration_ns = 0;
     {

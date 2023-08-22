@@ -172,6 +172,9 @@ public class TabletInvertedIndex {
                         if (backendTabletInfo.isSetIs_error_state()) {
                             replica.setIsErrorState(backendTabletInfo.is_error_state);
                         }
+                        if (backendTabletInfo.isSetMax_rowset_creation_time()) {
+                            replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
+                        }
                         if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                             foundTabletsWithValidSchema.add(tabletId);
                             // 1. (intersection)

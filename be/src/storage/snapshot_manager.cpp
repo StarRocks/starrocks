@@ -740,6 +740,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
+        // reset rowsetid means that it is different from the rowset in snapshot meta.
+        // It is reasonable that reset the creation time here.
+        rowset_meta_pb.set_creation_time(UnixSeconds());
     }
     return Status::OK();
 }

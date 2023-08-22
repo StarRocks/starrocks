@@ -2454,4 +2454,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+
+    /**
+     * Loading or compaction must be stopped for primary_key_disk_schedule_time
+     * seconds before it can be scheduled
+     */
+    @ConfField(mutable = true)
+    public static int primary_key_disk_schedule_time = 3600; // 1h
 }

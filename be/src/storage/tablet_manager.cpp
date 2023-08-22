@@ -107,15 +107,28 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             LOG(WARNING) << "add tablet with same data dir twice! tablet_id=" << new_tablet->tablet_id();
             return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
-        old_tablet->obtain_header_rdlock();
-        auto old_rowset = old_tablet->rowset_with_max_version();
-        auto new_rowset = new_tablet->rowset_with_max_version();
-        auto old_time = (old_rowset == nullptr) ? -1 : old_rowset->creation_time();
-        auto new_time = (new_rowset == nullptr) ? -1 : new_rowset->creation_time();
-        auto old_version = (old_rowset == nullptr) ? -1 : old_rowset->end_version();
-        auto new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
-        old_tablet->release_header_lock();
+
+        int64_t old_time = 0;
+        int64_t new_time = 0;
+        int64_t old_version = 0;
+        int64_t new_version = 0;
+        if (new_tablet->updates() != nullptr) {
+            old_time = old_tablet->updates()->max_rowset_creation_time();
+            new_time = new_tablet->updates()->max_rowset_creation_time();
+            old_version = old_tablet->updates()->max_version();
+            new_version = new_tablet->updates()->max_version();
+        } else {
+            old_tablet->obtain_header_rdlock();
+            auto old_rowset = old_tablet->rowset_with_max_version();
+            auto new_rowset = new_tablet->rowset_with_max_version();
+            old_time = (old_rowset == nullptr) ? -1 : old_rowset->creation_time();
+            new_time = (new_rowset == nullptr) ? -1 : new_rowset->creation_time();
+            old_version = (old_rowset == nullptr) ? -1 : old_rowset->end_version();
+            new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
+            old_tablet->release_header_lock();
+        }
         bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
+
         if (replace_old) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
@@ -1509,11 +1522,14 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
     auto shard = stol(shard_str);
 
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_path);
-    if (!snapshot_meta.ok()) {
-        LOG(WARNING) << "Fail to parse " << meta_path << ": " << snapshot_meta.status();
-        return snapshot_meta.status();
+    auto meta_file = SnapshotManager::instance()->parse_snapshot_meta(meta_path);
+    if (!meta_file.ok()) {
+        LOG(WARNING) << "Fail to parse " << meta_path << ": " << meta_file.status();
+        return meta_file.status();
     }
+    auto val = std::move(meta_file).value();
+    auto snapshot_meta = &val;
+
     if (snapshot_meta->snapshot_type() != SNAPSHOT_TYPE_FULL) {
         return Status::InternalError("not full snapshot");
     }
@@ -1528,6 +1544,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     }
     LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
                                      snapshot_meta->snapshot_version(), schema_hash_path);
+
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path));
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;
