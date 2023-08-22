@@ -179,8 +179,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         private String timeUnit;
 
         public AsyncRefreshContext() {
-            this.baseTableVisibleVersionMap = Maps.newHashMap();
-            this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
+            this.baseTableVisibleVersionMap = Maps.newConcurrentMap();
+            this.baseTableInfoVisibleVersionMap = Maps.newConcurrentMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
