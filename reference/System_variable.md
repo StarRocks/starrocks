@@ -257,6 +257,10 @@ SELECT /*+ SET_VAR
   * 如果该选项关闭: 则只会产生 Local RF。
   * 如果该选项打开, 则会生成 multi-part GRF, 并且该 GRF 需要携带 multi-column 作为 partition-by 表达式.
 
+* enbale_strict_type (3.1 及以后)
+
+  是否对所有复合谓词以及 WHERE 子句中的表达式进行隐式转换。默认值：false。
+
 * event_scheduler
 
   用于兼容 MySQL 客户端。无实际作用。
@@ -329,9 +333,9 @@ SELECT /*+ SET_VAR
 
   其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
 
-* `log_rejected_record_num`（3.1 及以后）
+* log_rejected_record_num（3.1 及以后）
 
-  指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。该参数自 3.1 版本起支持。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
+  指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。
   
   * 取值为 `0` 表示不记录过滤掉的数据行。
   * 取值为 `-1` 表示记录所有过滤掉的数据行。
