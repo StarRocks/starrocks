@@ -242,6 +242,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", timeUnit='" + timeUnit + '\'' +
                     '}';
         }
+
+        public AsyncRefreshContext copy() {
+            AsyncRefreshContext arc = new AsyncRefreshContext();
+            arc.baseTableVisibleVersionMap.putAll(this.baseTableVisibleVersionMap);
+            arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
+            arc.defineStartTime = this.defineStartTime;
+            arc.startTime = this.startTime;
+            arc.step = this.step;
+            arc.timeUnit = this.timeUnit;
+            return arc;
+        }
     }
 
     public static class MvRefreshScheme {
