@@ -174,7 +174,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     _brpc_dest_real_ip = _brpc_dest_addr.hostname;
     if (!is_valid_ip(_brpc_dest_addr.hostname)) {
         _brpc_dest_real_ip = hostname_to_ip(_brpc_dest_addr.hostname);
-        if (_brpc_dest_real_ip == "") {
+        if (_brpc_dest_real_ip.empty()) {
             LOG(WARNING) << "failed to get ip from host " << _brpc_dest_addr.hostname;
         }
     }
