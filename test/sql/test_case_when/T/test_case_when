@@ -55,6 +55,8 @@ INSERT INTO `t0` (`region`, `order_date`, `income`, `ship_mode`, `ship_code`) VA
 ('CHINA', '2022-01-04', 98765, 150, 15),
 ('JAPAN', '2022-01-01', 23456, 75, null);
 
+[UC]set ENABLE_SIMPLIFY_CASE_WHEN = true
+
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
@@ -522,4 +524,9 @@ select * from t0 where (case when ship_code is null then true when not 3 then fa
 select * from t0 where (case when ship_code is null then true when not null then false end) is null;
 select * from t0 where (case when ship_code is null then true when null then false end) is null;
 select * from t0 where (case when ship_code is null then true when 0 then false end) is null;
-select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3  end in (2, 3, null)) is null;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3 end in (2, 3, null)) is null;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3 end in (2, 3, null)) is not null;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is null;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is not null;
+select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is null;
+select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is not null;
