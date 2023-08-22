@@ -181,7 +181,58 @@ struct TQueryOptions {
 
   63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
 
+<<<<<<< HEAD
   67: optional bool enable_pipeline_query_statistic;
+=======
+  64: optional TLoadJobType load_job_type
+
+  66: optional bool use_scan_block_cache;
+
+  67: optional bool enable_pipeline_query_statistic = false;
+
+  68: optional i32 transmission_encode_level;
+  
+  69: optional bool enable_populate_block_cache;
+
+  70: optional bool allow_throw_exception = 0;
+
+  71: optional bool hudi_mor_force_jni_reader;
+
+  72: optional i64 rpc_http_min_size;
+
+  // some experimental parameter for spill
+  73: optional i32 spill_mem_table_size;
+  74: optional i32 spill_mem_table_num;
+  75: optional double spill_mem_limit_threshold;
+  76: optional i64 spill_operator_min_bytes;
+  77: optional i64 spill_operator_max_bytes;
+  78: optional i32 spill_encode_level;
+  79: optional i64 spill_revocable_max_bytes;
+
+  85: optional TSpillMode spill_mode;
+  
+  86: optional i32 io_tasks_per_scan_operator = 4;
+  87: optional i32 connector_io_tasks_per_scan_operator = 16;
+  88: optional double runtime_filter_early_return_selectivity = 0.05;
+
+
+  90: optional i64 log_rejected_record_num = 0;
+
+  91: optional bool use_page_cache;
+
+  92: optional bool enable_connector_adaptive_io_tasks = true;
+  93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
+  94: optional double scan_use_query_mem_ratio = 0.25;
+  95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  96: optional i64 spillable_operator_mask;
+  // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
+  97: optional i64 load_profile_collect_second;
+
+  101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
+>>>>>>> be2f71b697 ([BugFix] fix compatibility issue when collecting query statistics (#29678))
 }
 
 
