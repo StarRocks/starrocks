@@ -153,8 +153,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         private String timeUnit;
 
         public AsyncRefreshContext() {
-            this.baseTableVisibleVersionMap = Maps.newHashMap();
-            this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
+            this.baseTableVisibleVersionMap = Maps.newConcurrentMap();
+            this.baseTableInfoVisibleVersionMap = Maps.newConcurrentMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
@@ -215,6 +215,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     ", step=" + step +
                     ", timeUnit='" + timeUnit + '\'' +
                     '}';
+        }
+
+        public AsyncRefreshContext copy() {
+            AsyncRefreshContext arc = new AsyncRefreshContext();
+            arc.baseTableVisibleVersionMap.putAll(this.baseTableVisibleVersionMap);
+            arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
+            arc.defineStartTime = this.defineStartTime;
+            arc.startTime = this.startTime;
+            arc.step = this.step;
+            arc.timeUnit = this.timeUnit;
+            return arc;
         }
     }
 
