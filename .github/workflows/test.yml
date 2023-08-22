@@ -16,6 +16,7 @@ jobs:
 
   sync-checker:
     runs-on: [ self-hosted, quick ]
+    if: contains(github.event.pull_request.title, '[Doc]')
     name: Replace
     steps:
       - name: test
@@ -30,4 +31,11 @@ jobs:
           githubToken: ${{ steps.test.outputs.GT }}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
+
+      - name: Replace Pull Request Body
+        uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
+        with:
+          githubToken: ${{ steps.test.outputs.GT }}
+          find: '[ ] No, this PR will not result in a change in behavior.'
+          replace: '[x] No, this PR will not result in a change in behavior.'
 
