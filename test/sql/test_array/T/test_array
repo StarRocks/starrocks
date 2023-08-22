@@ -33,6 +33,7 @@ insert into array_data_type (c1, c2, c3, c4,c5) values
 
 select c4 = c5 from array_data_type;
 select c4 > c5 from array_data_type;
+select * from (select array_map(x -> x*2 + x*2, [1,3]) col1) t1 join (select array_map(x -> x*2 + x*2, c3) col2 from  array_data_type) t2;
 
 -- name: testArrayVarchar
 CREATE TABLE array_data_type_1

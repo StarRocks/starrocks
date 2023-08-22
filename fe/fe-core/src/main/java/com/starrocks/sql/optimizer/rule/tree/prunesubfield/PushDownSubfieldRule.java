@@ -271,10 +271,10 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 ScalarOperator subfieldExpr = entry.getValue();
                 ColumnRefSet subfieldUseColumns = context.pushDownExprUseColumns.get(subfieldExpr);
 
-                if (leftOutput.isIntersect(subfieldUseColumns)) {
+                if (leftOutput.containsAll(subfieldUseColumns)) {
                     leftContext.put(index, subfieldExpr);
                     childSubfieldOutputs.union(index);
-                } else if (rightOutput.isIntersect(subfieldUseColumns)) {
+                } else if (rightOutput.containsAll(subfieldUseColumns)) {
                     rightContext.put(index, subfieldExpr);
                     childSubfieldOutputs.union(index);
                 } else {

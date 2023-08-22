@@ -122,7 +122,10 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public ColumnRefSet getUsedColumns() {
-        return lambdaExpr.getUsedColumns();
+        ColumnRefSet usedCols = lambdaExpr.getUsedColumns();
+        columnRefMap.values().stream().forEach(e -> usedCols.union(e.getUsedColumns()));
+        usedCols.except(new ColumnRefSet(columnRefMap.keySet()));
+        return usedCols;
     }
 
     @Override
