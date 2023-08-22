@@ -33,7 +33,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for all the future sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
-A variable set by `SET var_name = xxx;` only takes effect for the current session. Example:
+A variable set by `SET <var_name> = xxx;` only takes effect for the current session. Example:
 
 ```SQL
 SET query_mem_limit = 137438953472;
@@ -43,13 +43,13 @@ SET forward_to_master = true;
 SET time_zone = "Asia/Shanghai";
 ```
 
-A variable set by `SET GLOBAL var_name = xxx;` takes effect globally. Example:
+A variable set by `SET GLOBAL <var_name> = xxx;` takes effect globally. Example:
 
 ```SQL
 SET GLOBAL query_mem_limit = 137438953472;
 ```
 
-Variables that can **only be set globally effective** include:
+The following variables only take effect globally. They cannot take effect for a single session, which means you must use `SET GLOBAL <var_name> = xxx;` for these variables. If you try to set such a variable for a single session (`SET <var_name> = xxx;`), an error is returned.
 
 * activate_all_roles_on_login
 * character_set_database
