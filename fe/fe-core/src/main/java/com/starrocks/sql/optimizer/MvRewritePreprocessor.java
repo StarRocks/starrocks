@@ -218,7 +218,7 @@ public class MvRewritePreprocessor {
         }
 
         MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
-        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewriteFastWithDraw() ||
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() ||
                 mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
