@@ -790,7 +790,8 @@ public class MaterializedViewAnalyzer {
                     AnalyticExpr analyticExpr = columnExpr.cast();
                     if (analyticExpr.getPartitionExprs() == null
                             || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
-                        throw new SemanticException("window function: %s should be partitioned by partition column: %s",
+                        throw new SemanticException("window function %s ’s partition expressions" +
+                                " should contain the partition column %s of materialized view",
                                 analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
                     }
                 }

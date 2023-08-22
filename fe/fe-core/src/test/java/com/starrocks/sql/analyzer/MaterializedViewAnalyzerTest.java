@@ -161,7 +161,8 @@ public class MaterializedViewAnalyzerTest {
                     "select \n" +
                     "\tk2, k1, row_number() over (order by  k2)\n" +
                     "from tbl1 \n";
-            analyzeFail(mvSql, "Detail message: window function: row_number should be partitioned by partition column: k1.");
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
+                    " should contain the partition column k1 of materialized view");
         }
     }
 }
