@@ -404,8 +404,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.materializedColumnExpr() != null) {
-                    Expr materializedExpression = column.materializedColumnExpr();
+                if (column.generatedColumnExpr() != null) {
+                    Expr materializedExpression = column.generatedColumnExpr();
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);

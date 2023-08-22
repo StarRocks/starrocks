@@ -674,7 +674,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     st = ctx->open(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
 
-    chunk_changer.get_mc_exprs()->insert({3, ctx});
+    chunk_changer.get_gc_exprs()->insert({3, ctx});
 
     _sc_procedure = new (std::nothrow) SchemaChangeDirectly(&chunk_changer);
     Version version(3, 3);

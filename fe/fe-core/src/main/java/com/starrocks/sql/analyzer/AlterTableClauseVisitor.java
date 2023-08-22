@@ -281,9 +281,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("Unsupported data type: TIME");
         }
 
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (!table.isOlapTable()) {
-                throw new SemanticException("Materialized Column only support olap table");
+                throw new SemanticException("Generated Column only support olap table");
             }
 
             if (table.isCloudNativeTable()) {
@@ -296,7 +296,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
 
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-            Expr expr = columnDef.materializedColumnExpr();
+            Expr expr = columnDef.generatedColumnExpr();
             TableName tableName = new TableName(context.getDatabase(), table.getName());
 
             ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
@@ -309,18 +309,18 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             expr.collect(FunctionCallExpr.class, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
-                    throw new SemanticException("Materialized Column don't support aggregation function");
+                    throw new SemanticException("Generated Column don't support aggregation function");
                 }
             }
 
-            // check if the expression refers to other materialized columns
+            // check if the expression refers to other generated columns
             List<SlotRef> slots = Lists.newArrayList();
             expr.collect(SlotRef.class, slots);
             if (slots.size() != 0) {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
-                    if (refColumn.isMaterializedColumn()) {
-                        throw new SemanticException("Expression can not refers to other materialized columns");
+                    if (refColumn.isGeneratedColumn()) {
+                        throw new SemanticException("Expression can not refers to other generated columns");
                     }
                     if (refColumn.isAutoIncrement()) {
                         throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
@@ -329,7 +329,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Materialized Column " +
+                throw new SemanticException("Illege expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
@@ -338,12 +338,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
 
         ColumnPosition colPos = clause.getColPos();
-        if (colPos == null && table instanceof OlapTable && ((OlapTable) table).hasMaterializedColumn()) {
+        if (colPos == null && table instanceof OlapTable && ((OlapTable) table).hasGeneratedColumn()) {
             List<Column> baseSchema = ((OlapTable) table).getBaseSchema();
             if (baseSchema.size() > 1) {
                 for (int columnIdx = 0; columnIdx < baseSchema.size() - 1; ++columnIdx) {
-                    if (!baseSchema.get(columnIdx).isMaterializedColumn() &&
-                            baseSchema.get(columnIdx + 1).isMaterializedColumn()) {
+                    if (!baseSchema.get(columnIdx).isGeneratedColumn() &&
+                            baseSchema.get(columnIdx + 1).isGeneratedColumn()) {
                         clause.setColPos(new ColumnPosition(baseSchema.get(columnIdx).getName()));
                         break;
                     }
@@ -359,8 +359,8 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
             Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isMaterializedColumn()) {
-                throw new SemanticException("Can not add column after Materialized Column");
+            if (afterColumn.isGeneratedColumn()) {
+                throw new SemanticException("Can not add column after Generated Column");
             }
         }
 
@@ -386,7 +386,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         if (columnDefs == null || columnDefs.isEmpty()) {
             throw new SemanticException("Columns is empty in add columns clause.");
         }
-        boolean hasMaterializedColumn = false;
+        boolean hasGeneratedColumn = false;
         boolean hasNormalColumn = false;
         for (ColumnDef colDef : columnDefs) {
             try {
@@ -398,11 +398,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
             }
 
-            if (colDef.isMaterializedColumn()) {
-                hasMaterializedColumn = true;
+            if (colDef.isGeneratedColumn()) {
+                hasGeneratedColumn = true;
 
                 if (!table.isOlapTable()) {
-                    throw new SemanticException("Materialized Column only support olap table");
+                    throw new SemanticException("Generated Column only support olap table");
                 }
 
                 if (table.isCloudNativeTable()) {
@@ -413,7 +413,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                     throw new SemanticException("Generated Column does not support AGG table");
                 }
 
-                Expr expr = colDef.materializedColumnExpr();
+                Expr expr = colDef.generatedColumnExpr();
                 TableName tableName = new TableName(context.getDatabase(), table.getName());
 
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
@@ -426,18 +426,18 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 expr.collect(FunctionCallExpr.class, funcs);
                 for (FunctionCallExpr fn : funcs) {
                     if (fn.isAggregateFunction()) {
-                        throw new SemanticException("Materialized Column don't support aggregation function");
+                        throw new SemanticException("Generated Column don't support aggregation function");
                     }
                 }
 
-                // check if the expression refers to other materialized columns
+                // check if the expression refers to other generated columns
                 List<SlotRef> slots = Lists.newArrayList();
                 expr.collect(SlotRef.class, slots);
                 if (slots.size() != 0) {
                     for (SlotRef slot : slots) {
                         Column refColumn = table.getColumn(slot.getColumnName());
-                        if (refColumn.isMaterializedColumn()) {
-                            throw new SemanticException("Expression can not refers to other materialized columns");
+                        if (refColumn.isGeneratedColumn()) {
+                            throw new SemanticException("Expression can not refers to other generated columns");
                         }
                         if (refColumn.isAutoIncrement()) {
                             throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
@@ -446,7 +446,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
 
                 if (!colDef.getType().matchesType(expr.getType())) {
-                    throw new SemanticException("Illege expression type for Materialized Column " +
+                    throw new SemanticException("Illege expression type for Generated Column " +
                             "Column Type: " + colDef.getType().toString() +
                             ", Expression Type: " + expr.getType().toString());
                 }
@@ -455,18 +455,18 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
         }
 
-        if (hasMaterializedColumn && hasNormalColumn) {
-            throw new SemanticException("Can not add normal column and Materialized Column in the same time");
+        if (hasGeneratedColumn && hasNormalColumn) {
+            throw new SemanticException("Can not add normal column and Generated Column in the same time");
         }
 
-        if (hasNormalColumn && table instanceof OlapTable && ((OlapTable) table).hasMaterializedColumn()) {
+        if (hasNormalColumn && table instanceof OlapTable && ((OlapTable) table).hasGeneratedColumn()) {
             List<Column> baseSchema = ((OlapTable) table).getBaseSchema();
             if (baseSchema.size() > 1) {
                 for (int columnIdx = 0; columnIdx < baseSchema.size() - 1; ++columnIdx) {
-                    if (!baseSchema.get(columnIdx).isMaterializedColumn() &&
-                            baseSchema.get(columnIdx + 1).isMaterializedColumn()) {
+                    if (!baseSchema.get(columnIdx).isGeneratedColumn() &&
+                            baseSchema.get(columnIdx + 1).isGeneratedColumn()) {
                         ColumnPosition pos = new ColumnPosition(baseSchema.get(columnIdx).getName());
-                        clause.setMaterializedColumnPos(pos);
+                        clause.setGeneratedColumnPos(pos);
                         break;
                     }
                 }
@@ -488,12 +488,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
         for (Column column : table.getFullSchema()) {
-            if (column.isMaterializedColumn()) {
-                List<SlotRef> slots = column.getMaterializedColumnRef();
+            if (column.isGeneratedColumn()) {
+                List<SlotRef> slots = column.getGeneratedColumnRef();
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(clause.getColName())) {
                         throw new SemanticException("Column: " + clause.getColName() + " can not be dropped" +
-                                ", because expression of Materialized Column: " +
+                                ", because expression of Generated Column: " +
                                 column.getName() + " will refer to it");
                     }
                 }
@@ -518,9 +518,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("Unsupported data type: TIME");
         }
 
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (!(table instanceof OlapTable)) {
-                throw new SemanticException("Materialized Column only support olap table");
+                throw new SemanticException("Generated Column only support olap table");
             }
 
             if (table.isCloudNativeTable()) {
@@ -533,7 +533,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
 
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-            Expr expr = columnDef.materializedColumnExpr();
+            Expr expr = columnDef.generatedColumnExpr();
             TableName tableName = new TableName(context.getDatabase(), table.getName());
 
             ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
@@ -546,18 +546,18 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             expr.collect(FunctionCallExpr.class, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
-                    throw new SemanticException("Materialized Column don't support aggregation function");
+                    throw new SemanticException("Generated Column don't support aggregation function");
                 }
             }
 
-            // check if the expression refers to other materialized columns
+            // check if the expression refers to other generated columns
             List<SlotRef> slots = Lists.newArrayList();
             expr.collect(SlotRef.class, slots);
             if (slots.size() != 0) {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
-                    if (refColumn.isMaterializedColumn()) {
-                        throw new SemanticException("Expression can not refers to other materialized columns");
+                    if (refColumn.isGeneratedColumn()) {
+                        throw new SemanticException("Expression can not refers to other generated columns");
                     }
                     if (refColumn.isAutoIncrement()) {
                         throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
@@ -566,7 +566,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
 
             if (!columnDef.getType().matchesType(expr.getType())) {
-                throw new SemanticException("Illege expression type for Materialized Column " +
+                throw new SemanticException("Illege expression type for Generated Column " +
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
@@ -584,8 +584,8 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
             Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isMaterializedColumn()) {
-                throw new SemanticException("Can not modify column after Materialized Column");
+            if (afterColumn.isGeneratedColumn()) {
+                throw new SemanticException("Can not modify column after Generated Column");
             }
         }
 
