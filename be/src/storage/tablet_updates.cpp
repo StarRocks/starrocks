@@ -803,6 +803,11 @@ void TabletUpdates::_check_for_apply() {
     }
 }
 
+bool TabletUpdates::need_apply() const {
+    std::lock_guard wl(_lock);
+    return _apply_version_idx + 1 < _edit_version_infos.size();
+}
+
 void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     // only 1 thread at max is running this method
@@ -3417,10 +3422,10 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                 LOG(WARNING) << "failed to change data in chunk";
                 return Status::InternalError("failed to change data in chunk");
             }
-            status = chunk_changer->fill_materialized_columns(new_chunk);
+            status = chunk_changer->fill_generated_columns(new_chunk);
             if (!status.ok()) {
-                LOG(WARNING) << "failed to fill materialized column";
-                return Status::InternalError("failed to fill materialized column");
+                LOG(WARNING) << "failed to fill generated column";
+                return Status::InternalError("failed to fill generated column");
             }
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }

@@ -135,6 +135,9 @@ public:
     // get total number of committed and pending rowsets
     size_t version_count() const;
 
+    // if need do apply
+    bool need_apply() const;
+
     // get num of pending rowsets
     size_t num_pending() const;
 

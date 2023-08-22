@@ -286,7 +286,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
     // This function is just used for adding generated column if src_rowset
     // contain some segment files
     bool no_segment_file = (last_dcg_counts.size() == 0);
-    if (chunk_changer->get_mc_exprs()->size() == 0 || no_segment_file) {
+    if (chunk_changer->get_gc_exprs()->size() == 0 || no_segment_file) {
         return Status::OK();
     }
 
@@ -294,7 +294,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
     std::vector<uint32_t> new_columns_ids;
     std::vector<uint32_t> all_ref_columns_ids;
     std::set<uint32_t> s_ref_columns_ids;
-    for (const auto& iter : *chunk_changer->get_mc_exprs()) {
+    for (const auto& iter : *chunk_changer->get_gc_exprs()) {
         new_columns_ids.emplace_back(iter.first);
         // get read schema only through associated column in all generate columns' expr
         Expr* root = (iter.second)->root();
@@ -355,11 +355,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                     return Status::InternalError(ss.str());
                 }
             }
-            status = chunk_changer->append_materialized_columns(read_chunk, new_chunk, all_ref_columns_ids,
-                                                                base_tablet->tablet_schema()->num_columns());
+            status = chunk_changer->append_generated_columns(read_chunk, new_chunk, all_ref_columns_ids,
+                                                             base_tablet->tablet_schema()->num_columns());
             if (!status.ok()) {
-                LOG(WARNING) << "failed to append materialized columns";
-                return Status::InternalError("failed to append materialized columns");
+                LOG(WARNING) << "failed to append generated columns";
+                return Status::InternalError("failed to append generated columns");
             }
         }
 
@@ -369,7 +369,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
         std::vector<uint32_t> unique_column_ids;
-        for (const auto& iter : *chunk_changer->get_mc_exprs()) {
+        for (const auto& iter : *chunk_changer->get_gc_exprs()) {
             ColumnUID unique_id = new_tablet->tablet_schema()->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
         }
@@ -455,8 +455,8 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             return Status::InternalError(alter_msg_header() + err_msg);
         }
 
-        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fill materialized columns failed: " << st.get_error_msg();
+        if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
             return st;
         }
 
@@ -482,8 +482,8 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
-        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fill materialized columns failed: " << st.get_error_msg();
+        if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
             return st;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
@@ -718,11 +718,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         sc_params.chunk_changer->init_runtime_state(request.query_options, request.query_globals);
     }
 
-    // materialized column index in new schema
-    std::unordered_set<int> materialized_column_idxs;
+    // generated column index in new schema
+    std::unordered_set<int> generated_column_idxs;
     if (request.materialized_column_req.mc_exprs.size() != 0) {
         for (const auto& it : request.materialized_column_req.mc_exprs) {
-            materialized_column_idxs.insert(it.first);
+            generated_column_idxs.insert(it.first);
         }
     }
 
@@ -732,7 +732,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     Status status = SchemaChangeUtils::parse_request(base_tablet_schema, tablet_schema_ptr,
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
-                                                     &sc_params.sc_directly, &materialized_column_idxs);
+                                                     &sc_params.sc_directly, &generated_column_idxs);
 
     if (!status.ok()) {
         LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
@@ -740,9 +740,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
-        // Currently, a schema change task for materialized column is just
-        // ADD/DROP/MODIFY a single materialized column, so it is impossible
-        // that sc_sorting == true, for materialized column can not be a KEY.
+        // Currently, a schema change task for generated column is just
+        // ADD/DROP/MODIFY a single generated column, so it is impossible
+        // that sc_sorting == true, for generated column can not be a KEY.
         DCHECK_EQ(sc_params.sc_sorting, false);
 
         sc_params.chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
@@ -755,7 +755,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             RETURN_IF_ERROR(ctx->prepare(sc_params.chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->open(sc_params.chunk_changer->get_runtime_state()));
 
-            sc_params.chunk_changer->get_mc_exprs()->insert({it.first, ctx});
+            sc_params.chunk_changer->get_gc_exprs()->insert({it.first, ctx});
         }
     }
 
@@ -1066,7 +1066,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(new_tablet->data_dir()->get_meta(), tablet_id,
                                                                       rowsetid, j, INT64_MAX, &historical_dcgs[j]));
         }
-        if (!sc_params.sc_sorting && !sc_params.sc_directly && chunk_changer->get_mc_exprs()->size() != 0) {
+        if (!sc_params.sc_sorting && !sc_params.sc_directly && chunk_changer->get_gc_exprs()->size() != 0) {
             // new added dcgs info for every segment in rowset.
             DeltaColumnGroupList dcgs;
             std::vector<int> last_dcg_counts;

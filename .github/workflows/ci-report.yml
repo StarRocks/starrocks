@@ -25,17 +25,11 @@ jobs:
     runs-on: [ self-hosted, quick ]
     if: >
       github.event.workflow_run.event == 'pull_request'
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        max-retries: [1, 2, 3]
-    continue-on-error: true
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
-    steps:    
+    steps:
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v2
         with:
@@ -61,7 +55,7 @@ jobs:
         uses: juliangruber/read-file-action@v1
         with:
           path: ./head_sha.txt
-          
+
       - name: PR DETAILS
         id: pr_details
         env:
@@ -76,14 +70,14 @@ jobs:
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
           echo "HEAD_SHA=${HEAD_SHA}" >> $GITHUB_OUTPUT
-          
+
       - name: Set Workflow Name
         id: set_workflow_name
         env:
           pr: ${{ steps.pr_details.outputs.PR_NUMBER }}
         run: echo "workflow_name=\"CI Report - ${pr}\"" >> $GITHUB_OUTPUT
 
-  FE-UT-REPORT:
+  FE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
     env:
@@ -106,18 +100,18 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}/
-          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "Object Number is" | awk '{print $NF}')
+          oss_path=oss://${bucket_prefix}-ci-release/$branch/Release/pr/UT-Report/${PR_NUMBER}
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             mkdir fe && cd fe
-            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
           else
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
-            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
               --cover /var/local/env/empty_cov_result --github-token ${{ secrets.PAT }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
@@ -204,6 +198,106 @@ jobs:
           files: ${{ github.workspace }}/coverage.xml
           dry_run: false
           name: fe-total
+          fail_ci_if_error: false
+          verbose: true
+          override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
+          override_branch: ${{ needs.INFO.outputs.BASE_REF }}
+          override_commit: ${{ needs.INFO.outputs.HEAD_SHA }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  BE-REPORT:
+    runs-on: [ self-hosted, quick ]
+    needs: INFO
+    env:
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: INFO
+        id: info
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Download BE UT XML
+        id: download-ut-xml
+        env:
+          bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
+        run: |
+          oss_path=oss://${bucket_prefix}-ci-release/$BRANCH/ASAN/pr/UT-Report/${PR_NUMBER}
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
+          echo "size=${size}" >> $GITHUB_OUTPUT
+          if [[ "$size" != "0" ]]; then
+            cd be
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
+            ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/diff.txt . -f 1>/dev/null
+            echo "base_version=`cat base_version.txt`" >> $GITHUB_OUTPUT
+          else
+            rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+            export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+            export PATH=$JAVA_HOME/bin:$PATH;
+            java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.PAT }} --pr ${PR_NUMBER} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
+          fi
+
+      - name: Publish UT Report
+        uses: mikepenz/action-junit-report@v3
+        id: publish_report
+        if: steps.download-ut-xml.outcome == 'success' && steps.download-ut-xml.outputs.size != '0'
+        env:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          check_name: 'BE UT Report'
+          detailed_summary: true
+          fail_on_failure: true
+          commit: ${{ github.event.workflow_run.head_sha }}
+          report_paths: ./be/be_ut_coverage.xml
+
+      - name: Checkout PR Code
+        env:
+          CODE_PATH: ${{ github.workspace }}
+          BASE_VERSION: ${{ steps.download-ut-xml.outputs.base_version }}
+        run: |
+          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
+
+      # Incremental Total Coverage
+      - name: Publish Incremental Coverage Report - Total
+        if: steps.publish_report.outcome == 'success'
+        env:
+          be_path: ${{ github.workspace }}/be
+        run: |
+          rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            --cover ${be_path}/be_ut_coverage.xml --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
+            --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
+            -d ${be_path}/diff.txt -dt file
+
+      # total coverage
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/be/be_ut_coverage.xml
+          dry_run: false
+          name: be-total
           fail_ci_if_error: false
           verbose: true
           override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
@@ -317,7 +411,8 @@ jobs:
 
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
-    needs: INFO
+    needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
+    if: always() && needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_ID: ${{ needs.INFO.outputs.PR_NUMBER }}
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}

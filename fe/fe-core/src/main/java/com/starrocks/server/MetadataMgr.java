@@ -18,6 +18,7 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -39,6 +41,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -46,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -210,12 +214,34 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.dropTable(stmt);
+                inactiveViews(ImmutableList.of(new TableName(dbName, tableName)),
+                        "table [" + tableName + "] " + " has been dropped");
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
                 throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
                         catalogName, dbName, tableName, e.getMessage());
             }
         });
+    }
+
+    public static void inactiveViews(List<TableName> tableNames, String reason) {
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<View> views = Lists.newArrayList();
+        for (Long viewDbId : allDbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(viewDbId);
+            if (null == db) {
+                continue;
+            }
+            db.getTables().stream().filter(v -> v instanceof View).forEach(v -> views.add((View) v));
+        }
+
+        for (View view : views) {
+            Map<TableName, com.starrocks.catalog.Table> usedTable =
+                    AnalyzerUtils.collectAllTableAndView(view.getQueryStatement());
+            if (CollectionUtils.containsAny(usedTable.keySet(), tableNames)) {
+                view.setInvalid(reason);
+            }
+        }
     }
 
     public Optional<Table> getTable(TableName tableName) {

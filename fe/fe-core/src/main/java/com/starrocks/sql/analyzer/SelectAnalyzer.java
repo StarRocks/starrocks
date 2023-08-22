@@ -183,9 +183,7 @@ public class SelectAnalyzer {
                     .collect(Collectors.toList());
 
             Scope sourceScopeForOrder = new Scope(RelationId.anonymous(), new RelationFields(sourceForOrderFields));
-            sourceAndOutputScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
-            sourceAndOutputScope.setParent(sourceScopeForOrder);
-            analyzeState.setOrderScope(sourceAndOutputScope);
+            computeAndAssignOrderScope(analyzeState, sourceScopeForOrder, outputScope);
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 

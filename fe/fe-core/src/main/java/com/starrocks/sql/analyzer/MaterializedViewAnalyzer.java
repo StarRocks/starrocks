@@ -718,6 +718,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
+            } else if (table.isJDBCTable()) {
+                checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
@@ -749,9 +751,8 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
-            List<Column> partitionColumns = table.getPartitionColumns();
-            if (table.isUnPartitioned()) {
+        private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns, boolean unPartitioned) {
+            if (unPartitioned) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
@@ -768,6 +769,14 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
             }
+        }
+
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
