@@ -592,4 +592,14 @@ public class SetTest extends PlanTestBase {
                 "WHERE NULL";
         getThriftPlan(sql);
     }
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select * from t0 union all select 1, 1, 1 from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 10> : 1\n" +
+                "  |  <slot 11> : 1\n" +
+                "  |  <slot 12> : 1");
+    }
 }

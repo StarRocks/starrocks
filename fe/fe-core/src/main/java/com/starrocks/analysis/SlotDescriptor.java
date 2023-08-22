@@ -245,28 +245,26 @@ public class SlotDescriptor {
             nullIndicatorBit = -1;
         }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
-
+        TSlotDescriptor tSlotDescriptor;
         if (originType != null) {
-            TSlotDescriptor tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
-                    -1, -1,
-                    nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    -1, true);
-            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
-            return tSlotDescriptor;
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), originType.toThrift());
         } else {
-            /**
-             * Refer to {@link Expr#treeToThrift}
-             */
             if (type.isNull()) {
                 type = ScalarType.BOOLEAN;
             }
-            TSlotDescriptor tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
-                    -1, -1,
-                    nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    -1, true);
-            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
-            return tSlotDescriptor;
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), type.toThrift());
         }
+
+        tSlotDescriptor.setColumnPos(-1);
+        tSlotDescriptor.setByteOffset(-1);
+        tSlotDescriptor.setNullIndicatorByte(-1);
+        tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
+        tSlotDescriptor.setColName(((column != null) ? column.getName() : ""));
+        tSlotDescriptor.setSlotIdx(-1);
+        tSlotDescriptor.setIsMaterialized(true);
+        tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+        tSlotDescriptor.setIsNullable(isNullable);
+        return tSlotDescriptor;
     }
 
     public String debugString() {
