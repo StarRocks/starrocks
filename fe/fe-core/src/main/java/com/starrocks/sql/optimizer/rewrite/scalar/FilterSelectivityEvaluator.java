@@ -156,7 +156,7 @@ public class FilterSelectivityEvaluator {
             } else {
                 Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
                 List<ColumnRefOperator> usedCols = predicate.getChild(0).getColumnRefs();
-                if (isOnlyRefOneCol(usedCols) && inSet.stream().allMatch(ScalarOperator::isConstantRef)) {
+                if (isOnlyRefOneCol(usedCols) && inSet.stream().allMatch(e -> e.isConstantRef() && !e.isNullable())) {
                     ColumnRefOperator column = usedCols.get(0);
                     ColumnStatistic columnStatistic = statistics.getColumnStatistic(column);
                     double selectRatio;
