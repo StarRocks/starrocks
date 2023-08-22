@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
@@ -70,7 +69,8 @@ public class PartitionUtilTest {
     @Test
     public void testCreateHudiPartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
-                Lists.newArrayList("1", "a", "3.0", HiveMetaClient.HUDI_PARTITION_NULL_VALUE), partColumns, Table.TableType.HUDI);
+                Lists.newArrayList("1", "a", "3.0", HiveMetaClient.HUDI_PARTITION_NULL_VALUE), partColumns,
+                Table.TableType.HUDI);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
         List<String> res = PartitionUtil.fromPartitionKey(partitionKey);
         Assert.assertEquals("1", res.get(0));
@@ -78,9 +78,9 @@ public class PartitionUtilTest {
         Assert.assertEquals("3.0", res.get(2));
         Assert.assertEquals(HiveMetaClient.HUDI_PARTITION_NULL_VALUE, res.get(3));
 
-
         partitionKey = createPartitionKey(
-                Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns, Table.TableType.HUDI);
+                Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns,
+                Table.TableType.HUDI);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
         res = PartitionUtil.fromPartitionKey(partitionKey);
         Assert.assertEquals("1", res.get(0));
@@ -92,14 +92,16 @@ public class PartitionUtilTest {
     @Test
     public void testCreateIcebergPartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
-                Lists.newArrayList("1", "a", "3.0", IcebergApiConverter.PARTITION_NULL_VALUE), partColumns, Table.TableType.ICEBERG);
+                Lists.newArrayList("1", "a", "3.0", IcebergApiConverter.PARTITION_NULL_VALUE), partColumns,
+                Table.TableType.ICEBERG);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
     @Test
     public void testCreateDeltaLakePartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
-                Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns, Table.TableType.DELTALAKE);
+                Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns,
+                Table.TableType.DELTALAKE);
         Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
     }
 
@@ -131,7 +133,7 @@ public class PartitionUtilTest {
 
     @Test
     public void testToPartitionValues() {
-        String  partitionNames = "a=1/b=2/c=3";
+        String partitionNames = "a=1/b=2/c=3";
         Assert.assertEquals(Lists.newArrayList("1", "2", "3"), toPartitionValues(partitionNames));
     }
 
