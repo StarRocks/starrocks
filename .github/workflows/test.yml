@@ -15,7 +15,7 @@ on:
 jobs:
 
   sync-checker:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     name: Replace
     steps:
       - name: test
