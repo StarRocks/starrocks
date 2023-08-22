@@ -93,23 +93,27 @@ void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
 void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     // Make the exchange action atomic
     int64_t scan_rows = other.scan_rows.load();
-    this->scan_rows += scan_rows;
-    other.scan_rows -= scan_rows;
+    if (other.scan_rows.compare_exchange_strong(scan_rows, 0)) {
+        this->scan_rows += scan_rows;
+    }
 
     int64_t scan_bytes = other.scan_bytes.load();
-    this->scan_bytes += scan_bytes;
-    other.scan_bytes -= scan_bytes;
+    if (other.scan_bytes.compare_exchange_strong(scan_bytes, 0)) {
+        this->scan_bytes += scan_bytes;
+    }
 
     int64_t cpu_ns = other.cpu_ns.load();
-    this->cpu_ns += cpu_ns;
-    other.cpu_ns -= cpu_ns;
+    if (other.cpu_ns.compare_exchange_strong(cpu_ns, 0)) {
+        this->cpu_ns += cpu_ns;
+    }
 
     int64_t mem_cost_bytes = other.mem_cost_bytes.load();
     this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
 
     int64_t spill_bytes = other.spill_bytes.load();
-    this->spill_bytes += spill_bytes;
-    other.spill_bytes -= spill_bytes;
+    if (other.spill_bytes.compare_exchange_strong(spill_bytes, 0)) {
+        this->spill_bytes += spill_bytes;
+    }
 
     {
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
