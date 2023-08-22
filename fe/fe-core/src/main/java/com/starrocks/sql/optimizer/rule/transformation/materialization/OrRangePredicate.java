@@ -27,7 +27,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class OrRangePredicate extends RangePredicate {
     public OrRangePredicate(List<RangePredicate> rangePredicates) {
