@@ -383,13 +383,13 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column must be nullable column.",
                 () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
@@ -415,13 +415,13 @@ public class CreateTableTest {
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other generated columns",
                 () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE AS (array_avg(array_data)), \n"
                         + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column don't support aggregation function",
                 () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc BIGINT AS (sum(id)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
@@ -1540,5 +1540,29 @@ public class CreateTableTest {
                 "\"colocate_with\" = \"ship_id_public\"" +
                 ");";
         Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testPrimaryKeyNotSupportCoolDown() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.`primary1_table_not support_cool_down`\n" +
+                                "             ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "             primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "             PARTITION BY range(k1)\n" +
+                                "             (\n" +
+                                "                 PARTITION p1 VALUES LESS THAN (\"2021-01-02\"),\n" +
+                                "                 PARTITION p2 VALUES LESS THAN (\"2021-08-18\"),\n" +
+                                "                 PARTITION p3 VALUES LESS THAN (\"2022-08-17\"),\n" +
+                                "                 PARTITION p4 VALUES LESS THAN (\"2022-08-18\"),\n" +
+                                "                 PARTITION p5 VALUES LESS THAN (\"2022-08-19\"),\n" +
+                                "                 PARTITION p6 VALUES LESS THAN (\"2023-08-18\"),\n" +
+                                "                 PARTITION p7 VALUES LESS THAN (\"2024-08-18\")\n" +
+                                "             ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "  PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 year\");"
+                ));
     }
 }

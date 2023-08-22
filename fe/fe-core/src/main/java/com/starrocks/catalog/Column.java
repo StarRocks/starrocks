@@ -117,7 +117,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @SerializedName(value = "materializedColumnExpr")
     private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
-    private Expr materializedColumnExpr;
+    private Expr generatedColumnExpr;
 
     public Column() {
         this.name = "";
@@ -189,7 +189,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAutoIncrement = false;
         this.comment = comment;
         this.stats = new ColumnStats();
-        this.materializedColumnExpr = null;
+        this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
     }
 
@@ -332,8 +332,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return CatalogUtils.addEscapeCharacter(comment);
     }
 
-    public boolean isMaterializedColumn() {
-        return materializedColumnExpr != null;
+    public boolean isGeneratedColumn() {
+        return generatedColumnExpr != null;
     }
 
     public int getOlapColumnIndexSize() {
@@ -370,7 +370,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public void checkSchemaChangeAllowed(Column other) throws DdlException {
-        if (other.isMaterializedColumn()) {
+        if (other.isGeneratedColumn()) {
             return;
         }
 
@@ -466,18 +466,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         defineExpr = expr;
     }
 
-    public Expr materializedColumnExpr() {
-        if (materializedColumnExpr == null) {
+    public Expr generatedColumnExpr() {
+        if (generatedColumnExpr == null) {
             return null;
         }
-        return materializedColumnExpr.clone();
+        return generatedColumnExpr.clone();
     }
 
-    public Expr getMaterializedColumnExpr() {
-        return materializedColumnExpr;
+    public Expr getGeneratedColumnExpr() {
+        return generatedColumnExpr;
     }
-    public void setMaterializedColumnExpr(Expr expr) {
-        materializedColumnExpr = expr;
+    public void setGeneratedColumnExpr(Expr expr) {
+        generatedColumnExpr = expr;
     }
 
     public List<SlotRef> getRefColumns() {
@@ -490,12 +490,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
-    public List<SlotRef> getMaterializedColumnRef() {
+    public List<SlotRef> getGeneratedColumnRef() {
         List<SlotRef> slots = new ArrayList<>();
-        if (materializedColumnExpr == null) {
+        if (generatedColumnExpr == null) {
             return null;
         } else {
-            materializedColumnExpr.collect(SlotRef.class, slots);
+            generatedColumnExpr.collect(SlotRef.class, slots);
             return slots;
         }
     }
@@ -522,11 +522,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             } else {
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
-        } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
-                getPrimitiveType() != PrimitiveType.BITMAP) {
+        } else if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
-        } else if (isMaterializedColumn()) {
-            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        } else if (isGeneratedColumn()) {
+            sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
 
@@ -632,12 +631,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
             }
         }
-        if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
-                getPrimitiveType() != PrimitiveType.BITMAP) {
+        if (defaultValue != null && !type.isOnlyMetricType()) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
-        if (isMaterializedColumn()) {
-            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        if (isGeneratedColumn()) {
+            sb.append("AS " + generatedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -699,11 +697,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
 
-        if (this.isMaterializedColumn() && !other.isMaterializedColumn()) {
+        if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
             return false;
         }
-        if (this.isMaterializedColumn() &&
-                !this.materializedColumnExpr().equals(other.materializedColumnExpr())) {
+        if (this.isGeneratedColumn() &&
+                !this.generatedColumnExpr().equals(other.generatedColumnExpr())) {
             return false;
         }
 
@@ -724,15 +722,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @Override
     public void gsonPostProcess() throws IOException {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
-            materializedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
+            generatedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
                     SqlModeHelper.MODE_DEFAULT);
         }
     }
 
     @Override
     public void gsonPreProcess() throws IOException {
-        if (materializedColumnExpr != null) {
-            generatedColumnExprSerialized = new GsonUtils.ExpressionSerializedObject(materializedColumnExpr.toSql());
+        if (generatedColumnExpr != null) {
+            generatedColumnExprSerialized = new GsonUtils.ExpressionSerializedObject(generatedColumnExpr.toSql());
         }
     }
 

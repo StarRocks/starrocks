@@ -464,9 +464,9 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
-    public boolean hasMaterializedColumn() {
+    public boolean hasGeneratedColumn() {
         for (Column column : getFullSchema()) {
-            if (column.isMaterializedColumn()) {
+            if (column.isGeneratedColumn()) {
                 return true;
             }
         }
@@ -2021,8 +2021,8 @@ public class OlapTable extends Table {
         return getSchemaByIndexId(baseIndexId);
     }
 
-    public List<Column> getBaseSchemaWithoutMaterializedColumn() {
-        if (!hasMaterializedColumn()) {
+    public List<Column> getBaseSchemaWithoutGeneratedColumn() {
+        if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
         }
 
@@ -2030,7 +2030,7 @@ public class OlapTable extends Table {
 
         while (schema.size() > 0) {
             // check last column is whether materiazlied column or not
-            if (schema.get(schema.size() - 1).isMaterializedColumn()) {
+            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
                 schema.remove(schema.size() - 1);
             } else {
                 break;

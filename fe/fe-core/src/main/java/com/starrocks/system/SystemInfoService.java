@@ -300,6 +300,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
+
         // remove worker
         if (RunMode.allowCreateLakeTable()) {
             long starletPort = dropComputeNode.getStarletPort();
@@ -403,6 +406,9 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
 
         // remove worker
         if (RunMode.allowCreateLakeTable()) {
@@ -978,6 +984,12 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
 
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
+        }
+
         // clear map in starosAgent
         if (RunMode.allowCreateLakeTable()) {
             long starletPort = cn.getStarletPort();
@@ -998,6 +1010,12 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
+        }
 
         // clear map in starosAgent
         if (RunMode.allowCreateLakeTable()) {
@@ -1134,12 +1152,15 @@ public class SystemInfoService implements GsonPostProcessable {
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
 
-        // update BackendCoreStat
-        for (ComputeNode node : idToBackendRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
-        }
-        for (ComputeNode node : idToComputeNodeRef.values()) {
-            BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // update BackendCoreStat
+            for (ComputeNode node : idToBackendRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
         }
     }
 }
