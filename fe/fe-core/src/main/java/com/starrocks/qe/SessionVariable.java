@@ -240,6 +240,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SELECT_RATIO_THRESHOLD = "SELECT_RATIO_THRESHOLD";
 
+    public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
+
     // Limitations
     // mem limit can't smaller than bufferpool's default page size
     public static final int MIN_EXEC_MEM_LIMIT = 2097152;
@@ -613,6 +615,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
+    private boolean enableCollectTableLevelScanStats = true;
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1174,7 +1179,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
-
+        tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         return tResult;
     }
 
