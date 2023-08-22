@@ -1214,8 +1214,8 @@ public class CreateTableTest {
         ));
 
         // column types do not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "column:k3 type does mot match referenced column:k2 type",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +
@@ -1239,8 +1239,8 @@ public class CreateTableTest {
                 ));
 
         // key size does not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "columns:[k1, k2] are not dup table:parent_table2's unique constraint",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +
@@ -1261,8 +1261,8 @@ public class CreateTableTest {
                                 ");"
                 ));
 
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "invalid foreign key constraint:(k3,k4) REFERENCES parent_table2(k1)",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +

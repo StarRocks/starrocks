@@ -11,20 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 
-package com.starrocks.sql.ast;
-
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.sql.parser.NodePosition;
-
-public class SyncRefreshSchemeDesc extends RefreshSchemeClause {
-
-    public SyncRefreshSchemeDesc() {
-        this(NodePosition.ZERO);
-    }
-
-    public SyncRefreshSchemeDesc(NodePosition pos) {
-        super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
+public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseVisitor {
+    public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
+        //modify properties check in AlterMVJobExecutor
+        return null;
     }
 }

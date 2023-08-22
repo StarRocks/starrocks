@@ -15,25 +15,26 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.parser.NodePosition;
 
-public class RefreshSchemeDesc implements ParseNode {
+public class RefreshSchemeClause extends AlterTableClause {
 
     protected MaterializedView.RefreshType type;
     protected MaterializedView.RefreshMoment moment;
     protected final NodePosition pos;
 
-    public RefreshSchemeDesc(MaterializedView.RefreshType type) {
+    public RefreshSchemeClause(MaterializedView.RefreshType type) {
         this(type, NodePosition.ZERO);
     }
 
-    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos) {
+    public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos) {
         this(type, pos, MaterializedView.RefreshMoment.IMMEDIATE);
     }
 
-    public RefreshSchemeDesc(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
+    public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
+        super(AlterOpType.REFRESH_SCHEMA, pos);
         this.type = type;
         this.moment = moment;
         this.pos = pos;
@@ -52,4 +53,8 @@ public class RefreshSchemeDesc implements ParseNode {
         return moment;
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRefreshSchemeClause(this, context);
+    }
 }

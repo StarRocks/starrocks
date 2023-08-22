@@ -79,6 +79,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -2606,7 +2607,7 @@ public class AlterTest {
         AlterMaterializedViewStmt alterTableStmt2 =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertThrows("resource_group not_exist_rg does not exist.",
-                DdlException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
+                SemanticException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
         sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"mv_rg\" )";
         AlterMaterializedViewStmt alterTableStmt3 =

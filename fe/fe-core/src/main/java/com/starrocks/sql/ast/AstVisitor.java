@@ -973,6 +973,15 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    // Alter Materialized View
+    public R visitRefreshSchemeClause(RefreshSchemeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     // ------------------------------------------- Relation ----------------------------------==------------------------
 
     public R visitRelation(Relation node, C context) {
