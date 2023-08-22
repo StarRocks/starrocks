@@ -2884,7 +2884,7 @@ static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Opti
         re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
         std::vector<re2::StringPiece> matches(max_matches);
         bool success = local_re.Match(str_sp, 0, str_value.get_size(), re2::RE2::UNANCHORED, &matches[0], max_matches);
-        if (!success) {
+        if (!success || matches[0].empty) {
             result.append(Slice("", 0));
             continue;
         }
