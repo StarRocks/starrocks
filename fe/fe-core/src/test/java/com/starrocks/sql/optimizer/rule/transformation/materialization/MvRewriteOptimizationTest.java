@@ -2786,4 +2786,49 @@ public class MvRewriteOptimizationTest {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
     }
+
+    @Test
+    public void testProjectConstant() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_map_array (\n" +
+                "                            k1 date,\n" +
+                "                            k2 varchar(20),\n" +
+                "                            v3 int)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        DISTRIBUTED BY HASH(k1);");
+
+        // MV1: Projection MV
+        {
+            String mvName = "mv_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, k2, v3 " +
+                            "FROM test_map_array\n");
+            {
+                String query = "SELECT 'hehe', k1, k2" +
+                        " FROM test_map_array ";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+        // MV2: Aggregation MV
+        {
+            String mvName = "mv_aggregation_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, sum(v3) as sum_v3 \n" +
+                            "FROM test_map_array\n" +
+                            "GROUP BY k1");
+
+            {
+                String query = "SELECT 'hehe', k1, sum(v3) as sum_v1 " +
+                        " FROM test_map_array group by 'hehe', k1";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+    }
 }
