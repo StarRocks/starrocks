@@ -61,6 +61,7 @@ public:
 #endif
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
+        options.max_flying_memory_mb = 100;
         options.block_size = block_size;
         ASSERT_OK(cache->init(options));
     }

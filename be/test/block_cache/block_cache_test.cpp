@@ -220,7 +220,6 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
-    options.enable_cache_adaptor = true;
     options.skip_read_factor = 1;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -251,6 +250,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().is_resource_busy());
     }
@@ -267,6 +267,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
         std::string expect_value(batch_size, ch);
         char value[batch_size] = {0};
         ReadCacheOptions opts;
+        opts.use_adaptor = true;
         auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value, &opts);
         ASSERT_TRUE(res.status().ok());
     }
