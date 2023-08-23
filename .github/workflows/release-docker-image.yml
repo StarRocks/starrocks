@@ -1,8 +1,7 @@
 name: 'release docker images'
 
 # Don't trigger actions automatically
-on:
-
+#on:
 #  release:
 #    types: [published]
 
