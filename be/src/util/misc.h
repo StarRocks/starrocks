@@ -12,21 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
 
-package com.starrocks.catalog;
+#include <functional>
 
-import com.google.common.collect.ImmutableList;
-import com.starrocks.connector.hive.HiveMetaClient;
+namespace starrocks {
 
-import java.util.List;
+// take a sleep with small intervals until time out by `sleep_secs` or the `stop_condition()` is true
+void nap_sleep(int32_t sleep_secs, std::function<bool()> stop_condition);
 
-public class HivePartitionKey extends PartitionKey implements NullablePartitionKey {
-    public HivePartitionKey() {
-        super();
-    }
-
-    @Override
-    public List<String> nullPartitionValueList() {
-        return ImmutableList.of(HiveMetaClient.PARTITION_NULL_VALUE);
-    }
-}
+} // namespace starrocks
