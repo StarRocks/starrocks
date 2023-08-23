@@ -925,6 +925,7 @@ public class ReportHandler extends Daemon {
                 --maxTaskSendPerBe;
             }
         } // end for backendTabletIds
+
         AgentTaskExecutor.submit(batchTask);
 
         if (deleteFromBackendCounter != 0 || addToMetaCounter != 0) {
