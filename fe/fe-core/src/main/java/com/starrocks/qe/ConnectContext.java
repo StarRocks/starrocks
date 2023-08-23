@@ -164,6 +164,7 @@ public class ConnectContext {
 
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
+    protected boolean isStatisticsContext = false;
 
     protected DumpInfo dumpInfo;
 
@@ -591,11 +592,15 @@ public class ConnectContext {
     }
 
     public boolean isStatisticsJob() {
-        return isStatisticsJob;
+        return isStatisticsJob || isStatisticsContext;
     }
 
     public void setStatisticsJob(boolean statisticsJob) {
         isStatisticsJob = statisticsJob;
+    }
+
+    public void setStatisticsContext(boolean isStatisticsContext) {
+        this.isStatisticsContext = isStatisticsContext;
     }
 
     public ConnectContext getParent() {
