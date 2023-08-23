@@ -164,6 +164,10 @@ AS
 
 异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
 
+> **说明**
+>
+> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+
 - **哈希分桶**：
 
   语法
@@ -201,6 +205,10 @@ AS
 
 **refresh_scheme**（选填）
 
+> **说明**
+>
+> 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+
 物化视图的刷新方式。该参数支持如下值：
 
 - `ASYNC`：异步的刷新方式。如需设置为定时刷新，您需要指定刷新开始时间和刷新间隔 `START('yyyy-MM-dd hh:mm:ss') EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。如不指定刷新间隔，物化视图将采用导入触发刷新方式。
@@ -210,7 +218,13 @@ AS
 
 **partition_expression**（选填）
 
-异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。该参数支持如下值：
+异步物化视图的分区表达式。目前仅支持在创建异步物化视图时使用一个分区表达式。
+
+> **注意**
+>
+> 异步物化视图暂不支持使用 List 分区策略。
+
+该参数支持如下值：
 
 - `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
 - date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(` dt`, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的类型必须比 `date_trunc` 的类型粒度更细。
@@ -243,6 +257,10 @@ AS
 **query_statement**（必填）
 
 创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。
+
+> **注意**
+>
+> 异步物化视图暂不支持基于使用 List 分区的基表创建。
 
 ### 查询异步物化视图
 
