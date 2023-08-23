@@ -1055,18 +1055,26 @@ StatusOr<ColumnPtr> StringFunctions::repeat(FunctionContext* context, const Colu
 // ------------------------------------------------------------------------------------
 
 struct TranslateState {
-    using ASCII_MAP = phmap::flat_hash_map<char, char>;
+    using ASCII_MAP = char[0xff];
     using UTF8_MAP = phmap::flat_hash_map<EncodedUtf8Char, EncodedUtf8Char, EncodedUtf8CharHash>;
 
     static constexpr int SRC_STR_INDEX = 0;
     static constexpr int FROM_STR_INDEX = 1;
     static constexpr int TO_STR_INDEX = 2;
 
+    // The bytes not less than 0b1111'1000 will never occur in a UTF-8 character.
+    static constexpr char UNINIT_ASCII = 0b1111'1001;
+    static constexpr char DELETED_ASCII = 0b1111'1111;
+
     bool is_from_and_to_const = false;
 
     bool is_ascii_map = false;
     ASCII_MAP ascii_map; // effective when is_ascii_map is true.
     UTF8_MAP utf8_map;   // effective when is_ascii_map is false.
+
+    void clear_ascii_map() { std::memset(ascii_map, UNINIT_ASCII, sizeof(ascii_map)); }
+
+    void clear_utf8_map() { utf8_map.clear(); }
 };
 
 /**
@@ -1088,15 +1096,19 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
     const bool is_ascii_map = encoded_from_values.size() == from_str.size && encoded_to_values.size() == to_str.size;
     dst_state->is_ascii_map = is_ascii_map;
     if (is_ascii_map) {
+        dst_state->clear_ascii_map();
+
         size_t common_size = std::min(to_str.size, from_str.size);
         int i = 0;
         for (; i < common_size; i++) {
-            dst_state->ascii_map.emplace(from_str[i], to_str[i]);
+            dst_state->ascii_map[static_cast<uint8_t>(from_str[i])] = to_str[i];
         }
         for (; i < from_str.size; i++) {
-            dst_state->ascii_map.emplace(from_str[i], EncodedUtf8Char::ABSENT);
+            dst_state->ascii_map[static_cast<uint8_t>(from_str[i])] = TranslateState::DELETED_ASCII;
         }
     } else {
+        dst_state->clear_utf8_map();
+
         size_t common_size = std::min(encoded_to_values.size(), encoded_from_values.size());
         int i = 0;
         for (; i < common_size; i++) {
@@ -1155,11 +1167,11 @@ static inline size_t translate_string_with_ascii_map(const Slice& src, const Tra
                                                      uint8_t* dst) {
     uint8_t* const dst_begin = dst;
     for (int i = 0; i < src.size; i++) {
-        auto it = ascii_map.find(src[i]);
-        if (it == ascii_map.end()) {
+        char v = ascii_map[static_cast<uint8_t>(src[i])];
+        if (v == TranslateState::UNINIT_ASCII) {
             *(dst++) = src[i];
-        } else if (it->second != EncodedUtf8Char::ABSENT) {
-            *(dst++) = it->second;
+        } else if (v != TranslateState::DELETED_ASCII) {
+            *(dst++) = v;
         }
     }
 
@@ -1369,8 +1381,6 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
         const Slice from_str = from_viewer.value(i);
         const Slice to_str = to_viewer.value(i);
 
-        local_state.ascii_map.clear();
-        local_state.utf8_map.clear();
         build_translate_map(from_str, to_str, &local_state);
         if (local_state.is_ascii_map) {
             dst_bytes.resize(dst_offset + src.size);

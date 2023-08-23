@@ -22,7 +22,7 @@ namespace starrocks {
 
 struct EncodedUtf8Char {
     static constexpr char ABSENT = 0xff;
-    static constexpr uint32_t ABSENT_ENCODED = 0xffffffffU;
+    static constexpr uint32_t ABSENT_ENCODED = 0xffff'ffffU;
 
     union U {
         struct {
