@@ -64,7 +64,7 @@ public:
         ASSERT_TRUE(src_rowset != nullptr);
         ASSERT_EQ(1024, src_rowset->num_rows());
 
-        tablet->add_inc_rowset(src_rowset, _version++);
+        tablet -> add_inc_rowset(src_rowset, _version++);
     }
 
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
@@ -142,16 +142,16 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*_tablet_schema);
         for (size_t j = 0; j < 8; ++j) {
             auto chunk = ChunkHelper::new_chunk(schema, 128);
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
                 auto& cols = chunk->columns();
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
                 Slice field_1(test_data[i]);
-                cols[1]->append_datum(vectorized::Datum(field_1));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+                cols[1]->append_datum(Datum(field_1));
+                cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
             }
             CHECK_OK(writer->add_chunk(*chunk));
         }

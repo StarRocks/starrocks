@@ -117,6 +117,10 @@ public:
 
     void stop_compaction(TabletSharedPtr tablet);
 
+    std::unordered_set<CompactionTask*> get_running_task(TabletSharedPtr tablet);
+
+    int get_waiting_task_num();
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
