@@ -285,8 +285,8 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
-    void set_is_compacting(bool is_compacting){
-        this->is_compacting.store(is_compacting);
+    void set_is_compacting(bool flag){
+        is_compacting.store(flag);
     }
 
     bool get_is_compacting(){return is_compacting.load();}
@@ -391,7 +391,7 @@ private:
 
     std::vector<SegmentSharedPtr> _segments;
 
-    std::atomic<bool> is_compacting;
+    std::atomic<bool> is_compacting{false};
 
     KeysType _keys_type;
 };
