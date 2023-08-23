@@ -403,8 +403,13 @@ public class AlterJobMgr {
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
+<<<<<<< HEAD
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+=======
+            materializedView.setActive();
+        } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
+>>>>>>> 30d68c3d20 ([BugFix] Add enable_materialized_view_rewrite_greedy_mode param to control fast withdraw for mv rewrite (#29645))
             materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
         }
     }

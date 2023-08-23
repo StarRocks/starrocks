@@ -11,7 +11,6 @@ where
   and l_quantity < (
     select
             0.2 * avg(l_quantity)
---         0.2 * sum(l_quantity) / count(l_quantity)
     from
         lineitem
     where
