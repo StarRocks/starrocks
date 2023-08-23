@@ -735,7 +735,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, admit ]
+    needs: [ deploy, SQL-Tester, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -743,14 +743,23 @@ jobs:
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: Backup SR Info
+        id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
+        if: steps.backup.outcome == 'success'
+        env:
+          SQL_TESTER_RESULT: ${{ needs.SQL-Tester.outcome }}
+          ADMIT_RESULT: ${{ needs.admit.outcome }}
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --delete
+          if [[ "${SQL_TESTER_RESULT}" == 'success' && "${ADMIT_RESULT}" == 'success' ]]; then
+              ./bin/elastic-cluster.sh --delete
+          else
+              ./bin/elastic-cluster.sh --renew 0.25
+          fi
 
       - name: Clean
         run: |
