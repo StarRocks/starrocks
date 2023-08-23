@@ -68,7 +68,7 @@ public class MaterializedViewAnalyzerTest {
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        mv.setActive(false);
+        mv.setInactiveAndReason("");
         analyzeFail("refresh materialized view mv");
     }
 

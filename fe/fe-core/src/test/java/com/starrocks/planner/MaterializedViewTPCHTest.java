@@ -111,7 +111,9 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery16() {
+        connectContext.getSessionVariable().setEnableMaterializedViewRewriteGreedyMode(true);
         runFileUnitTest("materialized-view/tpch/q16");
+        connectContext.getSessionVariable().setEnableMaterializedViewRewriteGreedyMode(false);
     }
 
     @Test

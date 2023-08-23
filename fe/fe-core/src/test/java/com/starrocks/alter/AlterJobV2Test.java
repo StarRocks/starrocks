@@ -51,7 +51,6 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.hadoop.util.ThreadUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -59,6 +58,8 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
 public class AlterJobV2Test {
     private static ConnectContext connectContext;
@@ -347,19 +348,6 @@ public class AlterJobV2Test {
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
-        }
-    }
-
-    private void waitForSchemaChangeAlterJobFinish() throws Exception {
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
     }
 

@@ -285,7 +285,7 @@ public class AlterJobMgr {
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
-            materializedView.setActive(true);
+            materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
         }

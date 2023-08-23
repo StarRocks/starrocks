@@ -148,11 +148,11 @@ ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
-true	
+true	based table mv2 swapped
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
-true	
+true	base table mv_on_mv_1 inactive
 -- !result
 CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
 AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
@@ -173,5 +173,5 @@ ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 -- result:
-true	
+true	based table jj swapped
 -- !result

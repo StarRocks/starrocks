@@ -218,7 +218,8 @@ public class MvRewritePreprocessor {
         }
 
         MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
-        if (mvRewriteContextCache == null) {
+        if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() ||
+                mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
             // optimize the sql by rule and disable rule based materialized view rewrite
@@ -235,9 +236,19 @@ public class MvRewritePreprocessor {
             mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext, optimizerConfig);
             mv.setPlanContext(mvRewriteContextCache);
         }
+        if (mvRewriteContextCache == null) {
+            logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, cannot generate plan for rewrite",
+                        isSyncMV, mv.getName());
+            return;
+        }
         if (!mvRewriteContextCache.isValidMvPlan()) {
-            logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, plan:\n {}",
-                    isSyncMV, mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
+            if (mvRewriteContextCache.getLogicalPlan() != null) {
+                logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, plan:\n {}",
+                        isSyncMV, mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
+            } else {
+                logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}",
+                        isSyncMV, mv.getName());
+            }
             return;
         }
 
@@ -268,7 +279,10 @@ public class MvRewritePreprocessor {
             return;
         }
 
+        Preconditions.checkState(mvRewriteContextCache != null);
         OptExpression mvPlan = mvRewriteContextCache.getLogicalPlan();
+        Preconditions.checkState(mvPlan != null);
+
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
