@@ -262,6 +262,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
+    public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -637,6 +639,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    // This variable is introduced to solve compatibility issues/
+    // see more details: https://github.com/StarRocks/starrocks/pull/29678
+    @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
+    private boolean enableCollectTableLevelScanStats = true;
+
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
@@ -1222,6 +1230,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
+        tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         return tResult;
     }
 

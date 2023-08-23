@@ -182,6 +182,8 @@ struct TQueryOptions {
   63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
 
   67: optional bool enable_pipeline_query_statistic;
+
+  102: optional bool enable_collect_table_level_scan_stats;
 }
 
 
