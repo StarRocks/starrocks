@@ -4,8 +4,6 @@
 
 The function `TRANSLATE()` is used to substitute characters within a string. It works by taking a string as input, along with a set of characters to be replaced, and the corresponding characters to replace them with. TRANSLATE() then performs the specified substitutions.
 
-If the length of result string after translated exceed the maximum length (1048576) of [`VARCAHR`](../sql-statements/data-types/VARCHAR.md), the result string will be `NULL`.
-
 ## Syntax
 
 ```SQL
@@ -21,6 +19,12 @@ TRANSLATE( <source>, <from_string>, <to_string> )
 ## Return value
 
 Returns a value of the `VARCHAR` type.
+
+Scenarios where the result is `NULL`:
+
+- When any of the input parameters is `NULL`.
+
+- When the length of result string after translated exceed the maximum length (1048576) of `VARCHAR`.
 
 ## Examples
 
