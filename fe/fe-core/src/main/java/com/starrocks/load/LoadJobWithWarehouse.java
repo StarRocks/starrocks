@@ -17,11 +17,24 @@ package com.starrocks.load;
 public interface LoadJobWithWarehouse {
     String getCurrentWarehouse();
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/load/LoadJobWithWarehouse.java
     boolean isFinal();
+=======
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
+>>>>>>> 83dbcebb84 ([Enhancement] Compatible with the default partition value of the new hudi version (#29606)):fe/fe-core/src/main/java/com/starrocks/catalog/JDBCPartitionKey.java
 
     default boolean isInternalJob() {
         return false;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/load/LoadJobWithWarehouse.java
     long getFinishTimestampMs();
+=======
+    @Override
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(JDBCTable.PARTITION_NULL_VALUE);
+    }
+>>>>>>> 83dbcebb84 ([Enhancement] Compatible with the default partition value of the new hudi version (#29606)):fe/fe-core/src/main/java/com/starrocks/catalog/JDBCPartitionKey.java
 }
