@@ -154,7 +154,7 @@ The following parameters apply to all three reading methods: Spark SQL, Spark Da
 | starrocks.request.retries            | 3                 | The maximum number of times that Spark can retry to send a read request o StarRocks. |
 | starrocks.request.connect.timeout.ms | 30000             | The maximum amount of time after which a read request sent to StarRocks times out. |
 | starrocks.request.read.timeout.ms    | 30000             | The maximum amount of time after which the reading for a request sent to StarRocks times out. |
-| starrocks.request.query.timeout.s    | 3600              | The maximum amount of time after which a query of data from StarRocks times out. The default timeout period is 1 hour. `-1` means that no timeout period is specified. |
+| starrocks.request.query.timeout.s    | 3600              | The maximum amount of time after which a query of data from StarRocks times out. The default timeout period is 1 hour. |
 | starrocks.request.tablet.size        | Integer.MAX_VALUE | The number of StarRocks tablets grouped into each Spark RDD partition. A smaller value of this parameter indicates that a larger number of Spark RDD partitions will be generated. A larger number of Spark RDD partitions means higher parallelism on Spark but greater pressure on StarRocks. |
 | starrocks.batch.size                 | 4096              | The maximum number of rows that can be read from BEs at a time. Increasing the value of this parameter can reduce the number of connections established between Spark and StarRocks, thereby mitigating extra time overheads caused by network latency. |
 | starrocks.exec.mem.limit             | 2147483648        | The maximum amount of memory allowed per query. Unit: bytes. The default memory limit is 2 GB. |
