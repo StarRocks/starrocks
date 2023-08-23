@@ -302,6 +302,7 @@ You can find a function based on the following categories:
 - [parse_url](../sql-functions/string-functions/parse_url.md)
 - [repeat](../sql-functions/string-functions/repeat.md)
 - [replace](../sql-functions/string-functions/replace.md)
+- [translate](../sql-functions/string-functions/translate.md)
 - [reverse](../sql-functions/string-functions/reverse.md)
 - [right](../sql-functions/string-functions/right.md)
 - [rpad](../sql-functions/string-functions/rpad.md)
