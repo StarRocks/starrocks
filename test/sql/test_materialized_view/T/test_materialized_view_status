@@ -25,7 +25,7 @@ CREATE MATERIALIZED VIEW mv1
                DISTRIBUTED BY HASH(k1) BUCKETS 10
                REFRESH ASYNC
                AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
-select sleep(5);
+select sleep(2);
 drop table t1;
 refresh materialized view mv1;
 CREATE TABLE `t1` (
@@ -48,13 +48,13 @@ PROPERTIES (
 );
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 REFRESH MATERIALIZED VIEW mv1;
-select sleep(5);
+select sleep(2);
 select * from mv1;
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
                                          ("2023-01-11",1,1),("2023-01-11",1,2),("2023-02-11",2,1),("2023-01-11",2,2),
                                          ("2023-03-11",1,1),("2023-05-11",1,2),("2023-04-11",2,1),("2023-05-01",2,2);
-select sleep(5);
+select sleep(2);
 select * from mv1;
 ALTER MATERIALIZED VIEW mv1 INACTIVE;
 REFRESH MATERIALIZED VIEW mv1;
@@ -84,5 +84,5 @@ PROPERTIES(
     "replication_num" = "1"
 );
 alter materialized view mv2 active;
-select sleep(5);
+select sleep(2);
 select * from mv2

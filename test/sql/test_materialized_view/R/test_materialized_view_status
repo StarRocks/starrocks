@@ -31,7 +31,7 @@ CREATE MATERIALIZED VIEW mv1
                AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
 -- result:
 -- !result
-select sleep(5);
+select sleep(2);
 -- result:
 1
 -- !result
@@ -68,7 +68,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 REFRESH MATERIALIZED VIEW mv1;
 -- result:
 -- !result
-select sleep(5);
+select sleep(2);
 -- result:
 1
 -- !result
@@ -90,7 +90,7 @@ insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),(
                                          ("2023-03-11",1,1),("2023-05-11",1,2),("2023-04-11",2,1),("2023-05-01",2,2);
 -- result:
 -- !result
-select sleep(5);
+select sleep(2);
 -- result:
 1
 -- !result
@@ -151,7 +151,7 @@ PROPERTIES(
 alter materialized view mv2 active;
 -- result:
 -- !result
-select sleep(5);
+select sleep(2);
 -- result:
 1
 -- !result
