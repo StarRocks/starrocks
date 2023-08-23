@@ -14,13 +14,17 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
+
 public class DeltaLakePartitionKey extends PartitionKey implements NullablePartitionKey  {
     public DeltaLakePartitionKey() {
         super();
     }
 
     @Override
-    public String nullPartitionValue() {
-        return DeltaLakeTable.PARTITION_NULL_VALUE;
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(DeltaLakeTable.PARTITION_NULL_VALUE);
     }
 }
