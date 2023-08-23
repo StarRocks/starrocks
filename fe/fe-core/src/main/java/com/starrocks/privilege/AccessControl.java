@@ -14,9 +14,12 @@
 
 package com.starrocks.privilege;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;
@@ -129,5 +132,13 @@ public interface AccessControl {
 
     default void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume) {
         AccessDeniedException.reportAccessDenied("ANY", ObjectType.STORAGE_VOLUME, storageVolume);
+    }
+
+    default Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
+        return null;
+    }
+
+    default Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+        return null;
     }
 }

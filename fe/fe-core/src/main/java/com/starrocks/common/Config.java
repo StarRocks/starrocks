@@ -2468,4 +2468,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int primary_key_disk_schedule_time = 3600; // 1h
+
+    @ConfField(mutable = true)
+    public static String access_control = "native";
 }

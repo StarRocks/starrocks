@@ -43,6 +43,9 @@ public class PrivilegeType {
         }
     }
 
+    // ANY is not in VALID_PRIVILEGE_TYPE, ANY is not a Privilege Type that users can use directly
+    public static final PrivilegeType ANY = new PrivilegeType(0, "ANY");
+
     public static final PrivilegeType GRANT = new PrivilegeType(1, "GRANT");
     public static final PrivilegeType NODE = new PrivilegeType(2, "NODE");
     public static final PrivilegeType OPERATE = new PrivilegeType(3, "OPERATE");
