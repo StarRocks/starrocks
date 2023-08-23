@@ -317,7 +317,7 @@ public class OptOlapPartitionPruner {
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
                                                   LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
-        if (operator.getPartitionNames() != null) {
+        if (operator.getPartitionNames() != null && operator.getPartitionNames().getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();
             for (String partName : operator.getPartitionNames().getPartitionNames()) {
                 Partition part = olapTable.getPartition(partName, operator.getPartitionNames().isTemp());
