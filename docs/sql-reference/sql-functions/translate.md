@@ -72,7 +72,3 @@ select length(translate(concat('b', repeat('a', 1024*1024-3)), 'b', '膨')) as t
 +---------+
 
 ```
-
-## Keywords
-
-TRANSLATE
