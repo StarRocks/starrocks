@@ -5,7 +5,13 @@ This load uses external Apache Spark™ resources to pre-process imported data, 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
 
 > **NOTICE**
+<<<<<<< HEAD
 > In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
+=======
+>
+> - Only users with the INSERT privilege on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privilege.
+> - Spark Load can not be used to load data into a Primary Key table.
+>>>>>>> 9cc630a315 ([Doc]  Spark load can not be used to load data into a Primary Key table (#29791))
 
 ## Terminology explanation
 
