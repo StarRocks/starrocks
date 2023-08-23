@@ -421,9 +421,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    // context used in mv rewrite
-    // just in memory now
-    // there are only reads after first-time write
+    // Materialized view plan cache used for mv rewrite, it is kept in memory for now.
+    // NOTE: Invalidate this when the materialized view is activated again.
+    // TODO: Add more policies to valid/invalidate this:
+    //  - When session variables changed
+    //  - When executes multi times.
     private MVRewriteContextCache mvRewriteContextCache;
 
     public MaterializedView() {
@@ -492,9 +494,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return active;
     }
 
-    public void setActive(boolean active) {
-        this.active = active;
-        this.inactiveReason = null;
+    /**
+     * active the materialized again & reload the state.
+     */
+    public void setActive() {
+        // reset mv rewrite cache when it is active again
+        this.mvRewriteContextCache = null;
+        this.active = true;
     }
 
     public void setInactiveAndReason(String reason) {
@@ -866,7 +872,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             boolean desiredActive = active;
             active = false;
             boolean reloadActive = onReloadImpl();
-            setActive(desiredActive && reloadActive);
+            if (desiredActive && reloadActive) {
+                setActive();
+            }
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());

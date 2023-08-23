@@ -41,6 +41,22 @@ import java.util.Set;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
+    // Comparator to normalize predicates, only use scalar operators' string to compare.
+    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR = new Comparator<ScalarOperator>() {
+        @Override
+        public int compare(ScalarOperator o1, ScalarOperator o2) {
+            if (o1 == null && o2 == null) {
+                return 0;
+            } else if (o1 == null) {
+                return -1;
+            } else if (o2 == null) {
+                return 1;
+            } else {
+                return o1.toString().compareTo(o2.toString());
+            }
+        }
+    };
+
     // Normalize Binary Predicate
     // for integer type:
     // a < 3 => a <= 2
@@ -51,17 +67,17 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        ScalarOperator tmp = super.visitBinaryPredicate(predicate, context);
-        Preconditions.checkState(tmp instanceof BinaryPredicateOperator);
-        BinaryPredicateOperator binary = (BinaryPredicateOperator) tmp;
+        ScalarOperator binaryPredicate = super.visitBinaryPredicate(predicate, context);
+        Preconditions.checkState(binaryPredicate instanceof BinaryPredicateOperator);
+        BinaryPredicateOperator binary = (BinaryPredicateOperator) binaryPredicate;
         if (binary.getChild(0).isVariable() && binary.getChild(1).isConstantRef()) {
             ConstantOperator constantOperator = (ConstantOperator) binary.getChild(1);
             if (!constantOperator.getType().isIntegerType()) {
-                return tmp;
+                return binaryPredicate;
             }
             ConstantOperator one = createConstantIntegerOne(constantOperator.getType());
             if (one == null) {
-                return tmp;
+                return binaryPredicate;
             }
             Type[] argsType = {constantOperator.getType(), constantOperator.getType()};
             switch (binary.getBinaryType()) {
@@ -91,7 +107,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     break;
             }
         }
-        return tmp;
+        return binaryPredicate;
     }
 
     // should maintain sequence for case:
@@ -100,9 +116,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Comparator<ScalarOperator> byToString =
-                (ScalarOperator o1, ScalarOperator o2) -> o1.toString().compareTo(o2.toString());
-        Set<ScalarOperator> after = Sets.newTreeSet(byToString);
+        Set<ScalarOperator> after = Sets.newTreeSet(SCALAR_OPERATOR_COMPARATOR);
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             after.addAll(before);
