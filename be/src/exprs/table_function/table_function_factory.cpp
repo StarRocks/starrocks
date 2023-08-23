@@ -91,6 +91,9 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_DATETIME}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_BOOLEAN}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_ARRAY}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_STRUCT}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_MAP}, func_unnest);
+    add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_JSON}, func_unnest);
 
     // Use special invalid as the parameter of multi_unnest, because multi_unnest is a variable parameter function,
     // and there is no special treatment for different types of input parameters,
