@@ -1358,7 +1358,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     auto& dst_bytes = builder.data_column()->get_bytes();
     auto& dst_nulls = builder.get_null_data();
 
-    const size_t num_rows = src_viewer.size();
+    const size_t num_rows = columns[TranslateState::SRC_STR_INDEX]->size();
     if (num_rows == 0) {
         return builder.build(ColumnHelper::is_all_const(columns));
     }
