@@ -12,7 +12,6 @@ CloudCanal help users build a modern data stack in a simple way.
 
 [CloudCanal Quick Start](https://www.cloudcanalx.com/us/cc-doc/quick/quick_start)
 
-
 ## Function Description
 
 - It is highly recommended to utilize CloudCanal version 2.2.5.0 or higher for efficient data import into StarRocks.
@@ -35,7 +34,7 @@ CloudCanal help users build a modern data stack in a simple way.
 
 ## Typical example
 
-CloudCanal offers a comprehensive productized capability where users can seamlessly add DataSources and create DataJobs through a visual interface. This enables automated schema migration, full data migration, and real-time incremental synchronization. The following example demonstrates how to migrate and synchronize data from MySQL to StarRocks. The procedures are similar for data synchronization between other data sources and StarRocks.
+CloudCanal allows users to perform operations in a visual interface where users can seamlessly add DataSources and create DataJobs through a visual interface. This enables automated schema migration, full data migration, and real-time incremental synchronization. The following example demonstrates how to migrate and synchronize data from MySQL to StarRocks. The procedures are similar for data synchronization between other data sources and StarRocks.
 
 ### Prerequisites
 
