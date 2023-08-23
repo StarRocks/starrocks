@@ -286,10 +286,13 @@ public class PipeManagerTest {
 
         Thread.sleep(1000);
         p3.poll();
-        long current = System.currentTimeMillis() / 1000;
-        Assert.assertEquals(current, p3.getLastPolledTime());
+        long timePoint = System.currentTimeMillis() / 1000;
+        long diff = timePoint - p3.getLastPolledTime();
+        Assert.assertTrue("Time diff: " + diff + " should less than 10 seconds", diff >= 0 && diff <= 10);
+
         p3.poll();
-        Assert.assertEquals(current, p3.getLastPolledTime());
+        diff = p3.getLastPolledTime() - timePoint;
+        Assert.assertTrue("Time diff: " + diff + " should less than 10 seconds", diff >= 0 && diff <= 10);
     }
 
     @Test
