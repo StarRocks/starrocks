@@ -142,8 +142,8 @@ public class SlotRequestQueue {
             return true;
         }
 
-        int numTotalSlots = group.getConcurrencyLimit();
-        return numTotalSlots <= 0 || numAllocatedSlotsOfGroup < numTotalSlots;
+        Integer numTotalSlots = group.getConcurrencyLimit();
+        return numTotalSlots == null || numTotalSlots <= 0 || numAllocatedSlotsOfGroup < numTotalSlots;
     }
 
     private int peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, LogicalSlot> subQueue,

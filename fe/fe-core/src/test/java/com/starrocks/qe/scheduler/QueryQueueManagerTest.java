@@ -90,6 +90,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     );
     private static final Frontend LOCAL_FRONTEND = FRONTENDS.get(1);
 
+    private static final int ABSENT_CONCURRENCY_LIMIT = -1;
+
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
@@ -341,7 +343,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     @Test
     public void testGroupQueueNormal() throws Exception {
         final int concurrencyLimit = 3;
-        final int numGroups = 4;
+        final int numGroups = 5;
         final int numGroupPendingCoords = concurrencyLimit * 5 + 1;
         // Each group and non-group has `numGroupPendingCoords` coordinators.
         final int numPendingCoords = numGroupPendingCoords * (numGroups + 1);
@@ -352,10 +354,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         TWorkGroup group0 = new TWorkGroup().setId(0L).setConcurrency_limit(concurrencyLimit - 1);
         TWorkGroup group1 = new TWorkGroup().setId(1L).setConcurrency_limit(0);
-        TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(concurrencyLimit);
-        TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit + 1);
+        TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(ABSENT_CONCURRENCY_LIMIT);
+        TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit);
+        TWorkGroup group4 = new TWorkGroup().setId(4L).setConcurrency_limit(concurrencyLimit + 1);
         TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
-        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
+        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, group4, nonGroup);
 
         // 1. Run `concurrencyLimit` non-group queries first, and they shouldn't be queued.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
@@ -1401,8 +1404,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         if (group != null && group.getId() != LogicalSlot.ABSENT_GROUP_ID) {
             ResourceGroup resourceGroup = new ResourceGroup();
+            if (group.getConcurrency_limit() != ABSENT_CONCURRENCY_LIMIT) {
+                resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
+            }
             resourceGroup.setId(group.getId());
-            resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
             mockedGroups.put(group.getId(), resourceGroup);
             new MockUp<ResourceGroupMgr>() {
                 @Mock
