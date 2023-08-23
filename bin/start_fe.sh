@@ -119,8 +119,12 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then 
         final_java_opt=$JAVA_OPTS_FOR_JDK_9
     else
-        echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf"       
-        exit -1
+        if [ -z "$DATE" ] ; then
+            DATE=`date +%Y%m%d-%H%M%S`
+        fi
+        default_java_opts_for_jdk11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+        echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf, use default java options for jdk11 to start fe process: $default_java_opts_for_jdk11"
+        final_java_opt=$default_java_opts_for_jdk11
     fi
 fi
 
