@@ -63,7 +63,6 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.withTable(createTblStmtStr);
     }
 
-
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("caseWhenWithCaseClauses")
     void testCaseWhenWithCaseClause(String sql, List<String> patterns) throws Exception {
@@ -297,7 +296,11 @@ class SelectStmtWithCaseWhenTest {
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=5.0\n" +
                                 "     cardinality: 1"
-                }
+                },
+
+                {"select * from test.t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3  end in (2, 3, null))" +
+                        " is null",
+                        " CASE 1: region WHEN 'USA' THEN 1 WHEN 'UK' THEN 2 ELSE 3 END IN (2, 3, NULL) IS NULL"},
         };
 
         List<Arguments> argumentsList = Lists.newArrayList();
@@ -640,6 +643,10 @@ class SelectStmtWithCaseWhenTest {
                         "     actualRows=0, avgRowSize=5.0\n" +
                         "     cardinality: 1\n"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (2,3)", "0:EMPTYSET"},
+                {"select * from test.t0 where (if(region='USA', 1, 0) in (2,3, null))",
+                        "if(1: region = 'USA', 1, 0) IN (2, 3, NULL)"},
+                {"select * from test.t0 where (if(region='USA', 1, 0) in (2,3, null)) is null",
+                        "if(1: region = 'USA', 1, 0) IN (2, 3, NULL) IS NULL"},
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0)", "[1: region, VARCHAR, false] = 'USA'"},
 
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0,1)", "0:EMPTYSET"},
@@ -718,19 +725,19 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,NULL)",
-                        "[1: region, VARCHAR, false] = 'China'",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END IN (1, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1,NULL)",
-                        "[1: region, VARCHAR, false] != 'China'",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END NOT IN (1, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (NULL,NULL)",
-                        "0:EMPTYSET",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END IN (NULL, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (NULL,NULL)",
-                        "0:EMPTYSET",
+                        "CASE 1: region WHEN 'China' THEN 1 WHEN 'Japan' THEN 2 ELSE 3 END NOT IN (NULL, NULL)",
                 },
                 {"select * from test.t0 where \n" +
                         "if (region = 'China', 1, 2) = NULL",
@@ -738,8 +745,33 @@ class SelectStmtWithCaseWhenTest {
                 },
                 {"select * from test.t0 where \n" +
                         "if (region = 'China', 1, 2) not in (NULL, 1)",
-                        "[1: region, VARCHAR, false] != 'China'",
+                        "if(1: region = 'China', 1, 2) NOT IN (NULL, 1)",
                 },
+                {"select * from test.t0 where (case when ship_code is null then true when 1 then false end) is null",
+                        "0:EMPTYSET"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when 0 then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when null then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when not null then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL"
+                },
+                {"select * from test.t0 where (case when ship_code is null then true when not 3 then false end) is null",
+                        "Predicates: 5: ship_code IS NOT NULL, (CAST(3 AS BOOLEAN)) OR (CAST(3 AS BOOLEAN) IS NULL)"
+                },
+                {"select * from test.t0 where (case when region = 'USA' then true " +
+                        "when region like 'COM%' then false end) is null",
+                        "Predicates: [1: region, VARCHAR, false] != 'USA', NOT (1: region LIKE 'COM%')"
+                },
+                {"select * from test.t0 where (case when case when null then 'A' when false then 'B' " +
+                        "when region like 'COM%' then 'C' end = 'C' then true else false end) is null",
+                        "0:EMPTYSET"
+                }
+
+
         };
         List<Arguments> argumentsList = Lists.newArrayList();
         for (String[] tc : testCases) {
@@ -753,7 +785,6 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
         StringJoiner joiner = new StringJoiner("\n");
-        System.out.println(sql + ";");
         joiner.add(sql);
         joiner.add(patterns.toString());
         joiner.add(plan);
