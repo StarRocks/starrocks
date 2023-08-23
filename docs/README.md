@@ -1,5 +1,5 @@
 # How to contribute documentation
-s
+
 Thank you very much for contributing to StarRocks documentation! Your help is important to our improvement!
 
 Before contributing, please read this article carefully to quickly understand the tips, writing process, and documentation templates.
