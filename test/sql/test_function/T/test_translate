@@ -171,6 +171,19 @@ INSERT INTO t1 VALUES
     ('abc', null, 'ab');
 SELECT TRANSLATE(src, from_str) from t1;
 
+
+-- name: test_translate_random
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
 INSERT INTO t1 VALUES 
     ('ba1+E^]-', NULL, 'EE1aaababb'),
     ('(2%&j四[iH%û一G*%ù😂cûg˜', '%2(û*û😍😂在四', 'HjiiiG22'),

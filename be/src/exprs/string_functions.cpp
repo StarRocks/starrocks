@@ -1101,10 +1101,16 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
         size_t common_size = std::min(to_str.size, from_str.size);
         int i = 0;
         for (; i < common_size; i++) {
-            dst_state->ascii_map[static_cast<uint8_t>(from_str[i])] = to_str[i];
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = to_str[i];
+            }
         }
         for (; i < from_str.size; i++) {
-            dst_state->ascii_map[static_cast<uint8_t>(from_str[i])] = TranslateState::DELETED_ASCII;
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = TranslateState::DELETED_ASCII;
+            }
         }
     } else {
         dst_state->clear_utf8_map();
