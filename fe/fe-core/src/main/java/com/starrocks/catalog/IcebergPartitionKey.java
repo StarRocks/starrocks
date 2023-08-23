@@ -15,7 +15,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+
+import java.util.List;
 
 public class IcebergPartitionKey extends PartitionKey implements NullablePartitionKey {
     public IcebergPartitionKey() {
@@ -23,7 +26,7 @@ public class IcebergPartitionKey extends PartitionKey implements NullablePartiti
     }
 
     @Override
-    public String nullPartitionValue() {
-        return IcebergApiConverter.PARTITION_NULL_VALUE;
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(IcebergApiConverter.PARTITION_NULL_VALUE);
     }
 }
