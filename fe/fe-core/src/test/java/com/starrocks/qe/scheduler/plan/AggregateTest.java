@@ -35,6 +35,6 @@ public class AggregateTest extends SchedulerTestBase {
      */
     @Test
     public void testLocalOnePhaseAggregateWithExchangeInstanceParallel() {
-        runFileUnitTest("scheduler/aggregate/agg_local_one_phase_non_partition_one_exchange");
+        runFileUnitTest("scheduler/aggregate/agg_local_one_phase_non_partition_one_exchange", true);
     }
 }

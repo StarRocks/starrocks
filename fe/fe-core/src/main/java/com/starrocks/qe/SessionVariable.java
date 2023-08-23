@@ -396,7 +396,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
+
+    public static final String ENABLE_QUERY_CACHE_V2 = "enable_query_cache_v2";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
+
+    public static final String QUERY_CACHE_DENY_OVERSIZE_RESULT = "query_cache_deny_oversize_result";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
@@ -1232,8 +1236,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
-    @VarAttr(name = ENABLE_QUERY_CACHE)
-    private boolean enableQueryCache = false;
+    @VarAttr(name = ENABLE_QUERY_CACHE_V2, alias = ENABLE_QUERY_CACHE, show = ENABLE_QUERY_CACHE)
+    private boolean enableQueryCache = true;
+
+    @VarAttr(name = QUERY_CACHE_DENY_OVERSIZE_RESULT, flag = VariableMgr.INVISIBLE)
+    private boolean queryCacheDenyOversizeResult = true;
 
     @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
     private boolean queryCacheForcePopulate = false;
@@ -2428,6 +2435,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableQueryCache(boolean on) {
         enableQueryCache = on;
+    }
+
+    public void setQueryCacheDenyOversizeResult(boolean on) {
+        queryCacheDenyOversizeResult = on;
+    }
+
+    public boolean isQueryCacheDenyOversizeResult() {
+        return queryCacheDenyOversizeResult;
     }
 
     public boolean isQueryCacheForcePopulate() {

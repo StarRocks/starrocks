@@ -1188,6 +1188,9 @@ public class OlapScanNode extends ScanNode {
                     normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
                             .filter(s -> aggColumnNames.contains(s.getColumn().getName())).map(s -> s.getId())
                             .collect(Collectors.toSet());
+            int numTablets = Math.max(1, this.getScanTabletIds().size());
+            normalizer.setNumTablets(numTablets);
+            normalizer.setRowCountPerTablet(Math.max(1L, this.getCardinality() / numTablets));
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
             List<Long> partitionIds = getSelectedPartitionIds();
