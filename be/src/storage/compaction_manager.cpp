@@ -193,7 +193,7 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
     int64_t last_failure_ts = 0;
     DataDir* data_dir = tablet->data_dir();
     if (candidate.type == CUMULATIVE_COMPACTION) {
-        std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
+        std::shared_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
             VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
             return false;
@@ -362,25 +362,28 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
     if (!compaction_task) {
         return;
     }
-    std::lock_guard lg(_tasks_mutex);
-    auto iter = _running_tasks.find(compaction_task->tablet()->tablet_id());
-    if (iter != _running_tasks.end()) {
-        auto size = iter->second.erase(compaction_task);
-        if (size > 0) {
-            TabletSharedPtr& tablet = compaction_task->tablet();
-            DataDir* data_dir = tablet->data_dir();
-            if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
-                _data_dir_to_cumulative_task_num_map[data_dir]--;
-                _cumulative_compaction_concurrency--;
-            } else {
-                _data_dir_to_base_task_num_map[data_dir]--;
-                _base_compaction_concurrency--;
+    {
+        std::lock_guard lg(_tasks_mutex);
+        auto iter = _running_tasks.find(compaction_task->tablet()->tablet_id());
+        if (iter != _running_tasks.end()) {
+            auto size = iter->second.erase(compaction_task);
+            if (size > 0) {
+                TabletSharedPtr& tablet = compaction_task->tablet();
+                DataDir* data_dir = tablet->data_dir();
+                if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
+                    _data_dir_to_cumulative_task_num_map[data_dir]--;
+                    _cumulative_compaction_concurrency--;
+                } else {
+                    _data_dir_to_base_task_num_map[data_dir]--;
+                    _base_compaction_concurrency--;
+                }
+            }
+            if (iter->second.empty()) {
+                _running_tasks.erase(iter);
             }
         }
-        if (iter->second.empty()) {
-            _running_tasks.erase(iter);
-        }
     }
+    compaction_task->tablet()->reset_compaction();
 }
 
 void CompactionManager::clear_tasks() {
@@ -392,7 +395,6 @@ void CompactionManager::clear_tasks() {
     _cumulative_compaction_concurrency = 0;
 }
 
-bool CompactionManager::has_running_task(TabletSharedPtr tablet) {
 // for http action
 void CompactionManager::get_running_status(std::string* json_result) {
     int32_t max_task_num;
@@ -501,7 +503,7 @@ void CompactionManager::get_running_status(std::string* json_result) {
     *json_result = std::string(strbuf.GetString());
 }
 
-bool CompactionManager::is_running_task(TabletSharedPtr tablet){
+bool CompactionManager::has_running_task(TabletSharedPtr tablet){
     std::lock_guard lg(_tasks_mutex);
     auto iter = _running_tasks.find(tablet->tablet_id());
     return iter != _running_tasks.end() && !iter->second.empty();

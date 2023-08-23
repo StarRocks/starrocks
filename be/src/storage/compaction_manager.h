@@ -66,16 +66,15 @@ public:
     void get_running_status(std::string* json_result);
 
     uint16_t running_tasks_num() {
-        size_t res=0;
-        for(auto it:_running_tasks){
-            res+=it.second.size();
+        size_t res = 0;
+        for (auto it : _running_tasks) {
+            res += it.second.size();
         }
         return res;
     }
 
     bool check_if_exceed_max_task_num() {
         bool exceed = false;
-        std::lock_guard lg(_tasks_mutex);
         if (config::max_compaction_concurrency == 0) {
             LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
             exceed = true;
@@ -114,7 +113,7 @@ public:
 
     int64_t cumulative_compaction_concurrency();
 
-    bool is_running_task(TabletSharedPtr tablet);
+    bool has_running_task(TabletSharedPtr tablet);
 
     void stop_compaction(TabletSharedPtr tablet);
 
@@ -141,7 +140,7 @@ private:
 
     std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
-    std::map<int64_t,std::unordered_set<CompactionTask*>> _running_tasks;
+    std::map<int64_t, std::unordered_set<CompactionTask*>> _running_tasks;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;

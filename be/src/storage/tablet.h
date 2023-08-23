@@ -269,6 +269,8 @@ public:
 
     void stop_compaction();
 
+    void reset_compaction();
+
     bool enable_compaction();
 
     [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
@@ -376,6 +378,9 @@ private:
     bool _enable_compaction = true;
 
     std::mutex _compaction_task_lock;
+
+    // used for default base cumulative compaction strategy to control the
+    bool _has_running_compaction = false;
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure

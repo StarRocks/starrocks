@@ -382,7 +382,9 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
-        )
+        storage/compaction_parallelization_test.cpp
+        storage/compaction_parallelization_test.cpp
+)
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
@@ -394,7 +396,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif ()
 
 if (USE_AVX2)
-    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
+    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp
+            storage/compaction_parallelization_test.cpp
+            storage/compaction_parallelization_test.cpp)
 endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
