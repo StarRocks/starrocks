@@ -148,7 +148,7 @@ GROUP BY order_id;
 
 > **NOTE**
 >
-> - While creating an asynchronous materialized view, you must specify either the data distribution strategy or the refresh strategy of the materialized view.
+> - While creating an asynchronous materialized view, you must specify either the data distribution strategy or the refresh strategy of the materialized view, or both.
 > - You can set different partitioning and bucketing strategies for an asynchronous materialized view from those of its base tables.
 > - Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
 > - Currently, asynchronous materialized views do not support the list partitioning strategy.
