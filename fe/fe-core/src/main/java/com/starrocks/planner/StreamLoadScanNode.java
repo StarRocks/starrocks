@@ -60,6 +60,7 @@ import org.apache.logging.log4j.Logger;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * used to scan from stream
@@ -194,6 +195,31 @@ public class StreamLoadScanNode extends LoadScanNode {
         finalizeParams();
     }
 
+    /**
+     * For now, backend cannot see the TYPE_NULL and other derived types, like array<null>
+     * So we need to do some hack when transforming ScalarOperator to Expr.
+     */
+    private static void hackTypeNull(Expr expr) {
+        if (expr == null) {
+            return;
+        }
+
+        // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
+        if (expr.getType().isNull()) {
+            expr.setType(Type.BOOLEAN);
+            return;
+        }
+
+        // For array types, itemType can be any legitimate type, for simplicity, we pick boolean.
+        if (Objects.equals(Type.ARRAY_NULL, expr.getType())) {
+            expr.setType(Type.ARRAY_BOOLEAN);
+        }
+
+        for (Expr child : expr.getChildren()) {
+            hackTypeNull(child);
+        }
+    }
+
     private void finalizeParams() throws UserException {
         boolean negative = streamLoadTask.getNegative();
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
@@ -255,6 +281,8 @@ public class StreamLoadScanNode extends LoadScanNode {
                 expr.analyze(analyzer);
             }
             expr = castToSlot(dstSlotDesc, expr);
+
+            hackTypeNull(expr);
 
             brokerScanRange.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
         }
