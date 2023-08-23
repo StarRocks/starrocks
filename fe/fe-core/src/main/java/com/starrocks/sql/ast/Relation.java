@@ -30,6 +30,10 @@ public abstract class Relation implements ParseNode {
     protected TableName alias;
     protected List<String> explicitColumnNames;
 
+    // It is used to record whether the Relation has been rewritten by the Security Policy,
+    // to prevent the Relation from being rewritten multiple times due to multiple Analyzes
+    private boolean policyRewritten = false;
+
     protected final NodePosition pos;
 
     protected Relation(NodePosition pos) {
@@ -69,6 +73,14 @@ public abstract class Relation implements ParseNode {
 
     public boolean isDualRelation() {
         return false;
+    }
+
+    public void setPolicyRewritten(boolean policyRewritten) {
+        this.policyRewritten = policyRewritten;
+    }
+
+    public boolean isPolicyRewritten() {
+        return policyRewritten;
     }
 
     @Override
