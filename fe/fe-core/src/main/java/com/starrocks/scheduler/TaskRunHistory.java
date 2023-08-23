@@ -22,7 +22,7 @@ public class TaskRunHistory {
 
     public void forceGC() {
         if (historyDeque.size() >= Config.task_runs_max_history_number) {
-            int startIndex = Config.task_runs_max_history_number;
+            int startIndex = historyDeque.size() - Config.task_runs_max_history_number;
             int currentIndex = 0;
             for (TaskRunStatus taskRunStatus : historyDeque) {
                 if (currentIndex >= startIndex) {
