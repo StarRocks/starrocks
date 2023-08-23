@@ -1540,6 +1540,13 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_admin_user_protection = false;
 
     /**
+     * When set to true, guava cache is used to cache the privilege collection
+     * for a specified user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_priv_collection_cache = true;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.

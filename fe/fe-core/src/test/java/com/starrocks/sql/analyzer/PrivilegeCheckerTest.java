@@ -2462,6 +2462,16 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s) on GLOBAL FUNCTION " +
                         "my_udf_json_get(VARCHAR,VARCHAR) for this operation");
 
+        // test disable privilege collection cache
+        Config.authorization_enable_priv_collection_cache = false;
+        verifyGrantRevoke(
+                "drop global function my_udf_json_get (string, string);",
+                "grant drop on GLOBAL FUNCTION my_udf_json_get(string,string) to test",
+                "revoke drop on GLOBAL FUNCTION my_udf_json_get(string,string) from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on GLOBAL FUNCTION " +
+                        "my_udf_json_get(VARCHAR,VARCHAR) for this operation");
+        Config.authorization_enable_priv_collection_cache = true;
+
         Config.enable_udf = true;
         ctxToTestUser();
         try {
