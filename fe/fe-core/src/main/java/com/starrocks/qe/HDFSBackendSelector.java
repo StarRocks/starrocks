@@ -225,7 +225,7 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         long totalSize = computeTotalSize();
-        long avgNodeScanRangeBytes = totalSize / workerProvider.getAllWorkers().size() + 1;
+        long avgNodeScanRangeBytes = totalSize / Math.max(workerProvider.getAllWorkers().size(), 1) + 1;
 
         for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
             assignedScansPerComputeNode.put(computeNode, 0L);
