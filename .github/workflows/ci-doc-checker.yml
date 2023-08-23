@@ -87,7 +87,7 @@ jobs:
           ignore: node_modules
           version: 0.28.1
 
-  behavior-unchange:
+  behavior-change-unset:
     runs-on: ubuntu-latest
     needs: add-doc-label
     steps:
@@ -97,7 +97,11 @@ jobs:
           githubToken: ${{ secrets.PAT }}
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
-
+     
+  behavior-unchange-set:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    steps:
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
