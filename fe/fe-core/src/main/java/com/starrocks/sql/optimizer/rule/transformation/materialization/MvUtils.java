@@ -843,6 +843,11 @@ public class MvUtils {
             return partitionPredicates;
         }
 
+        // if no partitions are selected, return pruned partition predicates directly.
+        if (olapScanOperator.getSelectedPartitionId().isEmpty()) {
+            return olapScanOperator.getPrunedPartitionPredicates();
+        }
+
         if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo partitionInfo =
                     (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();

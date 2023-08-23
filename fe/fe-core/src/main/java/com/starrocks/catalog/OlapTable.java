@@ -1119,6 +1119,15 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
+    /**
+     * Return all visible partition names which exclude all shadow partitions.
+     */
+    public Set<String> getVisiblePartitionNames() {
+        return nameToPartition.keySet().stream()
+                .filter(n -> !n.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .collect(Collectors.toSet());
+    }
+
     public Map<String, Range<PartitionKey>> getValidPartitionMap(int lastPartitionNum) throws AnalysisException {
         Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set

@@ -494,7 +494,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                        !snapshotOlapTable.getPartitionNames().contains(partitionName));
+                        !snapshotOlapTable.getVisiblePartitionNames().contains(partitionName));
             }
         }
         if (!changedTablePartitionInfos.isEmpty()) {
@@ -780,7 +780,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // Force refresh
         if (force && start == null && end == null) {
             if (mvPartitionInfo instanceof SinglePartitionInfo) {
-                return materializedView.getPartitionNames();
+                return materializedView.getVisiblePartitionNames();
             } else {
                 return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
             }
@@ -790,7 +790,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvPartitionInfo instanceof SinglePartitionInfo) {
             // non-partitioned materialized view
             if (force || isNonPartitionedMVNeedToRefresh()) {
-                return materializedView.getPartitionNames();
+                return materializedView.getVisiblePartitionNames();
             }
         } else if (mvPartitionInfo instanceof ExpressionRangePartitionInfo) {
             // range partitioned materialized views
@@ -821,13 +821,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             } else if (partitionExpr instanceof FunctionCallExpr) {
                 needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
                         mvRangePartitionNames, force);
+
                 Set<String> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
                 // because the relation of partitions between materialized view and base partition table is n : m,
                 // should calculate the candidate partitions recursively.
                 LOG.debug("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                         " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
                 SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
-                        mvContext.refBaseTableMVIntersectedPartitions, mvContext.mvRefBaseTableIntersectedPartitions);
+                        mvContext.getRefBaseTableMVIntersectedPartitions(), mvContext.getMvRefBaseTableIntersectedPartitions());
                 LOG.debug("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                         " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
             }
@@ -837,33 +838,58 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return needRefreshMvPartitionNames;
     }
 
-    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table partitionTable,
-            Set<String> mvRangePartitionNames, boolean force) {
-        if (force || unSupportRefreshByPartition(partitionTable)) {
+    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
+                                                                                  Set<String> mvRangePartitionNames,
+                                                                                  boolean force) {
+        if (force || unSupportRefreshByPartition(refBaseTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
-        // check if there is a load in the base table and add it to the refresh candidate
-        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(partitionTable, false);
+
+        // step1: check updated partition names in the ref base table and add it to the refresh candidate
+        Set<String> updatePartitionNames = materializedView.getUpdatedPartitionNamesOfTable(refBaseTable, false);
         if (updatePartitionNames == null) {
             return mvRangePartitionNames;
         }
+
+        // step2: fetch the corresponding materialized view partition names as the need to refresh partitions
         Set<String> result = getMVPartitionNamesByBasePartitionNames(updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         return result;
     }
 
+    /**
+     *
+     * @param basePartitionNames : ref base table partition names to check.
+     * @return                   : Return mv corresponding partition names to the ref base table partition names.
+     */
     private Set<String> getMVPartitionNamesByBasePartitionNames(Set<String> basePartitionNames) {
         Set<String> result = Sets.newHashSet();
+        Map<String, Set<String>> refBaseTableMVPartitionMap = mvContext.getRefBaseTableMVIntersectedPartitions();
         for (String basePartitionName : basePartitionNames) {
-            result.addAll(mvContext.refBaseTableMVIntersectedPartitions.get(basePartitionName));
+            if (refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
+                result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
+            } else {
+                LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}",
+                        basePartitionName);
+            }
         }
         return result;
     }
 
+    /**
+     * @param mvPartitionNames : the need to refresh materialized view partition names
+     * @return                 : the corresponding ref base table partition names to the materialized view partition names
+     */
     private Set<String> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
+        Map<String, Set<String>> mvRefBaseTablePartitionMap = mvContext.getMvRefBaseTableIntersectedPartitions();
         for (String mvPartitionName : mvPartitionNames) {
-            result.addAll(mvContext.mvRefBaseTableIntersectedPartitions.get(mvPartitionName));
+            if (mvRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
+                result.addAll(mvRefBaseTablePartitionMap.get(mvPartitionName));
+            } else {
+                LOG.warn("Cannot find need refreshed mv table partition from synced partition info: {}",
+                        mvPartitionName);
+            }
         }
         return result;
     }
@@ -1032,9 +1058,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 if (snapshotTable.isOlapOrCloudNativeTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
-                    if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                    PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
+                    if (snapshotPartitionInfo instanceof SinglePartitionInfo) {
                         Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
-                        if (!snapShotOlapTable.getPartitionNames().equals(partitionNames)) {
+                        if (!snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames)) {
                             // there is partition rename
                             return true;
                         }
@@ -1344,7 +1371,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // do nothing.
             } else {
                 if (table.isNativeTableOrMaterializedView()) {
-                    tableNamePartitionNames.put(table, ((OlapTable) table).getPartitionNames());
+                    tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
                 } else if (table.isHiveTable()) {
                     tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 } else if (table.isView()) {
