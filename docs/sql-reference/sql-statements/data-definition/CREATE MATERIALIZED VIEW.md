@@ -170,7 +170,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
 
 > **NOTE**
 >
-> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`.
+> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
 
 - **Hash bucketing**:
 
@@ -211,7 +211,7 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 
 > **NOTE**
 >
-> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`.
+> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
