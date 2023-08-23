@@ -10,6 +10,9 @@ CloudCanal help users build a modern data stack in a simple way.
 
 [CloudCanal Download Link](https://www.cloudcanalx.com)
 
+[CloudCanal Quick Start](https://www.cloudcanalx.com/us/cc-doc/quick/quick_start)
+
+
 ## Function Description
 
 - It is highly recommended to utilize CloudCanal version 2.2.5.0 or higher for efficient data import into StarRocks.
@@ -30,9 +33,9 @@ CloudCanal help users build a modern data stack in a simple way.
   | PolarDb for MySQL          | Yes | Yes | Yes | Yes |
   | Db2                        | Yes | Yes | Yes | Yes |
 
-## Instructions for Use
+## Typical example
 
-CloudCanal offers a comprehensive productized capability where users can seamlessly add DataSources and create DataJobs through a visual interface. This enables automated schema migration, full data migration, and real-time incremental synchronization. The following example demonstrates how to migrate and synchronize data from a MySQL to the target StarRocks. Similar procedures can be applied when synchronizing other source endpoints with StarRocks.
+CloudCanal offers a comprehensive productized capability where users can seamlessly add DataSources and create DataJobs through a visual interface. This enables automated schema migration, full data migration, and real-time incremental synchronization. The following example demonstrates how to migrate and synchronize data from MySQL to StarRocks. The procedures are similar for data synchronization between other data sources and StarRocks.
 
 ### Prerequisites
 
@@ -68,7 +71,8 @@ Once the DataSource has been added successfully, you can follow these steps to c
 
 ![image.png](../assets/3.11-4.png)
 
-- Select the tables you want to subscribe to. Please note that **the tables automatically created during structural migration follow the primary key model, so tables without a primary key are not currently supported**
+- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are primary key tables, so source tables without a primary key are not currently supported**
+
 - Click Next Step
 
 ![image.png](../assets/3.11-5.png)
