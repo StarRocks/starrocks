@@ -410,10 +410,11 @@ void CompactionManager::get_running_status(std::string* json_result) {
         max_task_num = _max_task_num;
         base_task_num = _base_compaction_concurrency;
         cumulative_task_num = _cumulative_compaction_concurrency;
-        running_task_num = running_tasks_num();
+        running_task_num = 0;
         running_tablet_ids.reserve(_running_tasks.size());
-        for (auto it : _running_tasks) {
+        for (const auto& it : _running_tasks) {
             running_tablet_ids.push_back(it.first);
+            running_task_num += it.second.size();
         }
         for (auto it : _data_dir_to_base_task_num_map) {
             data_dir_to_base_task_num[it.first->path()] = it.second;
@@ -503,13 +504,13 @@ void CompactionManager::get_running_status(std::string* json_result) {
     *json_result = std::string(strbuf.GetString());
 }
 
-bool CompactionManager::has_running_task(TabletSharedPtr tablet) {
+bool CompactionManager::has_running_task(const TabletSharedPtr& tablet) {
     std::lock_guard lg(_tasks_mutex);
     auto iter = _running_tasks.find(tablet->tablet_id());
     return iter != _running_tasks.end() && !iter->second.empty();
 }
 
-void CompactionManager::stop_compaction(TabletSharedPtr tablet) {
+void CompactionManager::stop_compaction(const TabletSharedPtr& tablet) {
     std::lock_guard lg(_tasks_mutex);
     auto iter = _running_tasks.find(tablet->tablet_id());
     if (iter != _running_tasks.end()) {
@@ -519,7 +520,7 @@ void CompactionManager::stop_compaction(TabletSharedPtr tablet) {
     }
 }
 
-std::unordered_set<CompactionTask*> CompactionManager::get_running_task(TabletSharedPtr tablet) {
+std::unordered_set<CompactionTask*> CompactionManager::get_running_task(const TabletSharedPtr& tablet) {
     std::lock_guard lg(_tasks_mutex);
     std::unordered_set<CompactionTask*> res;
     auto iter = _running_tasks.find(tablet->tablet_id());

@@ -66,8 +66,9 @@ public:
     void get_running_status(std::string* json_result);
 
     uint16_t running_tasks_num() {
+        std::lock_guard lg(_tasks_mutex);
         size_t res = 0;
-        for (auto it : _running_tasks) {
+        for (const auto& it : _running_tasks) {
             res += it.second.size();
         }
         return res;
@@ -80,7 +81,11 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        if (running_tasks_num() >= _max_task_num) {
+        size_t runing_tasks_num = 0;
+        for (const auto& it : _running_tasks) {
+            runing_tasks_num += it.second.size();
+        }
+        if (running_tasks_num >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
@@ -113,11 +118,11 @@ public:
 
     int64_t cumulative_compaction_concurrency();
 
-    bool has_running_task(TabletSharedPtr tablet);
+    bool has_running_task(const TabletSharedPtr& tablet);
 
-    void stop_compaction(TabletSharedPtr tablet);
+    void stop_compaction(const TabletSharedPtr& tablet);
 
-    std::unordered_set<CompactionTask*> get_running_task(TabletSharedPtr tablet);
+    std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
 
     int get_waiting_task_num();
 

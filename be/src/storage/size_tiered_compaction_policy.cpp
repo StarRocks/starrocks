@@ -72,7 +72,7 @@ std::shared_ptr<CompactionTask> SizeTieredCompactionPolicy::create_compaction(Ta
         output_version.second = (*_rowsets.rbegin())->end_version();
 
         // set rowset status to compacting
-        for (auto rowset : _rowsets) {
+        for (const auto& rowset : _rowsets) {
             rowset->set_is_compacting(true);
         }
 
