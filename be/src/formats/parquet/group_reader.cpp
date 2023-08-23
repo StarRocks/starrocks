@@ -398,7 +398,8 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     }
 
     *row_count = count;
-    return Status::OK();
+
+    return (*chunk)->upgrade_if_overflow();
 }
 
 Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size) {
@@ -486,6 +487,9 @@ Status GroupReader::_fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk)
                                                                   read_chunk->get_column_by_slot_id(slot_id)));
     }
     read_chunk->check_or_die();
+    if (!_dict_column_indices.empty()) {
+        (*chunk)->upgrade_if_overflow();
+    }
     return Status::OK();
 }
 
