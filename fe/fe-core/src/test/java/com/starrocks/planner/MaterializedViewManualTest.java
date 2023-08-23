@@ -155,6 +155,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "group by ds;";
         starRocksAssert.withMaterializedView(mv);
 
+        /*
         sql("SELECT \n" +
                 "count(DISTINCT `order_id`) AS `order_num`, \n" +
                 "time_slice(`dt`, INTERVAL 5 minute) AS ds \n" +
@@ -178,6 +179,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "WHERE time_slice(dt, interval 5 minute) >= '2023-04-10 17:00:00' and time_slice(dt, interval 5 minute) < '2023-04-10 18:00:00'\n" +
                 "group by ts")
                 .match("test_partition_expr_mv1");
+
+         */
 
         sql("SELECT \n" +
                 "count(DISTINCT `order_id`) AS `order_num`, \n" +

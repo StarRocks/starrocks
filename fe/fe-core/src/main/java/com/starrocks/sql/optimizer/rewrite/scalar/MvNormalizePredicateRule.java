@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -24,7 +23,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
@@ -33,7 +31,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -53,64 +50,6 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             }
         }
     };
-
-    // Normalize Binary Predicate
-    // for integer type:
-    // a < 3 => a <= 2
-    // a > 3 => a >= 4
-    // a = 3 => a >= 3 and a <= 3
-    // a != 3 => a > 3 and a < 3 (which will be normalized further)
-    //
-    @Override
-    public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
-                                               ScalarOperatorRewriteContext context) {
-        ScalarOperator binaryPredicate = super.visitBinaryPredicate(predicate, context);
-        Preconditions.checkState(binaryPredicate instanceof BinaryPredicateOperator);
-        BinaryPredicateOperator binary = (BinaryPredicateOperator) binaryPredicate;
-        if (binary.getChild(0).isVariable() && binary.getChild(1).isConstantRef()) {
-            ConstantOperator constantOperator = (ConstantOperator) binary.getChild(1);
-            if (!constantOperator.getType().isIntegerType()) {
-                return binaryPredicate;
-            }
-            ConstantOperator one = createConstantIntegerOne(constantOperator.getType());
-            if (one == null) {
-                return binaryPredicate;
-            }
-            Optional<ConstantOperator> pre = constantOperator.predecessor();
-            Optional<ConstantOperator> successor = constantOperator.successor();
-            switch (binary.getBinaryType()) {
-                case LT:
-                    if (!pre.isPresent()) {
-                        return ConstantOperator.FALSE;
-                    }
-                    return new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get());
-                case GT:
-                    if (!successor.isPresent()) {
-                        return ConstantOperator.FALSE;
-                    }
-                    return new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), successor.get());
-                    /*
-                case EQ:
-                    BinaryPredicateOperator gePart =
-                            new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), constantOperator);
-                    BinaryPredicateOperator lePart =
-                            new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), constantOperator);
-                    return Utils.compoundAnd(gePart, lePart);
-
-                     */
-                case NE:
-                    BinaryPredicateOperator left = pre.isPresent() ?
-                            new BinaryPredicateOperator(BinaryType.LE, binary.getChild(0), pre.get()) : null;
-                    BinaryPredicateOperator right = successor.isPresent() ?
-                            new BinaryPredicateOperator(BinaryType.GE, binary.getChild(0), successor.get()) : null;
-
-                    return Utils.compoundOr(left, right);
-                default:
-                    break;
-            }
-        }
-        return binaryPredicate;
-    }
 
     // should maintain sequence for case:
     // a like "%hello%" and (b * c = 100 or b * c = 200)
