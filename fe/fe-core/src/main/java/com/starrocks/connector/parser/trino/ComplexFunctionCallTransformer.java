@@ -16,6 +16,7 @@ package com.starrocks.connector.parser.trino;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -71,6 +72,11 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("date_diff function must have 3 arguments");
             }
             return new FunctionCallExpr("date_diff", ImmutableList.of(args[0], args[2], args[1]));
+        } else if (functionName.equalsIgnoreCase("element_at")) {
+            if (args.length != 2) {
+                throw new SemanticException("element_at function must have 2 arguments");
+            }
+            return new CollectionElementExpr(args[0], args[1]);
         }
         return null;
     }
