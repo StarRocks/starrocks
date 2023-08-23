@@ -81,9 +81,9 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        size_t runing_tasks_num = 0;
+        size_t running_tasks_num = 0;
         for (const auto& it : _running_tasks) {
-            runing_tasks_num += it.second.size();
+            running_tasks_num += it.second.size();
         }
         if (running_tasks_num >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
