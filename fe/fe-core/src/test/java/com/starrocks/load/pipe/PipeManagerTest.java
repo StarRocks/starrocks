@@ -65,7 +65,6 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -73,6 +72,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
 public class PipeManagerTest {
@@ -312,8 +312,7 @@ public class PipeManagerTest {
     }
 
     @Test
-    @Ignore
-    public void executeError() throws Exception {
+    public void testExecuteTaskSubmitFailed() throws Exception {
         mockRepoExecutor();
         final String pipeName = "p3";
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
@@ -335,12 +334,13 @@ public class PipeManagerTest {
         Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
         Assert.assertEquals(1, p3.getRunningTasks().size());
 
-        // execute error
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         new mockit.Expectations(taskManager) {
             {
+                // submit error
                 taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
                 result = new SubmitResult("queryid", SubmitResult.SubmitStatus.FAILED);
+
             }
         };
 
@@ -370,6 +370,97 @@ public class PipeManagerTest {
             List<PipeFileRecord> unloadedFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assert.assertEquals(1, unloadedFiles.size());
+        }
+    }
+
+    private void pipeRetryFailedTask(Pipe p3) throws Exception {
+        // retry several times, until failed
+        for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
+            // submit task, turn into running
+            p3.schedule();
+            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
+            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
+                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunning));
+
+            // task execution failed, turn into error
+            p3.schedule();
+            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
+            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
+                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isError));
+
+            // cleanup error state, and turn into runnable
+            p3.schedule();
+            Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
+            Assert.assertTrue(String.format("iteration %d: %s", i, p3.getRunningTasks()),
+                    p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable));
+        }
+        p3.schedule();
+        p3.schedule();
+        Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
+        Assert.assertEquals(Pipe.State.ERROR, p3.getState());
+
+        // retry all
+        {
+            AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser("alter pipe p3 retry all", ctx);
+            p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
+            List<PipeFileRecord> unloadedFiles =
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
+            Assert.assertEquals(1, unloadedFiles.size());
+        }
+    }
+
+    private Pipe preparePipe(String pipeName) throws Exception {
+        String sql = String.format("create pipe %s as insert into tbl1 " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')", pipeName);
+        createPipe(sql);
+
+        // poll the pipe to generate tasks
+        Pipe p3 = getPipe(pipeName);
+        p3.poll();
+        p3.setLastPolledTime(0);
+        Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+        return p3;
+    }
+
+    @Test
+    public void testExecuteFailed() throws Exception {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        mockRepoExecutor();
+
+        // mock execution failed
+        {
+            final String pipeName = "p3";
+            Pipe p3 = preparePipe(pipeName);
+            new mockit.Expectations(taskManager) {
+                {
+                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
+                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+                    submit.setFuture(future);
+                    future.run();
+                    result = submit;
+                }
+            };
+            Assert.assertEquals(0, p3.getRunningTasks().size());
+            pipeRetryFailedTask(p3);
+        }
+
+        // mock execution cancelled
+        {
+            final String pipeName = "p4";
+            Pipe p4 = preparePipe(pipeName);
+            new mockit.Expectations(taskManager) {
+                {
+                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
+                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+                    submit.setFuture(future);
+                    future.cancel(true);
+                    result = submit;
+                }
+            };
+            Assert.assertEquals(0, p4.getRunningTasks().size());
+            pipeRetryFailedTask(p4);
         }
     }
 
