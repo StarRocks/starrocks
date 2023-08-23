@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -23,7 +35,7 @@
 #include "storage/tablet_reader_params.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class CompactionParallelizationTest : public testing::Test {
 public:
     ~CompactionParallelizationTest() override {
@@ -64,7 +76,7 @@ public:
         ASSERT_TRUE(src_rowset != nullptr);
         ASSERT_EQ(1024, src_rowset->num_rows());
 
-        tablet -> add_inc_rowset(src_rowset, _version++);
+        ASSERT_TRUE(tablet -> add_inc_rowset(src_rowset, _version++).ok());
     }
 
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
@@ -210,6 +222,7 @@ protected:
     int64_t _rowset_id;
     int64_t _version;
 };
+
 /*
  select and execute new compaction task while the other one is in the execution progress：
  1. selection thread selects rowsets and adds candidate_a into queue
@@ -228,7 +241,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // task 1
     // write 5 rowsets
@@ -373,7 +386,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
     create_tablet_meta(tablet_meta.get());
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
     for (int i = 0; i < 5; ++i) {
@@ -490,7 +503,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     create_tablet_meta(tablet_meta.get());
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
     for (int i = 0; i < 5; ++i) {
@@ -615,7 +628,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     create_tablet_meta(tablet_meta.get());
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // write 5 rowsets
     for (int i = 0; i < 5; ++i) {
@@ -702,7 +715,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // task 1
     // write 5 rowsets
@@ -816,7 +829,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // task 1
     // write 5 rowsets
@@ -921,7 +934,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-    tablet->init();
+    ASSERT_TRUE(tablet->init().ok());
 
     // task 1
     // write 5 rowsets

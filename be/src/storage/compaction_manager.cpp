@@ -410,10 +410,10 @@ void CompactionManager::get_running_status(std::string* json_result) {
         max_task_num = _max_task_num;
         base_task_num = _base_compaction_concurrency;
         cumulative_task_num = _cumulative_compaction_concurrency;
-        running_task_num = _running_tasks.size();
-        running_tablet_ids.reserve(running_task_num);
+        running_task_num = running_tasks_num();
+        running_tablet_ids.reserve(_running_tasks.size());
         for (auto it : _running_tasks) {
-            running_tablet_ids.push_back(it->tablet()->tablet_id());
+            running_tablet_ids.push_back(it.first);
         }
         for (auto it : _data_dir_to_base_task_num_map) {
             data_dir_to_base_task_num[it.first->path()] = it.second;
