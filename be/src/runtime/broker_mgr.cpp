@@ -42,7 +42,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
-#include "util/await.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
@@ -106,9 +106,6 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
 }
 
 void BrokerMgr::ping_worker() {
-    Awaitility await;
-    // timeout in 5 seconds with 200ms check interval
-    await.timeout(5 * 1000L * 1000).interval(200 * 1000L);
     while (!_thread_stop) {
         std::vector<TNetworkAddress> addresses;
         {
@@ -120,8 +117,7 @@ void BrokerMgr::ping_worker() {
         for (auto& addr : addresses) {
             ping(addr);
         }
-        // block until _thread_stop is true or timeout
-        await.until([this] { return _thread_stop; });
+        nap_sleep(5, [this] { return _thread_stop; });
     }
 }
 

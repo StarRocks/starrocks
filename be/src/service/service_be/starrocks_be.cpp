@@ -211,7 +211,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << "BE started successfully";
 
     while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
-        sleep(10);
+        sleep(1);
     }
 
     int exit_step = 1;

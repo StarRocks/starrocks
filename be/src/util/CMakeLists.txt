@@ -44,6 +44,7 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
+  misc.cpp
   murmur_hash3.cpp
   network_util.cpp
   parse_util.cpp

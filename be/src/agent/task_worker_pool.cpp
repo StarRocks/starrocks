@@ -71,6 +71,7 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -600,7 +601,8 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
 
-        sleep(config::report_task_interval_seconds);
+        nap_sleep(config::report_task_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -740,7 +742,8 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (result.__isset.workgroup_ops) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
         }
-        sleep(config::report_workgroup_interval_seconds);
+        nap_sleep(config::report_workgroup_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
