@@ -58,7 +58,7 @@ public class TaskRunHistory {
 
     public void forceGC() {
         List<TaskRunStatus> allHistory = getAllHistory();
-        int startIndex = Config.task_runs_max_history_number;
+        int startIndex = Math.min(allHistory.size(), Config.task_runs_max_history_number);
         allHistory.subList(startIndex, allHistory.size())
                 .forEach(taskRunStatus -> historyTaskRunMap.remove(taskRunStatus.getQueryId()));
     }
