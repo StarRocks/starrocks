@@ -274,7 +274,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
     ASSERT_TRUE(_compaction_lock.owns_lock());
     // execution progress
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
 
     // task 2
     // write 6 rowsets
@@ -305,7 +305,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
     ASSERT_TRUE(_compaction_lock2.owns_lock());
     // execution progress
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
 
     // task 3
     // write 7 rowsets
@@ -336,7 +336,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel) {
     }
     ASSERT_TRUE(_compaction_lock3.owns_lock());
     // execution progress
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
 
     auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(tablet);
     int base_count = 0, cumu_count = 0;
@@ -428,7 +428,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
             _compaction_lock = std::shared_lock(compaction_task->tablet()->get_base_lock(), std::try_to_lock);
         }
         ASSERT_TRUE(_compaction_lock.owns_lock());
-        ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        ASSERT_TRUE(tablet->has_compaction_task());
         ASSERT_EQ(BASE_COMPACTION, compaction_task->compaction_type());
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
@@ -476,7 +476,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel2) {
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_base_lock(), std::try_to_lock);
     }
     ASSERT_TRUE(_compaction_lock2.owns_lock());
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
     ASSERT_EQ(BASE_COMPACTION, compaction_task2->compaction_type());
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
@@ -553,7 +553,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
             _compaction_lock = std::shared_lock(compaction_task->tablet()->get_base_lock(), std::try_to_lock);
         }
         ASSERT_TRUE(_compaction_lock.owns_lock());
-        ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        ASSERT_TRUE(tablet->has_compaction_task());
         ASSERT_EQ(BASE_COMPACTION, compaction_task->compaction_type());
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
@@ -591,7 +591,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_base_lock(), std::try_to_lock);
     }
     ASSERT_TRUE(_compaction_lock2.owns_lock());
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
     ASSERT_EQ(CUMULATIVE_COMPACTION, compaction_task2->compaction_type());
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
@@ -672,7 +672,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
             _compaction_lock = std::shared_lock(compaction_task->tablet()->get_base_lock(), std::try_to_lock);
         }
         ASSERT_TRUE(_compaction_lock.owns_lock());
-        ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+        ASSERT_TRUE(tablet->has_compaction_task());
         ASSERT_EQ(BASE_COMPACTION, compaction_task->compaction_type());
         ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
@@ -769,7 +769,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     }
     ASSERT_TRUE(_compaction_lock2.owns_lock());
     // execution progress
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
 
     // execute task1
     ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->register_task(compaction_task.get()));
@@ -782,7 +782,7 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel4) {
     }
     ASSERT_TRUE(_compaction_lock.owns_lock());
     // execution progress
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
 
     auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(tablet);
     int base_count = 0, cumu_count = 0;
@@ -868,7 +868,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
         _compaction_lock = std::shared_lock(compaction_task->tablet()->get_base_lock(), std::try_to_lock);
     }
     ASSERT_TRUE(_compaction_lock.owns_lock());
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
     // finish executing task
@@ -904,7 +904,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
         _compaction_lock2 = std::shared_lock(compaction_task2->tablet()->get_base_lock(), std::try_to_lock);
     }
     ASSERT_TRUE(_compaction_lock2.owns_lock());
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task2.get())->run_impl().ok());
 
     // finish executing task
@@ -987,7 +987,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
         _compaction_lock = std::shared_lock(compaction_task->tablet()->get_base_lock(), std::try_to_lock);
     }
     ASSERT_TRUE(_compaction_lock.owns_lock());
-    ASSERT_TRUE(StorageEngine::instance()->compaction_manager()->has_running_task(tablet));
+    ASSERT_TRUE(tablet->has_compaction_task());
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
     // finish executing task
