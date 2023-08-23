@@ -9,12 +9,10 @@
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/base_compaction.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/cumulative_compaction.h"
 #include "storage/horizontal_compaction_task.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -67,61 +65,6 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
 
         tablet->add_inc_rowset(src_rowset, _version++);
-    }
-
-    void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
-        RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, version);
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
-
-        rowset_writer_add_rows(rowset_writer);
-
-        rowset_writer->flush();
-        RowsetSharedPtr src_rowset = *rowset_writer->build();
-        ASSERT_TRUE(src_rowset != nullptr);
-        ASSERT_EQ(1024, src_rowset->num_rows());
-
-        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
-    }
-
-    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
-        RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, version);
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
-
-        rowset_writer->flush();
-        RowsetSharedPtr src_rowset = *rowset_writer->build();
-        ASSERT_TRUE(src_rowset != nullptr);
-        ASSERT_EQ(0, src_rowset->num_rows());
-
-        auto* delete_predicate = src_rowset->rowset_meta()->mutable_delete_predicate();
-        delete_predicate->set_version(version);
-        auto* in_pred = delete_predicate->add_in_predicates();
-        in_pred->set_column_name("k1");
-        in_pred->set_is_not_in(false);
-        in_pred->add_values("0");
-
-        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
-    }
-
-    void write_delete_version2(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
-        RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, version);
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
-
-        rowset_writer->flush();
-        RowsetSharedPtr src_rowset = *rowset_writer->build();
-        ASSERT_TRUE(src_rowset != nullptr);
-        ASSERT_EQ(0, src_rowset->num_rows());
-
-        auto* delete_predicate = src_rowset->rowset_meta()->mutable_delete_predicate();
-        delete_predicate->set_version(version);
-        string condition_str = "k1<=100000";
-        delete_predicate->add_sub_predicates(condition_str);
-        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
@@ -212,28 +155,6 @@ public:
             }
             CHECK_OK(writer->add_chunk(*chunk));
         }
-    }
-
-    void do_compaction() {
-        create_tablet_schema(UNIQUE_KEYS);
-
-        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
-        create_tablet_meta(tablet_meta.get());
-
-        for (int i = 0; i < 2; ++i) {
-            write_new_version(tablet_meta);
-        }
-
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-        tablet->init();
-
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
-        ASSERT_TRUE(res.ok());
-
-        ASSERT_EQ(1, tablet->version_count());
-        ASSERT_EQ(2, tablet->cumulative_layer_point());
     }
 
     void SetUp() override {
@@ -677,13 +598,15 @@ TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel_repla
     ASSERT_EQ(17, versions[1].second);
 }
 
-// 1. selection thread selects rowsets and adds candidate_a into queue
-// 2. schedule thread picks candidate_a out of queue
-// 3. selection thread selects rowsets and adds candidate_b into queue, which may includes rowsets being compacting
-// 4. schedule thread creates task for candidate_a, executed by execution thread
-// 5. schedule thread creates task for candidate_b, but failed
-// select new compaction candidate while the other one is taken out from queue before creating task, the
-// 'is_compacting' status of rowsets in the old candidate is false, causing new candidate select the same rowset
+/*
+ Select new compaction candidate while the other one is taken out from queue before creating task, the
+'is_compacting' status of rowsets in the old candidate is false, causing new candidate select the same rowset
+ 1. selection thread selects rowsets and adds candidate_a into queue
+ 2. schedule thread picks candidate_a out of queue
+ 3. selection thread selects rowsets and adds candidate_b into queue, which may includes rowsets being compacting
+ 4. schedule thread creates task for candidate_a, executed by execution thread
+ 5. schedule thread creates task for candidate_b, but failed
+*/
 TEST_F(CompactionParallelizationTest, test_size_tiered_compaction_parallel3) {
     LOG(INFO) << "test_size_tiered_compaction_parallel3";
 
@@ -987,7 +910,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     ASSERT_EQ(16, versions[1].second);
 }
 
-// replace old candidate
+// replace old candidate when submitting new candidate with the same tabletId
 TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel2) {
     LOG(INFO) << "test_default_base_cumu_compaction_parallel";
     config::enable_size_tiered_compaction_strategy = false;
