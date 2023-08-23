@@ -366,8 +366,6 @@ void ByteRleDecoderImpl::readHeader() {
     }
 }
 
-
-
 void ByteRleDecoderImpl::reset() {
     repeating = false;
     remainingValues = 0;
@@ -376,9 +374,7 @@ void ByteRleDecoderImpl::reset() {
     bufferEnd = nullptr;
 }
 
-ByteRleDecoderImpl::ByteRleDecoderImpl(
-        std::unique_ptr<SeekableInputStream> input,
-        ReaderMetrics* _metrics)
+ByteRleDecoderImpl::ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input, ReaderMetrics* _metrics)
         : metrics(_metrics) {
     inputStream = std::move(input);
     reset();

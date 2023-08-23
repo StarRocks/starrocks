@@ -196,12 +196,8 @@ void RleDecoderV1::reset() {
     repeating = false;
 }
 
-RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input,
-                           bool hasSigned,
-                           ReaderMetrics* _metrics)
-        : RleDecoder(_metrics),
-          inputStream(std::move(input)),
-          isSigned(hasSigned) {
+RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input, bool hasSigned, ReaderMetrics* _metrics)
+        : RleDecoder(_metrics), inputStream(std::move(input)), isSigned(hasSigned) {
     reset();
 }
 
