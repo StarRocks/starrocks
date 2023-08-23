@@ -1245,7 +1245,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
         return dst;
     }
 
-    const int num_src_bytes = src_offsets[src_offsets.size() - 1];
+    const int num_src_bytes = src_offsets.back();
     dst_bytes.resize(num_src_bytes);
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
@@ -1295,7 +1295,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
     }
 
     const auto& src_offsets = src->get_offset();
-    const int num_src_bytes = src_offsets[src_offsets.size() - 1];
+    const int num_src_bytes = src_offsets.back();
     // The `dst_bytes` can be at most four times larger than `src_bytes`, as in the worst-case scenario, each
     // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
     // UTF-8 character.
@@ -1364,7 +1364,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     }
 
     const auto& src_offsets = src_viewer.column()->get_offset();
-    const int num_src_bytes = src_offsets[src_offsets.size() - 1];
+    const int num_src_bytes = src_offsets.back();
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
