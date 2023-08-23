@@ -100,6 +100,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // no need to persist
     private long lastStatusCheckTime = -1;
 
+    private long lastFullCloneFinishedTimeMs = -1;
+
     public LocalTablet() {
         this(0L, new ArrayList<>());
     }
@@ -820,5 +822,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 sb.append("}");
             }
         }
+    }
+
+    public long getLastFullCloneFinishedTimeMs() {
+        return lastFullCloneFinishedTimeMs;
+    }
+
+    public void setLastFullCloneFinishedTimeMs(long lastFullCloneFinishedTimeMs) {
+        this.lastFullCloneFinishedTimeMs = lastFullCloneFinishedTimeMs;
     }
 }
