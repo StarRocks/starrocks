@@ -831,6 +831,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | dropColumnsClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
@@ -944,6 +945,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+dropColumnsClause
+    : DROP COLUMN identifierList (FROM rollupName=identifier)? properties?
     ;
 
 modifyColumnClause

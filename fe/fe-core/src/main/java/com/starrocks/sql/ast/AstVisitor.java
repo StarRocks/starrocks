@@ -914,6 +914,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitDropColumnsClause(DropColumnsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     public R visitModifyColumnClause(ModifyColumnClause clause, C context) {
         return visitNode(clause, context);
     }

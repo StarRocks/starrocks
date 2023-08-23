@@ -191,6 +191,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropColumnsClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -3671,6 +3672,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             rollupName = getIdentifierName(context.rollupName);
         }
         return new DropColumnClause(columnName, rollupName, getProperties(context.properties()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropColumnsClause(StarRocksParser.DropColumnsClauseContext context) {
+        List<String> columnNames =
+                context.identifierList().identifier().stream().map(this::getIdentifierName).collect(toList());
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new DropColumnsClause(columnNames, rollupName, getProperties(context.properties()), createPos(context));
     }
 
     @Override
