@@ -4003,7 +4003,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testRangePredicate() {
-        /*
         // integer
         {
             String mv = "select * from lineorder where lo_orderkey < 10001";
@@ -4205,7 +4204,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query = "select * from test.test_all_type where id_date > '2023-08-11'";
             testRewriteOK(mv, query);
         }
-        */
 
         // datetime
         {
