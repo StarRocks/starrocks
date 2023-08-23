@@ -149,7 +149,7 @@ public class MaterializedViewRewriter {
             // MV : A JOIN B JOIN C
             // To fast rewrite, only need to check `A JOIN B JOIN C` pattern rather than
             // `A JOIN B JOIN C JOIN D`.
-            if (optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode()) {
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode()) {
                 for (OptExpression child : queryExpression.getInputs()) {
                     final List<Table> childTables = MvUtils.getAllTables(child);
                     if (Sets.newHashSet(childTables).contains(mvTables)) {
@@ -185,7 +185,7 @@ public class MaterializedViewRewriter {
             // To avoid join reorder producing plan bomb, record query's max tables to be only matched.
             // But if query contains non inner/left outer joins which cannot be used to view delta join,
             // not use `intersectingTables` anymore.
-            if (optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() &&
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() &&
                     !queryTables.containsAll(materializationContext.getIntersectingTables())) {
                 return false;
             }

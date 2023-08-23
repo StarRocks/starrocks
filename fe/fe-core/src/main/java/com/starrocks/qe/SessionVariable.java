@@ -1136,7 +1136,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // - Use plan cache if possible to avoid regenerating plan tree.
     // - Use the max plan tree to rewrite in view-delta mode to avoid too many rewrites.
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
-    private boolean enableMaterializedViewRewriteGreedyMode = true;
+    private boolean enableMaterializedViewRewriteGreedyMode = false;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
