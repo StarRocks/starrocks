@@ -4,19 +4,23 @@
 
 The function `TRANSLATE()` is used to substitute characters within a string. It works by taking a string as input, along with a set of characters to be replaced, and the corresponding characters to replace them with. TRANSLATE() then performs the specified substitutions.
 
+If the length of result string after translated exceed the maximum length (1048576) of [`VARCAHR`](../sql-statements/data-types/VARCHAR.md), the result string will be `NULL`.
+
 ## Syntax
 
 ```SQL
-TRANSLATE( <expr>, <from_string>, <to_string> )
+TRANSLATE( <source>, <from_string>, <to_string> )
 ```
 
-in which
+## Parameters
 
-- `expr`: the expression to be translated. When a character in the expr is not found in the `from_string`, it is simply included in the result string.
-- `from_string`: Each character in the `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if the to_string has fewer characters than the from_string, the character is excluded from the resulting string.)
-- `to_string`: A string with the characters that are used to replace characters from the `from_string`. If more characters are specified in the `to_string` than in the `from_string` argument, the extra characters from the `to_string` argument are ignored.
+- `source`: supports the `VARCAHR` type. The source string to be translated. When a character in the `source` is not found in the `from_string`, it is simply included in the result string.
+- `from_string`: supports the `VARCAHR` type. Each character in the `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if the `to_string` has fewer characters than the `from_string`, the character is excluded from the resulting string.)
+- `to_string`: supports the `VARCAHR` type. A string with the characters that are used to replace characters from the `from_string`. If more characters are specified in the `to_string` than in the `from_string` argument, the extra characters from the `to_string` argument are ignored.
 
-If the length of result string after translated exceed the maximum length (1048576) of [`VARCAHR`](../sql-statements/data-types/VARCHAR.md), the result string will be `NULL`.
+## Return value
+
+Returns a value of the `VARCHAR` type.
 
 ## Examples
 
