@@ -73,6 +73,8 @@ private:
 
     inline void skipLongs(uint64_t numValues);
 
+    inline void reset();
+
     const std::unique_ptr<SeekableInputStream> inputStream;
     const bool isSigned;
     uint64_t remainingValues;
