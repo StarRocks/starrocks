@@ -4,7 +4,10 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 
 Spark Load 是一种**异步**导入方式，用户需要通过 MySQL 协议创建 Spark 类型导入任务，并可以通过 SHOW LOAD 查看导入结果。
 
----
+> **注意**
+>
+> * 使用 Spark Load 导入数据至 StarRocks 表时，不支持该表分桶列的数据类型为 DATE、DATETIME 或者 DECIMAL。
+> * Spark Load 不支持导入至主键模型表。
 
 ## 名词解释
 
