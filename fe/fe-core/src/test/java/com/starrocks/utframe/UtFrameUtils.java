@@ -410,7 +410,7 @@ public class UtFrameUtils {
     private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
                                    GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
+        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
@@ -737,7 +737,7 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
-        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase;
