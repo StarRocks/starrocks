@@ -31,16 +31,8 @@ CREATE MATERIALIZED VIEW mv1
                AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
 -- result:
 -- !result
-select sleep(2);
--- result:
-1
--- !result
 drop table t1;
 -- result:
--- !result
-refresh materialized view mv1;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
 -- !result
 CREATE TABLE `t1` (
   `k1` date NULL COMMENT "",
@@ -65,16 +57,8 @@ PROPERTIES (
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW mv1;
--- !result
-select sleep(2);
--- result:
-1
--- !result
-select * from mv1;
--- result:
--- !result
-ALTER MATERIALIZED VIEW mv1 ACTIVE;
+REFRESH MATERIALIZED VIEW mv1  with sync mode;
+select * from mv1 order by k1;
 -- result:
 -- !result
 insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
@@ -82,47 +66,24 @@ insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),(
                                          ("2023-03-11",1,1),("2023-05-11",1,2),("2023-04-11",2,1),("2023-05-01",2,2);
 -- result:
 -- !result
-select sleep(2);
--- result:
-1
--- !result
-select * from mv1;
+REFRESH MATERIALIZED VIEW mv1  with sync mode;
+select * from mv1 order by k1;
 -- result:
 2019-01-01	6
-2023-03-11	1
-2023-05-01	2
 2023-01-11	4
 2023-02-11	2
+2023-03-11	1
 2023-04-11	2
+2023-05-01	2
 2023-05-11	1
 -- !result
 ALTER MATERIALIZED VIEW mv1 INACTIVE;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW mv1;
--- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
--- !result
-CREATE TABLE t1 (
-    k1 INT,
-    v1 INT,
-    v2 INT)
-DUPLICATE KEY(k1)
-DISTRIBUTED BY HASH(k1)
-PROPERTIES(
-    "replication_num" = "1"
-)
-insert into t1 values (1,1,1),(1,2,2),(2,3,3),(2,3,4),(2,5,5);
--- result:
-E: (1064, "Getting syntax error at line 10, column 0. Detail message: Unexpected input 'insert', the most similar input is {<EOF>, ';'}.")
--- !result
 CREATE MATERIALIZED VIEW mv2
 DISTRIBUTED BY HASH(k1) BUCKETS 10
 REFRESH MANUAL
 AS SELECT k1,v1 FROM t1;
--- result:
--- !result
-refresh materialized view mv2;
 -- result:
 -- !result
 drop table t1;
@@ -142,10 +103,7 @@ PROPERTIES(
 alter materialized view mv2 active;
 -- result:
 -- !result
-select sleep(2);
--- result:
-1
--- !result
-select * from mv2
+refresh materialized view mv2  with sync mode;
+select * from mv2 order by k1;
 -- result:
 -- !result

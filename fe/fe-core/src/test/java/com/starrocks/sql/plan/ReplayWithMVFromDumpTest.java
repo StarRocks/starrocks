@@ -103,7 +103,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
     }
 
@@ -112,7 +111,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
     }
 
@@ -121,7 +119,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_3"));
     }
 }

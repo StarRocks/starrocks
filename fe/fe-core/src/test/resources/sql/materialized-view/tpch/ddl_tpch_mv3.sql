@@ -2,7 +2,7 @@
 create materialized view lineitem_mv_agg_mv1
  distributed by hash(p_name,
                o_orderyear,
-               n_name1) buckets 96
+               n_name2) buckets 96
  refresh deferred manual
  properties (
      "replication_num" = "1"
@@ -10,14 +10,15 @@ create materialized view lineitem_mv_agg_mv1
  as select /*+ SET_VAR(query_timeout = 7200) */
                p_name,
                o_orderyear,
-               n_name1,
+               n_name2,
                sum(l_amount) as sum_amount
     from
                lineitem_mv
+    where c_nationkey = s_nationkey
     group by
         p_name,
         o_orderyear,
-        n_name1
+        n_name2
 ;
 
 -- query7
