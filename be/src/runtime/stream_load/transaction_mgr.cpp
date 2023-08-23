@@ -48,12 +48,12 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/await.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
@@ -87,12 +87,9 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
         ProfilerRegisterThread();
 #endif
 
-        Awaitility await;
-        // check every 200ms until timeout with `interval` seconds
-        await.timeout(interval * 1000L * 1000L).interval(200 * 1000);
         while (!_is_stopped.load()) {
             _clean_stream_context();
-            await.until([this] { return _is_stopped.load(); });
+            nap_sleep(interval, [this] { return _is_stopped.load(); });
         }
     });
     Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
