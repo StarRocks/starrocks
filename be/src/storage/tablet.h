@@ -263,11 +263,11 @@ public:
 
     std::shared_ptr<CompactionTask> create_compaction_task();
 
+    bool check_is_compaction_validate();
+
     bool has_compaction_task();
 
     void stop_compaction();
-
-    void reset_compaction();
 
     bool enable_compaction();
 
@@ -373,7 +373,6 @@ private:
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
-    std::shared_ptr<CompactionTask> _compaction_task;
     bool _enable_compaction = true;
 
     std::mutex _compaction_task_lock;

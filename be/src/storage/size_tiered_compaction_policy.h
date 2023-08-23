@@ -33,6 +33,8 @@ public:
     // used to generate a CompactionTask for tablet
     std::shared_ptr<CompactionTask> create_compaction(TabletSharedPtr tablet) override;
 
+    bool check_is_rowset_validate() override;
+
 protected:
     Status _pick_rowsets_to_size_tiered_compact(bool force_base_compaction, std::vector<RowsetSharedPtr>* input_rowsets,
                                                 double* score);

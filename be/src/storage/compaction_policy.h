@@ -30,6 +30,9 @@ public:
 
     // used to generate a CompactionTask for tablet
     virtual std::shared_ptr<CompactionTask> create_compaction(TabletSharedPtr tablet) = 0;
+
+    // used to check if all input rowsets are validate
+    virtual bool check_is_rowset_validate() = 0;
 };
 
 } // namespace starrocks

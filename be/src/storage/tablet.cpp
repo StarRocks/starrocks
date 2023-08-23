@@ -1529,12 +1529,13 @@ void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& context)
 
 std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    std::shared_ptr<CompactionTask> compaction_task;
+    if (_enable_compaction) {
         if (_compaction_context) {
-            _compaction_task = _compaction_context->policy->create_compaction(
+            compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
-        return _compaction_task;
+        return compaction_task;
     } else {
         return nullptr;
     }
@@ -1542,12 +1543,12 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
 
 bool Tablet::has_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    return _compaction_task != nullptr;
+    return StorageEngine::instance()->compaction_manager()->is_running_task(std::static_pointer_cast<Tablet>(shared_from_this()));
 }
 
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    if (_enable_compaction) {
         _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
@@ -1560,7 +1561,7 @@ bool Tablet::need_compaction() {
 
 bool Tablet::force_base_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && _enable_compaction) {
+    if (_enable_compaction) {
         _compaction_context->type = BASE_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
@@ -1581,17 +1582,10 @@ double Tablet::compaction_score() {
 
 void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task) {
-        _compaction_task->stop();
-        _compaction_task = nullptr;
-    }
+    StorageEngine::instance()->compaction_manager()->stop_compaction(std::static_pointer_cast<Tablet>(shared_from_this()));
     _enable_compaction = false;
 }
 
-void Tablet::reset_compaction() {
-    std::lock_guard lock(_compaction_task_lock);
-    _compaction_task = nullptr;
-}
 
 bool Tablet::enable_compaction() {
     std::lock_guard lock(_compaction_task_lock);

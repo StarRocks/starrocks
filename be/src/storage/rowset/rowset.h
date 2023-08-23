@@ -285,6 +285,12 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
+    void set_is_compacting(bool is_compacting){
+        this->is_compacting.store(is_compacting);
+    }
+
+    bool get_is_compacting(){return is_compacting.load();}
+
     DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
@@ -384,6 +390,8 @@ private:
     Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
     std::vector<SegmentSharedPtr> _segments;
+
+    std::atomic<bool> is_compacting;
 
     KeysType _keys_type;
 };

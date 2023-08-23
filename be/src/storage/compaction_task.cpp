@@ -81,7 +81,9 @@ void CompactionTask::run() {
         // reset compaction before judge need_compaction again
         // because if there is a compaction task for one compaction type in a tablet,
         // it will not be able to run another one for that type
-        _tablet->reset_compaction();
+        for(RowsetSharedPtr rowset:_input_rowsets){
+            rowset->set_is_compacting(false);
+        }
         _task_info.end_time = UnixMillis();
         StorageEngine::instance()->compaction_manager()->unregister_task(this);
         // compaction context has been updated when commit
