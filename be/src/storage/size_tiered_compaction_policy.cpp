@@ -72,7 +72,7 @@ std::shared_ptr<CompactionTask> SizeTieredCompactionPolicy::create_compaction(Ta
         output_version.second = (*_rowsets.rbegin())->end_version();
 
         // set rowset status to compacting
-        for(auto rowset:_rowsets){
+        for (auto rowset : _rowsets) {
             rowset->set_is_compacting(true);
         }
 
@@ -208,7 +208,7 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         }
 
         // meet version being compacted
-        if(rowset->get_is_compacting()){
+        if (rowset->get_is_compacting()) {
             if (!transient_rowsets.empty()) {
                 auto level = std::make_unique<SizeTieredLevel>(
                         transient_rowsets, segment_num, level_size, total_size,
