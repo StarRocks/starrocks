@@ -77,7 +77,7 @@ void start_be() {
     }
 
     while (!starrocks::k_starrocks_exit.load()) {
-        sleep(10);
+        sleep(1);
     }
 
     starrocks::wait_for_fragments_finish(exec_env, starrocks::config::loop_count_wait_fragments_finish);
