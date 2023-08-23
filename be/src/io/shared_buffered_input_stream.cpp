@@ -72,11 +72,11 @@ void SharedBufferedInputStream::_merge_small_ranges(const std::vector<IORange>& 
             // merge from [unmerge, i-1]
             int64_t ref_count = (to - from + 1);
             int64_t end = (small_ranges[to].offset + small_ranges[to].size);
-            SharedBuffer sb = SharedBuffer{.raw_offset = small_ranges[from].offset,
-                                           .raw_size = end - small_ranges[from].offset,
-                                           .ref_count = ref_count};
-            sb.align(_align_size, _file_size);
-            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+            SharedBufferPtr sb(new SharedBuffer{.raw_offset = small_ranges[from].offset,
+                                                .raw_size = end - small_ranges[from].offset,
+                                                .ref_count = ref_count});
+            sb->align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb->raw_offset + sb->raw_size, sb));
         };
 
         size_t unmerge = 0;
@@ -108,9 +108,9 @@ Status SharedBufferedInputStream::_set_io_ranges_all_columns(const std::vector<I
     std::vector<IORange> small_ranges;
     for (const IORange& r : check) {
         if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
-            sb.align(_align_size, _file_size);
-            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+            SharedBufferPtr sb(new SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1});
+            sb->align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb->raw_offset + sb->raw_size, sb));
         } else {
             small_ranges.emplace_back(r);
         }
@@ -137,9 +137,9 @@ Status SharedBufferedInputStream::_set_io_ranges_active_and_lazy_columns(const s
     for (auto index = 0; index < check.size(); ++index) {
         const IORange& r = check[index];
         if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
-            sb.align(_align_size, _file_size);
-            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+            SharedBufferPtr sb(new SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1});
+            sb->align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb->raw_offset + sb->raw_size, sb));
         } else {
             if (r.is_active) {
                 small_active_ranges.emplace_back(r);
@@ -165,9 +165,9 @@ Status SharedBufferedInputStream::_set_io_ranges_active_and_lazy_columns(const s
             const IORange& r = check[index];
             auto iter = _map.upper_bound(r.offset);
             if (iter != _map.end()) {
-                SharedBuffer& sb = iter->second;
-                if (sb.offset <= r.offset && sb.offset + sb.size >= r.offset + r.size) {
-                    sb.ref_count++;
+                SharedBufferPtr& sb = iter->second;
+                if (sb->offset <= r.offset && sb->offset + sb->size >= r.offset + r.size) {
+                    sb->ref_count++;
                     continue;
                 }
             }
@@ -194,22 +194,27 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     }
 }
 
-StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::find_shared_buffer(size_t offset,
-                                                                                                 size_t count) {
+StatusOr<SharedBufferedInputStream::SharedBufferPtr> SharedBufferedInputStream::find_shared_buffer(size_t offset,
+                                                                                                   size_t count) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");
     }
-    SharedBuffer& sb = iter->second;
-    if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + count)) {
+    const SharedBufferPtr& sb = iter->second;
+    if ((sb->offset > offset) || (sb->offset + sb->size) < (offset + count)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
-    return &sb;
+    return sb;
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
-    ASSIGN_OR_RETURN(auto ret, find_shared_buffer(offset, nbytes));
-    SharedBuffer& sb = *ret;
+Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t count,
+                                            SharedBufferPtr shared_buffer) {
+    if (!shared_buffer) {
+        ASSIGN_OR_RETURN(auto ret, find_shared_buffer(offset, count));
+        shared_buffer = ret;
+    }
+
+    SharedBuffer& sb = *shared_buffer;
     if (sb.buffer.capacity() == 0) {
         RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read into shared buffer"));
         SCOPED_RAW_TIMER(&_shared_io_timer);
@@ -246,7 +251,7 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
         return Status::OK();
     }
     const uint8_t* buffer = nullptr;
-    RETURN_IF_ERROR(get_bytes(&buffer, offset, count));
+    RETURN_IF_ERROR(get_bytes(&buffer, offset, count, st.value()));
     strings::memcpy_inlined(out, buffer, count);
     return Status::OK();
 }
@@ -266,14 +271,25 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     ASSIGN_OR_RETURN(auto ret, find_shared_buffer(_offset, count));
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
-    RETURN_IF_ERROR(get_bytes(&buf, _offset, count));
+    RETURN_IF_ERROR(get_bytes(&buf, _offset, count, ret));
+    return std::string_view((const char*)buf, count);
+}
+
+StatusOr<std::string_view> SharedBufferedInputStream::peek_shared_buffer(int64_t count,
+                                                                         SharedBufferPtr* shared_buffer) {
+    ASSIGN_OR_RETURN(auto ret, find_shared_buffer(_offset, count));
+    if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
+    const uint8_t* buf = ret->buffer.data() + _offset - ret->offset;
+    if (shared_buffer) {
+        *shared_buffer = ret;
+    }
     return std::string_view((const char*)buf, count);
 }
 
 void SharedBufferedInputStream::_update_estimated_mem_usage() {
     int64_t mem_usage = 0;
     for (const auto& [_, sb] : _map) {
-        mem_usage += sb.size;
+        mem_usage += sb->size;
     }
     // in most cases, those data are compressed.
     // to read it, we need to decompress it, and let's say to add 50% overhead.
