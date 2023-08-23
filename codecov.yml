@@ -1,6 +1,7 @@
 comment: false
 codecov:
   allow_coverage_offsets: true
+  max_report_age: off
 github_checks:
   annotations: false
 coverage:
