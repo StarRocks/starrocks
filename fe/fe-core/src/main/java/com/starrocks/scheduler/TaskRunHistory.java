@@ -21,6 +21,7 @@ public class TaskRunHistory {
     }
 
     public void forceGC() {
+<<<<<<< HEAD
         if (historyDeque.size() >= Config.task_runs_max_history_number) {
             int startIndex = historyDeque.size() - Config.task_runs_max_history_number;
             int currentIndex = 0;
@@ -32,6 +33,12 @@ public class TaskRunHistory {
                 currentIndex++;
             }
         }
+=======
+        List<TaskRunStatus> allHistory = getAllHistory();
+        int startIndex = Math.min(allHistory.size(), Config.task_runs_max_history_number);
+        allHistory.subList(startIndex, allHistory.size())
+                .forEach(taskRunStatus -> removeTask(taskRunStatus.getQueryId()));
+>>>>>>> 5946825657 (Fix remove task_run overflow (#29727))
     }
 
     public long getTaskRunCount() {

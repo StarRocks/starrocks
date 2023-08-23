@@ -387,6 +387,39 @@ public class TaskManagerTest {
 
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testForceGC() {
+        TaskRunManager taskRunManager = new TaskRunManager();
+        for (int i = 0; i < 100; i++) {
+            TaskRunStatus taskRunStatus = new TaskRunStatus();
+            taskRunStatus.setQueryId("test" + i);
+            taskRunStatus.setTaskName("test" + i);
+            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus);
+        }
+        Config.task_runs_max_history_number = 20;
+        taskRunManager.getTaskRunHistory().forceGC();
+        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getAllHistory().size());
+        Config.task_runs_max_history_number = 10000;
+    }
+
+    @Test
+    public void testForceGC2() {
+        TaskRunManager taskRunManager = new TaskRunManager();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus taskRunStatus = new TaskRunStatus();
+            taskRunStatus.setQueryId("test" + i);
+            taskRunStatus.setTaskName("test" + i);
+            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus);
+        }
+        Config.task_runs_max_history_number = 20;
+        taskRunManager.getTaskRunHistory().forceGC();
+        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getAllHistory().size());
+        Config.task_runs_max_history_number = 10000;
+    }
+
+>>>>>>> 5946825657 (Fix remove task_run overflow (#29727))
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
         Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
         return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
