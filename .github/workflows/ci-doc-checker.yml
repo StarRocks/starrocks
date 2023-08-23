@@ -98,7 +98,7 @@ jobs:
           find: '[x] Yes, this PR will result in a change in behavior.'
           replace: '[ ] Yes, this PR will result in a change in behavior.'
       - run: |
-          sleep 10
+          sleep 30
       - name: Replace Pull Request Body
         uses: ivangabriele/find-and-replace-pull-request-body@v1.1.5
         with:
