@@ -58,6 +58,7 @@
 #include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
@@ -97,10 +98,15 @@ void gc_memory(void* arg_this) {
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
+<<<<<<< HEAD
         sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
+=======
+        nap_sleep(config::memory_maintenance_sleep_time_s, [daemon] { return daemon->stopped(); });
+
+>>>>>>> ef6c33877b ([Enhancement] add nap_sleep() to handle sleep a large portion of time (#29689))
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
@@ -210,7 +216,7 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
 
-        sleep(15); // 15 seconds
+        nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
 

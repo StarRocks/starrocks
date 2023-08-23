@@ -38,7 +38,7 @@
 
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
-#include "util/await.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
@@ -145,9 +145,6 @@ Status ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& quer
 void ResultBufferMgr::cancel_thread() {
     LOG(INFO) << "result buffer manager cancel thread begin.";
 
-    Awaitility await;
-    // check every 200ms until 1 second and timeout
-    await.timeout(1000 * 1000).interval(200 * 1000);
     while (!_is_stop) {
         // get query
         std::vector<TUniqueId> query_to_cancel;
@@ -169,8 +166,7 @@ void ResultBufferMgr::cancel_thread() {
         for (auto& i : query_to_cancel) {
             cancel(i);
         }
-        // wait until timeout or _is_stop returns true
-        await.until([this] { return _is_stop; });
+        nap_sleep(1, [this] { return _is_stop; });
     }
 
     LOG(INFO) << "result buffer manager cancel thread finish.";

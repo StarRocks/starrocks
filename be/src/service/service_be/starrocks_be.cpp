@@ -76,8 +76,34 @@ void start_be() {
         exit(1);
     }
 
+<<<<<<< HEAD
     while (!starrocks::k_starrocks_exit.load()) {
         sleep(10);
+=======
+    // Start heartbeat server
+    std::unique_ptr<ThriftServer> heartbeat_server;
+    ThriftRpcHelper::setup(exec_env);
+    if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
+                                           config::heartbeat_service_thread_count);
+        !ret.ok()) {
+        LOG(ERROR) << "BE heartbeat server did not start correctly, exiting: " << ret.status().message();
+        shutdown_logging();
+        exit(1);
+    } else {
+        heartbeat_server = std::move(ret.value());
+    }
+    if (auto status = heartbeat_server->start(); !status.ok()) {
+        LOG(ERROR) << "BE heartbeat server dint not start correctlr, exiting: " << status.message();
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << "BE start step " << start_step++ << ": start heartbeat server successfully";
+
+    LOG(INFO) << "BE started successfully";
+
+    while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
+        sleep(1);
+>>>>>>> ef6c33877b ([Enhancement] add nap_sleep() to handle sleep a large portion of time (#29689))
     }
 
     starrocks::wait_for_fragments_finish(exec_env, starrocks::config::loop_count_wait_fragments_finish);
