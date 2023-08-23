@@ -185,6 +185,7 @@ public class Coordinator {
     private boolean thriftServerHighLoad;
 
     private final boolean isStatisticsJob;
+    private final boolean needQueued;
     private LogicalSlot slot = null;
 
     // Used for new planner
@@ -210,6 +211,7 @@ public class Coordinator {
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
                         queryOptions);
         this.isStatisticsJob = context.isStatisticsJob();
+        this.needQueued = context.isNeedQueued();
     }
 
     // Used for broker export task coordinator
@@ -245,6 +247,7 @@ public class Coordinator {
                 new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, this.descTable, queryGlobals,
                         queryOptions);
         this.isStatisticsJob = false;
+        this.needQueued = true;
     }
 
     // Used for broker load task coordinator
@@ -274,6 +277,7 @@ public class Coordinator {
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, this.descTable, queryGlobals,
                         queryOptions);
         this.isStatisticsJob = context != null && context.isStatisticsJob();
+        this.needQueued = context != null && connectContext.isNeedQueued();
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -320,6 +324,7 @@ public class Coordinator {
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
                         queryOptions);
         this.isStatisticsJob = context.isStatisticsJob();
+        this.needQueued = connectContext.isNeedQueued();
     }
 
     public LogicalSlot getSlot() {
@@ -340,6 +345,10 @@ public class Coordinator {
 
     public boolean isStatisticsJob() {
         return isStatisticsJob;
+    }
+
+    public boolean isNeedQueued() {
+        return needQueued;
     }
 
     public void onFinished() {
