@@ -6,7 +6,8 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 
 > **NOTICE**
 >
-> Only users with the INSERT privilege on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privilege.
+> - Only users with the INSERT privilege on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privilege.
+> - Spark load can not be used to load data into a Primary Key table.
 
 ## Terminology explanation
 
