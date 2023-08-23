@@ -144,6 +144,7 @@ public class LoadLoadingTask extends LoadTask {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                     timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                     brokerDesc, fileGroups, fileStatusList, fileNum);
+            loadPlanner.setPartialUpdateMode(partialUpdateMode);
             loadPlanner.plan();
         }
     }
@@ -228,6 +229,8 @@ public class LoadLoadingTask extends LoadTask {
                     }
                     sb.deleteCharAt(sb.length() - 1);
                     summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+                    summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
                 }
 
                 profile.addChild(summaryProfile);
@@ -235,7 +238,7 @@ public class LoadLoadingTask extends LoadTask {
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.endProfile();
-                profile.addChild(curCoordinator.buildMergedQueryProfile(null));
+                profile.addChild(curCoordinator.buildMergedQueryProfile());
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");

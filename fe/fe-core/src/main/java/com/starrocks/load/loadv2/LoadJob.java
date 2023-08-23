@@ -62,7 +62,6 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
-import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -98,8 +97,7 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable,
-        LoadJobWithWarehouse {
+public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable {
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
@@ -139,6 +137,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     @SerializedName("p")
     protected boolean partialUpdate = false;
+    @SerializedName("pum")
     protected String partialUpdateMode = "row";
     @SerializedName("pr")
     protected int priority = LoadPriority.NORMAL_VALUE;
@@ -219,16 +218,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     protected void writeUnlock() {
         lock.writeLock().unlock();
-    }
-
-    @Override
-    public boolean isFinal() {
-        return isCompleted();
-    }
-
-    @Override
-    public long getFinishTimestampMs() {
-        return getFinishTimestamp();
     }
 
     public long getId() {

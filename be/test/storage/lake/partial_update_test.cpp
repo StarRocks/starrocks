@@ -98,6 +98,11 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+        // check trash files already removed
+        for (const auto& file : _trash_files) {
+            EXPECT_FALSE(fs::path_exist(file));
+        }
         remove_test_dir_or_die();
     }
 
@@ -155,6 +160,19 @@ public:
         return ret;
     }
 
+    void add_trash_files(uint32_t tablet_id, uint32_t txn_id) {
+        Tablet tablet(_tablet_mgr.get(), tablet_id);
+        auto txn_log_st = tablet.get_txn_log(txn_id);
+        EXPECT_TRUE(txn_log_st.ok());
+        auto& txn_log = txn_log_st.value();
+        auto& segments = txn_log->op_write().rowset().segments();
+        for (const auto& segment : segments) {
+            std::string filename = _tablet_mgr->segment_location(tablet_id, segment);
+            _trash_files.push_back(filename);
+            EXPECT_TRUE(fs::path_exist(filename));
+        }
+    }
+
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_partial_update";
     constexpr static const int kChunkSize = 12;
@@ -166,6 +184,7 @@ protected:
     std::shared_ptr<Schema> _partial_schema;
     std::vector<int32_t> _referenced_column_ids;
     int64_t _partition_id = 4561;
+    std::vector<std::string> _trash_files;
 };
 
 TEST_F(PartialUpdateTest, test_write) {
@@ -205,6 +224,7 @@ TEST_F(PartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        add_trash_files(tablet_id, txn_id);
         // Publish version
         ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
@@ -254,6 +274,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        add_trash_files(tablet_id, txn_id);
         // Publish version
         ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
@@ -307,6 +328,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
         ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        add_trash_files(tablet_id, txn_id);
         // Publish version
         ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
@@ -358,6 +380,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        add_trash_files(tablet_id, txn_id);
     }
     // publish in order
     for (auto txn_id : txn_ids) {
@@ -413,6 +436,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
         ASSERT_OK(delta_writer->write(chunk2, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        add_trash_files(tablet_id, txn_id);
     }
     // publish in order
     for (auto txn_id : txn_ids) {

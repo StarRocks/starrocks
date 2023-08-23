@@ -20,7 +20,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.time.LocalDateTime;
 
-public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
+public class AsyncRefreshSchemeDesc extends RefreshSchemeClause {
 
     private boolean defineStartTime;
 

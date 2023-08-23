@@ -183,20 +183,12 @@ public class SelectAnalyzer {
                     .collect(Collectors.toList());
 
             Scope sourceScopeForOrder = new Scope(RelationId.anonymous(), new RelationFields(sourceForOrderFields));
-            sourceAndOutputScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
-            sourceAndOutputScope.setParent(sourceScopeForOrder);
-            analyzeState.setOrderScope(sourceAndOutputScope);
+            computeAndAssignOrderScope(analyzeState, sourceScopeForOrder, outputScope);
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 
         if (limitElement != null && limitElement.hasLimit()) {
-            if (limitElement.getOffset() > 0 && orderByElements.isEmpty()) {
-                // The offset can only be processed in sort,
-                // so when there is no order by, we manually set offset to 0
-                analyzeState.setLimit(new LimitElement(0, limitElement.getLimit()));
-            } else {
-                analyzeState.setLimit(new LimitElement(limitElement.getOffset(), limitElement.getLimit()));
-            }
+            analyzeState.setLimit(new LimitElement(limitElement.getOffset(), limitElement.getLimit()));
         }
     }
 

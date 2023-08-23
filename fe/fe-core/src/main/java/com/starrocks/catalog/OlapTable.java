@@ -304,11 +304,8 @@ public class OlapTable extends Table {
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
-        olapTable.partitionInfo = new PartitionInfo();
-        if (this.partitionInfo instanceof RangePartitionInfo) {
-            olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
-        } else if (this.partitionInfo instanceof SinglePartitionInfo) {
-            olapTable.partitionInfo = this.partitionInfo;
+        if (this.partitionInfo != null) {
+            olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
@@ -321,6 +318,10 @@ public class OlapTable extends Table {
         olapTable.idToPartition = idToPartitions;
         olapTable.nameToPartition = nameToPartitions;
         olapTable.physicalPartitionIdToPartitionId = this.physicalPartitionIdToPartitionId;
+        olapTable.tempPartitions = new TempPartitions();
+        for (Partition tempPartition : this.getTempPartitions()) {
+            olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
+        }
         olapTable.baseIndexId = this.baseIndexId;
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
@@ -446,9 +447,9 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
-    public boolean hasMaterializedColumn() {
+    public boolean hasGeneratedColumn() {
         for (Column column : getFullSchema()) {
-            if (column.isMaterializedColumn()) {
+            if (column.isGeneratedColumn()) {
                 return true;
             }
         }
@@ -1214,6 +1215,15 @@ public class OlapTable extends Table {
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
+    }
+
+    /**
+     * Return all visible partition names which exclude all shadow partitions.
+     */
+    public Set<String> getVisiblePartitionNames() {
+        return nameToPartition.keySet().stream()
+                .filter(n -> !n.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .collect(Collectors.toSet());
     }
 
     public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
@@ -2001,8 +2011,8 @@ public class OlapTable extends Table {
         return getSchemaByIndexId(baseIndexId);
     }
 
-    public List<Column> getBaseSchemaWithoutMaterializedColumn() {
-        if (!hasMaterializedColumn()) {
+    public List<Column> getBaseSchemaWithoutGeneratedColumn() {
+        if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
         }
 
@@ -2010,7 +2020,7 @@ public class OlapTable extends Table {
 
         while (schema.size() > 0) {
             // check last column is whether materiazlied column or not
-            if (schema.get(schema.size() - 1).isMaterializedColumn()) {
+            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
                 schema.remove(schema.size() - 1);
             } else {
                 break;
@@ -2202,7 +2212,7 @@ public class OlapTable extends Table {
 
     public void setHasDelete() {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasDelete(true);
     }
@@ -2234,7 +2244,7 @@ public class OlapTable extends Table {
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }

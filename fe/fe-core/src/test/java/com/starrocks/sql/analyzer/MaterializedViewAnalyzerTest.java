@@ -88,9 +88,9 @@ public class MaterializedViewAnalyzerTest {
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
                 (ShowStmt) analyzeSuccess("show full columns from mv1"));
         ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, \\N, , , a1]," +
-                        " [b, int, , YES, YES, \\N, , , b2]," +
-                        " [c, int, , YES, YES, \\N, , , ]]",
+        Assert.assertEquals("[[a, date, , YES, YES, \\N, NONE, , a1]," +
+                        " [b, int, , YES, YES, \\N, NONE, , b2]," +
+                        " [c, int, , YES, YES, \\N, NONE, , ]]",
                 showResultSet.getResultRows().toString());
     }
 

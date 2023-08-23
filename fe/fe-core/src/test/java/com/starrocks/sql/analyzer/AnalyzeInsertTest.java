@@ -75,7 +75,7 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into tmc values (1,2)");
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
         analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
-        analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "materialized column 'mc' can not be specified.");
+        analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
     }
 
     @Test

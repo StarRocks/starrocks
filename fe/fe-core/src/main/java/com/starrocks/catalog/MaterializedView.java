@@ -179,8 +179,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         private String timeUnit;
 
         public AsyncRefreshContext() {
-            this.baseTableVisibleVersionMap = Maps.newHashMap();
-            this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
+            this.baseTableVisibleVersionMap = Maps.newConcurrentMap();
+            this.baseTableInfoVisibleVersionMap = Maps.newConcurrentMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
@@ -241,6 +241,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", step=" + step +
                     ", timeUnit='" + timeUnit + '\'' +
                     '}';
+        }
+
+        public AsyncRefreshContext copy() {
+            AsyncRefreshContext arc = new AsyncRefreshContext();
+            arc.baseTableVisibleVersionMap.putAll(this.baseTableVisibleVersionMap);
+            arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
+            arc.defineStartTime = this.defineStartTime;
+            arc.startTime = this.startTime;
+            arc.step = this.step;
+            arc.timeUnit = this.timeUnit;
+            return arc;
         }
     }
 
@@ -591,7 +602,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Set<String> result = Sets.newHashSet();
 
         // If there are new added partitions, add it into refresh result.
-        for (String partitionName : baseTable.getPartitionNames()) {
+        for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
                 // TODO: use `mvBaseTableVisibleVersionMap` to check whether base table has been refreshed or not instead of
@@ -607,7 +618,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
                 // Once there is a partition deleted, refresh all partitions.
-                return baseTable.getPartitionNames();
+                return baseTable.getVisiblePartitionNames();
             }
             BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
             if (mvRefreshedPartitionInfo == null) {
@@ -731,8 +742,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
-        if (!baseTable.isHiveTable()) {
-            // Only support hive table now
+        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
+            // Only support hive table and jdbc table now
             return null;
         }
 
@@ -848,11 +859,26 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void onReload() {
+        try {
+            boolean desiredActive = active;
+            active = false;
+            boolean reloadActive = onReloadImpl();
+            setActive(desiredActive && reloadActive);
+        } catch (Throwable e) {
+            LOG.error("reload mv failed: {}", this, e);
+            setInactiveAndReason("reload failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * @return active or not
+     */
+    private boolean onReloadImpl() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
             setInactiveAndReason("db not exists: " + dbId);
-            return;
+            return false;
         }
         if (baseTableInfos == null) {
             baseTableInfos = Lists.newArrayList();
@@ -863,10 +889,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             } else {
                 active = false;
-                return;
+                return false;
             }
         }
 
+        boolean res = true;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
@@ -875,6 +902,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
+                    res = false;
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
@@ -891,6 +919,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         analyzePartitionInfo();
+        return res;
     }
 
     private void analyzePartitionInfo() {
@@ -1244,7 +1273,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     = tableProperty.getQueryRewriteConsistencyMode();
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 case LOOSE:
                     return Sets.newHashSet();
                 case CHECKED:
@@ -1287,14 +1316,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Sets.newHashSet();
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 }
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true, isQueryRewrite);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                return getPartitionNames();
+                return getVisiblePartitionNames();
             }
         }
         return Sets.newHashSet();
@@ -1345,7 +1374,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     return Sets.newHashSet();
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    return getPartitionNames();
+                    return getVisiblePartitionNames();
                 }
             }
             if (baseTable.getTableIdentifier().equals(refBaseTable.getTableIdentifier())) {
@@ -1354,7 +1383,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // If the non ref table has already changed, need refresh all materialized views' partitions.
             Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
-                return getPartitionNames();
+                return getVisiblePartitionNames();
             }
         }
 
@@ -1367,7 +1396,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return getPartitionNames();
+            return getVisiblePartitionNames();
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();

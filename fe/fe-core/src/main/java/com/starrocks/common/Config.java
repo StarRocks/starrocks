@@ -595,6 +595,14 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
+     * When obtaining hardware information, some sensitive commands will be executed indirectly through
+     * the oshi library, such as: getent passwd
+     * If you have higher requirements for security, you can turn off the acquisition of this information
+     */
+    @ConfField(mutable = true)
+    public static boolean http_web_page_display_hardware = true;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
@@ -1042,6 +1050,12 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view = true;
 
     /**
+     * Control whether to enable spill for all materialized views in the refresh mv.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_materialized_view_spill = true;
+
+    /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,
      * and he can ignore some metadata exceptions.
@@ -1242,7 +1256,6 @@ public class Config extends ConfigBase {
      *
      * <p>For more discussion on this issue, see
      * <a href="https://github.com/StarRocks/starrocks-kubernetes-operator/issues/49">issue49</a>
-     *
      */
     @ConfField(mutable = true)
     public static long tablet_sched_be_down_tolerate_time_s = 900; // 15 min
@@ -1321,6 +1334,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    @ConfField(mutable = true)
+    public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
 
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
@@ -1640,6 +1656,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int statistic_cache_thread_pool_size = 10;
+
+    @ConfField
+    public static int slot_manager_response_thread_pool_size = 16;
 
     @ConfField
     public static long statistic_dict_columns = 100000;
@@ -2067,7 +2086,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int cloud_native_meta_port = 6090;
     /**
-     *  Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+     * Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
      */
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
@@ -2120,16 +2139,6 @@ public class Config extends ConfigBase {
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
-    @ConfField
-    public static String azure_blob_tenant_id = "";
-    @ConfField
-    public static String azure_blob_client_id = "";
-    @ConfField
-    public static String azure_blob_client_secret = "";
-    @ConfField
-    public static String azure_blob_client_certificate_path = "";
-    @ConfField
-    public static String azure_blob_authority_host = "";
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
@@ -2266,6 +2275,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
+    @ConfField(mutable = true)
+    public static boolean enable_sync_publish = true;
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2443,6 +2454,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+
+    /**
+     * Loading or compaction must be stopped for primary_key_disk_schedule_time
+     * seconds before it can be scheduled
+     */
+    @ConfField(mutable = true)
+    public static int primary_key_disk_schedule_time = 3600; // 1h
 
     @ConfField(mutable = true)
     public static String access_control = "native";

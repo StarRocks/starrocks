@@ -365,17 +365,14 @@ public class QueryAnalyzer {
             } else {
                 List<Column> fullSchema = node.isBinlogQuery()
                         ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-                List<Column> baseSchema = node.isBinlogQuery()
-                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                Set<Column> baseSchema = new HashSet<>(node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema());
                 for (Column column : fullSchema) {
-                    Field field;
-                    if (baseSchema.contains(column)) {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
-                    } else {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
-                    }
+                    // TODO: avoid analyze visible or not each time, cache it in schema
+                    boolean visible = baseSchema.contains(column);
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, visible,
+                            column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
                 }
@@ -407,8 +404,8 @@ public class QueryAnalyzer {
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
-                if (column.materializedColumnExpr() != null) {
-                    Expr materializedExpression = column.materializedColumnExpr();
+                if (column.generatedColumnExpr() != null) {
+                    Expr materializedExpression = column.generatedColumnExpr();
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
@@ -681,6 +678,10 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            if (node.getView().isInvalid()) {
+                throw new SemanticException("View " + node.getName() + " need re-build, " + node.getView().getReason());
+            }
+
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
@@ -704,6 +705,27 @@ public class QueryAnalyzer {
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
+            }
+
+            // check view schema
+            Map<String, Column> columns = node.getView().getColumns().stream()
+                    .collect(Collectors.toMap(c -> c.getName().toLowerCase(), c -> c));
+
+            for (Field field : fields) {
+                String name = field.getName().toLowerCase();
+                if (!columns.containsKey(name)) {
+                    throw new SemanticException(
+                            "Found undefined column[%s] from View[%s]'s query, " +
+                                    "please check the source table has been modified", field.getName(),
+                            node.getName().toSql());
+                }
+
+                Column column = columns.get(name);
+                if (!column.getType().matchesType(field.getType())) {
+                    throw new SemanticException("The type of column[%s] on View[%s] is different with query, " +
+                            "please check the source table has been modified", column.getName(),
+                            node.getName().toSql());
+                }
             }
 
             if (session.getDumpInfo() != null) {

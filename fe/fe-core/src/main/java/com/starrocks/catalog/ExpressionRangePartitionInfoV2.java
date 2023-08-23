@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CastExpr;
@@ -229,5 +229,15 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
 
     public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
         this.sourcePartitionTypes = sourcePartitionTypes;
+    }
+
+    @Override
+    protected Object clone() {
+        ExpressionRangePartitionInfoV2 v2 = (ExpressionRangePartitionInfoV2) super.clone();
+        v2.partitionExprs = Lists.newArrayList(this.partitionExprs);
+        v2.serializedPartitionExprs = Lists.newArrayList(this.serializedPartitionExprs);
+        v2.automaticPartition = this.automaticPartition;
+        v2.sourcePartitionTypes = Lists.newArrayList(sourcePartitionTypes);
+        return v2;
     }
 }

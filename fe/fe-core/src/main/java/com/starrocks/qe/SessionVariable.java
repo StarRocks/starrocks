@@ -35,6 +35,11 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.google.common.reflect.TypeToken;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -57,11 +62,18 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
 public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
+
+    public static final SessionVariable DEFAULT_SESSION_VARIABLE = new SessionVariable();
+    private static final Gson GSON = new GsonBuilder()
+            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE) // explicit default, may be omitted
+            .create();
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
     public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
@@ -275,6 +287,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
+    public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -470,6 +484,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
+
+    public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -671,8 +687,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final int PIPELINE_BATCH_SIZE = 4096;
 
+    // auto, force_streaming, force_preaggregation
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
-    private String streamingPreaggregationMode = SessionVariableConstants.AUTO; // auto, force_streaming, force_preaggregation
+    private String streamingPreaggregationMode = SessionVariableConstants.AUTO;
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -701,6 +718,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
+
+    @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
+    private boolean cboUseDBLock = false;
 
     /*
      * the parallel exec instance num for one Fragment in one BE
@@ -1207,6 +1227,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    // This variable is introduced to solve compatibility issues/
+    // see more details: https://github.com/StarRocks/starrocks/pull/29678
+    @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
+    private boolean enableCollectTableLevelScanStats = true;
+
     private int exprChildrenLimit = -1;
 
     public int getExprChildrenLimit() {
@@ -1287,6 +1312,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    public boolean isCboUseDBLock() {
+        return cboUseDBLock;
+    }
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -2467,6 +2496,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
+        tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         return tResult;
     }
 
@@ -2555,6 +2585,49 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         } catch (Exception e) {
             LOG.warn("failed to read session variable: {}", e.getMessage());
+        }
+    }
+
+    public Map<String, NonDefaultValue> getNonDefaultVariables() {
+        Map<String, NonDefaultValue> nonDefaultVariables = Maps.newHashMap();
+        Class<SessionVariable> clazz = SessionVariable.class;
+        Field[] fields = clazz.getDeclaredFields();
+        try {
+            for (Field field : fields) {
+                VarAttr varAttr = field.getAnnotation(VarAttr.class);
+                if (varAttr == null) {
+                    continue;
+                }
+                field.setAccessible(true);
+
+                Object defaultValue = field.get(DEFAULT_SESSION_VARIABLE);
+                Object actualValue = field.get(this);
+                if (!Objects.equals(defaultValue, actualValue)) {
+                    nonDefaultVariables.put(varAttr.name(), new NonDefaultValue(defaultValue, actualValue));
+                }
+            }
+        } catch (IllegalAccessException e) {
+            LOG.warn("failed to get non default variables", e);
+        }
+        return nonDefaultVariables;
+    }
+
+    public String getNonDefaultVariablesJson() {
+        return GSON.toJson(getNonDefaultVariables());
+    }
+
+    public static final class NonDefaultValue {
+        public final Object defaultValue;
+        public final Object actualValue;
+
+        public NonDefaultValue(Object defaultValue, Object actualValue) {
+            this.defaultValue = defaultValue;
+            this.actualValue = actualValue;
+        }
+
+        public static Map<String, NonDefaultValue> parseFrom(String content) {
+            return GSON.fromJson(content, new TypeToken<Map<String, NonDefaultValue>>() {
+            }.getType());
         }
     }
 

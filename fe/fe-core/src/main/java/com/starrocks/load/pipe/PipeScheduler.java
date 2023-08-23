@@ -1,23 +1,22 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,6 +36,7 @@ public class PipeScheduler extends FrontendDaemon {
 
     private final Map<Long, Integer> beSlotMap = new HashMap<>();
     private final ReentrantLock slotLock = new ReentrantLock();
+    private boolean recovered = false;
 
     public PipeScheduler(PipeManager pm) {
         super("PipeScheduler", Config.pipe_scheduler_interval_millis);
@@ -52,13 +52,28 @@ public class PipeScheduler extends FrontendDaemon {
         }
     }
 
-    private void process() throws DdlException {
+    private void process() {
+        if (!recovered) {
+            for (Pipe pipe : CollectionUtils.emptyIfNull(pipeManager.getAllPipes())) {
+                try {
+                    pipe.recovery();
+                } catch (Throwable e) {
+                    LOG.warn("Failed to recover pipe {} due to ", pipe, e);
+                }
+            }
+
+            recovered = pipeManager.getAllPipes().stream().allMatch(Pipe::isRecovered);
+            if (recovered) {
+                LOG.warn("Successfully recover all pipes");
+            }
+        }
+
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
             try {
                 pipe.schedule();
             } catch (Throwable e) {
-                LOG.warn("Failed to execute due to ", e);
+                LOG.warn("Failed to execute pipe {} due to ", pipe, e);
             }
         }
     }

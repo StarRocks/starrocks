@@ -334,6 +334,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.PAIMON;
     }
 
+    public boolean isJDBCTable() {
+        return type == TableType.JDBC;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -634,8 +638,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             }
         }
 
-        OlapTable olapTable = (OlapTable) this;
-        return !isLocalBalance || olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+        return true;
     }
 
     public boolean hasAutoIncrementColumn() {

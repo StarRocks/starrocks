@@ -36,6 +36,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -73,6 +74,7 @@ public class InformationSchemaDataSource {
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (authInfo.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
@@ -82,8 +84,13 @@ public class InformationSchemaDataSource {
             }
         }
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        String catalogName = null;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
         UserIdentity currentUser;
@@ -101,8 +108,9 @@ public class InformationSchemaDataSource {
                 continue;
             }
 
-            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db1)) {
+            final String dbName = ClusterNamespace.getNameFromFullName(fullName);
+
+            if (!PatternMatcher.matchPattern(authInfo.getPattern(), dbName, matcher, caseSensitive)) {
                 continue;
             }
             authorizedDbs.add(fullName);
@@ -294,15 +302,35 @@ public class InformationSchemaDataSource {
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
 
-        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = null;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = metadataMgr.getDb(catalogName, dbName);
+
             if (db != null) {
                 db.readLock();
                 try {
-                    List<Table> allTables = db.getTables();
-                    for (Table table : allTables) {
+                    List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                    for (String tableName : tableNames) {
+                        Table table = null;
+                        try {
+                            table = metadataMgr.getTable(catalogName, dbName, tableName);
+                        } catch (Exception e) {
+                            LOG.warn(e.getMessage());
+                        }
+
+                        if (table == null) {
+                            continue;
+                        }
+
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
                         } catch (AccessDeniedException e) {

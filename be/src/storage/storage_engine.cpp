@@ -59,6 +59,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/publish_version_manager.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -111,7 +112,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _compaction_manager(new CompactionManager()) {
+          _compaction_manager(new CompactionManager()),
+          _publish_version_manager(new PublishVersionManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -191,6 +193,8 @@ Status StorageEngine::_open(const EngineOptions& options) {
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
+
+    RETURN_IF_ERROR_WITH_WARN(_publish_version_manager->init(), "init publish_version_manager failed");
 
     auto dirs = get_stores<false>();
 
@@ -602,6 +606,8 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
+    wake_finish_publish_vesion_thread();
+    JOIN_THREAD(_finish_publish_version_thread)
 
     JOIN_THREADS(_base_compaction_threads)
     JOIN_THREADS(_cumulative_compaction_threads)
@@ -612,7 +618,7 @@ void StorageEngine::stop() {
     JOIN_THREADS(_manual_compaction_threads)
     JOIN_THREADS(_tablet_checkpoint_threads)
 
-    JOIN_THREAD(_pk_index_major_compaction_thread);
+    JOIN_THREAD(_pk_index_major_compaction_thread)
 
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
@@ -938,6 +944,17 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     }
     TRACE("found best tablet $0", best_tablet->tablet_id());
 
+    // The concurrency of migration and compaction will lead to inconsistency between the meta and
+    // primary index cache of the new tablet. So we should abort the compaction for the old tablet
+    // when executing migration.
+    std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
+    if (!rlock.owns_lock()) {
+        return Status::InternalError("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id());
+    }
+    if (Tablet::check_migrate(best_tablet)) {
+        return Status::InternalError("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id());
+    }
+
     Status res;
     int64_t duration_ns = 0;
     {
@@ -1188,8 +1205,10 @@ double StorageEngine::delete_unused_rowset() {
                 << rowset->version().second;
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
-        clear_rowset_delta_column_group_cache(*rowset.get());
-        status = rowset->remove_delta_column_group();
+        if (rowset->keys_type() != PRIMARY_KEYS) {
+            clear_rowset_delta_column_group_cache(*rowset.get());
+            status = rowset->remove_delta_column_group();
+        }
         LOG_IF(WARNING, !status.ok()) << "remove delta column group error rowset:" << rowset->rowset_id()
                                       << " finished. status:" << status;
     }

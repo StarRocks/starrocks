@@ -3844,4 +3844,110 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK("select * from t5 full outer join t4 on k1=a",
                 "select * from t5 left outer join t4 on k1=a where k1=3;");
     }
+
+    @Test
+    public void testComplexExpressionRewrite() {
+        {
+            String mv = "select" +
+                    " case" +
+                    "    when lo_custkey is not null then lo_custkey" +
+                    "    when lo_partkey is not null then lo_partkey" +
+                    "    else null" +
+                    " end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5," +
+                    " lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            String query = "select" +
+                    " case" +
+                    "    when lo_custkey is not null then lo_custkey" +
+                    "    when lo_partkey is not null then lo_partkey" +
+                    "    else null" +
+                    " end as f1," +
+                    " lo_linenumber is null as f2," +
+                    " lo_shipmode like 'mode' as f3," +
+                    " not lo_revenue > 0 as f4," +
+                    " lo_revenue between 100 and 200 as f5," +
+                    " lo_orderdate in (20230101, 20230102) as f6" +
+                    " from lineorder_null";
+            testRewriteOK(mv, query);
+        }
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_custkey is not null";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_shipmode like 'mode'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_orderdate in (20230101, 20230102)";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where lo_revenue between 100 and 200";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder";
+            String query = "select * from lineorder where not lo_revenue > 0";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testEmptyPartitionPrune() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_empty_partition_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` bigint(20) DEFAULT NULL,\n" +
+                "  `col2` bigint(20) DEFAULT NULL,\n" +
+                "  `col3` bigint(20) DEFAULT NULL,\n" +
+                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt, col1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_empty_partition_mv1 \n" +
+                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "partition by date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select\n" +
+                "      col1,\n" +
+                "        dt,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    GROUP BY\n" +
+                "        col1,\n" +
+                "        dt;");
+        String sql = "select\n" +
+                "      col1,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "    GROUP BY col1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
+    }
 }

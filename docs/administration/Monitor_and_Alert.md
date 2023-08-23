@@ -91,6 +91,7 @@ The available metrics are:
 |disk_io_svctm|Ms|average| Disk IO service time |
 |disk_io_util|percentage|average| Disk usage |
 |disk_used|bytes|average| Used disk capacity |
+|starrocks_fe_meta_log_count|pcs|Instantaneous|The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable.|
 |starrocks_fe_query_resource_group|pcs|cumulative|The number of queries for each resource group|
 |starrocks_fe_query_resource_group_latency|second|average|the query latency percentile for each resource group|
 |starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|

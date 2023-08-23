@@ -242,7 +242,7 @@ TEST_F(TableReaderTest, test_basic_read) {
         std::vector<RowsetSharedPtr> dummy_rowsets;
         EditVersion full_version;
         ASSERT_TRUE(_tablets[0]->updates()->get_applied_rowsets(4, &dummy_rowsets, &full_version).ok());
-        if (full_version.major() == 4) {
+        if (full_version.major_number() == 4) {
             break;
         }
         std::cerr << "waiting for version 4\n";

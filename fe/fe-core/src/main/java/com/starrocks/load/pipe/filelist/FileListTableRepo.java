@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe.filelist;
 
@@ -47,7 +46,9 @@ public class FileListTableRepo extends FileListRepo {
                     "last_modified  datetime, " +
                     "staged_time datetime, " +
                     "start_load datetime, " +
-                    "finish_load datetime" +
+                    "finish_load datetime, " +
+                    "error_info string, " +
+                    "insert_label string" +
                     " ) PRIMARY KEY(pipe_id, file_name, file_version) " +
                     "DISTRIBUTED BY HASH(pipe_id, file_name) BUCKETS 8 " +
                     "properties('replication_num' = '%d') ";
@@ -57,7 +58,7 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String ALL_COLUMNS =
             "`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, `staged_time`," +
-                    " `start_load`, `finish_load`";
+                    " `start_load`, `finish_load`, `error_info`, `insert_label`";
 
     protected static final String SELECT_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME;
@@ -65,10 +66,10 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
     protected static final String UPDATE_FILE_STATE =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `error_info` = %s WHERE ";
 
     protected static final String UPDATE_FILE_STATE_START_LOAD =
-            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `start_load` = now() WHERE ";
+            "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `start_load` = now(), `insert_label`=%s WHERE ";
 
     protected static final String UPDATE_FILE_STATE_FINISH_LOAD =
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `finish_load` = now() WHERE ";
@@ -82,8 +83,8 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE `pipe_id` = %d";
 
     @Override
-    public List<PipeFileRecord> listUnloadedFiles() {
-        return RepoAccessor.getInstance().listUnloadedFiles(pipeId.getId());
+    public List<PipeFileRecord> listFilesByState(PipeFileState state) {
+        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state);
     }
 
     @Override
@@ -99,9 +100,9 @@ public class FileListTableRepo extends FileListRepo {
     }
 
     @Override
-    public void updateFileState(List<PipeFileRecord> files, PipeFileState state) {
+    public void updateFileState(List<PipeFileRecord> files, PipeFileState state, String insertLabel) {
         files.forEach(x -> x.pipeId = pipeId.getId());
-        RepoAccessor.getInstance().updateFilesState(files, state);
+        RepoAccessor.getInstance().updateFilesState(files, state, insertLabel);
     }
 
     @Override

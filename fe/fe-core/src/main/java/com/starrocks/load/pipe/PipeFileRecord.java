@@ -1,22 +1,22 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
@@ -44,7 +44,18 @@ import java.util.Objects;
 public class PipeFileRecord {
 
     private static final String FILE_LOCATOR = "(pipe_id = %s AND file_name = %s AND file_version = %s)";
-    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s)";
+    private static final String FILE_RECORD_VALUES = "(%d, %s, %s, %d, %s, %s, %s, %s, %s, %s, %s)";
+
+    // Fields of error_info
+    // {
+    //   "errorMessage": "xxxx",
+    //   "errorCount": 123,
+    //   "errorLine": 123
+    // }
+    private static final String JSON_FIELD_ERROR_MESSAGE = "errorMessage";
+    private static final String JSON_FIELD_ERROR_COUNT = "errorCount";
+    private static final String JSON_FIELD_ERROR_LINE = "errorLine";
+
 
     public long pipeId;
     public String fileName;
@@ -56,6 +67,8 @@ public class PipeFileRecord {
     public LocalDateTime stagedTime;
     public LocalDateTime startLoadTime;
     public LocalDateTime finishLoadTime;
+    public String errorMessage;
+    public String insertLabel;
 
     public PipeFileRecord() {
     }
@@ -120,6 +133,28 @@ public class PipeFileRecord {
             file.stagedTime = parseJsonDateTime(dataArray.get(6));
             file.startLoadTime = parseJsonDateTime(dataArray.get(7));
             file.finishLoadTime = parseJsonDateTime(dataArray.get(8));
+
+            // Error info are encapsulated in a json object
+            if (dataArray.size() > 9) {
+                String errorInfo = dataArray.get(9).getAsString();
+                if (StringUtils.isNotEmpty(errorInfo)) {
+                    JsonObject infoJson = (JsonObject) JsonParser.parseString(errorInfo);
+                    JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
+                    if (errorMessageElement != null && !errorMessageElement.isJsonNull()) {
+                        file.errorMessage = errorMessageElement.getAsString();
+                    }
+                }
+            }
+            if (dataArray.size() > 10) {
+                JsonElement field = dataArray.get(10);
+                if (field.isJsonPrimitive()) {
+                    String insertLabel = field.getAsString();
+                    if (StringUtils.isNotEmpty(insertLabel)) {
+                        file.insertLabel = insertLabel;
+                    }
+                }
+            }
+
             return file;
         } catch (Exception e) {
             throw new RuntimeException("convert json to PipeFile failed due to malformed json data: " + json, e);
@@ -163,6 +198,12 @@ public class PipeFileRecord {
         }
     }
 
+    public String toErrorInfo() {
+        JsonObject obj = new JsonObject();
+        obj.addProperty(JSON_FIELD_ERROR_MESSAGE, errorMessage);
+        return obj.toString();
+    }
+
     public String toValueList() {
         return String.format(FILE_RECORD_VALUES,
                 pipeId,
@@ -173,7 +214,9 @@ public class PipeFileRecord {
                 toSQLString(lastModified),
                 toSQLString(stagedTime),
                 toSQLString(startLoadTime),
-                toSQLString(finishLoadTime)
+                toSQLString(finishLoadTime),
+                toSQLString(toErrorInfo()),
+                toSQLStringNonnull(insertLabel)
         );
     }
 
@@ -218,6 +261,22 @@ public class PipeFileRecord {
         return finishLoadTime;
     }
 
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public long getErrorCount() {
+        return 0L;
+    }
+
+    public long getErrorLine() {
+        return 0L;
+    }
+
+    public String getInsertLabel() {
+        return insertLabel;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -248,6 +307,7 @@ public class PipeFileRecord {
                 ", stagedTime=" + stagedTime +
                 ", startLoadTime=" + startLoadTime +
                 ", finishLoadTime=" + finishLoadTime +
+                ", errorMessage=" + errorMessage +
                 '}';
     }
 }

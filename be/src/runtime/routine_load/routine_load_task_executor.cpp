@@ -48,6 +48,39 @@
 
 namespace starrocks {
 
+Status RoutineLoadTaskExecutor::init() {
+    REGISTER_GAUGE_STARROCKS_METRIC(routine_load_task_count, [this]() {
+        std::lock_guard<std::mutex> l(_lock);
+        return _task_map.size();
+    })
+
+    auto st = ThreadPoolBuilder("routine_load")
+                      .set_min_threads(0)
+                      .set_max_threads(INT_MAX)
+                      .set_max_queue_size(INT_MAX)
+                      .build(&_thread_pool);
+    RETURN_IF_ERROR(st);
+
+    _data_consumer_pool.start_bg_worker();
+    return Status::OK();
+}
+
+void RoutineLoadTaskExecutor::stop() {
+    _data_consumer_pool.stop();
+
+    if (_thread_pool) {
+        _thread_pool->shutdown();
+    }
+
+    for (auto& it : _task_map) {
+        auto ctx = it.second;
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    }
+    _task_map.clear();
+}
+
 Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
                                                          std::vector<int32_t>* partition_ids, int timeout_ms,
                                                          std::string* group_id) {
@@ -340,7 +373,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 
     // create data consumer group
     std::shared_ptr<DataConsumerGroup> consumer_grp;
-    HANDLE_ERROR(consumer_pool->get_consumer_grp(ctx, &consumer_grp), "failed to get consumers");
+    HANDLE_ERROR(consumer_pool->get_consumer_grp(ctx, &consumer_grp), "failed to get consumers")
 
     // create and set pipe
     std::shared_ptr<StreamLoadPipe> pipe;
@@ -376,21 +409,16 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     ctx->body_sink = pipe;
 
     // must put pipe before executing plan fragment
-    HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe");
+    HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe")
 
-#ifndef BE_TEST
     // execute plan fragment, async
-    HANDLE_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx), "failed to execute plan fragment");
-#else
-    // only for test
-    HANDLE_ERROR(_execute_plan_for_test(ctx), "test failed");
-#endif
+    HANDLE_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx), "failed to execute plan fragment")
 
     // start to consume, this may block a while
-    HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed");
+    HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed")
 
     // wait for all consumers finished
-    HANDLE_ERROR(ctx->future.get(), "consume failed");
+    HANDLE_ERROR(ctx->future.get(), "consume failed")
 
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
@@ -399,7 +427,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     consumer_pool->return_consumers(consumer_grp.get());
 
     // commit txn
-    HANDLE_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx), "commit failed");
+    HANDLE_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx), "commit failed")
 
     // commit messages
     switch (ctx->load_src_type) {
@@ -474,7 +502,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 }
 
 void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg) {
-    LOG(WARNING) << err_msg;
+    LOG(WARNING) << err_msg << " " << ctx->brief();
     ctx->status = st;
     if (ctx->need_rollback) {
         _exec_env->stream_load_executor()->rollback_txn(ctx);
@@ -483,46 +511,6 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
     if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel(st);
     }
-}
-
-// for test only
-Status RoutineLoadTaskExecutor::_execute_plan_for_test(StreamLoadContext* ctx) {
-    ctx->ref();
-    auto mock_consumer = [this, ctx]() {
-        std::shared_ptr<StreamLoadPipe> pipe = _exec_env->load_stream_mgr()->get(ctx->id);
-        bool eof = false;
-        std::stringstream ss;
-        while (true) {
-            char one;
-            size_t len = 1;
-            Status st = pipe->read((uint8_t*)&one, &len, &eof);
-            if (!st.ok()) {
-                LOG(WARNING) << "read failed";
-                ctx->promise.set_value(st);
-                break;
-            }
-
-            if (eof) {
-                ctx->promise.set_value(Status::OK());
-                break;
-            }
-
-            if (one == '\n') {
-                LOG(INFO) << "get line: " << ss.str();
-                ss.str("");
-                ctx->number_loaded_rows++;
-            } else {
-                ss << one;
-            }
-        }
-        if (ctx->unref()) {
-            delete ctx;
-        }
-    };
-
-    std::thread t1(mock_consumer);
-    t1.detach();
-    return Status::OK();
 }
 
 } // namespace starrocks

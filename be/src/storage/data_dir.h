@@ -130,6 +130,8 @@ public:
 
     void perform_path_gc_by_tablet();
 
+    void perform_delta_column_files_gc();
+
     // check if the capacity reach the limit after adding the incoming data
     // return true if limit reached, otherwise, return false.
     // TODO(cmy): for now we can not precisely calculate the capacity StarRocks used,
@@ -143,6 +145,9 @@ public:
     std::string get_persistent_index_path() { return _path + "/" + PERSISTENT_INDEX_PREFIX; }
     Status init_persistent_index_dir();
 
+    // for test
+    size_t get_all_check_dcg_files_cnt() const { return _all_check_dcg_files.size(); }
+
 private:
     Status _init_data_dir();
     Status _init_tmp_dir();
@@ -151,6 +156,9 @@ private:
     Status _read_and_write_test_file();
 
     void _process_garbage_path(const std::string& path);
+
+    bool _need_gc_delta_column_files(const std::string& path, int64_t tablet_id,
+                                     std::unordered_map<int64_t, std::unordered_set<std::string>>& delta_column_files);
 
     bool _stop_bg_worker = false;
 
@@ -182,6 +190,7 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
+    std::set<std::string> _all_check_dcg_files;
 };
 
 } // namespace starrocks

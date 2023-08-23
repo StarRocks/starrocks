@@ -22,8 +22,10 @@ import com.starrocks.thrift.TSchemaTableType;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class SchemataSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.SCHEMATA_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.SCHEMATA_ID,
                 "schemata",
                 Table.TableType.SCHEMA,
                 builder()

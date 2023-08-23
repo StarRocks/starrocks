@@ -1,4 +1,4 @@
-# All functions
+# Function list
 
 StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
 
@@ -37,6 +37,9 @@ You can find a function based on the following categories:
 - [avg](../sql-functions/aggregate-functions/avg.md)
 - [bitmap](../sql-functions/aggregate-functions/bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
+- [corr](../sql-functions/aggregate-functions/corr.md)
+- [covar_pop](../sql-functions/aggregate-functions/covar_pop.md)
+- [covar_samp](../sql-functions/aggregate-functions/covar_samp.md)
 - [count](../sql-functions/aggregate-functions/count.md)
 - [group_concat](../sql-functions/string-functions/group_concat.md)
 - [grouping](../sql-functions/aggregate-functions/grouping.md)
@@ -346,6 +349,8 @@ You can find a function based on the following categories:
 - [conv](../sql-functions/math-functions/conv.md)
 - [cos](../sql-functions/math-functions/cos.md)
 - [cosh](../sql-functions/math-functions/cosh.md)
+- [cosine_similarity](../sql-functions/math-functions/cos_similarity.md)
+- [cosine_similarity_norm](../sql-functions/math-functions/cos_similarity_norm.md)
 - [cot](../sql-functions/math-functions/cot.md)
 - [degrees](../sql-functions/math-functions/degrees.md)
 - [divide](../sql-functions/math-functions/divide.md)
@@ -410,8 +415,10 @@ You can find a function based on the following categories:
 
 ## Utility functions
 
+- [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
 - [current_role](../sql-functions/utility-functions/current_role.md)
 - [current_version](../sql-functions/utility-functions/current_version.md)
+- [database](./sql-reference/sql-functions/utility-functions/database.md)
 - [host_name](../sql-functions/utility-functions/host_name.md)
 - [isnull](../sql-functions/utility-functions/isnull.md)
 - [isnotnull](../sql-functions/utility-functions/isnotnull.md)

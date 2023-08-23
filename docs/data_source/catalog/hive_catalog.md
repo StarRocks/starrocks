@@ -837,7 +837,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 ```
 
-## Grant privileges on Hive tales and views
+## Grant privileges on Hive tables and views
 
 You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
 

@@ -68,6 +68,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -361,10 +362,14 @@ public class DatabaseTransactionMgr {
      * 5. persistent transactionState
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
-    public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos,
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
+        Preconditions.checkNotNull(tabletCommitInfos, "tabletCommitInfos is null");
+        Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
         Database db = globalStateMgr.getDb(dbId);
@@ -389,11 +394,11 @@ public class DatabaseTransactionMgr {
             return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
-        if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())
+        if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
-        if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
+        if (!tabletCommitInfos.isEmpty()) {
             transactionState.setTabletCommitInfos(tabletCommitInfos);
         }
 
@@ -539,6 +544,7 @@ public class DatabaseTransactionMgr {
         LOG.info("transaction:[{}] successfully prepare", transactionState);
     }
 
+    @NotNull
     public VisibleStateWaiter commitPreparedTransaction(long transactionId)
             throws UserException {
         // 1. check status
@@ -1695,5 +1701,42 @@ public class DatabaseTransactionMgr {
             stateListeners.add(listener);
         }
         return stateListeners;
+    }
+    
+    public TTransactionStatus getTxnStatus(long txnId) {
+        TransactionState transactionState;
+        readLock();
+        try {
+            transactionState = unprotectedGetTransactionState(txnId);
+        } finally {
+            readUnlock();
+        }
+        if (transactionState == null) {
+            return TTransactionStatus.UNKNOWN;
+        }
+        TransactionStatus status = transactionState.getTransactionStatus();
+
+        switch (status.value()) {
+            //UNKNOWN
+            case 0:
+                return TTransactionStatus.UNKNOWN;
+            //PREPARE
+            case 1:
+                return TTransactionStatus.PREPARE;
+            //COMMITTED
+            case 2:
+                return TTransactionStatus.COMMITTED;
+            //VISIBLE
+            case 3:
+                return TTransactionStatus.VISIBLE;
+            //ABORTED
+            case 4:
+                return TTransactionStatus.ABORTED;
+            //PREPARED
+            case 5:
+                return TTransactionStatus.PREPARED;
+            default:
+                return TTransactionStatus.UNKNOWN;
+        }
     }
 }

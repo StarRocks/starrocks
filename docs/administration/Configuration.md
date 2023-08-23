@@ -160,6 +160,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_repair_delay_factor_second       | s    | 60                     | The interval at which replicas are repaired, in seconds. The alias is `tablet_repair_delay_factor_second`. |
 | tablet_sched_min_clone_task_timeout_sec       | s    | 3 \* 60                | The minimum timeout duration for cloning a tablet, in seconds. |
 | tablet_sched_max_clone_task_timeout_sec       | s    | 2 \* 60 \* 60          | The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`. |
+| tablet_sched_max_not_being_scheduled_interval_ms | ms   | 15 \* 60 \* 100 | When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible. |
 
 #### Other FE dynamic parameters
 
@@ -289,7 +290,7 @@ This section provides an overview of the static parameters that you can configur
 | ----------------------------------- | --------------- | ------------------------------------------------------------ |
 | run_mode                            | shared_nothing  | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | 6090            | The cloud-native meta service RPC port. Default: `6090`.     |
-| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in <!--Azure Blob (Preview feature, supported from v3.2 onwards), and -->object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default)<!-- and `AZBLOB`-->. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. <!--If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`.--> |
+| cloud_native_storage_type           | S3              | The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: `S3` (Default) and `AZBLOB`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. |
 | aws_s3_path                         | N/A             | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`. |
 | aws_s3_endpoint                     | N/A             | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | N/A             | The region in which your S3 bucket resides, for example, `us-west-2`. |
@@ -299,10 +300,10 @@ This section provides an overview of the static parameters that you can configur
 | aws_s3_secret_key                   | N/A             | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | N/A             | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | N/A             | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
-<!--| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
+| azure_blob_path                     | N/A             | The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`. |
 | azure_blob_endpoint                 | N/A             | The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`. |
 | azure_blob_shared_key               | N/A             | The Shared Key used to authorize requests for your Azure Blob Storage.                     |
-| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |-->
+| azure_blob_sas_token                | N/A             | The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.                |
 
 #### Other FE static parameters
 
@@ -390,7 +391,7 @@ BE dynamic parameters are as follows.
 | tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
 | result_buffer_cancelled_interval_time | 300 | Second | The wait time before BufferControlBlock release data. |
 | thrift_rpc_timeout_ms | 5000 | ms | The timeout for a thrift RPC. |
-| txn_commit_rpc_timeout_ms | 20000 | ms | The timeout for a transaction commit RPC. |
+| txn_commit_rpc_timeout_ms | 60000 | ms | The timeout for a transaction commit RPC. |
 | max_consumer_num_per_group | 3 | N/A | The maximum number of consumers in a consumer group of Routine Load. |
 | max_memory_sink_batch_count | 20 | N/A | The maximum number of Scan Cache batches. |
 | scan_context_gc_interval_min | 5 | Minute | The time interval at which to clean the Scan Context. |

@@ -1,20 +1,20 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.sql.ast.pipe;
 
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -38,6 +38,7 @@ public class DescPipeStmt extends ShowStmt {
                     .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
                     .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
+                    .addColumn(new Column("PROPERTIES", ScalarType.createVarchar(512)))
                     .build();
 
     private final PipeName name;
@@ -55,6 +56,7 @@ public class DescPipeStmt extends ShowStmt {
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(pipe.getPipeSource().toString());
         row.add(pipe.getOriginSql());
+        row.add(pipe.getPropertiesJson());
     }
 
     public PipeName getName() {
@@ -64,6 +66,11 @@ public class DescPipeStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.FORWARD_NO_SYNC;
     }
 
     @Override

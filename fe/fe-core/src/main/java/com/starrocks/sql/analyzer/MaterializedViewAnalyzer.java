@@ -21,7 +21,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -56,7 +55,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -64,16 +62,15 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -88,6 +85,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
@@ -97,8 +95,8 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -252,8 +250,7 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
 
-            // Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (int i = 0; i < outputExpressions.size(); ++i) {
@@ -265,7 +262,7 @@ public class MaterializedViewAnalyzer {
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement);
                 // check partition expression is supported
-                checkPartitionColumnExprs(statement, columnExprMap, context, aliasTableMap);
+                checkPartitionColumnExprs(statement, columnExprMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
@@ -278,23 +275,44 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
+        /**
+         * Retrieve all the tables from the input query statement and do normalization: if the query statement
+         * contains views, retrieve the contained tables in the view recursively.
+         * @param queryStatement : the input statement which need retrieve
+         * @param context        : the session connect context
+         * @return               : Retrieve all the tables from the input query statement and do normalization.
+         */
+        private Map<TableName, Table> getNormalizedBaseTables(QueryStatement queryStatement, ConnectContext context) {
+            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+
+            // do normalization if catalog is null
+            Map<TableName, Table> result = Maps.newHashMap();
+            for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
+                entry.getKey().normalization(context);
+                result.put(entry.getKey(), entry.getValue());
+            }
+            return result;
+        }
+
+        /**
+         * Retrieve all the tables from the input query statement :
+         * - if the query statement contains views, retrieve the contained tables in the view recursively.
+         * @param queryStatement : the input statement which need retrieve
+         * @param context        : the session connect context
+         * @return
+         */
         private Map<TableName, Table> getAllBaseTables(QueryStatement queryStatement, ConnectContext context) {
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
             if (viewRelations.isEmpty()) {
                 return aliasTableMap;
             }
+
             for (ViewRelation viewRelation : viewRelations) {
                 Map<TableName, Table> viewTableMap = getAllBaseTables(viewRelation.getQueryStatement(), context);
                 aliasTableMap.putAll(viewTableMap);
             }
-            Map<TableName, Table> result = Maps.newHashMap();
-            for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
-                // catalog may be null, should do normalization
-                entry.getKey().normalization(context);
-                result.put(entry.getKey(), entry.getValue());
-            }
-            return result;
+            return aliasTableMap;
         }
 
         // TODO(murphy) implement
@@ -379,7 +397,7 @@ public class MaterializedViewAnalyzer {
 
             // set duplicate key, when sort key is set, it is dup key col.
             List<String> keyCols = statement.getSortKeys();
-            if (keyCols == null) {
+            if (CollectionUtils.isEmpty(keyCols)) {
                 keyCols = Lists.newArrayList();
                 int theBeginIndexOfValue = 0;
                 int keySizeByte = 0;
@@ -410,31 +428,51 @@ public class MaterializedViewAnalyzer {
             }
 
             if (keyCols.isEmpty()) {
-                throw new SemanticException("The number of sort key is 0");
+                throw new SemanticException("Sort key of materialized view is empty");
             }
 
             if (keyCols.size() > mvColumns.size()) {
                 throw new SemanticException("The number of sort key should be less than the number of columns.");
             }
 
-            for (int i = 0; i < keyCols.size(); i++) {
-                Column column = mvColumns.get(i);
-                if (!column.getName().equalsIgnoreCase(keyCols.get(i))) {
-                    String keyName = keyCols.get(i);
-                    if (mvColumns.stream().noneMatch(col -> col.getName().equalsIgnoreCase(keyName))) {
-                        throw new SemanticException("Sort key(%s) doesn't exist.", keyCols.get(i));
-                    }
-                    throw new SemanticException("Sort key should be a ordered prefix of select cols.");
+            // Without specified sortkeys, set keys from columns
+            // Map<String, Column> columnMap = mvColumns.stream().collect(Collectors.toMap(Column::getName, col -> col));
+            Map<String, Column> columnMap = new HashMap<>();
+            for (Column col : mvColumns) {
+                if (columnMap.putIfAbsent(col.getName(), col) != null) {
+                    throw new SemanticException("Duplicate column name " + Strings.quote(col.getName()));
                 }
-
-                Type keyColType = column.getType();
-                if (!keyColType.canBeMVKey()) {
-                    throw new SemanticException("This col(%s) can't be mv sort key", keyCols.get(i));
-                }
-                column.setIsKey(true);
-                column.setAggregationType(null, false);
             }
-            return mvColumns;
+            if (CollectionUtils.isEmpty(statement.getSortKeys())) {
+                for (String col : keyCols) {
+                    columnMap.get(col).setIsKey(true);
+                }
+                return mvColumns;
+            }
+
+            // Reorder the MV columns according to sort-key
+            List<Column> reorderedColumns = new ArrayList<>();
+            Set<String> usedColumns = new HashSet<>();
+            for (String columnName : keyCols) {
+                Column keyColumn = columnMap.get(columnName);
+                if (keyColumn == null) {
+                    throw new SemanticException("Sort key not exists: " + columnName);
+                }
+                Type keyColType = keyColumn.getType();
+                if (!keyColType.canBeMVKey()) {
+                    throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
+                }
+                keyColumn.setIsKey(true);
+                keyColumn.setAggregationType(null, false);
+                reorderedColumns.add(keyColumn);
+                usedColumns.add(columnName);
+            }
+            for (Column col : mvColumns) {
+                if (!usedColumns.contains(col.getName())) {
+                    reorderedColumns.add(col);
+                }
+            }
+            return reorderedColumns;
         }
 
         private void checkExpInColumn(CreateMaterializedViewStatement statement) {
@@ -482,15 +520,15 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
-                                               Map<Column, Expr> columnExprMap, ConnectContext connectContext,
-                                               Map<TableName, Table> aliasTableMap) {
+                                               Map<Column, Expr> columnExprMap,
+                                               ConnectContext connectContext) {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
 
             // partition column expr from input query
             Expr partitionColumnExpr = columnExprMap.get(partitionColumn);
             try {
-                partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext, aliasTableMap);
+                partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext, statement.getQueryStatement());
             } catch (Exception e) {
                 LOG.warn("resolve partition column failed", e);
                 throw new SemanticException("resolve partition column failed", statement.getPartitionExpDesc().getPos());
@@ -523,12 +561,11 @@ public class MaterializedViewAnalyzer {
                 }
                 statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
-                // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                 if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
+                    // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                     statement.setPartitionRefTableExpr(partitionColumnExpr);
                 } else {
-                    throw new SemanticException(
-                            "Materialized view partition function must related with column",
+                    throw new SemanticException("Materialized view partition function must related with column",
                             expressionPartitionDesc.getPos());
                 }
             }
@@ -544,12 +581,13 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private Expr resolvePartitionExpr(
-                Expr partitionColumnExpr, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
+        private Expr resolvePartitionExpr(Expr partitionColumnExpr,
+                                          ConnectContext connectContext,
+                                          QueryStatement queryStatement) {
             if (partitionColumnExpr instanceof SlotRef) {
-                return resolveSlotRefForView((SlotRef) partitionColumnExpr, connectContext, aliasTableMap);
+                return resolvePartitionExprOfSlotRef((SlotRef) partitionColumnExpr, connectContext, queryStatement);
             } else {
-                AstVisitor exprShuttle = new AstVisitor<Void, ExprShuttleContext>() {
+                final AstVisitor exprShuttle = new AstVisitor<Void, ExprShuttleContext>() {
                     @Override
                     public Void visitExpression(Expr expr, ExprShuttleContext context) {
                         for (int i = 0; i < expr.getChildren().size(); i++) {
@@ -560,7 +598,7 @@ public class MaterializedViewAnalyzer {
 
                     @Override
                     public Void visitSlot(SlotRef slotRef, ExprShuttleContext context) {
-                        Expr resolved = resolveSlotRefForView(slotRef, connectContext, aliasTableMap);
+                        Expr resolved = resolvePartitionExprOfSlotRef(slotRef, connectContext, queryStatement);
                         if (resolved == null) {
                             throw new RuntimeException(String.format("can not resolve slotRef: %s", slotRef.debugString()));
                         }
@@ -572,13 +610,38 @@ public class MaterializedViewAnalyzer {
                         return null;
                     }
                 };
+
                 partitionColumnExpr.accept(exprShuttle, new ExprShuttleContext(null, -1));
                 return partitionColumnExpr;
             }
         }
 
-        private Expr resolveSlotRefForView(
-                SlotRef slotRef, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
+        /**
+         * Resolve the materialized view's partition expr's slot ref.
+         * @param slotRef           : the materialized view's partition expr's slot ref
+         * @param connectContext    : connect context of the current session.
+         * @param queryStatement    : the sub query statment that contains the partition column slot ref
+         * @return                  : return the resolved partition column slot ref.
+         */
+        private Expr resolvePartitionExprOfSlotRef(SlotRef slotRef,
+                                                   ConnectContext connectContext,
+                                                   QueryStatement queryStatement) {
+            Map<TableName, SubqueryRelation> tableNameSubqueryRelationMap =
+                    AnalyzerUtils.collectOneLevelSubQueryRelation(queryStatement);
+            if (!tableNameSubqueryRelationMap.isEmpty()) {
+                // choose the query statement that can resolve the partition column expr
+                for (Map.Entry<TableName, SubqueryRelation> e : tableNameSubqueryRelationMap.entrySet()) {
+                    QueryStatement subQueryStatement = e.getValue().getQueryStatement();
+
+                    Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, subQueryStatement);
+                    if (resolved != null) {
+                        return resolvePartitionExpr(resolved, connectContext, subQueryStatement);
+                    }
+                }
+                return null;
+            }
+
+            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, connectContext);
             TableName tableName = slotRef.getTblNameWithoutAnalyzed();
             tableName.normalization(connectContext);
 
@@ -593,25 +656,29 @@ public class MaterializedViewAnalyzer {
                             slotRef.toSql());
                 }
             }
+
             if (!table.isView()) {
                 // for table, it must be slotRef
                 if (!table.getName().equalsIgnoreCase(tableName.getTbl())) {
                     slotRef.setType(table.getColumn(slotRef.getColumnName()).getType());
                 }
                 return slotRef;
+            } else {
+                // resolve the view table
+                View view = (View) table;
+                QueryStatement viewQueryStatement = view.getQueryStatement();
+                Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, viewQueryStatement);
+                if (resolved == null) {
+                    return null;
+                }
+                SlotRef slot = getSlotRef(resolved);
+                // TableName's catalog may be null, so normalization it
+                slot.getTblNameWithoutAnalyzed().normalization(connectContext);
+                // resolved may be view's column, resolve it recursively
+                // NOTE: Why here not use `viewQueryStatement`? because `viewQueryStatement`'s relation
+                // is not analyzed yet cannot be used directly.
+                return resolvePartitionExpr(resolved, connectContext, queryStatement);
             }
-            View view = (View) table;
-            QueryStatement queryStatement = view.getQueryStatement();
-            Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, queryStatement);
-            if (resolved == null) {
-                return null;
-            }
-            SlotRef slot = getSlotRef(resolved);
-            // TableName's catalog may be null, so normalization it
-            slot.getTblNameWithoutAnalyzed().normalization(connectContext);
-            // resolved may be view's column, resolve it recursively
-            // return resolveSlotRefForView(resolved, connectContext, aliasTableMap);
-            return resolvePartitionExpr(resolved, connectContext, aliasTableMap);
         }
 
         private void checkPartitionExpPatterns(CreateMaterializedViewStatement statement) {
@@ -646,6 +713,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
+            } else if (table.isJDBCTable()) {
+                checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
@@ -672,14 +741,13 @@ public class MaterializedViewAnalyzer {
                 }
                 partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
             } else {
-                throw new SemanticException("Materialized view related base table partition type:" +
-                        partitionInfo.getType().name() + "not supports");
+                throw new SemanticException("Materialized view related base table partition type: " +
+                        partitionInfo.getType().name() + " not supports");
             }
         }
 
-        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
-            List<Column> partitionColumns = table.getPartitionColumns();
-            if (table.isUnPartitioned()) {
+        private void checkPartitionColumnWithBaseTable(SlotRef slotRef, List<Column> partitionColumns, boolean unPartitioned) {
+            if (unPartitioned) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
@@ -696,6 +764,14 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column");
                 }
             }
+        }
+
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
         }
 
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
@@ -828,63 +904,17 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
-                                                        ConnectContext context) {
-            statement.getMvName().normalization(context);
-            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
-            final String newMvName = statement.getNewMvName();
-            if (newMvName != null) {
-                if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name " + newMvName,
-                            statement.getMvName().getPos());
-                }
-            } else if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
-                    throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
-                }
-                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-                    final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
-                    if (intervalLiteral != null) {
-                        long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
-                        if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value: " + step,
-                                    async.getPos());
-                        }
-                        final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
-                        try {
-                            RefreshTimeUnit.valueOf(unit);
-                        } catch (IllegalArgumentException e) {
-                            String msg =
-                                    String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
-                                            Arrays.asList(RefreshTimeUnit.values()));
-                            throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
-                        }
-                    }
-                }
-            } else if (statement.getModifyTablePropertiesClause() != null) {
-                TableName mvName = statement.getMvName();
-                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
-                if (db == null) {
-                    throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
-                }
-                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
-                if (table == null) {
-                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
-                }
-                if (!(table instanceof MaterializedView)) {
-                    throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
-                }
-            } else if (statement.getStatus() != null) {
-                String status = statement.getStatus();
-                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
-                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
-                }
-            } else if (statement.getSwapTable() != null) {
-                // skip
-            } else {
-                throw new SemanticException("Unsupported modification for materialized view");
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
+            TableName mvName = statement.getMvName();
+            MetaUtils.normalizationTableName(context, mvName);
+            Table table = MetaUtils.getTable(statement.getMvName());
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
             }
+
+            AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor();
+            alterTableClauseAnalyzerVisitor.setTable(table);
+            alterTableClauseAnalyzerVisitor.analyze(statement.getAlterTableClause(), context);
             return null;
         }
 
@@ -901,7 +931,9 @@ public class MaterializedViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }
-            Preconditions.checkState(table instanceof MaterializedView);
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
+            }
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +

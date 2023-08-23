@@ -48,6 +48,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "util/await.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -86,9 +87,12 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
         ProfilerRegisterThread();
 #endif
 
+        Awaitility await;
+        // check every 200ms until timeout with `interval` seconds
+        await.timeout(interval * 1000L * 1000L).interval(200 * 1000);
         while (!_is_stopped.load()) {
             _clean_stream_context();
-            sleep(interval);
+            await.until([this] { return _is_stopped.load(); });
         }
     });
     Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
@@ -258,6 +262,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
 
         st = _commit_transaction(ctx, boost::iequals(TXN_PREPARE, req->param(HTTP_TXN_OP_KEY)));
         if (!st.ok()) {
+            LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
             if (ctx->need_rollback) {
                 _rollback_transaction(ctx);

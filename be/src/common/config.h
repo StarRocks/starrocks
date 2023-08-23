@@ -491,7 +491,7 @@ CONF_Bool(thrift_rpc_strict_mode, "true");
 CONF_Int32(thrift_rpc_max_body_size, "0");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -728,6 +728,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
+CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
@@ -971,6 +972,14 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -1030,6 +1039,9 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+CONF_mInt32(finish_publish_version_internal, "100");
+
+CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 

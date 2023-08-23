@@ -14,16 +14,26 @@
 
 package com.starrocks.leader;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryQueueManager;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackend;
@@ -31,6 +41,7 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.utframe.StarRocksAssert;
@@ -144,7 +155,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleResourceUsageReport() {
-        QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
+        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
@@ -162,9 +173,9 @@ public class ReportHandlerTest {
             }
         };
 
-        new Expectations(queryQueueManager) {
+        new Expectations(resourceUsageMonitor) {
             {
-                queryQueueManager.maybeNotifyAfterLock();
+                resourceUsageMonitor.notifyResourceUsageUpdate();
                 times = 2;
             }
         };
@@ -221,7 +232,6 @@ public class ReportHandlerTest {
             }
         };
 
-
         ReportHandler handler = new ReportHandler();
         TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
 
@@ -265,5 +275,52 @@ public class ReportHandlerTest {
             TMasterResult res = handler.handleReport(req);
             Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
         }
+    }
+
+    @Test
+    public void testHandleMigration() throws TException {
+        ReportHandler handler = new ReportHandler();
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        for (Long tabletId : tabletIds) {
+            tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
+        }
+        handler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        Backend reportBackend = currentSystemInfo.getBackend(10001);
+        BackendStatus backendStatus = reportBackend.getBackendStatus();
+        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+
+        handler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+        for (int i = 0; i < tabletMetaList.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            TabletMeta tabletMeta = tabletMetaList.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            if (db == null) {
+                continue;
+            }
+            OlapTable table = null;
+            db.readLock();
+            try {
+                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            } finally {
+                db.readUnlock();
+            }
+
+            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+
+
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
+            }
+        }
+        Config.primary_key_disk_schedule_time = 0;
+        handler.handleMigration(tabletMetaMigrationMap, 10001);
     }
 }

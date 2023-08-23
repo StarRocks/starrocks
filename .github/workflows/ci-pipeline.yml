@@ -194,7 +194,7 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
-    timeout-minutes: 90
+    timeout-minutes: 180
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -209,14 +209,14 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 90
+        timeout-minutes: 180
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --with-gcov
 
       - name: clean ECI
         if: always()

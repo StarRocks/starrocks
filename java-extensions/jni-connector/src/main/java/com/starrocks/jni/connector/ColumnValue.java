@@ -38,4 +38,6 @@ public interface ColumnValue {
     void unpackMap(List<ColumnValue> keys, List<ColumnValue> values);
 
     void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
+
+    byte getByte();
 }

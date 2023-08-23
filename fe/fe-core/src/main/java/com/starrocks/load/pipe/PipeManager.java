@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
@@ -23,6 +22,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,17 +136,23 @@ public class PipeManager {
 
     public void alterPipe(AlterPipeStmt stmt) throws DdlException {
         LOG.info("alter pipe " + stmt.toString());
-        AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
+        AlterPipeClause alterClause = stmt.getAlterPipeClause();
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            if (alterClause.isSuspend()) {
-                pipe.suspend();
-            } else if (alterClause.isResume()) {
-                pipe.resume();
+            if (alterClause instanceof AlterPipePauseResume) {
+                AlterPipePauseResume pauseResume = (AlterPipePauseResume) alterClause;
+                if (pauseResume.isSuspend()) {
+                    pipe.suspend();
+                } else if (pauseResume.isResume()) {
+                    pipe.resume();
+                }
+            } else if (alterClause instanceof AlterPipeClauseRetry) {
+                AlterPipeClauseRetry retry = (AlterPipeClauseRetry) alterClause;
+                pipe.retry(retry);
             }
 
             // persistence
@@ -183,6 +191,15 @@ public class PipeManager {
         try {
             lock.readLock().lock();
             return pipeMap.values().stream().filter(Pipe::isRunnable).collect(Collectors.toList());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public List<Pipe> getAllPipes() {
+        try {
+            lock.readLock().lock();
+            return new ArrayList<>(pipeMap.values());
         } finally {
             lock.readLock().unlock();
         }

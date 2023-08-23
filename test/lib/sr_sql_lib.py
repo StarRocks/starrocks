@@ -889,6 +889,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
+        """
+        wait pipe load finish
+        """
+        status = ""
+        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        count = 0
+        print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            print(res)
+            status = res["result"][0][0]
+            if status != "FINISHED":
+                print("pipe status is " + status)
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
@@ -1093,6 +1116,8 @@ class StarrocksSQLApiLib(object):
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
+            if ".gitkeep" in data: 
+                continue
             label = "%s_load_label_%s" % (data_name, uuid.uuid1().hex)
             file_name = data.split("/")[-1]
             table_name = file_name.split(".")[0]

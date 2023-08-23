@@ -42,7 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -55,6 +54,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -212,7 +212,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbitGlobalDict = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
         return newTableProperty;
     }
 
@@ -373,18 +373,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
         QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
         if (res == null) {
             String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                     .stream().map(Enum::name).collect(Collectors.joining(","));
-            throw new AnalysisException(
+            throw new SemanticException(
                     PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
         }
         return res;
     }
 
-    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) throws AnalysisException {
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) {
         if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
             // old version use the boolean value
             boolean boolValue = Boolean.parseBoolean(value);
@@ -394,7 +394,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             if (res == null) {
                 String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
                         .stream().map(Enum::name).collect(Collectors.joining(","));
-                throw new AnalysisException(
+                throw new SemanticException(
                         PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE + " could only be " + allValues + " but " +
                                 "got " + value);
             }
@@ -409,7 +409,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (value != null) {
             try {
                 forceExternalTableQueryRewrite = analyzeExternalTableQueryRewrite(value);
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
             }
         }
@@ -419,7 +419,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (value != null) {
             try {
                 queryRewriteConsistencyMode = analyzeQueryRewriteMode(value);
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, e);
             }
         }
@@ -488,7 +488,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         try {
             uniqueConstraints = UniqueConstraint.parse(
                     properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
         }
 

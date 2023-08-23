@@ -15,8 +15,10 @@
 #include "exprs/string_functions.h"
 
 #include <hs/hs.h>
+#ifdef __x86_64__
 #include <immintrin.h>
 #include <mmintrin.h>
+#endif
 #include <re2/re2.h>
 
 #include <algorithm>

@@ -21,10 +21,10 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -79,7 +79,28 @@ public abstract class Coordinator {
         startScheduling();
     }
 
-    public abstract void startScheduling() throws Exception;
+    /**
+     * Start scheduling fragments of this job, mainly containing the following work:
+     * <ul>
+     *     <li> Instantiates multiple parallel instances of each fragment.
+     *     <li> Assigns these fragment instances to appropriate workers (including backends and compute nodes).
+     *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
+     * </ul>
+     * <p>
+     *
+     * @param needDeploy Whether deploying fragment instances to workers.
+     */
+    public abstract void startScheduling(boolean needDeploy) throws Exception;
+
+    public void startScheduling() throws Exception {
+        startScheduling(true);
+    }
+
+    public void startSchedulingWithoutDeploy() throws Exception {
+        startScheduling(false);
+    }
+
+    public abstract String getSchedulerExplain();
 
     public abstract void updateFragmentExecStatus(TReportExecStatusParams params);
 
@@ -90,6 +111,8 @@ public abstract class Coordinator {
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
     public abstract void onFinished();
+
+    public abstract LogicalSlot getSlot();
 
     // ------------------------------------------------------------------------------------
     // Methods for query.
@@ -131,7 +154,7 @@ public abstract class Coordinator {
 
     public abstract void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier);
 
-    public abstract RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics);
+    public abstract RuntimeProfile buildMergedQueryProfile();
 
     public abstract RuntimeProfile getQueryProfile();
 
