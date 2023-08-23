@@ -1214,6 +1214,9 @@ Status StringFunctions::translate_close(FunctionContext* context, FunctionContex
  */
 static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
                                                                        const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(state->is_ascii_map);
+
     auto dst = BinaryColumn::create();
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
@@ -1260,6 +1263,9 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
  */
 static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
                                                                       const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(!state->is_ascii_map);
+
     NullableBinaryColumnBuilder builder;
     auto& dst_offsets = builder.data_column()->get_offset();
     auto& dst_bytes = builder.data_column()->get_bytes();
@@ -1323,6 +1329,8 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
  *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
  */
 ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
+    DCHECK(state == nullptr || !state->is_from_and_to_const);
+
     ColumnViewer<TYPE_VARCHAR> src_viewer(columns[TranslateState::SRC_STR_INDEX]);
     ColumnViewer<TYPE_VARCHAR> from_viewer(columns[TranslateState::FROM_STR_INDEX]);
     ColumnViewer<TYPE_VARCHAR> to_viewer(columns[TranslateState::TO_STR_INDEX]);
