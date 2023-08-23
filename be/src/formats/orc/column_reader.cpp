@@ -45,9 +45,9 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     case TYPE_LARGEINT:
         return std::make_unique<IntColumnReader<TYPE_LARGEINT>>(type, orc_type, nullable, reader);
     case TYPE_FLOAT:
-        return std::make_unique<FloatColumnReader<TYPE_FLOAT>>(type, orc_type, nullable, reader);
+        return std::make_unique<DoubleColumnReader<TYPE_FLOAT>>(type, orc_type, nullable, reader);
     case TYPE_DOUBLE:
-        return std::make_unique<FloatColumnReader<TYPE_DOUBLE>>(type, orc_type, nullable, reader);
+        return std::make_unique<DoubleColumnReader<TYPE_DOUBLE>>(type, orc_type, nullable, reader);
     case TYPE_DECIMAL:
         return std::make_unique<DecimalColumnReader>(type, orc_type, nullable, reader);
     case TYPE_DECIMALV2:
@@ -126,41 +126,21 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
+    auto* data = down_cast<orc::LongVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
     if (_nullable) {
-        auto* data = down_cast<orc::LongVectorBatch*>(cvb);
-        int col_start = col->size();
-        col->resize(col->size() + size);
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+        handle_null(cvb, null_column, column_start, from, size);
+    }
 
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(c->data_column())->get_data().data();
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    uint8_t* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(data_column)->get_data().data();
+    int64_t* cvb_data = data->data.data();
 
-        auto* cvbd = data->data.data();
-        auto pos = from;
-        if (cvb->hasNulls) {
-            auto* cvbn = reinterpret_cast<uint8_t*>(cvb->notNull.data());
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                nulls[i] = !cvbn[pos];
-            }
-        }
-        pos = from;
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            values[i] = (cvbd[pos] != 0);
-        }
-        c->update_has_null();
-    } else {
-        auto* data = down_cast<orc::LongVectorBatch*>(cvb);
-
-        int col_start = col->size();
-        col->resize(col_start + size);
-
-        auto* values = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data().data();
-
-        auto* cvbd = data->data.data();
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            values[i] = (cvbd[from] != 0);
-        }
+    for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size; column_pos++, vb_pos++) {
+        values[column_pos] = (cvb_data[vb_pos] != 0);
     }
     return Status::OK();
 }
@@ -180,8 +160,10 @@ Status IntColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& c
                 return _fill_int_column_with_null_from_cvb<orc::DoubleVectorBatch>(data, col, from, size);
             }
         }
-        // we have nothing to fill, but have to resize column to save from crash.
-        col->resize(col->size() + size);
+        {
+            // we have nothing to fill, but have to resize column to save from crash.
+            col->resize(col->size() + size);
+        }
     } else {
         // try to dyn_cast to long vector batch first. in most case, the cast will succeed.
         // so there is no performance loss comparing to call `down_cast` directly
@@ -200,8 +182,10 @@ Status IntColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& c
                 return _fill_int_column_from_cvb<orc::DoubleVectorBatch>(data, col, from, size);
             }
         }
-        // we have nothing to fill, but have to resize column to save from crash.
-        col->resize(col->size() + size);
+        {
+            // we have nothing to fill, but have to resize column to save from crash.
+            col->resize(col->size() + size);
+        }
     }
     return Status::OK();
 }
@@ -210,24 +194,18 @@ template <LogicalType Type>
 template <typename OrcColumnVectorBatch>
 Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
                                                                   size_t from, size_t size) {
-    int col_start = col->size();
-    col->resize(col->size() + size);
+    size_t col_start = col->size();
+    col->resize_uninitialized(col->size() + size);
 
-    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-    auto* nulls = c->null_column()->get_data().data();
-    auto* values = ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+    auto null_column = ColumnHelper::as_raw_column<NullableColumn>(col);
+    auto nulls = null_column->null_column()->get_data().data();
+    handle_null(data, null_column, col_start, from, size, false);
 
+    auto* values = ColumnHelper::cast_to_raw<Type>(null_column->data_column())->get_data().data();
     auto* cvbd = data->data.data();
-    auto pos = from;
-    if (data->hasNulls) {
-        auto* cvbn = reinterpret_cast<uint8_t*>(data->notNull.data());
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            nulls[i] = !cvbn[pos];
-        }
-    }
-    pos = from;
-    for (int i = col_start; i < col_start + size; ++i, ++pos) {
-        values[i] = cvbd[pos];
+
+    for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+        values[i] = cvbd[cvb_pos];
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
@@ -238,7 +216,7 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
         bool reported = false;
 
         if (strict_mode) {
-            for (int i = 0; i < size; i++) {
+            for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
                 if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
@@ -266,7 +244,7 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
         }
     }
 
-    c->update_has_null();
+    null_column->update_has_null();
     return Status::OK();
 }
 
@@ -274,16 +252,15 @@ template <LogicalType Type>
 template <typename OrcColumnVectorBatch>
 Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from,
                                                         size_t size) {
-    int col_start = col->size();
-    col->resize(col_start + size);
+    size_t col_start = col->size();
+    col->resize_uninitialized(col_start + size);
 
     auto* values = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
 
     auto* cvbd = data->data.data();
 
-    auto pos = from;
-    for (int i = col_start; i < col_start + size; ++i, ++pos) {
-        values[i] = cvbd[pos];
+    for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+        values[i] = cvbd[cvb_pos];
     }
 
     // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
@@ -294,7 +271,7 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
         if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
             auto filter = _reader->get_broker_load_fiter()->data();
             bool reported = false;
-            for (int i = 0; i < size; i++) {
+            for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
                 if (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
@@ -317,177 +294,102 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
 }
 
 template <LogicalType Type>
-Status FloatColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status DoubleColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
+    auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
     if (_nullable) {
-        auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
-        int col_start = col->size();
-        col->resize(col->size() + size);
+        auto null_column = ColumnHelper::as_raw_column<NullableColumn>(column);
+        handle_null(cvb, null_column, column_start, from, size);
+    }
 
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    auto* values = ColumnHelper::cast_to_raw<Type>(data_column)->get_data().data();
+    double* cvb_data = data->data.data();
 
-        auto* cvbd = data->data.data();
-        auto pos = from;
-        if (cvb->hasNulls) {
-            auto* cvbn = reinterpret_cast<uint8_t*>(cvb->notNull.data());
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                nulls[i] = !cvbn[pos];
-            }
-        }
-        pos = from;
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            values[i] = cvbd[pos];
-        }
-        c->update_has_null();
-    } else {
-        auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
-
-        int col_start = col->size();
-        col->resize(col_start + size);
-
-        auto* values = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
-
-        auto* cvbd = data->data.data();
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            values[i] = cvbd[from];
-        }
+    for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size; column_pos++, vb_pos++) {
+        values[column_pos] = cvb_data[vb_pos];
     }
     return Status::OK();
 }
 
 Status DecimalColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+    size_t col_start = col->size();
+    col->resize_uninitialized(col_start + size);
+
     if (_nullable) {
-        if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
-            _fill_decimal_column_with_null_from_orc_decimal64(cvb, col, from, size);
-        } else {
-            _fill_decimal_column_with_null_from_orc_decimal128(cvb, col, from, size);
-        }
-    } else {
-        if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
-            _fill_decimal_column_from_orc_decimal64(cvb, col, from, size);
-        } else {
-            _fill_decimal_column_from_orc_decimal128(cvb, col, from, size);
-        }
+        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
+        handle_null(cvb, c, col_start, from, size);
     }
+
+    Column* data_column = ColumnHelper::get_data_column(col.get());
+
+    if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
+        _fill_decimal_column_from_orc_decimal64(down_cast<orc::Decimal64VectorBatch*>(cvb), data_column, col_start,
+                                                from, size);
+    } else {
+        _fill_decimal_column_from_orc_decimal128(down_cast<orc::Decimal128VectorBatch*>(cvb), data_column, col_start,
+                                                 from, size);
+    }
+
     return Status::OK();
 }
 
-void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                                  size_t from, size_t size) {
-    auto* data = down_cast<orc::Decimal64VectorBatch*>(cvb);
-
-    int col_start = col->size();
-    col->resize(col->size() + size);
-
+void DecimalColumnReader::_fill_decimal_column_from_orc_decimal64(orc::Decimal64VectorBatch* cvb, Column* col,
+                                                                  size_t col_start, size_t from, size_t size) {
     static_assert(sizeof(DecimalV2Value) == sizeof(int128_t));
-    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
+    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col)->get_data().data());
 
-    auto* cvbd = data->values.data();
+    auto* cvbd = cvb->values.data();
 
-    for (int i = col_start; i < col_start + size; ++i, ++from) {
-        values[i] = static_cast<int128_t>(cvbd[from]);
+    for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+        values[i] = static_cast<int128_t>(cvbd[cvb_pos]);
     }
 
-    if (DecimalV2Value::SCALE < data->scale) {
-        int128_t d = DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
-        for (int i = col_start; i < col_start + size; ++i) {
+    if (DecimalV2Value::SCALE < cvb->scale) {
+        int128_t d = DecimalV2Value::get_scale_base(cvb->scale - DecimalV2Value::SCALE);
+        for (size_t i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
-    } else if (DecimalV2Value::SCALE > data->scale) {
-        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
-        for (int i = col_start; i < col_start + size; ++i) {
+    } else if (DecimalV2Value::SCALE > cvb->scale) {
+        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - cvb->scale);
+        for (size_t i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
     }
 }
 
-void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                                   size_t from, size_t size) {
-    auto* data = down_cast<orc::Decimal128VectorBatch*>(cvb);
+void DecimalColumnReader::_fill_decimal_column_from_orc_decimal128(orc::Decimal128VectorBatch* cvb, Column* col,
+                                                                   size_t col_start, size_t from, size_t size) {
+    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col)->get_data().data());
 
-    int col_start = col->size();
-    col->resize(col->size() + size);
-
-    auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(col.get())->get_data().data());
-
-    for (int i = col_start; i < col_start + size; ++i, ++from) {
-        uint64_t hi = data->values[from].getHighBits();
-        uint64_t lo = data->values[from].getLowBits();
+    for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+        uint64_t hi = cvb->values[cvb_pos].getHighBits();
+        uint64_t lo = cvb->values[cvb_pos].getLowBits();
         values[i] = (((int128_t)hi) << 64) | (int128_t)lo;
     }
-    if (DecimalV2Value::SCALE < data->scale) {
-        int128_t d = DecimalV2Value::get_scale_base(data->scale - DecimalV2Value::SCALE);
-        for (int i = col_start; i < col_start + size; ++i) {
+    if (DecimalV2Value::SCALE < cvb->scale) {
+        int128_t d = DecimalV2Value::get_scale_base(cvb->scale - DecimalV2Value::SCALE);
+        for (size_t i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] / d;
         }
-    } else if (DecimalV2Value::SCALE > data->scale) {
-        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - data->scale);
-        for (int i = col_start; i < col_start + size; ++i) {
+    } else if (DecimalV2Value::SCALE > cvb->scale) {
+        int128_t m = DecimalV2Value::get_scale_base(DecimalV2Value::SCALE - cvb->scale);
+        for (size_t i = col_start; i < col_start + size; ++i) {
             values[i] = values[i] * m;
         }
-    }
-}
-
-void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                                            size_t from, size_t size) {
-    int col_start = col->size();
-    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-    auto& null_column = c->null_column();
-    auto& data_column = c->data_column();
-
-    _fill_decimal_column_from_orc_decimal64(cvb, data_column, from, size);
-    DCHECK_EQ(col_start + size, data_column->size());
-    null_column->resize(data_column->size());
-    auto* nulls = null_column->get_data().data();
-
-    auto pos = from;
-    if (cvb->hasNulls) {
-        auto* cvbn = reinterpret_cast<uint8_t*>(cvb->notNull.data());
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            nulls[i] = !cvbn[pos];
-        }
-        c->update_has_null();
-    }
-}
-
-void DecimalColumnReader::_fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
-                                                                             ColumnPtr& col, size_t from, size_t size) {
-    int col_start = col->size();
-    auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-    auto& null_column = c->null_column();
-    auto& data_column = c->data_column();
-
-    _fill_decimal_column_from_orc_decimal128(cvb, data_column, from, size);
-    DCHECK_EQ(col_start + size, data_column->size());
-    null_column->resize(data_column->size());
-    auto* nulls = null_column->get_data().data();
-
-    auto pos = from;
-    if (cvb->hasNulls) {
-        auto* cvbn = reinterpret_cast<uint8_t*>(cvb->notNull.data());
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            nulls[i] = !cvbn[pos];
-        }
-        c->update_has_null();
     }
 }
 
 template <LogicalType DecimalType>
 Status Decimal32Or64Or128ColumnReader<DecimalType>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
                                                              size_t size) {
-    _fill_decimal_column_from_orc_decimal64_or_decimal128(cvb, col, from, size);
-    return Status::OK();
-}
-
-template <LogicalType DecimalType>
-inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_from_orc_decimal64_or_decimal128(
-        orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
         _fill_decimal_column_generic<int64_t>(cvb, col, from, size);
     } else {
         _fill_decimal_column_generic<int128_t>(cvb, col, from, size);
     }
+    return Status::OK();
 }
 
 template <LogicalType DecimalType>
@@ -503,23 +405,13 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
     using Type = RunTimeCppType<DecimalType>;
 
     auto data = (OrcDecimalBatchType*)cvb;
-    int col_start = col->size();
-    col->resize(col->size() + size);
+    size_t col_start = col->size();
+    col->resize_uninitialized(col->size() + size);
 
     ColumnType* decimal_column = nullptr;
     if (_nullable) {
         auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(col);
-        if (cvb->hasNulls) {
-            auto nulls = nullable_column->null_column()->get_data().data();
-            auto cvbn = reinterpret_cast<uint8_t*>(cvb->notNull.data());
-            bool has_null = col->has_null();
-            auto src_idx = from;
-            for (auto dst_idx = col_start; dst_idx < col_start + size; ++dst_idx, ++src_idx) {
-                has_null |= cvbn[src_idx] == 0;
-                nulls[dst_idx] = !cvbn[src_idx];
-            }
-            nullable_column->set_has_null(has_null);
-        }
+        handle_null(cvb, nullable_column, col_start, from, size);
         decimal_column = ColumnHelper::cast_to_raw<DecimalType>(nullable_column->data_column());
     } else {
         decimal_column = ColumnHelper::cast_to_raw<DecimalType>(col);
@@ -528,7 +420,7 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
     auto values = decimal_column->get_data().data();
     if (data->scale == decimal_column->scale()) {
         auto src_idx = from;
-        for (int dst_idx = col_start; dst_idx < col_start + size; ++dst_idx, ++src_idx) {
+        for (size_t dst_idx = col_start; dst_idx < col_start + size; ++dst_idx, ++src_idx) {
             T original_value;
             if constexpr (std::is_same_v<T, int128_t>) {
                 original_value = ((int128_t)data->values[src_idx].getHighBits()) << 64;
@@ -554,7 +446,7 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
     } else {
         auto scale_factor = get_scale_factor<Type>(decimal_column->scale() - data->scale);
         auto src_idx = from;
-        for (int dst_idx = col_start; dst_idx < col_start + size; ++dst_idx, ++src_idx) {
+        for (size_t dst_idx = col_start; dst_idx < col_start + size; ++dst_idx, ++src_idx) {
             T original_value;
             if constexpr (std::is_same_v<T, int128_t>) {
                 original_value = ((int128_t)data->values[src_idx].getHighBits()) << 64;
@@ -568,76 +460,90 @@ inline void Decimal32Or64Or128ColumnReader<DecimalType>::_fill_decimal_column_ge
 }
 
 Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+    auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+
+    size_t len = 0;
+    for (size_t i = 0; i < size; ++i) {
+        len += data->length[from + i];
+    }
+    size_t col_start = col->size();
+
     if (_nullable) {
-        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
-
-        size_t len = 0;
-        for (size_t i = 0; i < size; ++i) {
-            len += data->length[from + i];
-        }
-
-        int col_start = col->size();
-
         auto* c = ColumnHelper::as_raw_column<NullableColumn>(col);
+        c->null_column()->resize_uninitialized(col->size() + size);
+        handle_null(cvb, c, col_start, from, size, false);
+    }
 
-        c->null_column()->resize(col->size() + size);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c->data_column());
+    auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(ColumnHelper::get_data_column(col.get()));
 
-        values->get_offset().reserve(values->get_offset().size() + size);
-        values->get_bytes().reserve(values->get_bytes().size() + len);
+    auto& vb = values->get_bytes();
+    // Need to resize after insert, because of padding char existed
+    vb.reserve(vb.size() + len);
 
-        auto& vb = values->get_bytes();
-        auto& vo = values->get_offset();
+    auto& vo = values->get_offset();
+    // We can resize directly
+    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
 
-        int pos = from;
-        if (cvb->hasNulls) {
-            if (_type.type == TYPE_CHAR) {
-                // Possibly there are some zero padding characters in value, we have to strip them off.
-                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                    nulls[i] = !cvb->notNull[pos];
-                    if (cvb->notNull[pos]) {
-                        size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                        vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                        vo.emplace_back(vb.size());
-                    } else {
-                        vo.emplace_back(vb.size());
-                    }
-                }
-            } else {
-                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                    nulls[i] = !cvb->notNull[pos];
-                    if (cvb->notNull[pos]) {
-                        vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                        vo.emplace_back(vb.size());
-                    } else {
-                        vo.emplace_back(vb.size());
-                    }
+    size_t write_pos = vb.size();
+    if (cvb->hasNulls) {
+        if (_type.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                if (cvb->notNull[cvb_pos]) {
+                    size_t str_size = remove_trailing_spaces(data->data[cvb_pos], data->length[cvb_pos]);
+                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
+                    write_pos += str_size;
+                    // Need plus 1 for offset
+                    vo[i + 1] = write_pos;
+                } else {
+                    // Need plus 1 for offset
+                    vo[i + 1] = write_pos;
                 }
             }
         } else {
-            if (_type.type == TYPE_CHAR) {
-                // Possibly there are some zero padding characters in value, we have to strip them off.
-                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                    vo.emplace_back(vb.size());
-                }
-            } else {
-                for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                    vo.emplace_back(vb.size());
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                if (cvb->notNull[cvb_pos]) {
+                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+                    write_pos += data->length[cvb_pos];
+                    // Need plus 1 for offset
+                    vo[i + 1] = write_pos;
+                } else {
+                    // Need plus 1 for offset
+                    vo[i + 1] = write_pos;
                 }
             }
         }
+    } else {
+        if (_type.type == TYPE_CHAR) {
+            // Possibly there are some zero padding characters in value, we have to strip them off.
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                size_t str_size = remove_trailing_spaces(data->data[cvb_pos], data->length[cvb_pos]);
+                strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
+                write_pos += str_size;
+                // Need plus 1 for offset
+                vo[i + 1] = write_pos;
+            }
+        } else {
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+                write_pos += data->length[cvb_pos];
+                // Need plus 1 for offset
+                vo[i + 1] = write_pos;
+            }
+        }
+    }
 
-        // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
-        // otherwise `broker_load_filter` does not work.
-        if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
-            auto* filter = _reader->get_broker_load_fiter()->data();
+    vb.resize(write_pos);
+
+    // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
+    // otherwise `broker_load_filter` does not work.
+    if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
+        auto* filter = _reader->get_broker_load_fiter()->data();
+        // only report once.
+        bool reported = false;
+        if (_nullable) {
+            auto nulls = ColumnHelper::as_raw_column<NullableColumn>(col)->null_column()->get_data().data();
             auto strict_mode = _reader->get_strict_mode();
-            bool reported = false;
-
             if (strict_mode) {
                 for (int i = 0; i < size; i++) {
                     // overflow.
@@ -662,47 +568,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
                     }
                 }
             }
-        }
-
-        c->update_has_null();
-    } else {
-        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
-
-        size_t len = 0;
-        for (size_t i = 0; i < size; ++i) {
-            len += data->length[from + i];
-        }
-
-        int col_start = col->size();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(col);
-
-        values->get_offset().reserve(values->get_offset().size() + size);
-        values->get_bytes().reserve(values->get_bytes().size() + len);
-
-        auto& vb = values->get_bytes();
-        auto& vo = values->get_offset();
-        int pos = from;
-
-        if (_type.type == TYPE_CHAR) {
-            // Possibly there are some zero padding characters in value, we have to strip them off.
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                vo.emplace_back(vb.size());
-            }
         } else {
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                vo.emplace_back(vb.size());
-            }
-        }
-
-        // col_start == 0 and from == 0 means it's at top level of fill chunk, not in the middle of array
-        // otherwise `broker_load_filter` does not work.
-        if (_reader->get_broker_load_mode() && from == 0 && col_start == 0) {
-            auto filter = _reader->get_broker_load_fiter()->data();
-            // only report once.
-            bool reported = false;
             for (int i = 0; i < size; i++) {
                 // overflow.
                 if (_type.len > 0 && data->length[i] > _type.len) {
@@ -721,148 +587,125 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
             }
         }
     }
+
+    // Need to update_has_null, the broker load will change nulls
+    if (_nullable) {
+        auto* c = ColumnHelper::as_raw_column<NullableColumn>(col);
+        c->update_has_null();
+    }
+
     return Status::OK();
 }
 
 Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+    auto* data = down_cast<orc::StringVectorBatch*>(cvb);
+    size_t len = 0;
+    for (size_t i = 0; i < size; ++i) {
+        len += data->length[from + i];
+    }
+    size_t col_start = col->size();
+
     if (_nullable) {
-        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
-
-        size_t len = 0;
-        for (size_t i = 0; i < size; ++i) {
-            len += data->length[from + i];
-        }
-
-        int col_start = col->size();
-
         auto* c = ColumnHelper::as_raw_column<NullableColumn>(col);
+        c->null_column()->resize_uninitialized(col->size() + size);
+        handle_null(cvb, c, col_start, from, size);
+    }
 
-        c->null_column()->resize(col->size() + size);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(c->data_column());
+    auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(ColumnHelper::get_data_column(col.get()));
+    auto& vb = values->get_bytes();
+    auto& vo = values->get_offset();
 
-        values->get_offset().reserve(values->get_offset().size() + size);
-        values->get_bytes().reserve(values->get_bytes().size() + len);
+    size_t write_pos = vb.size();
 
-        auto& vb = values->get_bytes();
-        auto& vo = values->get_offset();
+    // vb is using RawVectorPad16, resize will not initialize vector
+    vb.resize(vb.size() + len);
+    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
 
-        int pos = from;
-        if (cvb->hasNulls) {
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                nulls[i] = !cvb->notNull[pos];
-                if (cvb->notNull[pos]) {
-                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                    vo.emplace_back(vb.size());
-                } else {
-                    vo.emplace_back(vb.size());
-                }
-            }
-        } else {
-            for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                vo.emplace_back(vb.size());
+    if (cvb->hasNulls) {
+        for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+            if (cvb->notNull[cvb_pos]) {
+                strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+                write_pos += data->length[cvb_pos];
+                // Plus 1 for offset
+                vo[i + 1] = write_pos;
+            } else {
+                // Plus 1 for offset
+                vo[i + 1] = write_pos;
             }
         }
-
-        c->update_has_null();
     } else {
-        auto* data = down_cast<orc::StringVectorBatch*>(cvb);
-
-        size_t len = 0;
-        for (size_t i = 0; i < size; ++i) {
-            len += data->length[from + i];
-        }
-
-        int col_start = col->size();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_VARBINARY>(col);
-
-        values->get_offset().reserve(values->get_offset().size() + size);
-        values->get_bytes().reserve(values->get_bytes().size() + len);
-
-        auto& vb = values->get_bytes();
-        auto& vo = values->get_offset();
-        int pos = from;
-
-        for (int i = col_start; i < col_start + size; ++i, ++pos) {
-            vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-            vo.emplace_back(vb.size());
+        for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+            strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+            write_pos += data->length[cvb_pos];
+            // Plus 1 for offset
+            vo[i + 1] = write_pos;
         }
     }
     return Status::OK();
 }
 
-Status DateColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+Status DateColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
+    auto* data = down_cast<orc::LongVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
     if (_nullable) {
-        auto* data = down_cast<orc::LongVectorBatch*>(cvb);
+        handle_null(cvb, ColumnHelper::as_raw_column<NullableColumn>(column), column_start, from, size);
+    }
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    auto* values = ColumnHelper::cast_to_raw<TYPE_DATE>(data_column)->get_data().data();
 
-        int col_start = col->size();
-        col->resize(col->size() + size);
-
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATE>(c->data_column())->get_data().data();
-
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            nulls[i] = cvb->hasNulls && !cvb->notNull[from];
-            if (!nulls[i]) {
-                OrcDateHelper::orc_date_to_native_date(&(values[i]), data->data[from]);
+    if (cvb->hasNulls) {
+        for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
+             column_pos++, vb_pos++) {
+            if (!cvb->notNull[column_pos]) {
+                continue;
             }
+            OrcDateHelper::orc_date_to_native_date(&(values[column_pos]), data->data[vb_pos]);
         }
-        c->update_has_null();
     } else {
-        auto* data = down_cast<orc::LongVectorBatch*>(cvb);
-
-        int col_start = col->size();
-        col->resize(col->size() + size);
-
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATE>(col)->get_data().data();
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            OrcDateHelper::orc_date_to_native_date(&(values[i]), data->data[from]);
+        for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
+             column_pos++, vb_pos++) {
+            OrcDateHelper::orc_date_to_native_date(&(values[column_pos]), data->data[vb_pos]);
         }
     }
     return Status::OK();
 }
 
 template <bool IsInstant>
-Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from,
                                                   size_t size) {
+    auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
+    size_t column_start = column->size();
+    column->resize_uninitialized(column_start + size);
     if (_nullable) {
-        auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
-        int col_start = col->size();
-        col->resize(col->size() + size);
+        handle_null(cvb, ColumnHelper::as_raw_column<NullableColumn>(column), column_start, from, size);
+    }
+    Column* data_column = ColumnHelper::get_data_column(column.get());
+    auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(data_column)->get_data().data();
+    bool use_ns = _reader->use_nanoseconds_in_datetime();
 
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c->data_column())->get_data().data();
-        bool use_ns = _reader->use_nanoseconds_in_datetime();
-
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
-            nulls[i] = cvb->hasNulls && !cvb->notNull[from];
-            if (!nulls[i]) {
-                int64_t ns = 0;
-                if (use_ns) {
-                    ns = data->nanoseconds[from];
-                }
-                OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), _reader->tzinfo(), _reader->tzoffset_in_seconds(),
-                                                        data->data[from], ns, IsInstant);
+    if (cvb->hasNulls) {
+        for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
+             column_pos++, vb_pos++) {
+            if (!cvb->notNull[column_pos]) {
+                continue;
             }
-        }
-
-        c->update_has_null();
-    } else {
-        auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
-        int col_start = col->size();
-        col->resize(col->size() + size);
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(col)->get_data().data();
-        bool use_ns = _reader->use_nanoseconds_in_datetime();
-        for (int i = col_start; i < col_start + size; ++i, ++from) {
             int64_t ns = 0;
             if (use_ns) {
-                ns = data->nanoseconds[from];
+                ns = data->nanoseconds[vb_pos];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[i]), _reader->tzinfo(), _reader->tzoffset_in_seconds(),
-                                                    data->data[from], ns, IsInstant);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
+                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
+        }
+    } else {
+        for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
+             column_pos++, vb_pos++) {
+            int64_t ns = 0;
+            if (use_ns) {
+                ns = data->nanoseconds[vb_pos];
+            }
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
+                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
         }
     }
     return Status::OK();
