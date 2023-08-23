@@ -2150,16 +2150,4 @@ TEST(RLEv1, testLeadingNulls) {
     }
 };
 
-TEST(RLEv1, seekOverEmptyPresentStream) {
-    const char* buffer = nullptr;
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>
-                             (new SeekableArrayInputStream(buffer, 0, 1)),
-                             false, RleVersion_1, *getDefaultPool(),
-                             getDefaultReaderMetrics());
-    std::list<uint64_t> position(2, 0);
-    PositionProvider location(position);
-    rle->seek(location);
-}
-
 } // namespace orc

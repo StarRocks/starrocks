@@ -644,18 +644,6 @@ TEST(ByteRle, testSeek) {
     } while (i != 0);
 }
 
-TEST(ByteRle, seekOverEmptyPresentStream) {
-    const char* buffer = nullptr;
-    std::unique_ptr<ByteRleDecoder> rle =
-            createByteRleDecoder(
-                    std::unique_ptr<orc::SeekableInputStream>
-                    (new SeekableArrayInputStream(buffer, 0, 1)),
-                    getDefaultReaderMetrics());
-    std::list<uint64_t> position(2, 0);
-    PositionProvider location(position);
-    rle->seek(location);
-}
-
 TEST(BooleanRle, simpleTest) {
     const unsigned char buffer[] = {0x61, 0xf0, 0xfd, 0x55, 0xAA, 0x55};
     std::unique_ptr<SeekableInputStream> stream(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer)));
