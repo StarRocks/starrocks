@@ -1181,6 +1181,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
 
         EXPECT_EQ("[1, NULL, '123456']", result->debug_row(0));
         EXPECT_EQ("[2, NULL, '12345']", result->debug_row(1));
+        EXPECT_TRUE(result->get_column_by_index(1)->has_null());
     }
 
     {
@@ -1328,9 +1329,6 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        for (int i = 0; i < result->num_rows(); ++i) {
-            std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
-        }
         EXPECT_EQ(result->debug_row(0), "[1, [0.999999999]]");
         EXPECT_EQ(result->debug_row(1), "[2, [0.000000001,NULL]]");
         EXPECT_EQ(result->debug_row(2), "[3, [NULL,NULL]]");
