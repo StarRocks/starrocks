@@ -126,9 +126,10 @@ struct JoinHashTableItems {
     bool has_large_column = false;
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
-    size_t probe_bytes = 0; // random access data during searching hash table.
+    bool cache_miss_serious = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
+    bool ht_cache_miss_serious() const { return cache_miss_serious; }
 
     void calculate_ht_info(size_t key_bytes) {
         if (used_buckets == 0) { // to avoid redo
@@ -136,7 +137,9 @@ struct JoinHashTableItems {
                 used_buckets += value != 0;
             }
             keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
-            probe_bytes = key_bytes + row_count * sizeof(uint32_t);
+            size_t probe_bytes = key_bytes + row_count * sizeof(uint32_t);
+            cache_miss_serious = ((probe_bytes > (1UL << 25) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 26)) &&
+                                 row_count > (1UL << 18);
         }
     }
 
@@ -210,7 +213,11 @@ struct HashTableProbeState {
     };
     uint32_t match_count = 0;
     int active_coroutines = 0;
-    uint32_t probe_cardinality = 0;
+    // used to adaptively detect time locality
+    size_t probe_chunks = 0;
+    uint32_t detect_step = 1;
+    bool last_enable_interleaving = true;
+
     std::set<std::coroutine_handle<ProbeCoroutine::ProbePromise>> handles;
 
     HashTableProbeState(const HashTableProbeState& rhs)
@@ -243,6 +250,8 @@ struct HashTableProbeState {
     // Disable move ctor and assignment.
     HashTableProbeState(HashTableProbeState&&) = delete;
     HashTableProbeState& operator=(HashTableProbeState&&) = delete;
+
+    void consider_probe_time_locality();
 
     ~HashTableProbeState() {
         for (auto it = handles.begin(); it != handles.end(); it++) {
