@@ -15,7 +15,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.HiveMetaClient;
+
+import java.util.List;
 
 public class HivePartitionKey extends PartitionKey implements NullablePartitionKey {
     public HivePartitionKey() {
@@ -23,7 +26,7 @@ public class HivePartitionKey extends PartitionKey implements NullablePartitionK
     }
 
     @Override
-    public String nullPartitionValue() {
-        return HiveMetaClient.PARTITION_NULL_VALUE;
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(HiveMetaClient.PARTITION_NULL_VALUE);
     }
 }
