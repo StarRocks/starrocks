@@ -7,6 +7,7 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > **注意**
 >
 > * v2.5.9 之前，使用 Spark Load 导入数据至 StarRocks 表时，不支持该表分桶列的数据类型为 DATE、DATETIME 或者 DECIMAL。
+> * Spark Load 不支持导入至主键模型表。
 
 ## 背景信息
 
