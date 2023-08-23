@@ -1,0 +1,61 @@
+-- name: test_materialized_view_with_subquery
+CREATE TABLE test_pk_tbl1 (
+    dt_hour datetime,
+    col1 string,
+    timezone string,
+    col2 string,
+    col3 string,
+    flag string
+)
+PRIMARY KEY(dt_hour, col1)
+PARTITION BY RANGE(`dt_hour`) (
+    PARTITION p20230817 VALUES LESS THAN ('2023-08-17')
+)
+DISTRIBUTED BY HASH(col1) BUCKETS 16
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_pk_tbl1 values ('2023-08-16', 'a', '0', 'a', 'b', '1'),  ('2023-08-16', 'b', '0', 'a', 'b', '3');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_pk_mv_with_subquery1
+PARTITION BY (`dt_hour`)
+DISTRIBUTED BY HASH(`dt_hour`,`col1`) BUCKETS 8
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS
+SELECT t0.col1, t0.dt_hour, t0.c_col2 as col2, t0.c_col3 as col3, t1.c_col2 as col4, t1.c_col3 as col5
+FROM
+    ( SELECT col1,
+             dt_hour,
+             COUNT(DISTINCT CASE WHEN flag = '1' THEN col2 ELSE NULL END) AS c_col2,
+             COUNT(DISTINCT CASE WHEN flag = '1' THEN col3 ELSE NULL END) AS c_col3 
+      FROM test_pk_tbl1
+      WHERE ((DATE_FORMAT(dt_hour, '%Y-%m-%d') = DATE(DATE_SUB(DATE('2023-08-17 09:00:00'), INTERVAL 8 hour))
+          AND timezone = '0') OR (DATE_FORMAT(dt_hour, '%Y-%m-%d') = DATE('2023-08-16') AND timezone = '8'))
+     AND (flag = '1' OR flag = '2')
+GROUP BY col1, dt_hour) t0
+    LEFT JOIN
+    ( SELECT col1, dt_hour,
+             COUNT(DISTINCT CASE WHEN flag = '1' THEN col2 ELSE NULL END) AS c_col2,
+             COUNT(DISTINCT CASE WHEN flag = '1' THEN col3 ELSE NULL END) AS c_col3 
+      FROM test_pk_tbl1
+      WHERE ((DATE_FORMAT(dt_hour, '%Y-%m-%d') = DATE(DATE_SUB(DATE('2023-08-17 08:00:006'), INTERVAL 8 hour))
+          AND timezone = '0') OR (DATE_FORMAT(dt_hour, '%Y-%m-%d') = DATE('2023-08-16') AND timezone = '8'))
+     AND (flag = '1' OR flag = '4')
+GROUP BY col1, dt_hour) t1 ON t0.col1 = t1.col1;
+-- result:
+-- !result
+refresh materialized view test_pk_mv_with_subquery1 with sync mode;
+select * from test_pk_tbl1 order by col1;
+-- result:
+2023-08-16 00:00:00	a	0	a	b	1
+2023-08-16 00:00:00	b	0	a	b	3
+-- !result
+select * from test_pk_mv_with_subquery1 order by col1;
+-- result:
+a	2023-08-16 00:00:00	1	1	1	1
+-- !result

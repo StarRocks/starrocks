@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -254,8 +255,7 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
 
-            // Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (int i = 0; i < outputExpressions.size(); ++i) {
@@ -267,7 +267,7 @@ public class MaterializedViewAnalyzer {
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement, columnExprMap);
                 // check partition expression is supported
-                checkPartitionColumnExprs(statement, columnExprMap, context, aliasTableMap);
+                checkPartitionColumnExprs(statement, columnExprMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
@@ -280,23 +280,44 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
+        /**
+         * Retrieve all the tables from the input query statement and do normalization: if the query statement
+         * contains views, retrieve the contained tables in the view recursively.
+         * @param queryStatement : the input statement which need retrieve
+         * @param context        : the session connect context
+         * @return               : Retrieve all the tables from the input query statement and do normalization.
+         */
+        private Map<TableName, Table> getNormalizedBaseTables(QueryStatement queryStatement, ConnectContext context) {
+            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+
+            // do normalization if catalog is null
+            Map<TableName, Table> result = Maps.newHashMap();
+            for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
+                entry.getKey().normalization(context);
+                result.put(entry.getKey(), entry.getValue());
+            }
+            return result;
+        }
+
+        /**
+         * Retrieve all the tables from the input query statement :
+         * - if the query statement contains views, retrieve the contained tables in the view recursively.
+         * @param queryStatement : the input statement which need retrieve
+         * @param context        : the session connect context
+         * @return
+         */
         private Map<TableName, Table> getAllBaseTables(QueryStatement queryStatement, ConnectContext context) {
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
             if (viewRelations.isEmpty()) {
                 return aliasTableMap;
             }
+
             for (ViewRelation viewRelation : viewRelations) {
                 Map<TableName, Table> viewTableMap = getAllBaseTables(viewRelation.getQueryStatement(), context);
                 aliasTableMap.putAll(viewTableMap);
             }
-            Map<TableName, Table> result = Maps.newHashMap();
-            for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
-                // catalog may be null, should do normalization
-                entry.getKey().normalization(context);
-                result.put(entry.getKey(), entry.getValue());
-            }
-            return result;
+            return aliasTableMap;
         }
 
         // TODO(murphy) implement
@@ -505,15 +526,15 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
-                                               Map<Column, Expr> columnExprMap, ConnectContext connectContext,
-                                               Map<TableName, Table> aliasTableMap) {
+                                               Map<Column, Expr> columnExprMap,
+                                               ConnectContext connectContext) {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
 
             // partition column expr from input query
             Expr partitionColumnExpr = columnExprMap.get(partitionColumn);
             try {
-                partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext, aliasTableMap);
+                partitionColumnExpr = resolvePartitionExpr(partitionColumnExpr, connectContext, statement.getQueryStatement());
             } catch (Exception e) {
                 LOG.warn("resolve partition column failed", e);
                 throw new SemanticException("resolve partition column failed", statement.getPartitionExpDesc().getPos());
@@ -546,12 +567,11 @@ public class MaterializedViewAnalyzer {
                 }
                 statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
-                // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                 if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
+                    // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                     statement.setPartitionRefTableExpr(partitionColumnExpr);
                 } else {
-                    throw new SemanticException(
-                            "Materialized view partition function must related with column",
+                    throw new SemanticException("Materialized view partition function must related with column",
                             expressionPartitionDesc.getPos());
                 }
             }
@@ -567,12 +587,13 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private Expr resolvePartitionExpr(
-                Expr partitionColumnExpr, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
+        private Expr resolvePartitionExpr(Expr partitionColumnExpr,
+                                          ConnectContext connectContext,
+                                          QueryStatement queryStatement) {
             if (partitionColumnExpr instanceof SlotRef) {
-                return resolveSlotRefForView((SlotRef) partitionColumnExpr, connectContext, aliasTableMap);
+                return resolvePartitionExprOfSlotRef((SlotRef) partitionColumnExpr, connectContext, queryStatement);
             } else {
-                AstVisitor exprShuttle = new AstVisitor<Void, ExprShuttleContext>() {
+                final AstVisitor exprShuttle = new AstVisitor<Void, ExprShuttleContext>() {
                     @Override
                     public Void visitExpression(Expr expr, ExprShuttleContext context) {
                         for (int i = 0; i < expr.getChildren().size(); i++) {
@@ -583,7 +604,7 @@ public class MaterializedViewAnalyzer {
 
                     @Override
                     public Void visitSlot(SlotRef slotRef, ExprShuttleContext context) {
-                        Expr resolved = resolveSlotRefForView(slotRef, connectContext, aliasTableMap);
+                        Expr resolved = resolvePartitionExprOfSlotRef(slotRef, connectContext, queryStatement);
                         if (resolved == null) {
                             throw new RuntimeException(String.format("can not resolve slotRef: %s", slotRef.debugString()));
                         }
@@ -595,13 +616,38 @@ public class MaterializedViewAnalyzer {
                         return null;
                     }
                 };
+
                 partitionColumnExpr.accept(exprShuttle, new ExprShuttleContext(null, -1));
                 return partitionColumnExpr;
             }
         }
 
-        private Expr resolveSlotRefForView(
-                SlotRef slotRef, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
+        /**
+         * Resolve the materialized view's partition expr's slot ref.
+         * @param slotRef           : the materialized view's partition expr's slot ref
+         * @param connectContext    : connect context of the current session.
+         * @param queryStatement    : the sub query statment that contains the partition column slot ref
+         * @return                  : return the resolved partition column slot ref.
+         */
+        private Expr resolvePartitionExprOfSlotRef(SlotRef slotRef,
+                                                   ConnectContext connectContext,
+                                                   QueryStatement queryStatement) {
+            Map<TableName, SubqueryRelation> tableNameSubqueryRelationMap =
+                    AnalyzerUtils.collectOneLevelSubQueryRelation(queryStatement);
+            if (!tableNameSubqueryRelationMap.isEmpty()) {
+                // choose the query statement that can resolve the partition column expr
+                for (Map.Entry<TableName, SubqueryRelation> e : tableNameSubqueryRelationMap.entrySet()) {
+                    QueryStatement subQueryStatement = e.getValue().getQueryStatement();
+
+                    Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, subQueryStatement);
+                    if (resolved != null) {
+                        return resolvePartitionExpr(resolved, connectContext, subQueryStatement);
+                    }
+                }
+                return null;
+            }
+
+            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, connectContext);
             TableName tableName = slotRef.getTblNameWithoutAnalyzed();
             tableName.normalization(connectContext);
 
@@ -616,25 +662,29 @@ public class MaterializedViewAnalyzer {
                             slotRef.toSql());
                 }
             }
+
             if (!table.isView()) {
                 // for table, it must be slotRef
                 if (!table.getName().equalsIgnoreCase(tableName.getTbl())) {
                     slotRef.setType(table.getColumn(slotRef.getColumnName()).getType());
                 }
                 return slotRef;
+            } else {
+                // resolve the view table
+                View view = (View) table;
+                QueryStatement viewQueryStatement = view.getQueryStatement();
+                Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, viewQueryStatement);
+                if (resolved == null) {
+                    return null;
+                }
+                SlotRef slot = getSlotRef(resolved);
+                // TableName's catalog may be null, so normalization it
+                slot.getTblNameWithoutAnalyzed().normalization(connectContext);
+                // resolved may be view's column, resolve it recursively
+                // NOTE: Why here not use `viewQueryStatement`? because `viewQueryStatement`'s relation
+                // is not analyzed yet cannot be used directly.
+                return resolvePartitionExpr(resolved, connectContext, queryStatement);
             }
-            View view = (View) table;
-            QueryStatement queryStatement = view.getQueryStatement();
-            Expr resolved = AnalyzerUtils.resolveSlotRef(slotRef, queryStatement);
-            if (resolved == null) {
-                return null;
-            }
-            SlotRef slot = getSlotRef(resolved);
-            // TableName's catalog may be null, so normalization it
-            slot.getTblNameWithoutAnalyzed().normalization(connectContext);
-            // resolved may be view's column, resolve it recursively
-            // return resolveSlotRefForView(resolved, connectContext, aliasTableMap);
-            return resolvePartitionExpr(resolved, connectContext, aliasTableMap);
         }
 
         private void checkPartitionExpPatterns(CreateMaterializedViewStatement statement) {
@@ -924,7 +974,9 @@ public class MaterializedViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
             }
-            Preconditions.checkState(table instanceof MaterializedView);
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
+            }
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
