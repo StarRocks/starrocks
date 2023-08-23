@@ -13,10 +13,11 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.epack.sql.analyzer.AlterTableClauseVisitorEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 
-public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseVisitor {
+public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseVisitorEPack {
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
         //modify properties check in AlterMVJobExecutor
         return null;

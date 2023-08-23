@@ -14,14 +14,16 @@ public class AuthorizerEPack extends Authorizer {
 
     public static void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                          String db, String policy, PrivilegeType privilegeType) {
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalogName))
-                .checkPolicyAction(currentUser, roleIds, policyType, catalogName, db, policy, privilegeType);
+        String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
+        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalog))
+                .checkPolicyAction(currentUser, roleIds, policyType, catalog, db, policy, privilegeType);
     }
 
     public static void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType,
                                               String catalogName, String db, String policy) {
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalogName)).checkAnyActionOnPolicy(
-                currentUser, roleIds, policyType, catalogName, db, policy);
+        String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
+        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalog)).checkAnyActionOnPolicy(
+                currentUser, roleIds, policyType, catalog, db, policy);
     }
 
     public static void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name,
