@@ -245,16 +245,15 @@ public class SlotDescriptor {
             nullIndicatorBit = -1;
         }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
-        TSlotDescriptor tSlotDescriptor;
+        TSlotDescriptor tSlotDescriptor = new TSlotDescriptor();
+        tSlotDescriptor.setId(id.asInt());
+        tSlotDescriptor.setParent(parent.getId().asInt());
         if (originType != null) {
-            tSlotDescriptor = new TSlotDescriptor(id.asInt(), originType.toThrift());
+            tSlotDescriptor.setSlotType(originType.toThrift());
         } else {
-            if (type.isNull()) {
-                type = ScalarType.BOOLEAN;
-            }
-            tSlotDescriptor = new TSlotDescriptor(id.asInt(), type.toThrift());
+            type = type.isNull() ? ScalarType.BOOLEAN : type;
+            tSlotDescriptor.setSlotType(type.toThrift());
         }
-
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);

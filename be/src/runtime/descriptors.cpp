@@ -94,8 +94,7 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _is_materialized(pdesc.is_materialized()),
           _is_output_column(true),
           // keep same as is_nullable()
-          _is_nullable(_null_indicator_offset.bit_mask != 0) {
-}
+          _is_nullable(_null_indicator_offset.bit_mask != 0) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);

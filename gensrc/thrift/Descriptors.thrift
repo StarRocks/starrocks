@@ -39,9 +39,9 @@ include "Types.thrift"
 include "Exprs.thrift"
 
 struct TSlotDescriptor {
-  1: required Types.TSlotId id
+  1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
-  3: required Types.TTypeDesc slotType
+  3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
   6: optional i32 nullIndicatorByte // Deprecated

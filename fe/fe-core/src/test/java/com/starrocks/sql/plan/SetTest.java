@@ -58,10 +58,10 @@ public class SetTest extends PlanTestBase {
         String sql = "select b from (select t1a as a, t1b as b, t1c as c, t1d as d from test_all_type " +
                 "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
-                        "scalar_type:TScalarType(type:TINYINT))]), num_children:0, int_literal:TIntLiteral(value:2)," +
-                        " output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true"));
+        assertContains(plan, "[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:" +
+                "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))])," +
+                " num_children:0, int_literal:TIntLiteral(value:2), output_scale:-1, " +
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true)]");
     }
 
     @Test
