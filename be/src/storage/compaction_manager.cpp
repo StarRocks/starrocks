@@ -503,7 +503,7 @@ void CompactionManager::get_running_status(std::string* json_result) {
     *json_result = std::string(strbuf.GetString());
 }
 
-bool CompactionManager::has_running_task(TabletSharedPtr tablet){
+bool CompactionManager::has_running_task(TabletSharedPtr tablet) {
     std::lock_guard lg(_tasks_mutex);
     auto iter = _running_tasks.find(tablet->tablet_id());
     return iter != _running_tasks.end() && !iter->second.empty();

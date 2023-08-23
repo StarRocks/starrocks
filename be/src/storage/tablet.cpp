@@ -1171,14 +1171,13 @@ void Tablet::get_compaction_status(std::string* json_result) {
         }
         // get snapshot version path json_doc
         _timestamped_version_tracker.get_stale_version_path_json_doc(stale_path_arr);
-
     }
 
     {
         std::lock_guard lock(_compaction_task_lock);
         auto task_set = StorageEngine::instance()->compaction_manager()->get_running_task(
-            std::static_pointer_cast<Tablet>(shared_from_this()));
-        compaction_running = task_set.size()>0;
+                std::static_pointer_cast<Tablet>(shared_from_this()));
+        compaction_running = task_set.size() > 0;
         rapidjson::Value compaction_detail;
         compaction_detail.SetObject();
 
@@ -1188,10 +1187,11 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
         rapidjson::Value compaction_status;
         std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
-        compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
+        compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(),
+                                    root.GetAllocator());
         compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
 
-        for (const auto& compaction_task:task_set) {
+        for (const auto& compaction_task : task_set) {
             compaction_task_id = compaction_task->task_id();
             compaction_score = compaction_task->compaction_score();
             compaction_type = to_string(compaction_task->compaction_type());

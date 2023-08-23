@@ -155,7 +155,7 @@ TEST(CompactionManagerTest, test_next_compaction_task_id) {
     ASSERT_LT(0, start_task_id);
 }
 
-TEST(CompactionManagerTest, test_compaction_parallel){
+TEST(CompactionManagerTest, test_compaction_parallel) {
     std::vector<TabletSharedPtr> tablets;
     std::vector<std::shared_ptr<MockCompactionTask>> tasks;
     DataDir data_dir("./data_dir");

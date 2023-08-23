@@ -76,7 +76,7 @@ public:
         ASSERT_TRUE(src_rowset != nullptr);
         ASSERT_EQ(1024, src_rowset->num_rows());
 
-        ASSERT_TRUE(tablet -> add_inc_rowset(src_rowset, _version++).ok());
+        ASSERT_TRUE(tablet->add_inc_rowset(src_rowset, _version++).ok());
     }
 
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
@@ -1004,4 +1004,4 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     ASSERT_EQ(10, versions[0].second);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
