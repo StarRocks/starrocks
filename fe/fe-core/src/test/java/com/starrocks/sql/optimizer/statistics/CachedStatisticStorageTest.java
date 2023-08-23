@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
-
+import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorTableColumnKey;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -29,11 +30,14 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -41,6 +45,10 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -115,7 +123,8 @@ public class CachedStatisticStorageTest {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
 
-        new Expectations() {{
+        new Expectations() {
+            {
                 cachedStatisticStorage.getColumnStatistic(table, "v1");
                 result = ColumnStatistic.builder().setDistinctValuesCount(888).build();
                 minTimes = 0;
@@ -127,7 +136,8 @@ public class CachedStatisticStorageTest {
                 cachedStatisticStorage.getColumnStatistic(table, "v3");
                 result = ColumnStatistic.builder().setDistinctValuesCount(666).build();
                 minTimes = 0;
-            }};
+            }
+        };
         ColumnStatistic columnStatistic1 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
         Assert.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
@@ -149,11 +159,13 @@ public class CachedStatisticStorageTest {
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
 
-        new Expectations() {{
+        new Expectations() {
+            {
                 cachedStatisticStorage.getColumnStatistics(table, ImmutableList.of("v1", "v2"));
                 result = ImmutableList.of(columnStatistic1, columnStatistic2);
                 minTimes = 0;
-            }};
+            }
+        };
         List<ColumnStatistic> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getColumnStatistics", table, ImmutableList.of("v1", "v2"));
         Assert.assertEquals(2, columnStatistics.size());
@@ -190,15 +202,75 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    public void testGetConnectorTableStatistics(@Mocked
+                                                AsyncLoadingCache<ConnectorTableColumnKey,
+                                                        Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
+                                                @Mocked
+                                                CompletableFuture<Map<ConnectorTableColumnKey,
+                                                        Optional<ConnectorTableColumnStats>>> res)
+            throws ExecutionException, InterruptedException {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        List<ConnectorTableColumnKey> cacheKeys =
+                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
+                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
+
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
+        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
+                Optional.of(new ConnectorTableColumnStats(
+                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
+        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
+                Optional.of(new ConnectorTableColumnStats(
+                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
+
+        new Expectations() {
+            {
+                connectorTableCachedStatistics.getAll(cacheKeys);
+                result = res;
+                minTimes = 0;
+
+                res.isDone();
+                result = true;
+                minTimes = 0;
+
+                res.get();
+                result = columnKeyOptionalMap;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+
+        List<ConnectorTableColumnStats> connectorColumnStatistics = Deencapsulation
+                .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
+                        ImmutableList.of("c1", "c2"));
+        Assert.assertEquals(2, connectorColumnStatistics.size());
+        Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
+        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
+        Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
+        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
+        Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
+        Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
+    }
+
+    @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         Table table = db.getTable("t0");
 
-        new Expectations() {{
+        new Expectations() {
+            {
                 cachedStatisticStorage.getColumnStatistic(table, "v1");
                 result = ColumnStatistic.unknown();
                 minTimes = 0;
-            }};
+            }
+        };
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
         Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
@@ -212,7 +284,8 @@ public class CachedStatisticStorageTest {
     public void testConvert2ColumnStatistics() {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
-        ColumnBasicStatsCacheLoader cachedStatisticStorage = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
+        ColumnBasicStatsCacheLoader cachedStatisticStorage =
+                Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 
         TStatisticData statisticData = new TStatisticData();
         statisticData.setDbId(db.getId());

@@ -114,11 +114,11 @@ public class ConnectorColumnStatsCacheLoader implements
         return asyncLoad(key, executor);
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, String column) {
+    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, String column) {
         return queryStatisticsData(context, tableUUID, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns) {
+    public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID, List<String> columns) {
         Table table = getTableByUUID(tableUUID);
         return statisticExecutor.queryStatisticSync(context, tableUUID, table, columns);
     }

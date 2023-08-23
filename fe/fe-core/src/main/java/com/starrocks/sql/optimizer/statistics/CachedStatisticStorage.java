@@ -149,7 +149,6 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
-        long tableId = table.getId();
         for (String column : columns) {
             cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
         }
