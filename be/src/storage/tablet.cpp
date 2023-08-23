@@ -1537,8 +1537,6 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
                     std::static_pointer_cast<Tablet>(shared_from_this()));
             _has_running_compaction = true;
         }
-    }
-    if (compaction_task && compaction_task.use_count() == 1) {
         return compaction_task;
     } else {
         return nullptr;

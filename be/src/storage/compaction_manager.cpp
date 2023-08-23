@@ -519,16 +519,6 @@ void CompactionManager::stop_compaction(TabletSharedPtr tablet) {
     }
 }
 
-std::unordered_set<CompactionTask*> CompactionManager::get_running_task(TabletSharedPtr tablet) {
-    std::lock_guard lg(_tasks_mutex);
-    std::unordered_set<CompactionTask*> res;
-    auto iter = _running_tasks.find(tablet->tablet_id());
-    if (iter != _running_tasks.end()) {
-        res = iter->second;
-    }
-    return res;
-}
-
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         return _compaction_pool->update_max_threads(max_threads);
@@ -556,9 +546,9 @@ int64_t CompactionManager::base_compaction_concurrency() {
     return _base_compaction_concurrency;
 }
 
-    int64_t CompactionManager::cumulative_compaction_concurrency() {
-        std::lock_guard lg(_tasks_mutex);
-        return _cumulative_compaction_concurrency;
-    }
+int64_t CompactionManager::cumulative_compaction_concurrency() {
+    std::lock_guard lg(_tasks_mutex);
+    return _cumulative_compaction_concurrency;
+}
 
 } // namespace starrocks
