@@ -15,7 +15,7 @@ TRANSLATE( <source>, <from_string>, <to_string> )
 ## Parameters
 
 - `source`: supports the `VARCAHR` type. The source string to be translated. When a character in the `source` is not found in the `from_string`, it is simply included in the result string.
-- `from_string`: supports the `VARCAHR` type. Each character in the `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if the `to_string` has fewer characters than the `from_string`, the character is excluded from the resulting string.)
+- `from_string`: supports the `VARCAHR` type. Each character in the `from_string` is either replaced by its corresponding character in the `to_string`, or if there is no corresponding character (i.e. if the `to_string` has fewer characters than the `from_string`, the character is excluded from the resulting string). If  a character appears multiple times in `from_string`, only its first occurrence is effective.
 - `to_string`: supports the `VARCAHR` type. A string with the characters that are used to replace characters from the `from_string`. If more characters are specified in the `to_string` than in the `from_string` argument, the extra characters from the `to_string` argument are ignored.
 
 ## Return value
@@ -55,6 +55,13 @@ MySQL > select translate('abcabc', 'ab', '12') as test;
 +--------+
 
 MySQL > select translate('abcabc', 'ab', '123') as test;
++--------+
+| test   |
++--------+
+| 12c12c |
++--------+
+
+MySQL > select translate('abcabc', 'aba', '123') as test;
 +--------+
 | test   |
 +--------+
