@@ -1530,7 +1530,10 @@ void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& context)
 std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
     std::shared_ptr<CompactionTask> compaction_task;
-    if (_enable_compaction) {
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy ||
+                               !StorageEngine::instance()->compaction_manager()->has_running_task(
+                                       std::static_pointer_cast<Tablet>(shared_from_this())))) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         if (_compaction_context) {
             compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
@@ -1543,16 +1546,18 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
 
 bool Tablet::has_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    return StorageEngine::instance()->compaction_manager()->is_running_task(std::static_pointer_cast<Tablet>(shared_from_this()));
+    return StorageEngine::instance()->compaction_manager()->has_running_task(
+            std::static_pointer_cast<Tablet>(shared_from_this()));
 }
 
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_enable_compaction) {
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy ||
+                               !StorageEngine::instance()->compaction_manager()->has_running_task(
+                                       std::static_pointer_cast<Tablet>(shared_from_this())))) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
-            // if there is running task, return false
-            // else, return true
             return true;
         }
     }
@@ -1561,7 +1566,10 @@ bool Tablet::need_compaction() {
 
 bool Tablet::force_base_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_enable_compaction) {
+    if (_enable_compaction && (config::enable_size_tiered_compaction_strategy ||
+                               !StorageEngine::instance()->compaction_manager()->has_running_task(
+                                       std::static_pointer_cast<Tablet>(shared_from_this())))) {
+        // only the size tiered strategy supports the parallelization of compaction tasks under one tablet
         _compaction_context->type = BASE_COMPACTION;
         if (_compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
@@ -1582,7 +1590,8 @@ double Tablet::compaction_score() {
 
 void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    StorageEngine::instance()->compaction_manager()->stop_compaction(std::static_pointer_cast<Tablet>(shared_from_this()));
+    StorageEngine::instance()->compaction_manager()->stop_compaction(
+            std::static_pointer_cast<Tablet>(shared_from_this()));
     _enable_compaction = false;
 }
 
