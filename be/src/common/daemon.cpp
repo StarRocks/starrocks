@@ -58,6 +58,7 @@
 #include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
@@ -105,7 +106,7 @@ void gc_memory(void* arg_this) {
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
+        nap_sleep(config::memory_maintenance_sleep_time_s, [daemon] { return daemon->stopped(); });
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
@@ -218,7 +219,7 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
 
-        sleep(15); // 15 seconds
+        nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
 

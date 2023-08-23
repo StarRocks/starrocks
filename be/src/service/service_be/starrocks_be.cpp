@@ -79,7 +79,7 @@ void start_be() {
     LOG(INFO) << "BE started successfully";
 
     while (!(starrocks::k_starrocks_exit.load()) && !(starrocks::k_starrocks_exit_quick.load())) {
-        sleep(10);
+        sleep(1);
     }
 
     starrocks::wait_for_fragments_finish(exec_env, starrocks::config::loop_count_wait_fragments_finish);
