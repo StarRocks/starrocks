@@ -34,7 +34,6 @@ CREATE MATERIALIZED VIEW mv1
 drop table t1;
 -- result:
 -- !result
-refresh materialized view mv1 with sync mode;
 CREATE TABLE `t1` (
   `k1` date NULL COMMENT "",
   `v1` int(11) NULL COMMENT "",
@@ -60,9 +59,6 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 -- !result
 REFRESH MATERIALIZED VIEW mv1  with sync mode;
 select * from mv1 order by k1;
--- result:
--- !result
-ALTER MATERIALIZED VIEW mv1 ACTIVE;
 -- result:
 -- !result
 insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
