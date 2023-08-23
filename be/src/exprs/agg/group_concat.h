@@ -327,14 +327,13 @@ struct GroupConcatAggregateStateV2 {
                 col.reset();
             }
             data_columns->clear();
-            delete data_columns;
-            data_columns = nullptr;
+            data_columns.reset(nullptr);
         }
     }
     // using pointer rather than vector to avoid variadic size
     // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order, and reject null for
     // output columns a and b.
-    Columns* data_columns = nullptr;
+    std::unique_ptr<Columns> data_columns = nullptr;
     int output_col_num = 0;
 };
 
@@ -352,7 +351,7 @@ public:
     // group_concat(a, b order by c, d), the arguments are a,b,',',c,d
     void create_impl(FunctionContext* ctx, GroupConcatAggregateStateV2& state) const {
         auto num = ctx->get_num_args();
-        state.data_columns = new Columns;
+        state.data_columns = std::make_unique<Columns>();
         auto order_by_num = ctx->get_nulls_first().size();
         state.output_col_num = num - order_by_num - 1; // excluding separator column
         if (UNLIKELY(state.output_col_num <= 0)) {
@@ -387,7 +386,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         auto num = ctx->get_num_args();
-        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
         }
@@ -416,7 +415,7 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
         }
@@ -433,7 +432,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        GroupConcatAggregateStateV2& state_impl = this->data(state);
+        auto& state_impl = this->data(state);
         if (state_impl.data_columns == nullptr) {
             create_impl(ctx, state_impl);
         }
