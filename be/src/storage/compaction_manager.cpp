@@ -383,7 +383,7 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
             }
         }
     }
-    compaction_task->tablet()->reset_compaction();
+    compaction_task->tablet()->reset_compaction_status();
 }
 
 void CompactionManager::clear_tasks() {

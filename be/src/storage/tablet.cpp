@@ -1590,10 +1590,11 @@ void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     StorageEngine::instance()->compaction_manager()->stop_compaction(
             std::static_pointer_cast<Tablet>(shared_from_this()));
+    _has_running_compaction = false;
     _enable_compaction = false;
 }
 
-void Tablet::reset_compaction() {
+void Tablet::reset_compaction_status() {
     std::lock_guard lock(_compaction_task_lock);
     _has_running_compaction = StorageEngine::instance()->compaction_manager()->has_running_task(
             std::static_pointer_cast<Tablet>(shared_from_this()));

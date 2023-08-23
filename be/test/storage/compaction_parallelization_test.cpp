@@ -872,7 +872,7 @@ TEST_F(CompactionParallelizationTest, test_default_base_cumu_compaction_parallel
     ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(compaction_task.get())->run_impl().ok());
 
     // finish executing task
-    tablet->reset_compaction();
+    tablet->reset_compaction_status();
     StorageEngine::instance()->compaction_manager()->unregister_task(compaction_task.get());
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->get_waiting_task_num());

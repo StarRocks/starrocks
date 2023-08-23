@@ -269,7 +269,7 @@ public:
 
     void stop_compaction();
 
-    void reset_compaction();
+    void reset_compaction_status();
 
     bool enable_compaction();
 
