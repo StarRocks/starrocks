@@ -1065,10 +1065,19 @@ struct TranslateState {
     bool is_from_and_to_const = false;
 
     bool is_ascii_map = false;
-    ASCII_MAP ascii_map;
-    UTF8_MAP utf8_map;
+    ASCII_MAP ascii_map; // effective when is_ascii_map is true.
+    UTF8_MAP utf8_map;   // effective when is_ascii_map is false.
 };
 
+/**
+ * Build the translate map.
+ * - If all the characters in `from_str` and `to_str`, it will set `dst_state.is_ascii_map` to true and store the map
+ *   to `dst_state.ascii_map`.
+ * - Otherwise, it will set `dst_state.is_ascii_map` to false and store the map to `dst_state.utf8_map`.
+ * @param from_str the from string.
+ * @param to_str the to string.
+ * @param dst_state the destination state to store map.
+ */
 static inline void build_translate_map(const Slice& from_str, const Slice& to_str, TranslateState* dst_state) {
     std::vector<EncodedUtf8Char> encoded_from_values;
     encode_utf8_chars(from_str, &encoded_from_values);
@@ -1106,7 +1115,7 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
  * @param utf8_map the UTF-8 map.
  * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
  * @return [is_null, num_bytes].
- * - `is_null will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+ * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
  * - `num_bytes`: the number of translated chars.
  */
 static inline std::pair<bool, size_t> translate_string_with_utf8_map(
