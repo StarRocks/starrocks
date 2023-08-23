@@ -1,8 +1,9 @@
 name: 'release docker images'
 
-on:
-  release:
-    types: [published]
+# Don't trigger actions automatically
+#on:
+#  release:
+#    types: [published]
 
 # This allows a subsequently queued workflow run to interrupt previous runs
 concurrency:
@@ -32,7 +33,7 @@ jobs:
 
       - name: build artifact docker image
         run: |
-          DOCKER_BUILDKIT=1 docker build --rm=true --build-arg RELEASE_VERSION=${RELEASE_VERSION} -f docker/dockerfiles/artifacts/artifact-ubuntu.Dockerfile -t artifact-ubuntu:${RELEASE_VERSION} .
+          DOCKER_BUILDKIT=1 docker build --rm=true --build-arg RELEASE_VERSION=${RELEASE_VERSION} -f docker/dockerfiles/artifacts/artifact.Dockerfile -t artifact-ubuntu:${RELEASE_VERSION} .
 
       - name: build and publish fe docker image
         run: |
