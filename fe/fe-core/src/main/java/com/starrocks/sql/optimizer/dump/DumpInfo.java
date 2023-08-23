@@ -59,6 +59,10 @@ public interface DumpInfo {
         return new HiveTableDumpInfo();
     }
 
+    default void setExplainInfo(String explainInfo) {
+
+    }
+
     default void reset() {
     }
 }

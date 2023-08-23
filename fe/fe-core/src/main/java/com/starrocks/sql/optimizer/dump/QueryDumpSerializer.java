@@ -173,6 +173,14 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         String sql = DesensitizedSQLBuilder.desensitizeSQL(dumpInfo.getStatement(), dict);
         // statement
         dumpJson.addProperty("statement", sql);
+        // resource
+        if (!dumpInfo.getResourceSet().isEmpty()) {
+            JsonObject resourceMetaData = new JsonObject();
+            for (Resource resource : dumpInfo.getResourceSet()) {
+                resourceMetaData.addProperty(resource.getName(), resource.toString());
+            }
+            dumpJson.add("resources", resourceMetaData);
+        }
         // table meta
         JsonObject tableMetaData = new JsonObject();
         List<Pair<String, Table>> tableMetaPairs = Lists.newArrayList(dumpInfo.getTableMap().values());
@@ -183,6 +191,30 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt);
         }
         dumpJson.add("table_meta", tableMetaData);
+
+        // hive meta store table info
+        if (!dumpInfo.getHmsTableMap().isEmpty()) {
+            JsonObject externalTableInfoData = new JsonObject();
+            for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> resourceEntry :
+                    dumpInfo.getHmsTableMap().entrySet()) {
+                String resourceName = resourceEntry.getKey();
+                for (Map.Entry<String, Map<String, HiveMetaStoreTableDumpInfo>> dbEntry :
+                        resourceEntry.getValue().entrySet()) {
+                    String dbName = DesensitizedSQLBuilder.desensitizeDbName(dbEntry.getKey(), dict);
+                    for (Map.Entry<String, HiveMetaStoreTableDumpInfo> tableEntry : dbEntry.getValue().entrySet()) {
+                        String tableName = DesensitizedSQLBuilder.desensitizeTblName(tableEntry.getKey(), dict);
+                        String fullName = String.join("%", resourceName, dbName, tableName);
+                        JsonObject tableTypeObject = new JsonObject();
+                        tableTypeObject.addProperty("type", tableEntry.getValue().getType());
+                        JsonArray jsonArray = new JsonArray();
+                        jsonArray.add(tableTypeObject);
+                        jsonArray.add(GsonUtils.GSON.toJson(tableEntry.getValue()));
+                        externalTableInfoData.add(fullName, jsonArray);
+                    }
+                }
+            }
+            dumpJson.add("hms_table", externalTableInfoData);
+        }
 
         // table row count
         JsonObject tableRowCount = new JsonObject();

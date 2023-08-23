@@ -445,6 +445,9 @@ public class StmtExecutor {
                         }
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
+                        if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
+                            context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
+                        }
                     }
                     execPlanBuildByNewPlanner = true;
                 }
