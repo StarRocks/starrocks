@@ -6,13 +6,9 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 
 > **NOTICE**
 >
-<<<<<<< HEAD
-> - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
-> - In versions earlier than v3.0.4, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
-=======
 > - Only users with the INSERT privilege on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privilege.
 > - Spark Load can not be used to load data into a Primary Key table.
->>>>>>> 9cc630a315 ([Doc]  Spark load can not be used to load data into a Primary Key table (#29791))
+> - In versions earlier than v3.0.4, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
 
 ## Terminology explanation
 
