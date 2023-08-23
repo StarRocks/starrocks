@@ -31,6 +31,9 @@ jobs:
       HEAD_SHA: ${{ steps.pr_details.outputs.HEAD_SHA }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
     steps:
+      - run: |
+          sleep 30
+
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v2
         with:
