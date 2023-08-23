@@ -790,7 +790,11 @@ public class AuthorizationMgr {
     protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
             throws PrivilegeException {
         try {
-            return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));
+            if (Config.authorization_enable_priv_collection_cache) {
+                return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));
+            } else {
+                return loadPrivilegeCollection(userIdentity, roleIds);
+            }
         } catch (ExecutionException e) {
             String errMsg = String.format("failed merge privilege collection on %s with roles %s", userIdentity, roleIds);
             PrivilegeException exception = new PrivilegeException(errMsg);
