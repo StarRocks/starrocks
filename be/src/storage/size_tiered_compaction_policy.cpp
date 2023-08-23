@@ -84,18 +84,6 @@ std::shared_ptr<CompactionTask> SizeTieredCompactionPolicy::create_compaction(Ta
     return nullptr;
 }
 
-/**
- * Checks if all input rowsets are validate. Returns false if one of them is being compacted.
- */
-bool SizeTieredCompactionPolicy::check_is_rowset_validate(){
-    for(auto rowset:_rowsets){
-        if(rowset->get_is_compacting()){
-            return false;
-        }
-    }
-    return true;
-}
-
 double SizeTieredCompactionPolicy::_cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size,
                                                          KeysType keys_type, bool reached_max_version) {
     // base score is segment num

@@ -263,8 +263,6 @@ public:
 
     std::shared_ptr<CompactionTask> create_compaction_task();
 
-    bool check_is_compaction_validate();
-
     bool has_compaction_task();
 
     void stop_compaction();
