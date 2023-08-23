@@ -2,8 +2,12 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
+
 public interface NullablePartitionKey {
-    default String nullPartitionValue() {
-        return "";
+    default List<String> nullPartitionValueList() {
+        return ImmutableList.of("");
     }
 }
