@@ -16,8 +16,22 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.cpp
 ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
+=======
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
+>>>>>>> 83dbcebb84 ([Enhancement] Compatible with the default partition value of the new hudi version (#29606)):fe/fe-core/src/main/java/com/starrocks/catalog/JDBCPartitionKey.java
 
 ComputeService::~ComputeService() = default;
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.cpp
 } // namespace starrocks
+=======
+    @Override
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(JDBCTable.PARTITION_NULL_VALUE);
+    }
+}
+>>>>>>> 83dbcebb84 ([Enhancement] Compatible with the default partition value of the new hudi version (#29606)):fe/fe-core/src/main/java/com/starrocks/catalog/JDBCPartitionKey.java
