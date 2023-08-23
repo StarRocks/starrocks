@@ -108,14 +108,6 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     int64_t mem_cost_bytes = other.mem_cost_bytes.load();
     this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
 
-<<<<<<< HEAD
-=======
-    int64_t spill_bytes = other.spill_bytes.load();
-    if (other.spill_bytes.compare_exchange_strong(spill_bytes, 0)) {
-        this->spill_bytes += spill_bytes;
-    }
-
->>>>>>> 824d16735c ([BugFix] Fix negative number of statistics item 'CpuCostNs' and 'ScanRows' (#29588))
     {
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
         {
