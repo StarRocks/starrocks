@@ -102,6 +102,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                 mvContext.addMatchedGroup(currentRootGroupId);
             }
+
             results.add(candidate);
             mvContext.updateMVUsedCount();
         }

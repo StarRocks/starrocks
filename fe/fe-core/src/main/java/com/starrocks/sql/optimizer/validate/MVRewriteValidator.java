@@ -34,6 +34,11 @@ public class MVRewriteValidator {
     }
 
     public void validateMV(OptExpression physicalPlan) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return;
+        }
+
         PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer("Summary");
         if (tracer == null) {
             return;
@@ -41,13 +46,25 @@ public class MVRewriteValidator {
         List<String> mvNames = collectMaterializedViewNames(physicalPlan);
         if (mvNames.isEmpty()) {
             // Check whether plan has been rewritten success by rule.
-            Map<String, PlannerProfile.LogTracer> tracers = ConnectContext.get().getPlannerProfile().getTracers();
+            Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
             List<String> tracerNames = Lists.newArrayList();
             for (Map.Entry<String, PlannerProfile.LogTracer> e : tracers.entrySet()) {
                 if (e.getValue().getLogs().stream().anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS))) {
                     tracerNames.add(e.getKey().replace("REWRITE ", ""));
                 }
             }
+
+            if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+                if (tracerNames.isEmpty()) {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
+                } else {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode because of" +
+                            "cost.");
+                }
+            }
+
             if (tracerNames.isEmpty()) {
                 tracer.log("Query cannot be rewritten, please check the trace logs or " +
                         "`set enable_mv_optimizer_trace_log=on` to find more infos.");
@@ -56,6 +73,16 @@ public class MVRewriteValidator {
                         + ", but are not chosen as the best plan by cost.");
             }
         } else {
+            // If final result contains materialized views, ho
+            if (connectContext.getSessionVariable().isEnableMaterializedViewRewriteOrError()) {
+                Map<String, PlannerProfile.LogTracer> tracers = connectContext.getPlannerProfile().getTracers();
+                if (tracers.entrySet().stream().noneMatch(e -> e.getValue().getLogs().stream()
+                        .anyMatch(x -> x.contains(MaterializedViewRewriter.REWRITE_SUCCESS)))) {
+                    throw new IllegalArgumentException("no executable plan with materialized view for this sql in " +
+                            connectContext.getSessionVariable().getMaterializedViewRewriteMode() + " mode.");
+                }
+            }
+
             tracer.log("Query has already been successfully rewritten by: " + Joiner.on(",").join(mvNames) + ".");
         }
     }
