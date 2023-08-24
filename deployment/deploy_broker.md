@@ -6,6 +6,10 @@
 
 Broker 节点与 BE 节点之间使用网络传输数据。当 Broker 节点和 BE 节点部署在相同机器时，会优先选择本地 BE 节点进行数据传输。
 
+## 准备工作
+
+请参照[部署前提条件](../deployment/deployment_prerequisites.md)、[检查境配置](../deployment/environment_configurations.md)、[准备部署文件](../deployment/prepare_deployment_files.md)完成准备工作。
+
 ## 启动 Broker 服务
 
 以下操作在 BE 实例上执行。
