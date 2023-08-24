@@ -205,18 +205,20 @@ public class StreamLoadScanNode extends LoadScanNode {
         }
 
         // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
-        if (expr.getType().isNull()) {
+        if (expr.getType() != null && expr.getType().isNull()) {
             expr.setType(Type.BOOLEAN);
             return;
         }
 
         // For array types, itemType can be any legitimate type, for simplicity, we pick boolean.
-        if (Objects.equals(Type.ARRAY_NULL, expr.getType())) {
+        if (expr.getType() != null && Objects.equals(Type.ARRAY_NULL, expr.getType())) {
             expr.setType(Type.ARRAY_BOOLEAN);
         }
 
-        for (Expr child : expr.getChildren()) {
-            hackTypeNull(child);
+        if (expr.getChildren() != null) {
+            for (Expr child : expr.getChildren()) {
+                hackTypeNull(child);
+            }
         }
     }
 
