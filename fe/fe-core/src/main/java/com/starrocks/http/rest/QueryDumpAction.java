@@ -118,10 +118,7 @@ public class QueryDumpAction extends RestBaseAction {
 
         DumpInfo dumpInfo = context.getDumpInfo();
         if (dumpInfo != null) {
-            if (enableMock && dumpInfo instanceof QueryDumpInfo) {
-                QueryDumpInfo queryDumpInfo = (QueryDumpInfo) dumpInfo;
-                queryDumpInfo.setDesensitizedInfo(true);
-            }
+            dumpInfo.setDesensitizedInfo(enableMock);
             response.getContent().append(GSON.toJson(dumpInfo, QueryDumpInfo.class));
             sendResult(request, response);
         } else {
