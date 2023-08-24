@@ -61,6 +61,7 @@ public:
 
     template <typename T>
     Datum(T value) {
+        static_assert(!std::is_same_v<std::string, T>, "should use the Slice as parameter instead of std::string");
         set(value);
     }
 
