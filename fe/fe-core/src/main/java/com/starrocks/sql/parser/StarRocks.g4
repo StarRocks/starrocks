@@ -1008,8 +1008,8 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
-        (WITH LABEL label=identifier)? columnAliases?
+    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames? columnAliases?
+        insertSpec*
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
@@ -1019,6 +1019,11 @@ updateStatement
 
 deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    ;
+
+insertSpec
+    : WITH LABEL label=identifier
+    | properties
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------

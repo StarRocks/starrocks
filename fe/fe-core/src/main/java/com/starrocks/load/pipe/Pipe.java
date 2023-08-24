@@ -592,7 +592,10 @@ public class Pipe implements GsonPostProcessable {
         this.lock = new ReentrantReadWriteLock();
         this.lastErrorInfo = new ErrorInfo();
         pipeSource.initPipeId(id);
-        processProperties();
+        try {
+            processProperties();
+        } catch (Exception ignored) {
+        }
     }
 
     public String toJson() {

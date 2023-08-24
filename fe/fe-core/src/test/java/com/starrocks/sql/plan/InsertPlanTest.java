@@ -24,10 +24,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
@@ -364,6 +366,13 @@ public class InsertPlanTest extends PlanTestBase {
                 "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
+    }
+
+    public static InsertStmt parseAndAnalyzeInsert(String originStmt) throws Exception {
+        StatementBase stmt = SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(stmt, connectContext);
+        new InsertPlanner().plan((InsertStmt) stmt, connectContext);
+        return (InsertStmt) stmt;
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
@@ -871,5 +880,96 @@ public class InsertPlanTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assert.assertEquals(expected, actualRes);
+    }
+
+    @Test
+    public void testInsertPartialUpdate() throws Exception {
+        String tableName = "ti1";
+        starRocksAssert.dropTableIfExists(tableName);
+        starRocksAssert.withTable("CREATE TABLE `ti1` (\n" +
+                "  `k1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `ti2` (\n" +
+                "  `k1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        // Default Partial update
+        {
+            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+                    "properties('partial_update'= 'true') " +
+                    "select k1, v1 from ti1");
+            assertContains(explainString, "OLAP TABLE SINK\n" +
+                    "    TABLE: ti1\n" +
+                    "    TUPLE ID: 1\n" +
+                    "    RANDOM\n" +
+                    "    PARTIAL_UPDATE_MODE: ROW_MODE\n" +
+                    "  0:OlapScanNode");
+        }
+
+        // Partial update with mode
+        {
+            String explainString = getInsertExecPlan("insert into ti1 (k1, v1) " +
+                    "properties('partial_update'= 'true', 'partial_update_mode'='column') " +
+                    "select k1, v1 from ti1");
+            assertContains(explainString, "PARTIAL_UPDATE_MODE: COLUMN_UPSERT_MODE");
+        }
+
+        // Illegal partial update
+        {
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti1 " +
+                            "properties('partial_update'= 'true') " +
+                            "select * from ti1"));
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti2 (k1, v1) " +
+                            "properties('partial_update'= 'true') " +
+                            "select k1, v1 from ti1"));
+        }
+
+        // Merge condition
+        {
+            InsertStmt stmt = parseAndAnalyzeInsert("insert into ti1 (k1, v1) " +
+                    "properties('merge_condition'= 'v2') " +
+                    "select k1, v1 from ti1");
+            Assert.assertEquals("v2", stmt.getMergeCondition());
+
+        }
+        // Illegal Merge condition
+        {
+            Assert.assertThrows(SemanticException.class,
+                    () -> getInsertExecPlan("insert into ti1 (k1, v1) " +
+                            "properties('merge_condition'= 'k1') " +
+                            "select k1, v1 from ti1"));
+        }
+
+        // Insert ratio
+        {
+            InsertStmt stmt = parseAndAnalyzeInsert("insert into ti1 " +
+                    "properties('max_filter_ratio'= '0.01') " +
+                    "select * from ti1");
+            Assert.assertEquals(0.01, stmt.getMaxFilterRatio(), 0.001);
+        }
+
+        // unsupported property
+        Assert.assertThrows(SemanticException.class,
+                () -> getInsertExecPlan("insert into ti1 (k1, v1) " +
+                        "properties('timezone'= 'UTC') " +
+                        "select k1, v1 from ti1"));
     }
 }

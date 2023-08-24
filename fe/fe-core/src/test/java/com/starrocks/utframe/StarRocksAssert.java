@@ -303,6 +303,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropTableIfExists(String tableName) throws Exception {
+        DropTableStmt dropTableStmt =
+                (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table if exists " + tableName + ";", ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
         DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser("drop materialized view " + materializedViewName + ";", ctx);

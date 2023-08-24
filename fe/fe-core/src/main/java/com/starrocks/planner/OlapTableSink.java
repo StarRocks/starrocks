@@ -93,6 +93,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -125,7 +126,7 @@ public class OlapTableSink extends DataSink {
     private boolean missAutoIncrementColumn;
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
-    private TPartialUpdateMode partialUpdateMode;
+    private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -212,7 +213,7 @@ public class OlapTableSink extends DataSink {
 
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
-        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+        if (StringUtils.isNotEmpty(mergeCondition)) {
             tSink.setMerge_condition(mergeCondition);
         }
         complete();
@@ -250,6 +251,9 @@ public class OlapTableSink extends DataSink {
         strBuilder.append(prefix + "  TABLE: " + dstTable.getName() + "\n");
         strBuilder.append(prefix + "  TUPLE ID: " + tupleDescriptor.getId() + "\n");
         strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
+        if (partialUpdateMode != TPartialUpdateMode.UNKNOWN_MODE) {
+            strBuilder.append(prefix + "  PARTIAL_UPDATE_MODE: " + partialUpdateMode.toString());
+        }
         return strBuilder.toString();
     }
 
@@ -622,6 +626,10 @@ public class OlapTableSink extends DataSink {
 
     public boolean missAutoIncrementColumn() {
         return this.missAutoIncrementColumn;
+    }
+
+    public TDataSink gettDataSink() {
+        return tDataSink;
     }
 }
 

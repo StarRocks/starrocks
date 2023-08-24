@@ -35,7 +35,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
+import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -97,6 +101,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -111,6 +116,7 @@ public class InsertPlanner {
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
+    private boolean missAutoIncrementColumn = false;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -190,24 +196,9 @@ public class InsertPlanner {
             }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
-            TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
-
-            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            long tableId = targetTable.getId();
-            for (Column column : targetTable.getFullSchema()) {
-                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
-                slotDescriptor.setIsMaterialized(true);
-                slotDescriptor.setType(column.getType());
-                slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
-                if (column.getType().isVarchar() &&
-                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                    dict.ifPresent(
-                            columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
-                }
-            }
-            tupleDesc.computeMemLayout();
+            TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor("InsertTableDescriptor");
+            List<Pair<Integer, ColumnDict>> globalDicts =
+                    buildDescriptorTable(descriptorTable, tupleDesc, insertStmt, targetTable);
 
             DataSink dataSink;
             if (targetTable instanceof OlapTable) {
@@ -247,10 +238,13 @@ public class InsertPlanner {
                     }
 
                 }
-                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
+                OlapTableSink olapSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition);
+                dataSink = olapSink;
+
+                olapSink.setPartialUpdateMode(insertStmt.getPartialUpdateMode());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
@@ -271,7 +265,8 @@ public class InsertPlanner {
                     sinkFragment.setPipelineDop(1);
                 } else {
                     if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                        sinkFragment.setPipelineDop(
+                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                     } else {
                         sinkFragment
                                 .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
@@ -291,12 +286,78 @@ public class InsertPlanner {
             sinkFragment.setSink(dataSink);
             sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
+        } catch (UserException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_FAILED_WHEN_INSERT, e);
+            return null;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
+    }
+
+    public List<Pair<Integer, ColumnDict>> buildDescriptorTable(DescriptorTable descriptorTable,
+                                                                TupleDescriptor tupleDesc,
+                                                                InsertStmt insertStmt,
+                                                                Table targetTable) throws UserException {
+
+        // 1. Generate tuple descriptor
+        OlapTable olapTable = (OlapTable) targetTable;
+        boolean isPrimaryKey = olapTable.getKeysType() == KeysType.PRIMARY_KEYS;
+        boolean partialUpdate = insertStmt.isPartialUpdate();
+
+        if (!isPrimaryKey && partialUpdate) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_INSERT, "only primary key support partial update");
+        }
+        if (partialUpdate && CollectionUtils.isEmpty(insertStmt.getTargetColumnNames())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_INSERT, "must specify columns for partial update");
+        }
+
+        // 2. desc columns
+        List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
+        List<Column> destColumns = Lists.newArrayList();
+        if (partialUpdate) {
+            Set<String> specifiedColumns = new HashSet<>(insertStmt.getTargetColumnNames());
+            destColumns = Load.getPartialUpateColumns(targetTable, specifiedColumns, isMissAutoIncrementColumn);
+        } else {
+            destColumns = targetTable.getFullSchema();
+        }
+
+        if (!isMissAutoIncrementColumn.isEmpty()) {
+            this.missAutoIncrementColumn = isMissAutoIncrementColumn.get(0);
+        }
+
+        // 3. tuple descriptor
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+        long tableId = targetTable.getId();
+        for (Column column : destColumns) {
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(column.getType());
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsNullable(column.isAllowNull());
+            if (column.getType().isVarchar() &&
+                    IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                dict.ifPresent(
+                        columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+            }
+        }
+
+        // 4. Add OP column for primary key table
+        // TODO
+        /*
+        if (isPrimaryKey) {
+            SlotDescriptor slotDesc = descriptorTable.addSlotDescriptor(tupleDesc);
+            slotDesc.setIsMaterialized(true);
+            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDesc.setIsNullable(false);
+        }
+        */
+
+        descriptorTable.computeMemLayout();
+        return globalDicts;
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
@@ -320,8 +381,8 @@ public class InsertPlanner {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                     targetColumn.getName() + " You can use `default` for an" +
-                                                     " AUTO INCREMENT column");
+                                targetColumn.getName() + " You can use `default` for an" +
+                                " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -338,9 +399,10 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                        targetColumn.getName() + " You can use `default` for an" +
-                                                        " AUTO INCREMENT column");
+                            throw new SemanticException(
+                                    " `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                            targetColumn.getName() + " You can use `default` for an" +
+                                            " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
@@ -361,6 +423,7 @@ public class InsertPlanner {
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
         List<Column> baseSchema = insertStatement.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        boolean partialUpdate = insertStatement.isPartialUpdate();
 
         for (int columnIdx = 0; columnIdx < baseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
@@ -377,7 +440,7 @@ public class InsertPlanner {
                         logicalPlan.getOutputColumn().get(columnIdx));
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
-                if (idx == -1) {
+                if (idx == -1 && !partialUpdate) {
                     ScalarOperator scalarOperator;
                     Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
@@ -401,6 +464,8 @@ public class InsertPlanner {
 
                     outputColumns.add(col);
                     columnRefMap.put(col, scalarOperator);
+                } else if (idx == -1) {
+                    // skip this column for partial update
                 } else {
                     outputColumns.add(logicalPlan.getOutputColumn().get(idx));
                     columnRefMap.put(logicalPlan.getOutputColumn().get(idx), logicalPlan.getOutputColumn().get(idx));
@@ -424,10 +489,11 @@ public class InsertPlanner {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
                 Expr expr = targetColumn.generatedColumnExpr();
                 ExpressionAnalyzer.analyzeExpression(expr,
-                    new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
-                        insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                col.getType(), insertStatement.getTableName(), null))
-                            .collect(Collectors.toList()))), session);
+                        new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                                insertStatement.getTargetTable().getBaseSchema().stream()
+                                        .map(col -> new Field(col.getName(),
+                                                col.getType(), insertStatement.getTableName(), null))
+                                        .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();
                 expr.collect(SlotRef.class, slots);
@@ -455,8 +521,10 @@ public class InsertPlanner {
                 outputColumns.add(columnRefOperator);
                 columnRefMap.put(columnRefOperator, scalarOperator);
             } else if (baseSchema.contains(fullSchema.get(columnIdx))) {
-                ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
-                columnRefMap.put(columnRefOperator, columnRefOperator);
+                if (columnIdx < outputColumns.size()) {
+                    ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
+                    columnRefMap.put(columnRefOperator, columnRefOperator);
+                }
             }
         }
 
@@ -469,6 +537,7 @@ public class InsertPlanner {
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        boolean isPartialUpdate = insertStatement.isPartialUpdate();
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
@@ -532,7 +601,7 @@ public class InsertPlanner {
             }
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
-            if (columnIdx >= outputColumns.size()) {
+            if (columnIdx >= outputColumns.size() && !isPartialUpdate) {
                 ColumnRefOperator columnRefOperator = columnRefFactory.create(
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
                 outputColumns.add(columnRefOperator);
@@ -547,7 +616,7 @@ public class InsertPlanner {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
-            } else {
+            } else if (columnIdx < outputColumns.size()){
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
@@ -562,16 +631,37 @@ public class InsertPlanner {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
-        for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
-            if (!fullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
-                Column c = fullSchema.get(columnIdx);
-                ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
-                ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
-                        outputColumns.get(columnIdx), true);
-                columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
-                outputColumns.set(columnIdx, k);
-            } else {
-                columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+
+        if (insertStatement.isPartialUpdate()) {
+            for (int i = 0; i < insertStatement.getTargetColumnNames().size(); i++) {
+                String name = insertStatement.getTargetColumnNames().get(i);
+                Column column = insertStatement.getTargetTable().getColumn(name);
+                ColumnRefOperator outputColumn = outputColumns.get(i);
+                Type currentType = outputColumn.getType();
+                Type targetType = column.getType();
+                if (!targetType.matchesType(currentType)) {
+                    ColumnRefOperator k = columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull());
+                    ScalarOperator castOperator = new CastOperator(fullSchema.get(i).getType(), outputColumn, true);
+                    columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
+                    outputColumns.set(i, k);
+                } else {
+                    columnRefMap.put(outputColumns.get(i), outputColumns.get(i));
+                }
+            }
+        } else {
+            for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
+                Type targetType = fullSchema.get(columnIdx).getType();
+                Type currentType = outputColumns.get(columnIdx).getType();
+                if (!targetType.matchesType(currentType)) {
+                    Column c = fullSchema.get(columnIdx);
+                    ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
+                    ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
+                            outputColumns.get(columnIdx), true);
+                    columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
+                    outputColumns.set(columnIdx, k);
+                } else {
+                    columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+                }
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
@@ -675,7 +765,8 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
-                ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+                ScalarOperator scalarOperator =
+                        ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
                 ColumnRefOperator col = columnRefFactory
                         .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
                 outputColumns.add(col);
