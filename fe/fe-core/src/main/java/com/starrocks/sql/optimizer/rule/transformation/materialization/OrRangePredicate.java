@@ -15,12 +15,18 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class OrRangePredicate extends RangePredicate {
@@ -56,7 +62,45 @@ public class OrRangePredicate extends RangePredicate {
         for (RangePredicate rangePredicate : childPredicates) {
             children.add(rangePredicate.toScalarOperator());
         }
-        return Utils.compoundOr(children);
+
+        ScalarOperator orPredicate = Utils.compoundOr(children);
+        List<ScalarOperator> childPredicates = Utils.extractDisjunctive(orPredicate);
+        Map<String, List<ScalarOperator>> columnPredicatesMap = Maps.newHashMap();
+        for (ScalarOperator rangePredicate : childPredicates) {
+            if (ScalarOperator.isColumnEqualConstant(rangePredicate)) {
+                BinaryPredicateOperator binaryEqPredicate = (BinaryPredicateOperator) rangePredicate;
+                ColumnRefOperator columnRef = binaryEqPredicate.getChild(0).cast();
+                List<ScalarOperator> columnRangePredicates = columnPredicatesMap.computeIfAbsent(
+                        columnRef.getName(), k -> Lists.newArrayList());
+                columnRangePredicates.add(rangePredicate);
+            } else if (rangePredicate instanceof InPredicateOperator && rangePredicate.getChild(0).isColumnRef()) {
+                InPredicateOperator inPredicate = rangePredicate.cast();
+                List<ScalarOperator> columnRangePredicates = columnPredicatesMap.computeIfAbsent(
+                        ((ColumnRefOperator) inPredicate.getChild(0)).getName(), k -> Lists.newArrayList());
+                columnRangePredicates.add(rangePredicate);
+            }
+        }
+        for (List<ScalarOperator> value : columnPredicatesMap.values()) {
+            if (value.size() > 1) {
+                childPredicates.removeAll(value);
+                // add InPredicateOperator
+                List<ScalarOperator> arguments = Lists.newArrayList();
+                arguments.add(value.get(0).getChild(0));
+                for (ScalarOperator predicate : value) {
+                    if (ScalarOperator.isColumnEqualConstant(predicate)) {
+                        arguments.add(predicate.getChild(1));
+                    } else {
+                        // must be InPredicateOperator
+                        Preconditions.checkState(predicate instanceof InPredicateOperator);
+                        arguments.addAll(predicate.getChildren().subList(1, predicate.getChildren().size()));
+                    }
+                }
+                InPredicateOperator inPredicateOperator = new InPredicateOperator(false, arguments);
+                childPredicates.add(inPredicateOperator);
+            }
+        }
+
+        return Utils.compoundOr(childPredicates);
     }
 
     // for
