@@ -320,6 +320,8 @@ public class LoadLoadingTask extends LoadTask {
         private OriginStatement originStmt;
         private List<List<TBrokerFileStatus>> fileStatusList;
         private int fileNum = 0;
+        private LoadTaskCallback callback;
+        private int priority;
 
         public Builder setCallback(LoadTaskCallback callback) {
             this.callback = callback;
@@ -330,9 +332,6 @@ public class LoadLoadingTask extends LoadTask {
             this.priority = priority;
             return this;
         }
-
-        private LoadTaskCallback callback;
-        private int priority;
 
         public Builder setLoadId(TUniqueId loadId) {
             this.loadId = loadId;
