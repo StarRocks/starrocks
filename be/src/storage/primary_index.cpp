@@ -151,7 +151,6 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
                                << " rowid=" << rowid_start + i;
                 }
-                LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
@@ -340,7 +339,6 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
-                    LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -594,7 +592,6 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                 }
-                LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
@@ -1424,7 +1421,6 @@ Status PrimaryIndex::upsert(uint32_t rowset_id, UpdateInfos& info, DeletesMap* d
         st = _upsert_into_persistent_index(rowset_id, info, deletes, stat);
     } else {
         for (auto i = 0; i < info._seg_ids.size(); i++) {
-            LOG(INFO) << "primary index upsert seg:" << info._seg_ids[i];
             _pkey_to_rssid_rowid->upsert(rowset_id + info._seg_ids[i], info._rowid_start[i], *(info._pk_columns[i]),
                                          info._idx_range[i].first, info._idx_range[i].second, deletes);
         }
