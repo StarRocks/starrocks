@@ -226,7 +226,7 @@ public class MaterializedViewAnalyzer {
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
-            Scope queryScope = new QueryAnalyzer(context).analyze(queryStatement);
+            Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
 
             // convert queryStatement to sql and set
@@ -268,7 +268,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
-                checkWindowFunctions(statement, columnExprMap, queryScope, context);
+                checkWindowFunctions(statement, columnExprMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -781,10 +781,10 @@ public class MaterializedViewAnalyzer {
         // should contain the partition column of mv
         private void checkWindowFunctions(
                 CreateMaterializedViewStatement statement,
-                Map<Column, Expr> columnExprMap,
-                Scope queryScope, ConnectContext context) {
-            AnalyzeState partitionExprState = new AnalyzeState();
-            ExpressionAnalyzer.analyzeExpression(statement.getPartitionRefTableExpr(), partitionExprState, queryScope, context);
+                Map<Column, Expr> columnExprMap) {
+            SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
+            // should analyze the partition expr to get type info
+            PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
             for (Expr columnExpr : columnExprMap.values()) {
                 if (columnExpr instanceof AnalyticExpr) {
                     AnalyticExpr analyticExpr = columnExpr.cast();
