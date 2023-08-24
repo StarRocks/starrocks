@@ -35,7 +35,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -446,7 +445,6 @@ public class DesensitizedSQLBuilder {
             sb.append("\n) ENGINE= ").append(table.getType().name()).append(" ");
 
             if (table.getType() == Table.TableType.MYSQL) {
-                MysqlTable mysqlTable = (MysqlTable) table;
                 // properties
                 sb.append("\nPROPERTIES (\n");
                 sb.append("\"host\" = \"").append("localhost").append("\",\n");
@@ -458,7 +456,6 @@ public class DesensitizedSQLBuilder {
                 sb.append(")");
             } else if (table.getType() == Table.TableType.ELASTICSEARCH) {
                 EsTable esTable = (EsTable) table;
-
                 // properties
                 sb.append("\nPROPERTIES (\n");
                 sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
@@ -467,7 +464,6 @@ public class DesensitizedSQLBuilder {
                 sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
             } else if (table.getType() == Table.TableType.HIVE) {
                 HiveTable hiveTable = (HiveTable) table;
-
                 // properties
                 sb.append("\nPROPERTIES (\n");
                 sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
