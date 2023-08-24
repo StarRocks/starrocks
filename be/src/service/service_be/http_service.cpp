@@ -197,7 +197,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction(_env);
+    auto* checksum_action = new ChecksumAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 

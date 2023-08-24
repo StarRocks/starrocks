@@ -40,21 +40,15 @@
 
 namespace starrocks {
 
-class ExecEnv;
-
 class ChecksumAction : public HttpHandler {
 public:
-    explicit ChecksumAction(ExecEnv* exec_env);
-
+    ChecksumAction() = default;
     ~ChecksumAction() override = default;
 
     void handle(HttpRequest* req) override;
 
 private:
-    int64_t do_checksum(int64_t tablet_id, int64_t version, int32_t schema_hash, HttpRequest* req);
-
-    [[maybe_unused]] ExecEnv* _exec_env;
-
-}; // end class ChecksumAction
+    int64_t _do_checksum(int64_t tablet_id, int64_t version);
+};
 
 } // end namespace starrocks
