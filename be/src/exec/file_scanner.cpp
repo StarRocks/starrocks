@@ -200,7 +200,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
-        if (!col->is_nullable() && slot->is_nullable()) {
+        if (!col->is_nullable()) {
             col = ColumnHelper::cast_to_nullable_column(col);
         }
 
