@@ -145,7 +145,7 @@ void BinlogReaderTest::create_rowset(int32_t* start_key, RowsetInfo& rowset_info
             auto& cols = chunk->columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(Datum(std::to_string(i)));
+            cols[2]->append_datum(Datum(Slice(std::to_string(i))));
         }
         ASSERT_OK(rowset_writer->flush_chunk(*chunk));
         *start_key += num_rows;
