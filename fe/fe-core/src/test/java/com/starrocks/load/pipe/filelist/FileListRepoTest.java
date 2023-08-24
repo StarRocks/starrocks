@@ -38,6 +38,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -136,7 +137,9 @@ public class FileListRepoTest {
 
         // add files
         sql = RepoAccessor.getInstance().buildSqlAddFiles(records);
-        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list VALUES " +
+        Assert.assertEquals("INSERT INTO _statistics_.pipe_file_list" +
+                        "(`pipe_id`, `file_name`, `file_version`, `file_size`, `state`, `last_modified`, " +
+                        "`staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label`) VALUES " +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
                         "'2023-07-01 01:01:01', '2023-07-01 01:01:01', '2023-07-01 01:01:01', '{\"errorMessage\":null}', '')," +
                 "(1, 'a.parquet', '123asdf', 1024, 'UNLOADED', '2023-07-01 01:01:01', " +
@@ -148,7 +151,7 @@ public class FileListRepoTest {
         Assert.assertEquals("DELETE FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1", sql);
 
         // list unloaded files
-        sql = RepoAccessor.getInstance().buildListFileByState(1, FileListRepo.PipeFileState.UNLOADED);
+        sql = RepoAccessor.getInstance().buildListFileByState(1, FileListRepo.PipeFileState.UNLOADED, 0);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
@@ -241,8 +244,8 @@ public class FileListRepoTest {
         Assert.assertTrue(accessor.listAllFiles().isEmpty());
 
         // listUnloadedFiles
-        Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED).isEmpty());
-        Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED).isEmpty());
+        Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+        Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
 
         // selectStagedFiles
         PipeFileRecord record = new PipeFileRecord();
@@ -256,13 +259,15 @@ public class FileListRepoTest {
         new Expectations(executor) {
             {
                 executor.executeDML(
-                        "INSERT INTO _statistics_.pipe_file_list VALUES " +
+                        "INSERT INTO _statistics_.pipe_file_list(`pipe_id`, `file_name`, `file_version`, " +
+                                "`file_size`, `state`, `last_modified`, `staged_time`, `start_load`, `finish_load`, " +
+                                "`error_info`, `insert_label`) VALUES " +
                                 "(1, 'a.parquet', '1', 0, 'UNLOADED', NULL, NULL, " +
                                 "NULL, NULL, '{\"errorMessage\":null}', '')");
                 result = Lists.newArrayList();
             }
         };
-        repo.addFiles(Lists.newArrayList(record));
+        repo.stageFiles(Lists.newArrayList(record));
 
         // updateFileState
         new Expectations(executor) {
@@ -327,5 +332,54 @@ public class FileListRepoTest {
         Assert.assertThrows(SemanticException.class, () -> executor.executeDML("insert into a.b values (1) "));
 
         Assert.assertThrows(RuntimeException.class, () -> executor.executeDDL("create table a (id int) "));
+    }
+
+    @Test
+    public void testDMLException() throws Exception {
+        FileListTableRepo repo = new FileListTableRepo();
+        repo.setPipeId(new PipeId(1, 1));
+        RepoAccessor accessor = RepoAccessor.getInstance();
+        RepoExecutor executor = RepoExecutor.getInstance();
+
+        new Expectations(executor) {
+            {
+                executor.executeDQL(anyString);
+                result = Lists.newArrayList();
+                times = 101;
+
+                executor.executeDML(anyString);
+                result = Lists.newArrayList();
+                times = 2;
+            }
+        };
+        // stage a large batch of files
+        List<PipeFileRecord> files = new ArrayList<>();
+        for (int i = 0; i < FileListTableRepo.WRITE_BATCH_SIZE + 1; i++) {
+            PipeFileRecord record = new PipeFileRecord();
+            record.pipeId = 1;
+            record.fileName = String.format("%d.parquet", i);
+            record.fileVersion = "1";
+            record.loadState = FileListRepo.PipeFileState.UNLOADED;
+            files.add(record);
+        }
+        repo.stageFiles(files);
+
+        // stage files error
+        new Expectations(executor) {
+            {
+                executor.executeDQL(anyString);
+                result = Lists.newArrayList();
+                times = 100;
+
+                executor.executeDML(anyString);
+                result = new Exception("too many versions");
+            }
+        };
+        try {
+            repo.stageFiles(files);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("too many versions", e.getMessage());
+        }
     }
 }
