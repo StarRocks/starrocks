@@ -409,7 +409,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
-                "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
+                "  |  <slot 26> : '49'\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
