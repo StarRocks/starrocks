@@ -38,6 +38,8 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Optional;
 
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+
 public class MetadataMgrTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -141,7 +143,7 @@ public class MetadataMgrTest {
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
-        sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+        sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
         Table msTable1 = new Table();
         msTable1.setDbName("hive_db");
         msTable1.setTableName("hive_table");

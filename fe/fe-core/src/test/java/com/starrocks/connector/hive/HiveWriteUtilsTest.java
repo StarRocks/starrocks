@@ -51,7 +51,7 @@ public class HiveWriteUtilsTest {
     public void testPathExists() {
         Path path = new Path("hdfs://127.0.0.1:9000/user/hive/warehouse/db");
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Failed checking path",
+                "Failed to check path",
                 () -> HiveWriteUtils.pathExists(path, new Configuration()));
 
         new MockUp<FileSystem>() {

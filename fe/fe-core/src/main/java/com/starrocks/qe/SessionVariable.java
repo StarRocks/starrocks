@@ -489,6 +489,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
+    public static final String HIVE_TEMP_STAGING_DIR = "hive_temp_staging_dir";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1240,7 +1242,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
 
+    @VarAttr(name = HIVE_TEMP_STAGING_DIR)
+    private String hiveTempStagingDir = "/tmp/starrocks";
+
     private int exprChildrenLimit = -1;
+
+    public String getHiveTempStagingDir() {
+        return hiveTempStagingDir;
+    }
+
+    public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
+        this.hiveTempStagingDir = hiveTempStagingDir;
+        return this;
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;

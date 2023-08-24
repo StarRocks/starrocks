@@ -628,4 +628,23 @@ public class PartitionUtil {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
     }
+
+    public static String getPartitionName(String basePath, String partitionPath) {
+        String basePathWithSlash = getPathWithSlash(basePath);
+        String partitionPathWithSlash = getPathWithSlash(partitionPath);
+
+        if (basePathWithSlash.equals(partitionPathWithSlash)) {
+            return "";
+        }
+
+        Preconditions.checkState(partitionPath.startsWith(basePathWithSlash),
+                "Can't infer partition name. base path: %s, partition path: %s", basePath, partitionPath);
+
+        partitionPath = partitionPath.endsWith("/") ? partitionPath.substring(0, partitionPath.length() - 1) : partitionPath;
+        return partitionPath.substring(basePathWithSlash.length());
+    }
+
+    public static String getPathWithSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
 }

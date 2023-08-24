@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configuration;
@@ -22,8 +24,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveMetastoreOperations.EXTERNAL_LOCATION_PROPERTY;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
@@ -49,8 +53,8 @@ public class HiveWriteUtils {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return fileSystem.exists(path);
         } catch (Exception e) {
-            LOG.error("Failed checking path {}", path, e);
-            throw new StarRocksConnectorException("Failed checking path: " + path + " msg:" + e.getMessage());
+            LOG.error("Failed to check path {}", path, e);
+            throw new StarRocksConnectorException("Failed to check path: " + path + ". msg: " + e.getMessage());
         }
     }
 
@@ -76,4 +80,54 @@ public class HiveWriteUtils {
             throw new StarRocksConnectorException("Failed to create directory: " + path, e);
         }
     }
+
+    public static String getStagingDir(HiveTable table, String tempStagingDir) {
+        String stagingDir;
+        String location = table.getTableLocation();
+        if (isS3Url(location)) {
+            stagingDir = location;
+        } else {
+            Path tempRoot = new Path(location, tempStagingDir);
+            Path tempStagingPath = new Path(tempRoot, UUID.randomUUID().toString());
+            stagingDir = tempStagingPath.toString();
+        }
+        return stagingDir.endsWith("/") ? stagingDir : stagingDir + "/";
+    }
+
+    public static boolean fileCreatedByQuery(String fileName, String queryId) {
+        Preconditions.checkState(fileName.length() > queryId.length() && queryId.length() > 8,
+                "file name or query id is invalid");
+        String checkQueryId = queryId.substring(0, queryId.length() - 8);
+        return fileName.startsWith(checkQueryId) || fileName.endsWith(checkQueryId);
+    }
+
+    public static void checkedDelete(FileSystem fileSystem, Path file, boolean recursive) throws IOException {
+        try {
+            if (!fileSystem.delete(file, recursive)) {
+                if (fileSystem.exists(file)) {
+                    throw new IOException("Failed to delete " + file);
+                }
+            }
+        } catch (FileNotFoundException ignored) {
+            // ignore
+        }
+    }
+
+    public static boolean deleteIfExists(Path path, boolean recursive, Configuration conf) {
+        try {
+            FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
+            if (fileSystem.delete(path, recursive)) {
+                return true;
+            }
+
+            return !fileSystem.exists(path);
+        } catch (FileNotFoundException ignored) {
+            return true;
+        } catch (IOException ignored) {
+            LOG.error("Failed to delete remote path {}", path);
+        }
+
+        return false;
+    }
+
 }

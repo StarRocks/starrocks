@@ -114,7 +114,7 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override

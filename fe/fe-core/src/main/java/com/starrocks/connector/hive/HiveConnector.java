@@ -62,6 +62,8 @@ public class HiveConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
+                internalMgr.getupdateRemoteFilesExecutor(),
+                internalMgr.getUpdateStatisticsExecutor(),
                 internalMgr.isSearchRecursive(),
                 internalMgr.enableHmsEventsIncrementalSync(),
                 hdfsEnvironment.getConfiguration(),

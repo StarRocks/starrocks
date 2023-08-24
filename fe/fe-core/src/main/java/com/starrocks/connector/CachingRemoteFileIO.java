@@ -102,7 +102,11 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public void updateRemoteFiles(RemotePathKey pathKey) {
-        cache.put(pathKey, loadRemoteFiles(pathKey));
+        if (fileIO instanceof CachingRemoteFileIO) {
+            ((CachingRemoteFileIO) fileIO).updateRemoteFiles(pathKey);
+        } else {
+            cache.put(pathKey, loadRemoteFiles(pathKey));
+        }
     }
 
     public synchronized void invalidateAll() {

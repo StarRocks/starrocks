@@ -42,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -172,6 +173,7 @@ public class HiveMetastoreOperations {
                 .setFullSchema(stmt.getColumns())
                 .setTableLocation(tablePath.toString())
                 .setProperties(stmt.getProperties())
+                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
                 .setCreateTime(System.currentTimeMillis());
         Table table = builder.build();
         try {
@@ -213,6 +215,18 @@ public class HiveMetastoreOperations {
 
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         return metastore.getPartition(dbName, tableName, partitionValues);
+    }
+
+    public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+        metastore.addPartitions(dbName, tableName, partitions);
+    }
+
+    public void dropPartition(String dbName, String tableName, List<String> partitionValues, boolean deleteData) {
+        metastore.dropPartition(dbName, tableName, partitionValues, deleteData);
+    }
+
+    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
+        return metastore.partitionExists(dbName, tableName, partitionValues);
     }
 
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
@@ -265,6 +279,15 @@ public class HiveMetastoreOperations {
 
     public void invalidateAll() {
         metastore.invalidateAll();
+    }
+
+    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+        metastore.updateTableStatistics(dbName, tableName, update);
+    }
+
+    public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                          Function<HivePartitionStats, HivePartitionStats> update) {
+        metastore.updatePartitionStatistics(dbName, tableName, partitionName, update);
     }
 
     public Path getDefaultLocation(String dbName, String tableName) {
