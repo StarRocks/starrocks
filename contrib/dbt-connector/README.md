@@ -7,13 +7,13 @@
 This project is **under development**.
 
 
-The `dbt-starrocks` package contains all the code enabling [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
+The `dbt-starrocks` package contains all the code to enable [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
 
 This is an experimental plugin:
 - We have not tested it extensively
-- Requirements at least StarRocks version 2.5.0+  
+- Requires StarRocks version 2.5.0 or higher  
   - version 3.1.x is recommended
-  - Previous versions will no longer support
+  - StarRocks versions 2.4 and below are no longer supported
 
 
 ## Installation
@@ -39,8 +39,8 @@ $ pip install dbt-starrocks
 
 ### Notice
 1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
-2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
-3. When StarRocks Version < 3.1 distributed_by is must
+2. When StarRocks Version >= 2.5, `Create table as` supports table_type='PRIMARY'
+3. When StarRocks Version < 3.1 distributed_by is required
 
 ## Profile Configuration
 
@@ -100,4 +100,4 @@ models:
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
 ## Contributing
-Welcome to contribute for dbt-starrocks. See [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.
+We welcome you to contribute to dbt-starrocks. Please see the [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.
