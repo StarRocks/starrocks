@@ -616,8 +616,8 @@ LOAD LABEL test_db.label_brokerloadtest_401
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -663,8 +663,8 @@ LOAD LABEL test_db.label_brokerloadtest_402
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -719,8 +719,8 @@ LOAD LABEL test_db.label_brokerloadtest_403
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
