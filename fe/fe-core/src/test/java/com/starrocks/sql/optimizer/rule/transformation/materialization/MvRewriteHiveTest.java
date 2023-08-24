@@ -157,7 +157,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan1, "hive_union_mv_1");
         PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
                 "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey <= 9, 13: s_suppkey >= 5");
+                "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey >= 5");
         dropMv("test", "hive_union_mv_1");
     }
 
@@ -179,8 +179,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 1: s_suppkey < 10");
+        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 1: s_suppkey < 10");
 
         connectContext.getSessionVariable().setUseNthExecPlan(0);
         dropMv("test", "hive_join_mv_1");

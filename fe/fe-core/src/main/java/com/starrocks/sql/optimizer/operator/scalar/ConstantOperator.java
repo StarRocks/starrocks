@@ -32,11 +32,13 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 import static com.starrocks.catalog.Type.TINYINT;
 import static java.util.Collections.emptyList;
@@ -72,6 +74,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     public static final ConstantOperator NULL = ConstantOperator.createNull(Type.BOOLEAN);
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
     public static final ConstantOperator FALSE = ConstantOperator.createBoolean(false);
+
+    private static final BigInteger MAX_LARGE_INT = new BigInteger("2").pow(127).subtract(BigInteger.ONE);
+    private static final BigInteger MIN_LARGE_INT = new BigInteger("2").pow(128).multiply(BigInteger.valueOf(-1));
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
         if (null == dateTime || dateTime.isBefore(MIN_DATETIME) || dateTime.isAfter(MAX_DATETIME)) {
@@ -501,5 +506,63 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         throw UnsupportedException.unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
+    }
+
+    public Optional<ConstantOperator> successor() {
+        return computeValue(1);
+    }
+
+    public Optional<ConstantOperator> predecessor() {
+        return computeValue(-1);
+    }
+
+    private Optional<ConstantOperator> computeValue(int delta) {
+        return computeWithLimits(delta,
+                v -> (byte) (v + delta),
+                v -> (short) (v + delta),
+                v -> v + delta,
+                v -> (long) v + delta,
+                v -> v.add(BigInteger.valueOf(delta)),
+                date -> date.plus(delta, ChronoUnit.DAYS),
+                date -> date.plus(delta, ChronoUnit.SECONDS)
+        );
+    }
+
+    private Optional<ConstantOperator> computeWithLimits(int delta,
+                                                         Function<Byte, Byte> byteFunc,
+                                                         Function<Short, Short> smallFunc,
+                                                         Function<Integer, Integer> intFunc,
+                                                         Function<Long, Long> longFunc,
+                                                         Function<BigInteger, BigInteger> bigintFunc,
+                                                         Function<LocalDateTime, LocalDateTime> dateFunc,
+                                                         Function<LocalDateTime, LocalDateTime> datetimeFunc) {
+        if (type.isTinyint()) {
+            return compute(delta, getTinyInt(), Byte.MAX_VALUE, Byte.MIN_VALUE, byteFunc, ConstantOperator::createTinyInt);
+        } else if (type.isSmallint()) {
+            return compute(delta, getSmallint(), Short.MAX_VALUE, Short.MIN_VALUE, smallFunc, ConstantOperator::createSmallInt);
+        } else if (type.isInt()) {
+            return compute(delta, getInt(), Integer.MAX_VALUE, Integer.MIN_VALUE, intFunc, ConstantOperator::createInt);
+        } else if (type.isBigint()) {
+            return compute(delta, getBigint(), Long.MAX_VALUE, Long.MIN_VALUE, longFunc, ConstantOperator::createBigint);
+        } else if (type.isLargeint()) {
+            return compute(delta, getLargeInt(), MAX_LARGE_INT, MIN_LARGE_INT, bigintFunc, ConstantOperator::createLargeInt);
+        } else if (type.isDatetime()) {
+            return compute(delta, (LocalDateTime) value, LocalDateTime.MAX, LocalDateTime.MIN,
+                    datetimeFunc, ConstantOperator::createDatetime);
+        } else if (type.isDateType()) {
+            return compute(delta, (LocalDateTime) value, LocalDate.MAX.atStartOfDay(), LocalDate.MIN.atStartOfDay(),
+                    dateFunc, ConstantOperator::createDate);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    private <T> Optional<ConstantOperator> compute(int delta,
+            T value, T maxValue, T minValue, Function<T, T> func, Function<T, ConstantOperator> creator) {
+        if ((delta > 0 && value.equals(maxValue)) || (delta < 0 && value.equals(minValue))) {
+            return Optional.empty();
+        } else {
+            return Optional.of(creator.apply(func.apply(value)));
+        }
     }
 }

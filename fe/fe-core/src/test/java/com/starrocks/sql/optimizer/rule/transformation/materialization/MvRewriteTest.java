@@ -359,7 +359,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: join_mv_2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: v1 <= 9");
+                "     PREDICATES: 15: v1 < 10");
         String query9 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 100";
         String plan9 = getFragmentPlan(query9);
@@ -613,7 +613,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
 
         String query4 = "SELECT t0.v1 as v1, " +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -630,7 +630,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
 
         // test group key not equal
         String query5 = "SELECT t0.v1 + 1 as alias, test_all_type.t1d," +
@@ -675,7 +675,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
         dropMv("test", "agg_join_mv_2");
 
         createAndRefreshMv("test", "agg_join_mv_3", "create materialized view agg_join_mv_3" +
@@ -985,7 +985,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan1, "hive_union_mv_1");
         PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
                 "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey <= 9, 13: s_suppkey >= 5");
+                "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey >= 5");
 
         dropMv("test", "hive_union_mv_1");
     }
@@ -1180,12 +1180,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
                     "     TABLE: emps2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 15: deptno <= 119, 15: deptno > 99, 15: deptno < 120\n" +
+                    "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
                     "     partitions=1/1");
             PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
                     "     TABLE: depts2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 18: deptno <= 119, 18: deptno > 99, 18: deptno < 120");
+                    "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
         }
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
@@ -1281,11 +1281,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
                     "     TABLE: test_all_type2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 24: t1d > 99, 24: t1d <= 119, 24: t1d < 120");
+                    "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
             PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
                     "     TABLE: t02\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: v1 > 99, 20: v1 <= 119, 20: v1 < 120");
+                    "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
             dropMv("test", "join_agg_union_mv_2");
         }
 
@@ -1555,7 +1555,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         String query13 = "select c1, c3, c2 from test_base_part where c3 < 1000";
         String plan13 = getFragmentPlan(query13);
-        PlanTestBase.assertContains(plan13, "partial_mv_6", "c3 <= 999");
+        PlanTestBase.assertContains(plan13, "partial_mv_6", "PREDICATES: 6: c3 < 1000");
 
         dropMv("test", "partial_mv_6");
 
