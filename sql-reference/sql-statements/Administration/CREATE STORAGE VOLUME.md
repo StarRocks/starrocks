@@ -256,7 +256,9 @@ PROPERTIES
 
   > **注意**
   >
-  > StarRocks 当前不支持通过认证接入 HDFS。
+  > Storage Volume 当前不支持通过认证接入 HDFS。
+
+<!--
 
   - 如果您使用简单认证接入 HDFS，请设置以下属性：
 
@@ -304,6 +306,8 @@ PROPERTIES
     | dfs.ha.namenodes.<ha_cluster_name\>                    | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。 其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
     | dfs.namenode.rpc-address.<ha_cluster_name\>.<NameNode\> | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
     | dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
+
+-->
 
 ## 示例
 
