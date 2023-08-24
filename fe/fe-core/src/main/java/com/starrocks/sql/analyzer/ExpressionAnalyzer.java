@@ -863,7 +863,10 @@ public class ExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                if (node.getChildren().size() == 0) {
+                    throw new SemanticException(fnName + " should have at least one input");
+                }
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
@@ -878,10 +881,13 @@ public class ExpressionAnalyzer {
                 for (int i = 0; i < argumentTypes.length; ++i) {
                     // TODO: support nested type
                     if (argumentTypes[i].isComplexType()) {
-                        throw new SemanticException("array_agg can't support inputs of nested types, " +
+                        throw new SemanticException(fnName + " can't support inputs of nested types, " +
                                 "but " + i + "-th input is " + argumentTypes[i].toSql());
                     }
                     argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
+                        argumentTypes[i] = Type.VARCHAR;
+                    }
                 }
                 fn.setArgsType(argumentTypes); // as accepting various types
                 ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
@@ -891,7 +897,20 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                fn.setRetType(new ArrayType(argumentTypes[0])); // return null if scalar agg with empty input
+                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                    fn.setRetType(new ArrayType(argumentTypes[0]));     // return null if scalar agg with empty input
+                } else {
+                    boolean outputConst = true;
+                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
+                        if (!node.getChild(i).isConstant()) {
+                            outputConst = false;
+                            break;
+                        }
+                    }
+                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                            (!isAscOrder.isEmpty() || outputConst));
+                    fn.setRetType(Type.VARCHAR);
+                }
             } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 // This must before test for DecimalV3.
                 if (!(node.getChild(1) instanceof IntLiteral)) {
