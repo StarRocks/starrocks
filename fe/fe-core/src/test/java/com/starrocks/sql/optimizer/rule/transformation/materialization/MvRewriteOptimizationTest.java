@@ -394,7 +394,7 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: empid <= 3");
+                "     PREDICATES: 5: empid < 4");
 
         String query3 = "select empid, deptno, name, salary from emps where empid <= 5";
         String plan3 = getFragmentPlan(query3);
@@ -791,7 +791,7 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: join_mv_2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: v1 <= 9");
+                "     PREDICATES: 15: v1 < 10");
         String query9 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 100";
         String plan9 = getFragmentPlan(query9);
@@ -1127,7 +1127,7 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
 
         String query4 = "SELECT t0.v1 as v1, " +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -1144,7 +1144,7 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
 
         // test group key not equal
         String query5 = "SELECT t0.v1 + 1 as alias, test_all_type.t1d," +
@@ -1188,7 +1188,7 @@ public class MvRewriteOptimizationTest {
                 "  0:OlapScanNode\n" +
                 "     TABLE: agg_join_mv_2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 16: v1 <= 98");
+                "     PREDICATES: 16: v1 < 99");
         dropMv("test", "agg_join_mv_2");
 
         createAndRefreshMv("test", "agg_join_mv_3", "create materialized view agg_join_mv_3" +
@@ -1499,7 +1499,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan1, "hive_union_mv_1");
         PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
                 "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey <= 9, 13: s_suppkey >= 5");
+                "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey >= 5");
 
         dropMv("test", "hive_union_mv_1");
     }
@@ -1528,7 +1528,7 @@ public class MvRewriteOptimizationTest {
 
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 19: s_suppkey <= 9, 19: s_suppkey >= 5");
+        PlanTestBase.assertContains(plan, "TABLE: supplier", "NON-PARTITION PREDICATES: 19: s_suppkey < 10, 19: s_suppkey >= 5");
 
         connectContext.getSessionVariable().setUseNthExecPlan(0);
         dropMv("test", "hive_union_mv_1");
@@ -1585,7 +1585,7 @@ public class MvRewriteOptimizationTest {
                     "     TABLE: union_mv_1");
             PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 9: empid <= 4, 9: empid >= 3");
+                    "     PREDICATES: 9: empid < 5, 9: empid >= 3");
 
             String query7 = "select deptno, empid from emps2 where empid < 5";
             String plan7 = getFragmentPlan(query7);
@@ -1643,12 +1643,13 @@ public class MvRewriteOptimizationTest {
             PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
                     "     TABLE: emps2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 15: deptno <= 119, 15: deptno > 99, 15: deptno < 120\n" +
+                    "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
                     "     partitions=1/1");
             PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
                     "     TABLE: depts2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 18: deptno <= 119, 18: deptno > 99, 18: deptno < 120");
+                    "     PREDICATES: 18: deptno < 120, 18: deptno >= 100\n" +
+                    "     partitions=1/1");
         }
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
@@ -1746,11 +1747,11 @@ public class MvRewriteOptimizationTest {
             PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
                     "     TABLE: test_all_type2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 24: t1d > 99, 24: t1d <= 119, 24: t1d < 120");
+                    "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
             PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
                     "     TABLE: t02\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: v1 > 99, 20: v1 <= 119, 20: v1 < 120");
+                    "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
             dropMv("test", "join_agg_union_mv_2");
         }
 
@@ -2019,7 +2020,7 @@ public class MvRewriteOptimizationTest {
 
         String query13 = "select c1, c3, c2 from test_base_part where c3 < 1000";
         String plan13 = getFragmentPlan(query13);
-        PlanTestBase.assertContains(plan13, "partial_mv_6", "c3 <= 999");
+        PlanTestBase.assertContains(plan13, "partial_mv_6", "PREDICATES: 6: c3 < 1000");
 
         dropMv("test", "partial_mv_6");
 
@@ -2232,10 +2233,10 @@ public class MvRewriteOptimizationTest {
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey >= 101", "lineitem_par",
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
                 "PARTITION PREDICATES: (((23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06')) AND " +
                         "(23: l_shipdate >= '1998-01-02')) OR (23: l_shipdate IS NULL)",
-                "NON-PARTITION PREDICATES: 21: l_orderkey >= 101");
+                "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
 
@@ -2275,8 +2276,8 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) OR " +
-                        "((22: l_shipdate IS NULL) OR (20: l_orderkey <= 99))) OR (20: l_orderkey >= 101)");
+                "NON-PARTITION PREDICATES:" +
+                        " ((22: l_shipdate != '1998-01-01') OR (22: l_shipdate IS NULL)) OR (20: l_orderkey != 100)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",

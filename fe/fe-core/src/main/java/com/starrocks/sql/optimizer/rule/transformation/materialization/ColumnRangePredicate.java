@@ -90,23 +90,33 @@ public class ColumnRangePredicate extends RangePredicate {
         List<ScalarOperator> orOperators = Lists.newArrayList();
         for (Range<ConstantOperator> range : columnRanges.asRanges()) {
             List<ScalarOperator> andOperators = Lists.newArrayList();
-            if (range.hasLowerBound() && range.hasUpperBound() && range.upperEndpoint().equals(range.lowerEndpoint())) {
-                andOperators.add(BinaryPredicateOperator.eq(columnRef, range.upperEndpoint()));
-            } else {
-                if (range.hasLowerBound()) {
-                    if (range.lowerBoundType() == BoundType.CLOSED) {
-                        andOperators.add(BinaryPredicateOperator.ge(columnRef, range.lowerEndpoint()));
-                    } else {
-                        andOperators.add(BinaryPredicateOperator.gt(columnRef, range.lowerEndpoint()));
-                    }
+            if (range.hasLowerBound() && range.hasUpperBound()) {
+                if (range.lowerBoundType() == BoundType.CLOSED
+                        && range.upperBoundType() == BoundType.CLOSED
+                        && range.upperEndpoint().equals(range.lowerEndpoint())) {
+                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    continue;
+                } else if (range.lowerBoundType() == BoundType.CLOSED
+                        && range.upperBoundType() == BoundType.OPEN
+                        && range.lowerEndpoint().successor().isPresent()
+                        && range.upperEndpoint().equals(range.lowerEndpoint().successor().get())) {
+                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    continue;
                 }
+            }
+            if (range.hasLowerBound()) {
+                if (range.lowerBoundType() == BoundType.CLOSED) {
+                    andOperators.add(BinaryPredicateOperator.ge(columnRef, range.lowerEndpoint()));
+                } else {
+                    andOperators.add(BinaryPredicateOperator.gt(columnRef, range.lowerEndpoint()));
+                }
+            }
 
-                if (range.hasUpperBound()) {
-                    if (range.upperBoundType() == BoundType.CLOSED) {
-                        andOperators.add(BinaryPredicateOperator.le(columnRef, range.upperEndpoint()));
-                    } else {
-                        andOperators.add(BinaryPredicateOperator.lt(columnRef, range.upperEndpoint()));
-                    }
+            if (range.hasUpperBound()) {
+                if (range.upperBoundType() == BoundType.CLOSED) {
+                    andOperators.add(BinaryPredicateOperator.le(columnRef, range.upperEndpoint()));
+                } else {
+                    andOperators.add(BinaryPredicateOperator.lt(columnRef, range.upperEndpoint()));
                 }
             }
             orOperators.add(Utils.compoundAnd(andOperators));
