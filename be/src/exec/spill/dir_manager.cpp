@@ -52,6 +52,14 @@ Status DirManager::init() {
         } else {
             iter++;
         }
+        auto iter_tmp = iter;
+        for (; iter_tmp != spill_local_storage_paths.end(); ++iter_tmp) {
+            if (is_same_disk(path, iter_tmp->path)) {
+                return Status::InvalidArgument(fmt::format(
+                        "spill_local_storage_dir {} has the same disk path with {}, please use another path", path,
+                        iter_tmp->path));
+            }
+        }
     }
     if (spill_local_storage_paths.empty()) {
         return Status::InvalidArgument("cannot find available spill_local_storage_dir");
@@ -59,6 +67,7 @@ Status DirManager::init() {
 
     std::regex query_id_pattern("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
 
+    double max_dir_size_ratio = config::spill_max_dir_bytes_ratio;
     for (const auto& path : spill_local_storage_paths) {
         std::string spill_dir_path = path.path;
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(spill_dir_path));
@@ -76,7 +85,17 @@ Status DirManager::init() {
             }
             return true;
         }));
-        _dirs.emplace_back(std::make_shared<Dir>(spill_dir_path, std::move(fs)));
+        ASSIGN_OR_RETURN(auto space_info, FileSystem::Default()->space(spill_dir_path));
+        int64_t max_dir_size = space_info.capacity;
+        for (const auto& storage_path : storage_paths) {
+            if (is_same_disk(spill_dir_path, storage_path)) {
+                max_dir_size = max_dir_size * max_dir_size_ratio;
+                // do not consider multi spill directory on the same disk
+                // we will return error state during initialize
+                break;
+            }
+        }
+        _dirs.emplace_back(std::make_shared<Dir>(spill_dir_path, std::move(fs), max_dir_size));
     }
     return Status::OK();
 }
