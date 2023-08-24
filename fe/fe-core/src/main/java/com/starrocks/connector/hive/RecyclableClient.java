@@ -33,7 +33,7 @@ public class RecyclableClient {
     private static final LinkedList<RecyclableClient> CLIENT_POOL = new LinkedList<>();
     private static final Object CLIENT_POOL_LOCK = new Object();
 
-    public final IMetaStoreClient hiveClient;
+    private final IMetaStoreClient hiveClient;
 
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;

@@ -90,8 +90,8 @@ public class HiveMetaClient {
         try {
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
-            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
-            return (T) method.invoke(client.hiveClient, args);
+            Method method = client.getHiveClient().getClass().getDeclaredMethod(methodName, argClasses);
+            return (T) method.invoke(client.getHiveClient(), args);
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
             connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
@@ -232,7 +232,7 @@ public class HiveMetaClient {
             StarRocksConnectorException connectionException = null;
             try {
                 client = getClient();
-                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
+                partitions = client.getHiveClient().getPartitionsByNames(dbName, tblName, partitionNames);
                 if (partitions.size() != partitionNames.size()) {
                     LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
                             partitionNames.size(), dbName, tblName, partitions.size());
@@ -306,7 +306,7 @@ public class HiveMetaClient {
         try {
             client = getClient();
             for (List<String> parts : partNamesList) {
-                partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
+                partitions.addAll(client.getHiveClient().getPartitionsByNames(dbName, tableName, parts));
             }
             LOG.info("Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
                     dbName, tableName, retryNum, subListSize, partNames.size());
