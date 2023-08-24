@@ -75,6 +75,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
@@ -238,14 +239,16 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-        if (currentWh == null) {
-            throw new BeginTransactionException("warehouse " + warehouseId + " not exist.");
+        try {
+            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
+                            new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                            LoadJobSourceType.FRONTEND, id, timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+
+        } catch (WarehouseUnavailableException e) {
+            throw new BeginTransactionException(e.getMessage());
         }
-        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
-                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        LoadJobSourceType.FRONTEND, id, timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
     }
 
     @Override
@@ -557,11 +560,8 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(
-                                            warehouseId);
-                                    if (currentWh == null) {
-                                        throw new LoadException("warehouse " + warehouseId + " not exist.");
-                                    }
+                                    Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().
+                                            getAvailbleWarehouse(warehouseId);
                                     long backendId = ((LakeTablet) tablet).
                                             getPrimaryComputeNodeId(currentWh.getAnyAvailableCluster().getWorkerGroupId());
                                     // TODO: need to refactor after be split into cn + dn

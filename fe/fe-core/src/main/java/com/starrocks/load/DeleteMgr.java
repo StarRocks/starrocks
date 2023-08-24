@@ -78,6 +78,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -269,7 +270,14 @@ public class DeleteMgr implements Writable {
         if (ConnectContext.get() != null) {
             warehouseId = ConnectContext.get().getCurrentWarehouseId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+        Warehouse warehouse = null;
+        // check warehouse state
+        try {
+            warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+        } catch (WarehouseUnavailableException e) {
+            throw new BeginTransactionException(e.getMessage());
+        }
+
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
         // begin txn here and generate txn id

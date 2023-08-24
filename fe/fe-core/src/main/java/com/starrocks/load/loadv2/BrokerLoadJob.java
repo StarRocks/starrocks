@@ -53,6 +53,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
@@ -126,15 +127,17 @@ public class BrokerLoadJob extends BulkLoadJob {
     public void beginTxn()
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-        if (currentWh == null) {
-            throw new BeginTransactionException("warehouse " + warehouseId + " not exist.");
+
+        try {
+            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
+                            new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                            TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
+                            timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+        } catch (WarehouseUnavailableException e) {
+            throw new BeginTransactionException(e.getMessage());
         }
-        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
-                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
     }
 
     @Override

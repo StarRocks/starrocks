@@ -45,6 +45,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -345,10 +346,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
 
-                        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-                        if (currentWh == null) {
-                            throw new AlterCancelException("warehouse " + warehouseId + " not exist.");
-                        }
+                        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+
                         Long nodeId = Utils.chooseBackend(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
                         if (nodeId == null) {
                             throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouseId);
@@ -418,9 +417,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
-                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-                if (currentWh == null) {
-                    throw new AlterCancelException("warehouse " + warehouseId + " not exist.");
+                Warehouse currentWh = null;
+                try {
+                    currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+                } catch (WarehouseUnavailableException e) {
+                    throw new AlterCancelException(e.getMessage());
                 }
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
@@ -596,10 +597,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
-                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-                if (currentWh == null) {
-                    throw new Exception("warehouse " + warehouseId + " not exist");
-                }
+                Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
                             currentWh.getAnyAvailableCluster().getWorkerGroupId());

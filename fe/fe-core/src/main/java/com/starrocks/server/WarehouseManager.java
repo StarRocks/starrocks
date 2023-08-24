@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -78,6 +79,17 @@ public class WarehouseManager implements Writable {
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
         }
+    }
+
+    public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null) {
+            throw new WarehouseUnavailableException("warehouse " + warehouseId + " not exist");
+        }
+        if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
+            throw new WarehouseUnavailableException("warehouse " + warehouseId + " has been suspended");
+        }
+        return warehouse;
     }
 
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
