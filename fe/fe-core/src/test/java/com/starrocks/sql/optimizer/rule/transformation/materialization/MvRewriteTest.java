@@ -933,7 +933,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testHiveAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
@@ -990,7 +989,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey > 4");
 
         dropMv("test", "hive_union_mv_1");
-=======
+    }
+
+    @Test
     public void testMVCacheInvalidAndReValid() throws Exception {
         starRocksAssert.withTable("\n" +
                 "CREATE TABLE test_base_tbl(\n" +
@@ -1067,7 +1068,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
             plan = getFragmentPlan(sql);
             PlanTestBase.assertContains(plan, "test_cache_mv1");
         }
->>>>>>> 30d68c3d20 ([BugFix] Add enable_materialized_view_rewrite_greedy_mode param to control fast withdraw for mv rewrite (#29645))
     }
 
     @Test

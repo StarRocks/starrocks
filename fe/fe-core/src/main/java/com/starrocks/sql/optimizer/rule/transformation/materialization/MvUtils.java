@@ -1039,7 +1039,6 @@ public class MvUtils {
         }
     }
 
-<<<<<<< HEAD
     /**
      * Return the max refresh timestamp of all partition infos.
      */
