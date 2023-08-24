@@ -858,10 +858,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return partitionIdToRollupIndex;
     }
 
-    public void setJobState(JobState jobState) {
-        this.jobState = jobState;
-    }
-
     private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
         for (Map.Entry<String, Expr> entry : columnNameToDefineExpr.entrySet()) {
             for (Column column : rollupSchema) {

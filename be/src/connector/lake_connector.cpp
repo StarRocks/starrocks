@@ -383,7 +383,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                           std::vector<uint32_t>& reader_columns) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new PredicateParser(*_tablet_schema));
+    auto parser = _obj_pool.add(new PredicateParser(_tablet_schema));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
@@ -458,14 +458,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
-    starrocks::Schema child_schema = ChunkHelper::convert_schema(*_tablet_schema, reader_columns);
+    starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
 
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_scan_range.tablet_id));
     ASSIGN_OR_RETURN(_reader, tablet.new_reader(_version, std::move(child_schema)));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::Schema output_schema = ChunkHelper::convert_schema(*_tablet_schema, scanner_columns);
+        starrocks::Schema output_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 

@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "tablet_schema.h"
 
 namespace starrocks {
 
@@ -51,7 +52,8 @@ public:
 
     static Status construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
                                                  CompactionAlgorithm algorithm, Version version,
-                                                 std::unique_ptr<RowsetWriter>* output_rowset_writer);
+                                                 std::unique_ptr<RowsetWriter>* output_rowset_writer,
+                                                 const TabletSchemaCSPtr* tablet_schema = nullptr);
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
 

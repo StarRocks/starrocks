@@ -85,16 +85,9 @@ class Segment : public std::enable_shared_from_this<Segment> {
     };
 
 public:
-    // Does NOT take the ownership of |tablet_schema|.
+    // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                   uint32_t segment_id, const TabletSchema* tablet_schema,
-                                                   size_t* footer_length_hint = nullptr,
-                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
-
-    // Like above but share the ownership of |tablet_schema|.
-    static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
-                                                   uint32_t segment_id,
-                                                   std::shared_ptr<const TabletSchema> tablet_schema,
+                                                   uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
                                                    bool skip_fill_local_cache = true);
@@ -104,10 +97,7 @@ public:
                                                      const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-            const TabletSchema* tablet_schema);
-
-    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-            std::shared_ptr<const TabletSchema> tablet_schema);
+            TabletSchemaCSPtr tablet_schema);
 
     ~Segment();
 
@@ -119,10 +109,11 @@ public:
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid, ColumnAccessPath* path = nullptr);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t id, ColumnAccessPath* path = nullptr,
+                                                                  const TabletSchemaCSPtr& tablet_schema = nullptr);
 
     [[nodiscard]] Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options,
-                                                   BitmapIndexIterator** iter);
+                                                   BitmapIndexIterator** iter, const TabletSchemaCSPtr& tablet_schema);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -152,11 +143,15 @@ public:
 
     size_t num_columns() const { return _column_readers.size(); }
 
-    const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
+    const ColumnReader* column(size_t i) const {
+        return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
+    }
 
     FileSystem* file_system() const { return _fs.get(); }
 
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
+
+    const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
 
     const std::string& file_name() const { return _fname; }
 
@@ -170,6 +165,8 @@ public:
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
+
+    bool is_valid_column(uint32_t column_unique_id) const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
@@ -195,8 +192,10 @@ private:
         // Does not take the ownership of TabletSchema pointed by |raw_ptr|.
         explicit TabletSchemaWrapper(const TabletSchema* raw_ptr) : _schema(raw_ptr, DummyDeleter()) {}
 
+        explicit TabletSchemaWrapper(const TabletSchemaCSPtr* shared_ptr) : _schema(*shared_ptr) {}
+
         // Shard the ownership of |ptr|.
-        explicit TabletSchemaWrapper(std::shared_ptr<const TabletSchema> ptr) : _schema(std::move(ptr)) {}
+        explicit TabletSchemaWrapper(TabletSchemaCSPtr ptr) : _schema(std::move(ptr)) {}
 
         DISALLOW_COPY_AND_MOVE(TabletSchemaWrapper);
 
@@ -204,8 +203,10 @@ private:
 
         const TabletSchema& operator*() const { return *_schema; }
 
+        const TabletSchemaCSPtr& schema() { return _schema; };
+
     private:
-        std::shared_ptr<const TabletSchema> _schema;
+        TabletSchemaCSPtr _schema;
     };
 
     Status _load_index(bool skip_fill_local_cache);
@@ -244,7 +245,7 @@ private:
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added
     // after this segment is generated.
-    std::vector<std::unique_ptr<ColumnReader>> _column_readers;
+    std::map<int32_t, std::unique_ptr<ColumnReader>> _column_readers;
 
     // used to guarantee that short key index will be loaded at most once in a thread-safe way
     OnceFlag _load_index_once;

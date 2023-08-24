@@ -198,7 +198,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
-    TabletSchema tablet_schema(new_tablet_meta_pb.schema());
+    auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 
@@ -255,12 +255,12 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
-                                          TabletSchema& tablet_schema, const RowsetId& rowset_id,
+                                          TabletSchemaCSPtr& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -274,7 +274,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
     context.rowset_path_prefix = new_path;
-    context.tablet_schema = &tablet_schema;
+    context.tablet_schema = org_rowset_meta->tablet_schema() ? org_rowset_meta->tablet_schema() : tablet_schema;
     context.rowset_state = org_rowset_meta->rowset_state();
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset

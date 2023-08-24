@@ -225,6 +225,9 @@ public class OperationType {
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
+    // light schema change for add and drop columns
+    public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
+
     // routine load 110~120
     @Deprecated
     public static final short OP_ROUTINE_LOAD_JOB = 110;

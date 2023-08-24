@@ -26,8 +26,7 @@ static void get_stats(std::ostream& os, void*) {
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
 
-bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb,
-                                             const std::shared_ptr<const TabletSchema>& schema_ptr) {
+bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr) {
     if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
         schema_pb.column_size() != schema_ptr->num_columns()) {
         return false;
@@ -54,7 +53,7 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     // We use shared schema to save mem usage, but the premise is that we need to ensure that no two different
     // TabletSchemaPBs have the same id. But we can't guarantee it after schema change so far, so we should
     // check the consistent of tablet schema.
-    // If check failed, we will create a new tablet_schema as return value, but we must hold the original schema
+    // If check failed, we will create a new unsafe_tablet_schema_ref as return value, but we must hold the original schema
     // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
     // a dead lock(#issue 5646)
     TabletSchemaPtr result = nullptr;

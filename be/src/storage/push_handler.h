@@ -51,8 +51,10 @@ private:
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
-    Status _load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
-    Status _delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
+    Status _load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                         const TabletSchemaCSPtr& tablet_schema);
+    Status _delete_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset,
+                           const TabletSchemaCSPtr& tablet_schema);
 
 private:
     // mainly tablet_id, version and delta file path

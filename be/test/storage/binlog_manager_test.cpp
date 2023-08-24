@@ -64,7 +64,7 @@ protected:
         col.set_has_bitmap_index(false);
 
         _tablet_schema = std::make_unique<TabletSchema>(schema_pb);
-        _schema = ChunkHelper::convert_schema(*_tablet_schema);
+        _schema = ChunkHelper::convert_schema(_tablet_schema);
     }
 
     void create_rowset(int version, std::vector<int32_t> rows_per_segment, RowsetSharedPtr& rowset) {
@@ -78,7 +78,7 @@ protected:
         writer_context.version = Version(version, 0);
         writer_context.rowset_path_prefix = _binlog_file_dir;
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = _tablet_schema.get();
+        writer_context.tablet_schema = _tablet_schema;
         writer_context.writer_type = kHorizontal;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -110,7 +110,7 @@ protected:
                               std::vector<BinlogFileMetaPBPtr>* metas_for_each_page);
 
     int64_t _next_rowset_uid;
-    std::unique_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     Schema _schema;
     std::shared_ptr<FileSystem> _fs;
     std::string _binlog_file_dir = "binlog_manager_test";

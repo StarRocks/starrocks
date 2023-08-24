@@ -83,22 +83,22 @@ protected:
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    void build_segment(const SegmentWriterOptions& opts, const TabletSchema& build_schema,
-                       const TabletSchema& query_schema, size_t nrows, const ValueGenerator& generator,
+    void build_segment(const SegmentWriterOptions& opts, const TabletSchemaCSPtr& build_schema,
+                       const TabletSchemaCSPtr& query_schema, size_t nrows, const ValueGenerator& generator,
                        shared_ptr<Segment>* res) {
         static int seg_id = 0;
         // must use unique filename for each segment, otherwise page cache kicks in and produces
         // the wrong answer (it use (filename,offset) as cache key)
         std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);
         ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
-        SegmentWriter writer(std::move(wfile), 0, &build_schema, opts);
+        SegmentWriter writer(std::move(wfile), 0, build_schema, opts);
         ASSERT_OK(writer.init());
 
         auto schema = ChunkHelper::convert_schema(build_schema);
         auto chunk = ChunkHelper::new_chunk(schema, nrows);
         for (size_t rid = 0; rid < nrows; ++rid) {
             auto& cols = chunk->columns();
-            for (int cid = 0; cid < build_schema.num_columns(); ++cid) {
+            for (int cid = 0; cid < build_schema->num_columns(); ++cid) {
                 int row_block_id = rid / opts.num_rows_per_block;
                 cols[cid]->append_datum(generator(rid, cid, row_block_id));
             }
@@ -108,7 +108,7 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_fs, filename, 0, &query_schema);
+        *res = *Segment::open(_fs, filename, 0, query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -121,7 +121,7 @@ protected:
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     size_t num_rows_per_block = 10;
 
-    auto tablet_schema = TabletSchemaHelper::create_tablet_schema(
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_key_pb(3), create_int_value_pb(4)}, 2);
     tablet_schema->_num_rows_per_row_block = 2;
 
@@ -134,14 +134,14 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 
     std::string fname = dname + "/int_case";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema.get(), opts);
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
     ASSERT_OK(writer.init());
 
     // 0, 1, 2, 3
     // 10, 11, 12, 13
     // 20, 21, 22, 23
     size_t nrows = 1048576;
-    auto schema = ChunkHelper::convert_schema(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, nrows);
     for (size_t rid = 0; rid < nrows; ++rid) {
         auto& cols = chunk->columns();
@@ -166,25 +166,25 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 }
 
 TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
-    std::unique_ptr<TabletSchema> schema =
+    std::shared_ptr<TabletSchema> schema =
             TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_key_pb(2), create_int_key_pb(3),
                                                       create_int_value_pb(4, "REPLACE", true, "", true)});
 
     // for not base segment
     SegmentWriterOptions opts1;
     shared_ptr<Segment> seg1;
-    build_segment(opts1, *schema, *schema, 100, DefaultIntGenerator, &seg1);
+    build_segment(opts1, schema, schema, 100, DefaultIntGenerator, &seg1);
     ASSERT_TRUE(seg1->column(3)->has_bloom_filter_index());
 
     // for base segment
     SegmentWriterOptions opts2;
     shared_ptr<Segment> seg2;
-    build_segment(opts2, *schema, *schema, 100, DefaultIntGenerator, &seg2);
+    build_segment(opts2, schema, schema, 100, DefaultIntGenerator, &seg2);
     ASSERT_TRUE(seg2->column(3)->has_bloom_filter_index());
 }
 
 TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
-    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
@@ -193,12 +193,12 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     std::string file_name = kSegmentDir + "/horizontal_write_case";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema.get(), opts);
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
     ASSERT_OK(writer.init());
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto schema = ChunkHelper::convert_schema(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         chunk->reset();
@@ -217,7 +217,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -249,7 +249,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
 // NOLINTNEXTLINE
 TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
-    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
@@ -258,7 +258,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     std::string file_name = kSegmentDir + "/vertical_write_case";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema.get(), opts);
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
@@ -269,7 +269,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -287,7 +287,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -304,7 +304,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col4
         std::vector<uint32_t> column_indexes{3};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -319,14 +319,14 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -367,7 +367,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     ColumnPB c3 = create_with_default_value_pb("VARCHAR", "");
     c3.set_length(65535);
 
-    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema({c1, c2, c3});
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema({c1, c2, c3});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
@@ -375,7 +375,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     std::string file_name = kSegmentDir + "/read_multiple_types_column";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
 
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema.get(), opts);
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
@@ -386,7 +386,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -404,7 +404,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -418,14 +418,14 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();

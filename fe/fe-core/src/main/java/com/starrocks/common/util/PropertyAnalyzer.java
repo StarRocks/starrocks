@@ -58,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
@@ -174,6 +175,9 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -535,6 +539,30 @@ public class PropertyAnalyzer {
 
         return schemaVersion;
     }
+
+    public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
+        if (properties == null || properties.isEmpty()) {
+            return false;
+        }
+        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        // set light schema change false by default
+        if (Config.allow_default_light_schema_change) {
+            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            return true;
+        }
+        if (null == value) {
+            return false;
+        }
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+            + " must be `true` or `false`");
+    }
+
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {

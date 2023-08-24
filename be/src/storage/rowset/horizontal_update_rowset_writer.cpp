@@ -42,7 +42,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalUpdateRowsetWriter::_create_u
     std::lock_guard<std::mutex> l(_lock);
     std::string path = Rowset::segment_upt_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_uptfile);
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    const auto* schema = _context.tablet_schema;
+    const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_uptfile, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     return std::move(segment_writer);

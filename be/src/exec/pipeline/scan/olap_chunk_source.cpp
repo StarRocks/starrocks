@@ -160,7 +160,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new PredicateParser(_tablet->tablet_schema()));
+    auto parser = _obj_pool.add(new PredicateParser(_tablet_schema));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
@@ -211,11 +211,11 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (skip_aggregation) {
         reader_columns = scanner_columns;
     } else {
-        for (size_t i = 0; i < _tablet->num_key_columns(); i++) {
+        for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
             reader_columns.push_back(i);
         }
         for (auto index : scanner_columns) {
-            if (!_tablet->tablet_schema().column(index).is_key()) {
+            if (!_tablet_schema->column(index).is_key()) {
                 reader_columns.push_back(index);
             }
         }
@@ -229,7 +229,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
 Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet->field_index(slot->col_name());
+        int32_t index = _tablet_schema->field_index(slot->col_name());
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -253,7 +253,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 
 Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
-        int32_t index = _tablet->field_index(col_name);
+        int32_t index = _tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
@@ -294,20 +294,33 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+
+    auto tablet_schema_ptr = _tablet->tablet_schema();
+    _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
+
+    // if column_desc come from fe, reset tablet schema
+    if (!_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
+        _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
+        _tablet_schema->clear_columns();
+        for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
+            _tablet_schema->append_column(TabletColumn(column_desc));
+        }
+    }
+
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
-    const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    starrocks::Schema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
+
+    starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema), _morsel->rowsets());
+                                             std::move(child_schema), _morsel->rowsets(), &_tablet_schema);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::Schema output_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
+        starrocks::Schema output_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -349,7 +362,7 @@ Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
         auto iter = global_dict_map.find(slot->id());
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
-            int32_t index = _tablet->field_index(slot->col_name());
+            int32_t index = _tablet_schema->field_index(slot->col_name());
             DCHECK(index >= 0);
             global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
         }

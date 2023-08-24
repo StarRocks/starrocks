@@ -143,6 +143,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField
+    public static String custom_config_dir = "/conf";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -2450,6 +2453,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
+    @ConfField(mutable = true)
+    public static boolean allow_default_light_schema_change = false;
+  
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)

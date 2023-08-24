@@ -517,8 +517,8 @@ void check_meta_consistency(DataDir* data_dir) {
         tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->tablet_id()));
         tablet_path = starrocks::path_util::join_path_segments(tablet_path, std::to_string(tablet_meta->schema_hash()));
 
-        auto& tablet_schema = tablet_meta->tablet_schema();
-        const std::vector<starrocks::TabletColumn>& columns = tablet_schema.columns();
+        auto tablet_schema = tablet_meta->tablet_schema_ptr();
+        const std::vector<starrocks::TabletColumn>& columns = tablet_schema->columns();
 
         for (const auto& rs : tablet_meta->all_rs_metas()) {
             for (int64_t seg_id = 0; seg_id < rs->num_segments(); ++seg_id) {
@@ -664,7 +664,7 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
-    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema.get(), &footer_length, nullptr);
+    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema, &footer_length, nullptr);
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");
