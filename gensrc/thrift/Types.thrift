@@ -309,6 +309,7 @@ struct TAggregateFunction {
   // Indicates, for each expr, if nulls should be listed first or last. This is
   // independent of is_asc_order.
   13: optional list<bool> nulls_first
+  14: optional bool is_distinct = false
 }
 
 struct TTableFunction {
