@@ -27,6 +27,7 @@ import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -39,20 +40,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
 
+    @Before
+    public void setUp() {
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+    }
+
     @Test
     public void testtNormal(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                minTimes = 0;
-
-                globalStateMgr.isLeader();
-                result = true;
-                minTimes = 0;
-            }
-        };
-
         BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
         short threadNum = 20;
         List<Thread> allThreads = new ArrayList<>();
@@ -94,17 +88,6 @@ public class EditLogTest {
 
     @Test
     public void testInterrupt(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                minTimes = 0;
-
-                globalStateMgr.isLeader();
-                result = true;
-                minTimes = 0;
-            }
-        };
         // block if more than one task is put
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(1);
         Thread t1 = new Thread(new Runnable() {
