@@ -404,7 +404,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testInactive() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
-        materializedView.setActive(false);
+        materializedView.setInactiveAndReason("");
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -1825,7 +1825,6 @@ public class PartitionBasedMvRefreshProcessorTest {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            System.out.println(plan);
             Assert.assertTrue(plan.contains("partitions=2/2\n" +
                     "     rollup: list_partition_tbl1"));
         }

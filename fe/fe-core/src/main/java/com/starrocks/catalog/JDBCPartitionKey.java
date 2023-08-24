@@ -15,6 +15,9 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
+
+import java.util.List;
 
 public class JDBCPartitionKey extends PartitionKey implements NullablePartitionKey {
     public JDBCPartitionKey() {
@@ -22,7 +25,7 @@ public class JDBCPartitionKey extends PartitionKey implements NullablePartitionK
     }
 
     @Override
-    public String nullPartitionValue() {
-        return JDBCTable.PARTITION_NULL_VALUE;
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(JDBCTable.PARTITION_NULL_VALUE);
     }
 }

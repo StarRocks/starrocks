@@ -181,6 +181,10 @@ public class Replica implements Writable {
 
     private boolean isErrorState = false;
 
+    // This variable will be used in Primary Key table only. It is the max rowset creation time for
+    // the corresponding replica. This variable is in-memory only.
+    private long maxRowsetCreationTime = -1L;
+
     public Replica() {
     }
 
@@ -285,6 +289,10 @@ public class Replica implements Writable {
         return lastSuccessVersion;
     }
 
+    public long getMaxRowsetCreationTime() {
+        return maxRowsetCreationTime;
+    }
+
     public long getPathHash() {
         return pathHash;
     }
@@ -327,6 +335,15 @@ public class Replica implements Writable {
             return false;
         }
         this.isErrorState = state;
+        return true;
+    }
+
+    public boolean setMaxRowsetCreationTime(long newCreationTime) {
+        if (newCreationTime < maxRowsetCreationTime) {
+            return false;
+        }
+
+        maxRowsetCreationTime = newCreationTime;
         return true;
     }
 

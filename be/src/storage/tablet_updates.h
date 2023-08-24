@@ -324,6 +324,9 @@ public:
 
     Status pk_index_major_compaction();
 
+    // get the max rowset creation time for largest major version
+    int64_t max_rowset_creation_time();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

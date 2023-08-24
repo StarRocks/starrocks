@@ -39,6 +39,7 @@
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/update_manager.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -53,10 +54,6 @@ Status EngineStorageMigrationTask::execute() {
     if (tablet == nullptr) {
         LOG(WARNING) << "Not found tablet: " << _tablet_id;
         return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
-    }
-    if (tablet->updates() != nullptr) {
-        LOG(WARNING) << "Not support to migrate updatable tablet: " << _tablet_id;
-        return Status::NotSupported(fmt::format("Not support to migrate updatable tablet: {}", _tablet_id));
     }
 
     // check tablet data dir
@@ -116,16 +113,29 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             return Status::InternalError("could not migration because has unfinished txns.");
         }
 
+        if (tablet->updates() != nullptr && tablet->updates()->num_pending() != 0) {
+            std::stringstream ss;
+            ss << "could not migration because has pending txns, tablet_id: " << tablet->tablet_id();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
         // get all versions to be migrate
         {
             std::shared_lock header_rdlock(tablet->get_header_lock());
-            RowsetSharedPtr max_version = tablet->rowset_with_max_version();
-            if (max_version == nullptr) {
-                LOG(WARNING) << "Not found version in tablet. tablet: " << tablet->tablet_id();
-                return Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
-            }
+            if (tablet->updates() == nullptr) {
+                RowsetSharedPtr max_version = tablet->rowset_with_max_version();
+                if (max_version == nullptr) {
+                    std::stringstream ss;
+                    ss << "Not found version in tablet. tablet: " << tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::NotFound(ss.str());
+                }
 
-            end_version = max_version->end_version();
+                end_version = max_version->end_version();
+            } else {
+                end_version = tablet->updates()->max_version();
+            }
             res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
             if (!res.ok() || consistent_rowsets.empty()) {
                 LOG(WARNING) << "Fail to capture consistent rowsets. version=" << end_version;
@@ -221,6 +231,17 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             break;
         }
 
+        if (tablet->updates() != nullptr && tablet->updates()->num_pending() != 0) {
+            std::stringstream ss;
+            ss << "could not migration because has pending txns. tablet id: " << tablet->tablet_id();
+            LOG(WARNING) << ss.str();
+            need_remove_new_path = true;
+            res = Status::InternalError(ss.str());
+            break;
+        }
+
+        // can guarantee there are no new load txns in the following execution flow.
+
         auto new_tablet_meta = std::make_shared<TabletMeta>();
         Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
         if (st.ok()) {
@@ -235,6 +256,51 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             break;
         }
 
+        if (tablet->updates() == nullptr) {
+            res = _finish_migration(tablet, end_version, shard, consistent_rowsets, new_tablet_meta, schema_hash_path,
+                                    new_meta_file, dcgs_snapshot_path, need_remove_new_path);
+        } else {
+            res = _finish_primary_key_migration(tablet, end_version, shard, consistent_rowsets, schema_hash_path,
+                                                new_meta_file, need_remove_new_path);
+        }
+    } while (false);
+
+    // 4. clear
+    if (!new_meta_file.empty()) {
+        // remove meta file
+        Status st = fs::remove(new_meta_file);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to remove meta file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
+                         << ", path=" << schema_hash_path << ", error=" << st.get_error_msg();
+        }
+    }
+    if (!dcgs_snapshot_path.empty()) {
+        // remove dcg snapshot file
+        Status st = fs::remove(dcgs_snapshot_path);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to remove dcg file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
+                         << ", path=" << schema_hash_path << ", error=" << st.get_error_msg();
+        }
+    }
+    if (!res.ok() && need_remove_new_path) {
+        // remove all index and data files if migration failed
+        Status st = fs::remove_all(schema_hash_path);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to remove storage migration path, tablet_id: " << _tablet_id
+                         << ". schema_hash_path=" << schema_hash_path << ", error=" << st.get_error_msg();
+        }
+    }
+
+    return res;
+}
+
+Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tablet, int64_t end_version, uint64_t shard,
+                                                     const std::vector<RowsetSharedPtr>& consistent_rowsets,
+                                                     const TabletMetaSharedPtr& new_tablet_meta,
+                                                     const string& schema_hash_path, std::string& new_meta_file,
+                                                     std::string& dcgs_snapshot_path, bool& need_remove_new_path) {
+    Status res = Status::OK();
+    do {
         {
             // check version
             std::shared_lock header_rdlock(tablet->get_header_lock());
@@ -319,7 +385,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
 
         // it will change rowset id and its create time
         // rowset create time is useful when load tablet from meta to check which tablet is the tablet to load
-        st = SnapshotManager::instance()->convert_rowset_ids(schema_hash_path, _tablet_id, _schema_hash);
+        Status st = SnapshotManager::instance()->convert_rowset_ids(schema_hash_path, _tablet_id, _schema_hash);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to convert rowset id. path=" << schema_hash_path;
             need_remove_new_path = true;
@@ -397,31 +463,98 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         }
     } while (false);
 
-    // 4. clear
-    if (!new_meta_file.empty()) {
-        // remove hdr meta file
-        Status st = fs::remove(new_meta_file);
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to remove meta file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
-                         << ", path=" << schema_hash_path << ", error=" << st.to_string();
+    return res;
+}
+
+/*
+    The key idea is that, when we migrate the Primary Key tablet, it need the following steps:
+    1. copy the data file into the dest store path (done before this function)
+    2. snapshot the meta data
+    3. create a NEW tablet using meta data in step 2 with the same tablet id. And FORCE REPLACE
+       the old one. This is the same as non Primary Key tablet.
+    4. clear primary index cache
+*/
+Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSharedPtr& tablet, int64_t end_version,
+                                                                 uint64_t shard,
+                                                                 const std::vector<RowsetSharedPtr>& consistent_rowsets,
+                                                                 const string& schema_hash_path,
+                                                                 std::string& new_meta_file,
+                                                                 bool& need_remove_new_path) {
+    Status res = Status::OK();
+    do {
+        {
+            // check version
+            std::shared_lock header_rdlock(tablet->get_header_lock());
+            /*
+                Just make sure the major version is consistent.
+
+                There is no need to pay attention to minor here,
+                because when making the snapshot on tablet meta, the
+                corresponding delvector will be obtained according
+                to the segment file in consistent_rowsets, so
+                consistency can be maintained.
+            */
+            int64_t new_end_version = tablet->updates()->max_version();
+            if (end_version != new_end_version) {
+                std::stringstream ss;
+                ss << "Version does not match. src_version: " << end_version << ", dst_version: " << new_end_version
+                   << "tablet_id: " << tablet->tablet_id();
+                LOG(WARNING) << ss.str();
+                need_remove_new_path = true;
+                res = Status::InternalError(ss.str());
+                break;
+            }
+
+            std::vector<RowsetMetaSharedPtr> rowset_metas;
+            rowset_metas.reserve(consistent_rowsets.size());
+            for (const auto& rowset : consistent_rowsets) {
+                rowset_metas.emplace_back(rowset->rowset_meta());
+            }
+            res = SnapshotManager::instance()->make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, schema_hash_path,
+                                                                            tablet, rowset_metas, new_end_version,
+                                                                            g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+            if (!res.ok()) {
+                need_remove_new_path = true;
+                break;
+            }
         }
-    }
-    if (!dcgs_snapshot_path.empty()) {
-        // remove dcg snapshot file
-        Status st = fs::remove(dcgs_snapshot_path);
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to remove dcg file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
-                         << ", path=" << schema_hash_path << ", error=" << st.to_string();
+
+        auto tablet_manager = StorageEngine::instance()->tablet_manager();
+        res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
+                                                               schema_hash_path, false);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to create tablet from meta snapshot. tablet_id: " << _tablet_id;
+            WriteBatch wb;
+            RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(_dest_store, &wb, _tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(_dest_store, &wb, _tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_rowset(_dest_store, &wb, _tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_log(_dest_store, &wb, _tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(_dest_store, &wb, _tablet_id, tablet->schema_hash()));
+            auto st = _dest_store->get_meta()->write_batch(&wb);
+            LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st << " tablet_id: " << _tablet_id;
+            need_remove_new_path = true;
+            break;
         }
-    }
-    if (!res.ok() && need_remove_new_path) {
-        // remove all index and data files if migration failed
-        Status st = fs::remove_all(schema_hash_path);
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to remove storage migration path"
-                         << ". schema_hash_path=" << schema_hash_path << ", error=" << st.to_string();
+
+        // clear index cache
+        auto manager = StorageEngine::instance()->update_manager();
+        auto& index_cache = manager->index_cache();
+        auto index_entry = index_cache.get_or_create(_tablet_id);
+        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+        index_entry->value().unload();
+        index_cache.release(index_entry);
+
+        // if old tablet finished schema change, then the schema change status of the new tablet is DONE
+        // else the schema change status of the new tablet is FAILED
+        TabletSharedPtr new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
+        if (new_tablet == nullptr) {
+            // tablet already loaded success.
+            // just log, and not set need_remove_new_path.
+            LOG(WARNING) << "Not found tablet: " << _tablet_id;
+            res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
+            break;
         }
-    }
+    } while (false);
 
     return res;
 }

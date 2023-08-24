@@ -1566,6 +1566,13 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_admin_user_protection = false;
 
     /**
+     * When set to true, guava cache is used to cache the privilege collection
+     * for a specified user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_priv_collection_cache = true;
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.
@@ -2460,4 +2467,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+
+    /**
+     * Loading or compaction must be stopped for primary_key_disk_schedule_time
+     * seconds before it can be scheduled
+     */
+    @ConfField(mutable = true)
+    public static int primary_key_disk_schedule_time = 3600; // 1h
+
+    @ConfField(mutable = true)
+    public static String access_control = "native";
 }

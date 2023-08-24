@@ -301,6 +301,7 @@
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
+      + [Data type list](./sql-reference/sql-statements/data-types/data-type-list.md)
       + Numeric
         + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
         + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)

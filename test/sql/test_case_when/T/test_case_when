@@ -55,470 +55,478 @@ INSERT INTO `t0` (`region`, `order_date`, `income`, `ship_mode`, `ship_code`) VA
 ('CHINA', '2022-01-04', 98765, 150, 15),
 ('JAPAN', '2022-01-01', 23456, 75, null);
 
+[UC]set ENABLE_SIMPLIFY_CASE_WHEN = true;
+
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  = 'A';
+   else 'E' end)  = 'A' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  = 'B';
+   else 'E' end)  = 'B' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  = 'C';
+   else 'E' end)  = 'C' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  <> 'D';
+   else 'E' end)  <> 'D' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  <> 'E';
+   else 'E' end)  <> 'E' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('A','B');
+   else 'E' end)  in ('A','B') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('A','B', 'C');
+   else 'E' end)  in ('A','B', 'C') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('D','E');
+   else 'E' end)  in ('D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('E');
+   else 'E' end)  in ('E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in (NULL);
+   else 'E' end)  in (NULL) order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('F');
+   else 'E' end)  in ('F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('A','B','C','D','E');
+   else 'E' end)  in ('A','B','C','D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  in ('A','B','C','D','E','F');
+   else 'E' end)  in ('A','B','C','D','E','F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  not in ('A','B', 'C');
+   else 'E' end)  not in ('A','B', 'C') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  not in ('D','E');
+   else 'E' end)  not in ('D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  not in ('E');
+   else 'E' end)  not in ('E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  not in (NULL);
+   else 'E' end)  not in (NULL) order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  not in ('A','B','C','D','E','F');
+   else 'E' end)  not in ('A','B','C','D','E','F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  is NULL;
+   else 'E' end)  is NULL order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_code >= 90 then 'A'
    when ship_code >= 80 then 'B'
    when ship_code >= 70 then 'C'
    when ship_code >= 60 then 'D'
-   else 'E' end)  is NOT NULL;
+   else 'E' end)  is NOT NULL order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) = 1;
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) <> 1;
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region <> 'China' then 1 when region = 'Japan' then 2 else 3 end) <> 2;
+(case when region <> 'China' then 1 when region = 'Japan' then 2 else 3 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 2 when region = 'Japan' then 2 else 3 end) <> 2;
+(case when region = 'China' then 2 when region = 'Japan' then 2 else 3 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 2 when region = 'China' then 1 else 3 end) = 1;
+(case when region = 'China' then 2 when region = 'China' then 1 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 2 when region = 'China' then 1 else 3 end) <> 1;
+(case when region = 'China' then 2 when region = 'China' then 1 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region is NULL then 2 when region = 'China' then 1 else 3 end) = 3;
+(case when region is NULL then 2 when region = 'China' then 1 else 3 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = NULL then 2 when region = 'China' then 1 else 3 end) = 1;
+(case when region = NULL then 2 when region = 'China' then 1 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'USA' then 5 when region = 'China' then 1 else 3 end) = 3;
+(case when region = 'USA' then 5 when region = 'China' then 1 else 3 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
 (case when region = 'USA' then 5 when region = 'UK' then 2
-when region = 'China' then 1 end) = 3;
+when region = 'China' then 1 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
 (case when region = 'USA' then 1 when region = 'UK' then 2
-when region = 'China' then 2 end) = 2;
+when region = 'China' then 2 end) = 2 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = NULL then 2 when region = 'China' then 1 else 3 end) <> 1;
+(case when region = NULL then 2 when region = 'China' then 1 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'UK' then 2 when region = 'China' then 1 else 3 end) <> 3;
+(case when region = 'UK' then 2 when region = 'China' then 1 else 3 end) <> 3 order by 1,2,3,4,5;
 select * from t0 where
 (case when region = 'USA' then 5 when region = 'UK' then 2
-when region = 'China' then 1 end) <> 3;
+when region = 'China' then 1 end) <> 3 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) <> 2;
+(case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) in (1);
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) in (1) order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) not in (1);
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) not in (1) order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) in (3);
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) in (3) order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) not in (3);
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) not in (3) order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) is null;
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) is not null;
+(case when region = 'China' then 1 when region = 'Japan' then 2 else 3 end) is not null order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 end) is null;
+(case when region = 'China' then 1 when region = 'Japan' then 2 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then 2 end) is not null;
+(case when region = 'China' then 1 when region = 'Japan' then 2 end) is not null order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then NULL when region = 'Japan' then 2 end) is null;
+(case when region = 'China' then NULL when region = 'Japan' then 2 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case when region = 'China' then 1 when region = 'Japan' then NULL end) is not null;
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end != 'c';
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end in ('a', 'b', 'c');
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end not in ('a', 'b', 'c');
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end != 'c';
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end in ('a', 'b', 'c');
-select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end not in ('a', 'b', 'c');
-select * from t0 where (case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end in ('a', 'b', 'c')) is null;
-select * from t0 where (case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end not in ('a', 'b', 'c')) is null;
-select * from t0 where if(region='USA', 1, 0) = 1;
-select * from t0 where if(region='USA', 1, 0) = 0;
-select * from t0 where if(region='USA', 1, 0) = 2;
-select * from t0 where if(region='USA', 1, 0) <> 1;
-select * from t0 where if(region='USA', 1, 0) <> 0;
-select * from t0 where if(region='USA', 1, 0) <> 2;
-select * from t0 where if(region='USA', 1, 0) in (1);
-select * from t0 where if(region='USA', 1, 0) in (1,0);
-select * from t0 where if(region='USA', 1, 0) in (2,3);
-select * from t0 where if(region='USA', 1, 0) not in (0);
-select * from t0 where if(region='USA', 1, 0) not in (0,1);
-select * from t0 where if(region='USA', 1, 0) not in (2,3);
-select * from t0 where if(region='USA', 1, 0) is NULL;
-select * from t0 where if(region='USA', 1, 0) is NOT NULL;
-select * from t0 where if(ship_code is null, null, 0) is NULL;
-select * from t0 where if(ship_code is null or ship_code > 2, 2, 1) > 1;
-select * from t0 where if(ship_code is null or ship_code > 2, 2, 1) != 2;
-select * from t0 where if(ship_code is null or ship_code > 2, 1, 0) is NOT NULL;
-with tmp as (select ship_mode, if(ship_code > 4, 1, 0) as layer0, if (ship_code >= 1 and ship_code <= 4, 1, 0) as layer1,if(ship_code is null or ship_code < 1, 1, 0) as layer2 from t0) select * from tmp where layer2 = 1 and layer0 != 1 and layer1 !=1;
-select * from t0 where nullif('China', region) = 'China';
-select * from t0 where nullif('China', region) <> 'China';
-select * from t0 where nullif('China', region) is NULL;
-select * from t0 where nullif('China', region) is NOT NULL;
-select * from t0 where nullif('China', region) = 'USA';
-select * from t0 where nullif('China', region) <>  'USA';
-select * from t0 where nullif(1, ship_code) = 1;
-select * from t0 where nullif(1, ship_code) <> 1;
-select * from t0 where nullif(1, ship_code) is NULL;
-select * from t0 where nullif(1, ship_code) is NOT NULL;
-select * from t0 where nullif(1, ship_code) = 2;
-select * from t0 where nullif(1, ship_code) <>  2;
+(case when region = 'China' then 1 when region = 'Japan' then NULL end) is not null order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end != 'c' order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end in ('a', 'b', 'c') order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' else 'd' end not in ('a', 'b', 'c') order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end != 'c' order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end in ('a', 'b', 'c') order by 1,2,3,4,5;
+select * from t0 where case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end not in ('a', 'b', 'c') order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end in ('a', 'b', 'c')) is null order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then 'a' when ship_code = 1 then 'b' when ship_code = 2 then 'c' end not in ('a', 'b', 'c')) is null order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) = 1 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) = 0 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) = 2 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) <> 1 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) <> 0 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) <> 2 order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) in (1) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) in (1,0) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) in (2,3) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) not in (0) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) not in (0,1) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) not in (2,3) order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) is NULL order by 1,2,3,4,5;
+select * from t0 where if(region='USA', 1, 0) is NOT NULL order by 1,2,3,4,5;
+select * from t0 where if(ship_code is null, null, 0) is NULL order by 1,2,3,4,5;
+select * from t0 where if(ship_code is null or ship_code > 2, 2, 1) > 1 order by 1,2,3,4,5;
+select * from t0 where if(ship_code is null or ship_code > 2, 2, 1) != 2 order by 1,2,3,4,5;
+select * from t0 where if(ship_code is null or ship_code > 2, 1, 0) is NOT NULL order by 1,2,3,4,5;
+with tmp as (select ship_mode, if(ship_code > 4, 1, 0) as layer0, if (ship_code >= 1 and ship_code <= 4, 1, 0) as layer1,if(ship_code is null or ship_code < 1, 1, 0) as layer2 from t0) select * from tmp where layer2 = 1 and layer0 != 1 and layer1 !=1 order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) = 'China' order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) <> 'China' order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) is NULL order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) is NOT NULL order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) = 'USA' order by 1,2,3,4,5;
+select * from t0 where nullif('China', region) <>  'USA' order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) = 1 order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) <> 1 order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) is NULL order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) is NOT NULL order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) = 2 order by 1,2,3,4,5;
+select * from t0 where nullif(1, ship_code) <>  2 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) = 1;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,2);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,2) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> 1;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> 2;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 2 when 'Japan' then 2 else 3 end) <> 2;
+(case region when 'China' then 2 when 'Japan' then 2 else 3 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 2 when 'China' then 1 else 3 end) = 1;
+(case region when 'China' then 2 when 'China' then 1 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 2 when 'China' then 1 else 3 end) <> 1;
+(case region when 'China' then 2 when 'China' then 1 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when NULL then 2 when 'China' then 1 else 3 end) = 3;
+(case region when NULL then 2 when 'China' then 1 else 3 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
-(case region when NULL then 2 when 'China' then 1 else 3 end) = 1;
+(case region when NULL then 2 when 'China' then 1 else 3 end) = 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'USA' then 5 when 'China' then 1 else 3 end) = 3;
+(case region when 'USA' then 5 when 'China' then 1 else 3 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'USA' then 5 when 'UK' then 2 when 'China' then 1 end) = 3;
+(case region when 'USA' then 5 when 'UK' then 2 when 'China' then 1 end) = 3 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) = 2;
+(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) = 2 order by 1,2,3,4,5;
 select * from t0 where
-(case region when NULL then 2 when 'China' then 1 else 3 end) <> 1;
+(case region when NULL then 2 when 'China' then 1 else 3 end) <> 1 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'UK' then 2 when 'China' then 1 else 3 end) <> 3;
+(case region when 'UK' then 2 when 'China' then 1 else 3 end) <> 3 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'USA' then 5 when 'UK' then 2 when 'China' then 1 end) <> 3;
+(case region when 'USA' then 5 when 'UK' then 2 when 'China' then 1 end) <> 3 order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2;
+(case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2 order by 1,2,3,4,5;
 select * from t0 where
-((case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2) IS NULL;
+((case region when 'USA' then 1 when 'UK' then 2 when 'China' then 2 end) <> 2) IS NULL order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (3);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (3) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (3);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (3) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) is null;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) is not null;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) is not null order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 end) is null;
+(case region when 'China' then 1 when 'Japan' then 2 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 end) is not null;
+(case region when 'China' then 1 when 'Japan' then 2 end) is not null order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then NULL when 'Japan' then 2 end) is null;
+(case region when 'China' then NULL when 'Japan' then 2 end) is null order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then NULL end) is not null;
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  = 'b';
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  != 'b';
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('a', 'b', 'c', 'd');
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('e', 'f');
-select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('a', 'b', 'c', 'd')) is null;
-select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('e', 'f')) is not null;
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null  else 'e' end  = 'b';
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end  != 'b';
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd');
-select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end  in ('e', 'f');
-select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd')) is null;
-select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd')) is not null;
-select * from t0 where case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' when 3 then 'c' end in ('b', 'c', 'd');
-select * from t0 where case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd');
-select * from t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd')) is null;
-select * from t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd')) is not null;
+(case region when 'China' then 1 when 'Japan' then NULL end) is not null order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  = 'b' order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  != 'b' order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('a', 'b', 'c', 'd') order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('e', 'f') order by 1,2,3,4,5;
+select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('a', 'b', 'c', 'd')) is null order by 1,2,3,4,5;
+select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then 'c' end  in ('e', 'f')) is not null order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null  else 'e' end  = 'b' order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end  != 'b' order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd') order by 1,2,3,4,5;
+select * from t0 where case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end  in ('e', 'f') order by 1,2,3,4,5;
+select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd')) is null order by 1,2,3,4,5;
+select * from t0 where (case ship_code when 1 then 'a' when 2 then 'b' when 3 then null else 'e' end in ('a', 'b', 'c', 'd')) is not null order by 1,2,3,4,5;
+select * from t0 where case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' when 3 then 'c' end in ('b', 'c', 'd') order by 1,2,3,4,5;
+select * from t0 where case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd') order by 1,2,3,4,5;
+select * from t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd')) is null order by 1,2,3,4,5;
+select * from t0 where (case ship_code when ship_mode + 1 then 'a' when ship_mode + 2 then 'b' else 'e' end in ('a', 'b', 'c', 'd')) is not null order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  = 'A';
+   else 'E' end)  = 'A' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  = 'B';
+   else 'E' end)  = 'B' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  = 'C';
+   else 'E' end)  = 'C' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  = 'D';
+   else 'E' end)  = 'D' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  = 'E';
+   else 'E' end)  = 'E' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  <> 'A';
+   else 'E' end)  <> 'A' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  <> 'B';
+   else 'E' end)  <> 'B' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  <> 'C';
+   else 'E' end)  <> 'C' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  <> 'D';
+   else 'E' end)  <> 'D' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  <> 'E';
+   else 'E' end)  <> 'E' order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('A','B');
+   else 'E' end)  in ('A','B') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('A','B', 'C');
+   else 'E' end)  in ('A','B', 'C') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('D','E');
+   else 'E' end)  in ('D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('E');
+   else 'E' end)  in ('E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in (NULL);
+   else 'E' end)  in (NULL) order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('F');
+   else 'E' end)  in ('F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('A','B','C','D','E');
+   else 'E' end)  in ('A','B','C','D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  in ('A','B','C','D','E','F');
+   else 'E' end)  in ('A','B','C','D','E','F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('A','B');
+   else 'E' end)  not in ('A','B') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('A','B', 'C');
+   else 'E' end)  not in ('A','B', 'C') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('D','E');
+   else 'E' end)  not in ('D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('E');
+   else 'E' end)  not in ('E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in (NULL);
+   else 'E' end)  not in (NULL) order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('A','B','C','D','E');
+   else 'E' end)  not in ('A','B','C','D','E') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  not in ('A','B','C','D','E','F');
+   else 'E' end)  not in ('A','B','C','D','E','F') order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  is NULL;
+   else 'E' end)  is NULL order by 1,2,3,4,5;
 select * from t0 where (case
    when ship_mode >= 90 then 'A'
    when ship_mode >= 80 then 'B'
    when ship_mode >= 70 then 'C'
    when ship_mode >= 60 then 'D'
-   else 'E' end)  is NOT NULL;
+   else 'E' end)  is NOT NULL order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) = NULL;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) = NULL order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> NULL;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <> NULL order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <=> NULL;
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) <=> NULL order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,NULL);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (1,NULL) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1,NULL);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (1,NULL) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (NULL,NULL);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) in (NULL,NULL) order by 1,2,3,4,5;
 select * from t0 where
-(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (NULL,NULL);
+(case region when 'China' then 1 when 'Japan' then 2 else 3 end) not in (NULL,NULL) order by 1,2,3,4,5;
 select * from t0 where
-if (region = 'China', 1, 2) = NULL;
+if (region = 'China', 1, 2) = NULL order by 1,2,3,4,5;
 select * from t0 where
-if (region = 'China', 1, 2) not in (NULL, 1);
-select * from t0 where (case when region = 'USA' then true when region like 'COM%' then false end) is null;
-select * from t0 where (case when ship_code is null then true when not 3 then false end) is null;
-select * from t0 where (case when ship_code is null then true when not null then false end) is null;
-select * from t0 where (case when ship_code is null then true when null then false end) is null;
-select * from t0 where (case when ship_code is null then true when 0 then false end) is null;
+if (region = 'China', 1, 2) not in (NULL, 1) order by 1,2,3,4,5;
+select * from t0 where (case when region = 'USA' then true when region like 'COM%' then false end) is null order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then true when not 3 then false end) is null order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then true when not null then false end) is null order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then true when null then false end) is null order by 1,2,3,4,5;
+select * from t0 where (case when ship_code is null then true when 0 then false end) is null order by 1,2,3,4,5;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3 end in (2, 3, null)) is null order by 1,2,3,4,5;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 else 3 end in (2, 3, null)) is not null order by 1,2,3,4,5;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is null order by 1,2,3,4,5;
+select * from t0 where (case region when 'USA' then 1 when 'UK' then 2 end in (2, 3, null)) is not null order by 1,2,3,4,5;
+select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is null order by 1,2,3,4,5;
+select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 else 3 end in (2, 3, null)) is not null order by 1,2,3,4,5;
