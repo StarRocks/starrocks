@@ -30,10 +30,17 @@ public class UDFClassLoader extends URLClassLoader {
 
     private Map<String, Class<?>> genClazzMap = new HashMap<>();
     private static final int SINGLE_BATCH_UPDATE = 1;
-    private static final int BATCH_EVALUATE = 2; 
+    private static final int BATCH_EVALUATE = 2;
 
     public UDFClassLoader(String udfPath) throws IOException {
         super(new URL[] {new URL("file://" + udfPath)});
+        if (System.getSecurityManager() == null && System.getProperties().get("java.security.policy") != null) {
+            synchronized (UDFClassLoader.class) {
+                if (System.getSecurityManager() == null) {
+                    System.setSecurityManager(new UDFSecurityManager(UDFClassLoader.class));
+                }
+            }
+        }
     }
 
     @Override
@@ -44,7 +51,6 @@ public class UDFClassLoader extends URLClassLoader {
         }
         return super.findClass(clazzName);
     }
-
 
     public Class<?> generateCallStubV(String name, Class<?> clazz, Method method, int genType) {
         String clazzName = name.replace("/", ".");
