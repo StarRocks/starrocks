@@ -51,15 +51,6 @@ public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
-
-    public static final String DLF_HIVE_METASTORE = "dlf";
-    public static final String GLUE_HIVE_METASTORE = "glue";
-    // Maximum number of idle metastore connections in the connection pool at any point.
-    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
-
-    private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
-    private final Object clientPoolLock = new Object();
-
     private final HiveConf conf;
 
     // Required for creating an instance of RetryingMetaStoreClient.
@@ -80,66 +71,12 @@ public class HiveMetaClient {
         return new HiveMetaClient(conf);
     }
 
-    public class RecyclableClient {
-        private final IMetaStoreClient hiveClient;
-
-        private RecyclableClient(HiveConf conf) throws MetaException {
-            if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        DLFProxyMetaStoreClient.class.getName());
-            } else if (GLUE_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        AWSCatalogMetastoreClient.class.getName());
-            } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreClient.class.getName());
-            }
-        }
-
-        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
-        // the client will be recycled and reused. If it does, we close the client.
-        public void finish() {
-            synchronized (clientPoolLock) {
-                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
-                    LOG.warn("There are more than {} connections currently accessing the metastore",
-                            MAX_HMS_CONNECTION_POOL_SIZE);
-                    close();
-                } else {
-                    clientPool.offer(this);
-                }
-            }
-        }
-
-        public void close() {
-            hiveClient.close();
-        }
-    }
-
     public int getClientSize() {
-        return clientPool.size();
+        return RecyclableClient.size();
     }
 
     private RecyclableClient getClient() throws MetaException {
-        // The MetaStoreClient c'tor relies on knowing the Hadoop version by asking
-        // org.apache.hadoop.util.VersionInfo. The VersionInfo class relies on opening
-        // the 'common-version-info.properties' file as a resource from hadoop-common*.jar
-        // using the Thread's context classloader. If necessary, set the Thread's context
-        // classloader, otherwise VersionInfo will fail in it's c'tor.
-        if (Thread.currentThread().getContextClassLoader() == null) {
-            Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
-        }
-
-        synchronized (clientPoolLock) {
-            RecyclableClient client = clientPool.poll();
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            if (client == null) {
-                return new RecyclableClient(conf);
-            } else {
-                return client;
-            }
-        }
+        return RecyclableClient.getInstance(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
