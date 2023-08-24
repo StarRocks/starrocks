@@ -437,8 +437,8 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
         LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
         status_code = TStatusCode::MEM_LIMIT_EXCEEDED;
     } else {
-        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.schema_hash,
-                                       check_consistency_req.version, &checksum);
+        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.version,
+                                       &checksum);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req->signature;
