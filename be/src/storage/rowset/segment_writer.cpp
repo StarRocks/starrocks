@@ -57,9 +57,12 @@ namespace starrocks {
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
 
-SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id,
-                             const TabletSchema* tablet_schema, SegmentWriterOptions opts)
-        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(std::move(opts)), _wfile(std::move(wfile)) {
+SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+                             SegmentWriterOptions opts)
+        : _segment_id(segment_id),
+          _tablet_schema(std::move(tablet_schema)),
+          _opts(std::move(opts)),
+          _wfile(std::move(wfile)) {
     CHECK_NOTNULL(_wfile.get());
 }
 

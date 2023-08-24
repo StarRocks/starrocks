@@ -70,8 +70,8 @@ public:
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                             const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
-                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             const TabletSchemaCSPtr& tablet_schema, std::vector<uint32_t>& column_ids,
+                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
@@ -125,7 +125,7 @@ private:
                       PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
 
     Status _do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                                     const TabletSchema& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
+                                     const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const std::vector<ColumnUniquePtr>& upserts,
                                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
 

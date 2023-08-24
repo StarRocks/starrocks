@@ -623,6 +623,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
+                    List<Column> originSchemaColumns = tbl.getSchemaByIndexId(originIdxId);
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -631,7 +632,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, generatedColumnReq);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId,
+                                    generatedColumnReq, originSchemaColumns);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }
@@ -767,7 +769,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
-        editLog.waitInfinity(start, future);
+        EditLog.waitInfinity(start, future);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
@@ -931,6 +933,17 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (indexChange) {
             tbl.setIndexes(indexes);
         }
+
+        //update max column unique id
+        int maxColUniqueId = tbl.getMaxColUniqueId();
+        for (Column column : tbl.getFullSchema()) {
+            if (column.getUniqueId() > maxColUniqueId) {
+                maxColUniqueId = column.getUniqueId();
+            }
+        }
+        tbl.setMaxColUniqueId(maxColUniqueId);
+        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), maxColUniqueId);
+
 
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());

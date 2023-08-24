@@ -531,6 +531,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 newMVColumns.add(mvColumnItem.toMVColumn(olapTable));
             }
         }
+
+        // set MV column unique id to Column.COLUMN_UNIQUE_ID_INIT_VALUE support old unique id rule.
+        newMVColumns.forEach(column -> column.setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE));
         return newMVColumns;
     }
 

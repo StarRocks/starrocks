@@ -133,7 +133,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
-    Schema schema = ChunkHelper::convert_schema(*_tablet_schema, column_group);
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
@@ -166,7 +166,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             return st;
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, *_tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
         chunk->reset();
 

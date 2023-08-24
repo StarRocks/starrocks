@@ -230,7 +230,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
 inline Status DeltaWriterImpl::reset_memtable() {
     RETURN_IF_ERROR(build_schema_and_writer());
     if (!_schema_initialized) {
-        _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
+        _vectorized_schema = MemTable::convert_schema(_tablet_schema, _slots);
         _schema_initialized = true;
     }
     if (_slots != nullptr || !_merge_condition.empty()) {
@@ -312,7 +312,7 @@ Status DeltaWriterImpl::handle_partial_update() {
             }
             _referenced_column_ids.push_back(index);
         }
-        _partial_update_tablet_schema = TabletSchema::create(*_tablet_schema, _referenced_column_ids);
+        _partial_update_tablet_schema = TabletSchema::create(_tablet_schema, _referenced_column_ids);
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(_referenced_column_ids.begin(), _referenced_column_ids.end(), sort_key_idxes.begin(),
@@ -433,7 +433,7 @@ Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    Schema pkey_schema = ChunkHelper::convert_schema(*_tablet_schema, pk_columns);
+    Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
     std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";

@@ -75,6 +75,7 @@ import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class OlapTableFactory implements AbstractTableFactory {
+
     private static final Logger LOG = LogManager.getLogger(OlapTableFactory.class);
     public static final OlapTableFactory INSTANCE = new OlapTableFactory();
 
@@ -224,6 +225,25 @@ public class OlapTableFactory implements AbstractTableFactory {
             long baseIndexId = metastore.getNextId();
             table.setBaseIndexId(baseIndexId);
 
+            // get use light schema change
+            Boolean useLightSchemaChange;
+            try {
+                useLightSchemaChange = PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            // only support olap table use light schema change optimization
+            table.setUseLightSchemaChange(useLightSchemaChange);
+            if (useLightSchemaChange) {
+                for (Column column : baseSchema) {
+                    column.setUniqueId(table.incAndGetMaxColUniqueId());
+                    LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
+                            column.getUniqueId());
+                }
+            } else {
+                LOG.debug("table: {} doesn't use light schema change", table.getName());
+            }
+            
             // analyze bloom filter columns
             Set<String> bfColumns = null;
             double bfFpp = 0;

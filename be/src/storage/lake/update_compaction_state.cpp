@@ -31,7 +31,7 @@ CompactionState::CompactionState(Rowset* rowset) {
 
 CompactionState::~CompactionState() = default;
 
-Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
+Status CompactionState::load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
         std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
         LOG(WARNING) << msg;
@@ -43,9 +43,9 @@ Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
-Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
+Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 

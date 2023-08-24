@@ -82,7 +82,7 @@ static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
 }
 
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
-    return tablet.tablet_schema();
+    return tablet.unsafe_tablet_schema_ref();
 }
 
 static uint64_t tablet_tablet_id(Tablet& tablet) {
@@ -421,7 +421,7 @@ public:
         {
             auto& cls = m.klass<Rowset>("Rowset");
             REG_METHOD(Rowset, rowset_id_str);
-            REG_METHOD(Rowset, schema);
+            REG_METHOD(Rowset, schema_ref);
             REG_METHOD(Rowset, start_version);
             REG_METHOD(Rowset, end_version);
             REG_METHOD(Rowset, creation_time);

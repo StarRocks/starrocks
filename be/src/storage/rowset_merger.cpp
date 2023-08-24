@@ -326,7 +326,7 @@ private:
         std::unique_ptr<vector<RowSourceMask>> source_masks;
         if (mask_buffer) {
             source_masks = std::make_unique<vector<RowSourceMask>>();
-            column_indexes = tablet.tablet_schema().sort_key_idxes();
+            column_indexes = tablet.tablet_schema()->sort_key_idxes();
         }
 
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
@@ -421,8 +421,9 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            Schema schema = tablet.tablet_schema().sort_key_idxes().empty()
-                                    ? ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[0])
+            auto tablet_schema_ptr = tablet.tablet_schema();
+            Schema schema = tablet_schema_ptr->sort_key_idxes().empty()
+                                    ? ChunkHelper::convert_schema(tablet_schema_ptr, column_groups[0])
                                     : ChunkHelper::get_sort_key_schema(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
@@ -431,6 +432,7 @@ private:
 
         // merge non key columns
         auto source_masks = std::make_unique<vector<RowSourceMask>>();
+        auto tablet_schema_ptr = tablet.tablet_schema();
         for (size_t i = 1; i < column_groups.size(); ++i) {
             // read mask buffer from the beginning
             mask_buffer->flip_to_read();
@@ -440,7 +442,7 @@ private:
             vector<ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
+            Schema schema = ChunkHelper::convert_schema(tablet_schema_ptr, column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 rowsets_mask_buffer[j]->flip_to_read();
@@ -485,7 +487,7 @@ private:
                     }
                 }
 
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet.tablet_schema(), chunk.get());
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema_ptr, chunk.get());
 
                 if (auto st = writer->add_columns(*chunk, column_groups[i], false); !st.ok()) {
                     LOG(WARNING) << "writer add_columns error, tablet=" << tablet.tablet_id() << ", err=" << st;
@@ -528,12 +530,15 @@ private:
 };
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
-                                RowsetWriter* writer, const MergeConfig& cfg) {
-    Schema schema = [&tablet]() {
-        if (tablet.tablet_schema().sort_key_idxes().empty()) {
-            return ChunkHelper::get_sort_key_schema_by_primary_key(tablet.tablet_schema());
+                                RowsetWriter* writer, const MergeConfig& cfg,
+                                const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
+    Schema schema = [&cur_tablet_schema, &tablet]() {
+        const starrocks::TabletSchemaCSPtr final_tablet_schema =
+                cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
+        if (final_tablet_schema->sort_key_idxes().empty()) {
+            return ChunkHelper::get_sort_key_schema_by_primary_key(final_tablet_schema);
         } else {
-            return ChunkHelper::convert_schema(tablet.tablet_schema());
+            return ChunkHelper::convert_schema(final_tablet_schema);
         }
     }();
     std::unique_ptr<RowsetMerger> merger;

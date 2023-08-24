@@ -510,7 +510,8 @@ public class ColumnDef implements ParseNode {
     }
 
     public Column toColumn() {
-        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment,
+                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
         col.setIsAutoIncrement(isAutoIncrement);
         col.setGeneratedColumnExpr(generatedColumnExpr);
         return col;

@@ -66,9 +66,9 @@ Status CompactionState::load_segments(Rowset* rowset, uint32_t segment_id) {
 static const size_t large_compaction_memory_threshold = 1000000000;
 
 Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
-    auto& schema = rowset->schema();
+    const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 

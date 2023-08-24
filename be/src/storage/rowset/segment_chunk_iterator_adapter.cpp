@@ -14,15 +14,17 @@
 
 #include "segment_chunk_iterator_adapter.h"
 
+#include <utility>
+
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
 
-SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema,
+SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchemaCSPtr& tablet_schema,
                                                          const std::vector<LogicalType>& new_types,
                                                          const Schema& out_schema, int chunk_size)
         : ChunkIterator(out_schema, chunk_size),
-          _tablet_schema(tablet_schema),
+          _tablet_schema(std::move(tablet_schema)),
           _new_types(new_types),
           _convert_time(0),
           _convert_timer(nullptr) {}

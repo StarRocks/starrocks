@@ -1267,7 +1267,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.partition_id = tablet->partition_id();
             context.tablet_schema_hash = tablet->schema_hash();
             context.rowset_path_prefix = tablet->schema_hash_path();
-            context.tablet_schema = &tablet->tablet_schema();
+            context.tablet_schema = tablet->tablet_schema();
             context.rowset_state = VISIBLE;
             context.version = version;
             // there is no data in init rowset, so overlapping info is unknown.
@@ -1331,16 +1331,16 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             //    to the new column
             size_t old_col_idx = 0;
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                auto old_name = base_tablet->tablet_schema().column(old_col_idx).name();
+                auto old_name = base_tablet->tablet_schema()->column(old_col_idx).name();
                 if (old_name == column.column_name) {
-                    uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
+                    uint32_t old_unique_id = base_tablet->tablet_schema()->column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
                     // During linked schema change, the now() default value is stored in TabletMeta.
                     // When receiving a new schema change request, the last default value stored should be
                     // remained instead of changing.
-                    if (base_tablet->tablet_schema().column(old_col_idx).has_default_value()) {
+                    if (base_tablet->tablet_schema()->column(old_col_idx).has_default_value()) {
                         normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
-                                base_tablet->tablet_schema().column(old_col_idx).default_value());
+                                base_tablet->tablet_schema()->column(old_col_idx).default_value());
                     }
                     break;
                 }

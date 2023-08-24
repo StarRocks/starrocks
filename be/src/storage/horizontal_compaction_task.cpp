@@ -150,7 +150,8 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, Tab
             }
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+        auto tablet_schema_ptr = _tablet->tablet_schema();
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema_ptr, chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_chunk(*chunk));
         output_rows += chunk->num_rows();

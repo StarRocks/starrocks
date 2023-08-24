@@ -45,6 +45,7 @@
 #include "json2pb/json_to_pb.h"
 #include "json2pb/pb_to_json.h"
 #include "storage/olap_common.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -173,10 +174,6 @@ public:
 
     SegmentsOverlapPB segments_overlap() const { return _rowset_meta_pb->segments_overlap_pb(); }
 
-    void set_segments_overlap_pb(SegmentsOverlapPB overlap) {
-        return _rowset_meta_pb->set_segments_overlap_pb(overlap);
-    }
-
     // return true if segments in this rowset has overlapping data.
     // this is not same as `segments_overlap()` method.
     // `segments_overlap()` only return the value of "segments_overlap" field in rowset meta,
@@ -209,6 +206,10 @@ public:
 
     uint32_t get_rowset_seg_id() const { return _rowset_meta_pb->rowset_seg_id(); }
 
+    void set_segments_overlap_pb(SegmentsOverlapPB overlap) {
+        return _rowset_meta_pb->set_segments_overlap_pb(overlap);
+    }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
@@ -216,6 +217,15 @@ public:
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
+
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
+        TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
+        tablet_schema_ptr->to_schema_pb(ts_pb);
+        CHECK(_schema == nullptr);
+        _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+    }
+
+    const TabletSchemaCSPtr tablet_schema() { return _schema; }
 
     void set_partial_schema_change(bool partial_schema_change) {
         _rowset_meta_pb->set_partial_schema_change(partial_schema_change);
@@ -233,6 +243,9 @@ private:
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
             _rowset_id.init(_rowset_meta_pb->rowset_id());
+        }
+        if (_rowset_meta_pb->has_tablet_schema()) {
+            _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
         }
     }
 
@@ -261,6 +274,7 @@ private:
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
+    TabletSchemaCSPtr _schema = nullptr;
 };
 
 } // namespace starrocks

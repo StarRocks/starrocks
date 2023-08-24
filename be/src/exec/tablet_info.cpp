@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
+#include "storage/tablet_schema.h"
 #include "types/constexpr.h"
 #include "util/string_parser.hpp"
 
@@ -46,6 +47,9 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
+    for (auto column : columns) {
+        column->to_schema_pb(pindex->add_columns_desc());
+    }
 }
 
 Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
@@ -68,6 +72,11 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             if (it != std::end(slots_map)) {
                 index->slots.emplace_back(it->second);
             }
+        }
+        for (auto& pcolumn_desc : p_index.columns_desc()) {
+            TabletColumn* tc = _obj_pool.add(new TabletColumn());
+            tc->init_from_pb(pcolumn_desc);
+            index->columns.emplace_back(tc);
         }
         _indexes.emplace_back(index);
     }
@@ -98,6 +107,11 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
             if (it != std::end(slots_map)) {
                 index->slots.emplace_back(it->second);
             }
+        }
+        for (auto& tcolumn_desc : t_index.columns_desc) {
+            TabletColumn* tc = _obj_pool.add(new TabletColumn());
+            tc->init_from_thrift(tcolumn_desc);
+            index->columns.emplace_back(tc);
         }
         _indexes.emplace_back(index);
     }
