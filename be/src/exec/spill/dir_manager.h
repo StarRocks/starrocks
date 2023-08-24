@@ -24,7 +24,6 @@
 namespace starrocks::spill {
 
 // Dir describes a specific directory, including the directory name and the corresponding FileSystem
-// @TODO(silverbullet233): maintain some stats, such as the capacity
 class Dir {
 public:
     Dir(std::string dir, std::shared_ptr<FileSystem> fs) : _dir(std::move(dir)), _fs(fs) {}
@@ -35,8 +34,19 @@ public:
 private:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
+    int_64 _capacity;
+    int_64 _current_usage;
+    int _priority;
 };
 using DirPtr = std::shared_ptr<Dir>;
+
+struct DirComparator {
+    bool operator() (const Dir& a, const Dir& b) {
+        // use capacity/usage;use hdd/ssd to compare
+        // try to find dir with more left space and higher priority
+        return a._priority > b._priority && ((a._current_usage/a.__capacity) > (b._current_usage/b.__capacity));
+    }
+};
 
 struct AcquireDirOptions {
     // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection
@@ -57,6 +67,7 @@ public:
 private:
     std::atomic<size_t> _idx = 0;
     std::vector<DirPtr> _dirs;
+    std::priority_queue<DirPtr, std::vector<DirPtr>, DirComparator> _dirs;
 };
 
 } // namespace starrocks::spill
