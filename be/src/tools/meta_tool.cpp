@@ -99,6 +99,7 @@ DEFINE_string(json_meta_path, "", "absolute json meta file path");
 DEFINE_string(pb_meta_path, "", "pb meta file path");
 DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
+DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
 
 std::string get_usage(const std::string& progname) {
@@ -106,30 +107,31 @@ std::string get_usage(const std::string& progname) {
     ss << progname << " is the StarRocks BE Meta tool.\n";
     ss << "Stop BE first before use this tool.\n";
     ss << "Usage:\n";
-    ss << "./meta_tool --operation=get_meta --root_path=/path/to/storage/path "
+    ss << "./meta_tool.sh --operation=get_meta --root_path=/path/to/storage/path "
           "--tablet_id=tabletid [--schema_hash=schemahash]\n";
-    ss << "./meta_tool --operation=load_meta --root_path=/path/to/storage/path "
+    ss << "./meta_tool.sh --operation=load_meta --root_path=/path/to/storage/path "
           "--json_meta_path=path\n";
-    ss << "./meta_tool --operation=delete_meta "
+    ss << "./meta_tool.sh --operation=delete_meta "
           "--root_path=/path/to/storage/path --tablet_id=tabletid "
           "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
           "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool --operation=delete_meta --tablet_file=file_path\n";
-    ss << "./meta_tool --operation=delete_rowset_meta "
+    ss << "./meta_tool.sh --operation=delete_meta --tablet_file=file_path\n";
+    ss << "./meta_tool.sh --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
-    ss << "./meta_tool --operation=delete_persistent_index_meta "
+    ss << "./meta_tool.sh --operation=delete_persistent_index_meta "
           "--root_path=/path/to/storage/path --tablet_id=tabletid | "
-          "./meta_tool --operation=delete_persistent_index_meta "
+          "./meta_tool.sh --operation=delete_persistent_index_meta "
           "--root_path=/path/to/storage/path --table_id=tableid\n";
-    ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
-    ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
-    ss << "./meta_tool --operation=dump_segment_data --file=/path/to/segment/file\n";
-    ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
-    ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
+    ss << "./meta_tool.sh --operation=compact_meta --root_path=/path/to/storage/path\n";
+    ss << "./meta_tool.sh --operation=get_meta_stats --root_path=/path/to/storage/path\n";
+    ss << "./meta_tool.sh --operation=ls --root_path=/path/to/storage/path\n";
+    ss << "./meta_tool.sh --operation=show_meta --pb_meta_path=path\n";
+    ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
+    ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
@@ -582,11 +584,12 @@ namespace starrocks {
 
 class SegmentDump {
 public:
-    SegmentDump(std::string path) : _path(std::move(path)) {}
+    SegmentDump(std::string path, int32_t column_index = -1) : _path(std::move(path)), _column_index(column_index) {}
     ~SegmentDump() = default;
 
     Status dump_segment_data();
     Status dump_short_key_index(size_t key_column_count);
+    Status calc_checksum();
 
 private:
     struct ColItem {
@@ -611,6 +614,7 @@ private:
     MemPool _mem_pool;
     const size_t _max_short_key_size = 36;
     const size_t _max_short_key_col_cnt = 3;
+    int32_t _column_index = 0;
 };
 
 std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema) {
@@ -754,6 +758,70 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
     return Status::OK();
 }
 
+Status SegmentDump::calc_checksum() {
+    Status st = _init();
+    if (!st.ok()) {
+        std::cout << "SegmentDump init failed: " << st << std::endl;
+        return st;
+    }
+
+    // convert schema
+    std::vector<uint32_t> return_columns;
+    if (_column_index == -1) {
+        size_t num_columns = _tablet_schema->num_columns();
+        for (size_t i = 0; i < num_columns; i++) {
+            LogicalType type = _tablet_schema->column(i).type();
+            if (is_support_checksum_type(type)) {
+                return_columns.push_back(i);
+            }
+        }
+    } else {
+        if (_column_index >= _tablet_schema->columns().size()) {
+            LOG(INFO) << "this column is not exist";
+            return Status::OK();
+        } else {
+            LogicalType type = _tablet_schema->columns()[_column_index].type();
+            if (is_support_checksum_type(type)) {
+                return_columns.push_back(_column_index);
+            }
+        }
+    }
+
+    auto schema = ChunkHelper::convert_schema(_tablet_schema, return_columns);
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.use_page_cache = false;
+    OlapReaderStatistics stats;
+    seg_opts.stats = &stats;
+    auto seg_res = _segment->new_iterator(schema, seg_opts);
+    if (!seg_res.ok()) {
+        std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
+        return seg_res.status();
+    }
+    auto seg_iter = std::move(seg_res.value());
+
+    int64_t checksum = 0;
+
+    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    st = seg_iter->get_next(chunk.get());
+    while (st.ok()) {
+        size_t size = chunk->num_rows();
+        for (auto& column : chunk->columns()) {
+            checksum ^= column->xor_checksum(0, size);
+        }
+        chunk->reset();
+        st = seg_iter->get_next(chunk.get());
+    }
+
+    if (!st.is_end_of_file() && !st.ok()) {
+        LOG(WARNING) << "Failed to do checksum. error:=" << st.to_string();
+        return st;
+    }
+
+    LOG(INFO) << "success to finish compute checksum. checksum=" << (uint32_t)checksum;
+    return Status::OK();
+}
+
 Status SegmentDump::dump_short_key_index(size_t key_column_count) {
     key_column_count = std::min(key_column_count, _max_short_key_col_cnt);
     Status st = _init();
@@ -891,6 +959,17 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "dump short key index failed: " << st << std::endl;
             return -1;
         }
+    } else if (FLAGS_operation == "calc_checksum") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for calc checksum" << std::endl;
+            return -1;
+        }
+        starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
+        Status st = segment_dump.calc_checksum();
+        if (!st.ok()) {
+            std::cout << "dump segment data failed: " << st << std::endl;
+            return -1;
+        }
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::lake::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
@@ -931,7 +1010,8 @@ int meta_tool_main(int argc, char** argv) {
                                                   "compact_meta",
                                                   "get_meta_stats",
                                                   "ls",
-                                                  "check_table_meta_consistency"};
+                                                  "check_table_meta_consistency",
+                                                  "calc_checksum"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
