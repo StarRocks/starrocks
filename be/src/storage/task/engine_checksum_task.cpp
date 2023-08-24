@@ -44,22 +44,21 @@
 
 namespace starrocks {
 
-EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
-                                       TVersion version, uint32_t* checksum)
-        : _tablet_id(tablet_id), _schema_hash(schema_hash), _version(version), _checksum(checksum) {
+EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TVersion version,
+                                       uint32_t* checksum)
+        : _tablet_id(tablet_id), _version(version), _checksum(checksum) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
 }
 
 Status EngineChecksumTask::execute() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    Status res = _compute_checksum();
-    return res;
-} // execute
+    return _compute_checksum();
+}
 
 Status EngineChecksumTask::_compute_checksum() {
     LOG(INFO) << "begin to process compute checksum."
-              << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
+              << "tablet_id=" << _tablet_id << ", version=" << _version;
 
     if (_checksum == nullptr) {
         LOG(WARNING) << "The input checksum is a null pointer";
