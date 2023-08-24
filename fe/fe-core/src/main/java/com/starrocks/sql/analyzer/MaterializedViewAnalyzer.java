@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -284,6 +285,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                checkWindowFunctions(statement, columnExprMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -774,6 +776,39 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+<<<<<<< HEAD
+=======
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        private void checkPartitionColumnWithBaseJDBCTable(SlotRef slotRef, JDBCTable table) {
+            checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
+        }
+
+        // if mv is partitioned, mv will be refreshed by partition.
+        // if mv has window functions, it should also be partitioned by and the partition by columns
+        // should contain the partition column of mv
+        private void checkWindowFunctions(
+                CreateMaterializedViewStatement statement,
+                Map<Column, Expr> columnExprMap) {
+            SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
+            // should analyze the partition expr to get type info
+            PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
+            for (Expr columnExpr : columnExprMap.values()) {
+                if (columnExpr instanceof AnalyticExpr) {
+                    AnalyticExpr analyticExpr = columnExpr.cast();
+                    if (analyticExpr.getPartitionExprs() == null
+                            || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
+                        throw new SemanticException("window function %s ’s partition expressions" +
+                                " should contain the partition column %s of materialized view",
+                                analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
+                    }
+                }
+            }
+        }
+
+>>>>>>> c43bdfe123 ([BugFix] limit mv with window function (#29325))
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
             org.apache.iceberg.Table icebergTable = table.getNativeTable();
             PartitionSpec partitionSpec = icebergTable.spec();

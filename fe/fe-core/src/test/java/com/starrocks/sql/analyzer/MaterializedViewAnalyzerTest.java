@@ -107,4 +107,44 @@ public class MaterializedViewAnalyzerTest {
                         "as select  k1, k2 from tbl1 where rand() > 0.5",
                 "Materialized view query statement select item rand() not supported nondeterministic function");
     }
+
+    @Test
+    public void testCreateMvWithWindowFunction() throws Exception {
+        {
+            String mvSql = "create materialized view window_mv_1\n" +
+                    "partition by date_trunc('month', k1)\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (partition by date_trunc('month', k1) order by  k2)\n" +
+                    "from tbl1 \n";
+            starRocksAssert.useDatabase("test").withMaterializedView(mvSql);
+        }
+
+        {
+            String mvSql = "create materialized view window_mv_2\n" +
+                    "partition by k1\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (partition by k1 order by  k2)\n" +
+                    "from tbl1 \n";
+            starRocksAssert.useDatabase("test").withMaterializedView(mvSql);
+        }
+
+        {
+            String mvSql = "create materialized view window_mv_3\n" +
+                    "partition by k1\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (order by  k2)\n" +
+                    "from tbl1 \n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
+                    " should contain the partition column k1 of materialized view");
+        }
+    }
 }
