@@ -298,6 +298,7 @@ jobs:
       # total coverage
       - name: Coverage Report
         uses: codecov/codecov-action@v3
+        if: steps.publish_report.outcome == 'success'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/be/be_ut_coverage.xml
