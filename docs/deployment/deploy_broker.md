@@ -8,7 +8,7 @@ Broker nodes use the network connection to transmit data to BE nodes. When a Bro
 
 ## Before you begin
 
-Make sure you have completed the required configurations by following the instructions provided in [Deployment prerequisites](../deployment/deployment_prerequisites.md)、[Check environment configurations](../deployment/environment_configurations.md), and [Prepare deployment files](../deployment/prepare_deployment_files.md).
+Make sure you have completed the required configurations by following the instructions provided in [Deployment prerequisites](../deployment/deployment_prerequisites.md), [Check environment configurations](../deployment/environment_configurations.md), and [Prepare deployment files](../deployment/prepare_deployment_files.md).
 
 ## Start Broker service
 
