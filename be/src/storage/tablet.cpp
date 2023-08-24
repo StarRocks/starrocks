@@ -1192,6 +1192,8 @@ void Tablet::get_compaction_status(std::string* json_result) {
         compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
 
         for (const auto& compaction_task : task_set) {
+            rapidjson::Value task;
+            task.SetObject();
             compaction_task_id = compaction_task->task_id();
             compaction_score = compaction_task->compaction_score();
             compaction_type = to_string(compaction_task->compaction_type());
@@ -1204,24 +1206,24 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
             rapidjson::Value compaction_task_id_value;
             compaction_task_id_value.SetUint64(compaction_task_id);
-            compaction_detail.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
+            task.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
 
             rapidjson::Value elapsed_time;
             int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
             elapsed_time.SetInt64(elapsed);
-            compaction_detail.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
+            task.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
 
             rapidjson::Value compaction_score_value;
             compaction_score_value.SetDouble(compaction_score);
-            compaction_detail.AddMember("score", compaction_score_value, root.GetAllocator());
+            task.AddMember("score", compaction_score_value, root.GetAllocator());
 
             rapidjson::Value compaction_type_value;
             compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
-            compaction_detail.AddMember("type", compaction_type_value, root.GetAllocator());
+            task.AddMember("type", compaction_type_value, root.GetAllocator());
 
             rapidjson::Value compaction_rowsets_count;
             compaction_rowsets_count.SetUint64(compaction_rowsets.size());
-            compaction_detail.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
+            task.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
 
             rapidjson::Document input_rowset_details;
             input_rowset_details.SetArray();
@@ -1242,7 +1244,8 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
                 input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
             }
-            compaction_detail.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+            task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+            compaction_detail.AddMember("task", task, root.GetAllocator());
         }
         root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());
     }
