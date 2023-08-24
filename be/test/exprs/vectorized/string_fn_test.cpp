@@ -610,6 +610,251 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
+<<<<<<< HEAD:be/test/exprs/vectorized/string_fn_test.cpp
+=======
+PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
+    /// non-constant source and delimiter.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto str = BinaryColumn::create();
+        auto delim = BinaryColumn::create();
+        auto null = NullColumn::create();
+
+        str->append("1上海,北,京");
+        delim->append(",");
+        null->append(0);
+
+        str->append("北京.南京.东京");
+        delim->append("");
+        null->append(0);
+
+        str->append("北 京南京*东……京");
+        delim->append("京");
+        null->append(0);
+
+        str->append("北京市北京区北京街道");
+        delim->append("北京");
+        null->append(0);
+
+        columns.emplace_back(str);
+        columns.emplace_back(delim);
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        ASSERT_EQ(
+                "[['1上海','北','京'], ['北','京','.','南','京','.','东','京'], ['北 ','南','*东……',''], "
+                "['','市','区','街道']]",
+                col_array->debug_string());
+    }
+    /// non-constant source and constant delimiter.
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+
+        auto delim_const = ConstColumn::create(BinaryColumn::create());
+        auto str_binary_column = BinaryColumn::create();
+
+        str_binary_column->append("a地 区b");
+        str_binary_column->append("");
+        str_binary_column->append("地sh北j 京 g");
+        str_binary_column->append(",");
+
+        delim_const->append_datum("");
+        columns.clear();
+        columns.push_back(str_binary_column);
+        columns.push_back(delim_const);
+        ctx->set_constant_columns(columns);
+        ASSERT_TRUE(
+                StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+        ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_EQ("[['a','地',' ','区','b'], [], ['地','s','h','北','j',' ','京',' ','g'], [',']]",
+                  result->debug_string());
+    }
+
+    /// constant source and delimiter
+    {
+        using CaseType = std::tuple<std::string, std::string, std::string>;
+        std::vector<CaseType> cases{
+                {"测隔试隔试", "", "[['测','隔','试','隔','试']]"},
+                {"测隔试隔试", "隔", "[['测','试','试']]"},
+                {"测隔试隔试", "a", "[['测隔试隔试']]"},
+                {"测abc隔试隔试", "", "[['测','a','b','c','隔','试','隔','试']]"},
+                {"测abc隔试隔试", "隔", "[['测abc','试','试']]"},
+                {"测abc隔试abc隔试", "a", "[['测','bc隔试','bc隔试']]"},
+                {"a|b|c|d", "", "[['a','|','b','|','c','|','d']]"},
+                {"a|b|c|d", "|", "[['a','b','c','d']]"},
+                {"a|b|c|d", "隔", "[['a|b|c|d']]"},
+        };
+
+        for (const auto& [src, delimiter, expected_out] : cases) {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            Columns columns;
+
+            auto src_const = ConstColumn::create(BinaryColumn::create());
+            auto delim_const = ConstColumn::create(BinaryColumn::create());
+
+            src_const->append_datum(src);
+            delim_const->append_datum(delimiter);
+
+            columns.clear();
+            columns.push_back(src_const);
+            columns.push_back(delim_const);
+
+            ctx->set_constant_columns(columns);
+            ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+            ASSERT_TRUE(
+                    StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+            ASSERT_EQ(expected_out, result->debug_string());
+        }
+    }
+}
+
+TypeDescriptor array_type(const LogicalType& child_type);
+
+PARALLEL_TEST(VecStringFunctionsTest, str_to_map) {
+    // input array<string>
+    int chunk_size = 7;
+    TypeDescriptor TYPE_ARRAY_VARCHAR = array_type(TYPE_VARCHAR);
+    auto array_str_null = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    // []
+    // NULL
+    // ['NULL']
+    array_str_null->append_datum(Datum(DatumArray{}));
+    array_str_null->append_datum(Datum());
+    array_str_null->append_datum(Datum(DatumArray{Datum("NULL")}));
+    array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
+    array_str_null->append_datum(Datum(DatumArray{Datum("a:b"), Datum("a:b中囸"), Datum("道c:d过’")}));
+    array_str_null->append_datum(Datum(DatumArray{Datum("a:c:b:d"), Datum(""), Datum("")}));
+    array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
+
+    auto array_str_notnull = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    array_str_notnull->append_datum(Datum(DatumArray{}));
+    array_str_notnull->append_datum(Datum(DatumArray{Datum("中国:shang海")}));
+    array_str_notnull->append_datum(Datum(DatumArray{Datum()}));
+    array_str_notnull->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
+    array_str_notnull->append_datum(
+            Datum(DatumArray{Datum("a:b"), Datum("a:b中囸"), Datum("道c:d过’"), Datum("道c:d过")}));
+    array_str_notnull->append_datum(Datum(DatumArray{Datum("a:c:b:d"), Datum(""), Datum("")}));
+    array_str_notnull->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
+
+    auto only_null = ColumnHelper::create_const_null_column(chunk_size);
+
+    // delimiters
+
+    auto map_delimiter_builder_nullable = ColumnBuilder<TYPE_VARCHAR>(chunk_size);
+    map_delimiter_builder_nullable.append(":");
+    map_delimiter_builder_nullable.append(":");
+    map_delimiter_builder_nullable.append("ab");
+    map_delimiter_builder_nullable.append(":");
+    map_delimiter_builder_nullable.append(":b");
+    map_delimiter_builder_nullable.append("");
+    map_delimiter_builder_nullable.append_null();
+    auto map_delimiter_nullable = map_delimiter_builder_nullable.build_nullable_column();
+
+    auto map_delimiter_builder_notnull = ColumnBuilder<TYPE_VARCHAR>(chunk_size);
+    map_delimiter_builder_notnull.append(":");
+    map_delimiter_builder_notnull.append("国");
+    map_delimiter_builder_notnull.append("ab");
+    map_delimiter_builder_notnull.append(":");
+    map_delimiter_builder_notnull.append(":b");
+    map_delimiter_builder_notnull.append("");
+    map_delimiter_builder_notnull.append("");
+    auto map_delimiter_notnull = map_delimiter_builder_notnull.build(false);
+
+    auto empty_col = BinaryColumn::create();
+    empty_col->append_datum("");
+    auto delim_const_empty = ConstColumn::create(empty_col, chunk_size);
+
+    auto ch_col = BinaryColumn::create();
+    ch_col->append_datum("中");
+    auto delim_const_ch = ConstColumn::create(ch_col, chunk_size);
+
+    auto const_col = BinaryColumn::create();
+    const_col->append_datum(":");
+    auto delim_const = ConstColumn::create(const_col, chunk_size);
+
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, only_null}).value();
+        ASSERT_EQ(res->debug_string(), "CONST: NULL Size : 7");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, map_delimiter_nullable}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, NULL, {'NULL':NULL}, {'ab':'b','':NULL}, {'a':'中囸','道c:d过’':NULL}, "
+                  "{'a':':c:b:d','':NULL}, NULL]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, map_delimiter_notnull}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, NULL, {'NULL':NULL}, {'ab':'b','':NULL}, {'a':'中囸','道c:d过’':NULL}, "
+                  "{'a':':c:b:d','':NULL}, {'a':'b:b','':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, delim_const_empty}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, NULL, {'N':'ULL'}, {'a':'b:b','':NULL}, {'a':':b中囸','道':'c:d过’'}, "
+                  "{'a':':c:b:d','':NULL}, {'a':'b:b','':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, delim_const_ch}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, NULL, {'NULL':NULL}, {'ab:b':NULL,'':NULL}, {'a:b':'囸','道c:d过’':NULL}, "
+                  "{'a:c:b:d':NULL,'':NULL}, {'ab:b':NULL,'':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_null, delim_const}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, NULL, {'NULL':NULL}, {'ab':'b','':NULL}, {'a':'b中囸','道c':'d过’'}, "
+                  "{'a':'c:b:d','':NULL}, {'ab':'b','':NULL}]");
+    }
+    ///
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, only_null}).value();
+        ASSERT_EQ(res->debug_string(), "CONST: NULL Size : 7");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, map_delimiter_nullable}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, {'中国':'shang海'}, {'':NULL}, {'ab':'b','':NULL}, "
+                  "{'a':'中囸','道c:d过’':NULL,'道c:d过':NULL}, {'a':':c:b:d','':NULL}, NULL]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, map_delimiter_notnull}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, {'中':':shang海'}, {'':NULL}, {'ab':'b','':NULL}, "
+                  "{'a':'中囸','道c:d过’':NULL,'道c:d过':NULL}, {'a':':c:b:d','':NULL}, {'a':'b:b','':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, delim_const_empty}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, {'中':'国:shang海'}, {'':NULL}, {'a':'b:b','':NULL}, {'a':':b中囸','道':'c:d过'}, "
+                  "{'a':':c:b:d','':NULL}, {'a':'b:b','':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, delim_const_ch}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, {'':'国:shang海'}, {'':NULL}, {'ab:b':NULL,'':NULL}, "
+                  "{'a:b':'囸','道c:d过’':NULL,'道c:d过':NULL}, {'a:c:b:d':NULL,'':NULL}, {'ab:b':NULL,'':NULL}]");
+    }
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {array_str_notnull, delim_const}).value();
+        ASSERT_EQ(res->debug_string(),
+                  "[{'':NULL}, {'中国':'shang海'}, {'':NULL}, {'ab':'b','':NULL}, {'a':'b中囸','道c':'d过'}, "
+                  "{'a':'c:b:d','':NULL}, {'ab':'b','':NULL}]");
+    }
+    ///
+    {
+        auto res = StringFunctions::str_to_map(nullptr, {only_null, only_null}).value();
+        ASSERT_EQ(res->debug_string(), "CONST: NULL Size : 7");
+    }
+}
+
+>>>>>>> 7c563f0136 ([BugFix] Fix split constant non-ASCII source and empty delimiter (#29818)):be/test/exprs/string_fn_test.cpp
 PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
