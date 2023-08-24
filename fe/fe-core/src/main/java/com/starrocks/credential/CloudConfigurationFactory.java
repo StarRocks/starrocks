@@ -18,12 +18,14 @@ import com.google.common.collect.ImmutableList;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
+import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsProperties;
 
 import java.util.HashMap;
@@ -48,6 +50,12 @@ public class CloudConfigurationFactory {
         }
 
         return buildDefaultCloudConfiguration();
+    }
+
+    public static AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+        AWSCloudConfigurationProvider awsCloudConfigurationProvider =
+                (AWSCloudConfigurationProvider) cloudConfigurationFactoryChain.get(0);
+        return awsCloudConfigurationProvider.buildGlueCloudCredential(hiveConf);
     }
 
     public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {

@@ -24,8 +24,7 @@ import com.amazonaws.services.glue.AWSGlueClientBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
-import com.starrocks.credential.CloudCredential;
-import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -47,12 +46,10 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
 
     @Override
     public AWSGlue newClient() throws MetaException {
-        AWSCloudConfigurationProvider factory = new AWSCloudConfigurationProvider();
-        CloudCredential cloudCredential = factory.buildGlueCloudCredential(conf);
+        AWSCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         try {
             AWSGlueClientBuilder glueClientBuilder = null;
-            if (cloudCredential != null) {
-                AWSCloudCredential glueCloudCredential = (AWSCloudCredential) cloudCredential;
+            if (glueCloudCredential != null) {
                 Preconditions.checkNotNull(glueCloudCredential);
                 AWSCredentialsProvider awsCredentialsProvider = glueCloudCredential.generateAWSCredentialsProvider();
                 glueClientBuilder = AWSGlueClientBuilder.standard().withCredentials(awsCredentialsProvider);

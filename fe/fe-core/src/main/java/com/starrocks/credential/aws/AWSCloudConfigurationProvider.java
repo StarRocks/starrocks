@@ -17,7 +17,6 @@ package com.starrocks.credential.aws;
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
-import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 import java.util.Map;
@@ -44,7 +43,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 public class AWSCloudConfigurationProvider implements CloudConfigurationProvider {
 
-    public CloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+    public AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         Preconditions.checkNotNull(hiveConf);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
                 hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
