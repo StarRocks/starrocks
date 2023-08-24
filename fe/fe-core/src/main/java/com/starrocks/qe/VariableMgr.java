@@ -299,6 +299,10 @@ public class VariableMgr {
         }
     }
 
+    public static boolean containsVariable(String name) {
+        return CTX_BY_VAR_NAME.containsKey(name);
+    }
+
     // Entry of handling SetVarStmt
     // Input:
     //      sessionVariable: the variable of current session

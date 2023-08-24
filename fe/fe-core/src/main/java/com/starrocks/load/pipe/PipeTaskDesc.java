@@ -15,12 +15,12 @@
 package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.Future;
 
 public class PipeTaskDesc {
@@ -29,6 +29,7 @@ public class PipeTaskDesc {
     private final String dbName;
     private final String sqlTask;
     private final FilePipePiece piece;
+    private final Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private PipeTaskState state = PipeTaskState.RUNNABLE;
 
     // TODO: error code and category
@@ -133,7 +134,7 @@ public class PipeTaskDesc {
     }
 
     public Map<String, String> getProperties() {
-        return Maps.newHashMap();
+        return properties;
     }
 
     public PipeTaskState getState() {

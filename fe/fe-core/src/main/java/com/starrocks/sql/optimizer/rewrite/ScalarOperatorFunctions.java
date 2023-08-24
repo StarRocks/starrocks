@@ -59,6 +59,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -1167,6 +1168,23 @@ public class ScalarOperatorFunctions {
             }
         }
         String json = obj.toString();
+        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Return meta data of all pipes in current database
+     */
+    @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspect_all_pipes() {
+        ConnectContext connectContext = ConnectContext.get();
+        Authorizer.checkSystemAction(
+                connectContext.getCurrentUserIdentity(),
+                connectContext.getCurrentRoleIds(),
+                PrivilegeType.OPERATE);
+        String currentDb = connectContext.getDatabase();
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
+        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);
     }
 
