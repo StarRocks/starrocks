@@ -21,6 +21,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
@@ -30,6 +31,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -104,6 +106,8 @@ public abstract class Coordinator {
 
     public abstract void updateFragmentExecStatus(TReportExecStatusParams params);
 
+    public abstract void updateAuditStatistics(TReportAuditStatisticsParams params);
+
     public void cancel() {
         cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
     }
@@ -175,6 +179,11 @@ public abstract class Coordinator {
     public abstract List<String> getRejectedRecordPaths();
 
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
+
+    // ------------------------------------------------------------------------------------
+    // Methods for audit.
+    // ------------------------------------------------------------------------------------
+    public abstract PQueryStatistics getAuditStatistics();
 
     // ------------------------------------------------------------------------------------
     // Common methods.

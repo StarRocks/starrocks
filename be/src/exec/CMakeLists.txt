@@ -211,6 +211,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
