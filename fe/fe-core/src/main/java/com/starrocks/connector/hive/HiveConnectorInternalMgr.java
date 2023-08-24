@@ -30,6 +30,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,9 +52,12 @@ public class HiveConnectorInternalMgr {
     private ExecutorService refreshHiveMetastoreExecutor;
     private ExecutorService refreshRemoteFileExecutor;
     private ExecutorService pullRemoteFileExecutor;
+    private ExecutorService updateRemoteFilesExecutor;
+    private ExecutorService updateStatisticsExecutor;
 
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
+    private final int updateRemoteFileMetadataThreadNum;
     private final boolean enableHmsEventsIncrementalSync;
 
     private final boolean enableBackgroundRefreshHiveMetadata;
@@ -72,6 +76,8 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+        this.updateRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_update_thread_num",
+                String.valueOf(Config.remote_file_metadata_load_concurrency / 4)));
         this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
                 String.valueOf(Config.enable_hms_events_incremental_sync)));
 
@@ -154,6 +160,21 @@ public class HiveConnectorInternalMgr {
         }
 
         return pullRemoteFileExecutor;
+    }
+
+    public ExecutorService getupdateRemoteFilesExecutor() {
+        if (updateRemoteFilesExecutor == null) {
+            updateRemoteFilesExecutor = Executors.newFixedThreadPool(updateRemoteFileMetadataThreadNum,
+                    new ThreadFactoryBuilder().setNameFormat("update-hive-remote-files-%d").build());
+        }
+
+        return updateRemoteFilesExecutor;
+    }
+
+    public Executor getUpdateStatisticsExecutor() {
+        Executor baseExecutor = Executors.newCachedThreadPool(
+                new ThreadFactoryBuilder().setNameFormat("hive-metastore-update-%d").build());
+        return new ReentrantExecutor(baseExecutor, remoteFileConf.getRefreshMaxThreadNum());
     }
 
     public boolean isSearchRecursive() {

@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -297,7 +298,7 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink)) {
+        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink)) {
             return dop;
         } else {
             int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();

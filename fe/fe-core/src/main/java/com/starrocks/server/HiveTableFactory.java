@@ -68,6 +68,7 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setDataColumnNames(oHiveTable.getDataColumnNames())
                 .setFullSchema(columns)
                 .setTableLocation(oHiveTable.getTableLocation())
+                .setStorageFormat(oHiveTable.getStorageFormat())
                 .setCreateTime(oHiveTable.getCreateTime());
 
         HiveTable hiveTable = tableBuilder.build();
