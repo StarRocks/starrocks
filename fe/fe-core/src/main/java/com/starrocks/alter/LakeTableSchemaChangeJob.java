@@ -719,6 +719,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             } else if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
+                table.onReload();
                 visualiseShadowIndex(table);
             } else if (jobState == JobState.CANCELLED) {
                 removeShadowIndex(table);
