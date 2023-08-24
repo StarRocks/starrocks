@@ -749,6 +749,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             inactiveRelatedMv(modifiedColumns, tbl);
 
             pruneMeta();
+            tbl.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
@@ -1069,6 +1070,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
                     onFinished(tbl);
+                    tbl.onReload();
                 }
             } finally {
                 db.writeUnlock();
