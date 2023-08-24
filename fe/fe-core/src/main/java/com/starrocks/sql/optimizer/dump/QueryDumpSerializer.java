@@ -171,7 +171,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
+        if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
+            dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
+        }
         return dumpJson;
     }
 
@@ -275,7 +277,11 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
+        String explainInfo = desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict);
+        if (StringUtils.isNotEmpty(explainInfo)) {
+            dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
+        }
+
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
