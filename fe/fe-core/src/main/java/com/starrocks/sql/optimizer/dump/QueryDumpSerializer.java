@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -32,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +41,9 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
@@ -166,6 +171,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         return dumpJson;
     }
 
@@ -269,6 +275,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
@@ -294,5 +301,32 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
 
         return hiveTableDumpInfo;
+    }
+
+    private String desensitizeExplainInfo(String explainInfo, Map<String, String> dict) {
+        Set<String> keys = Sets.newHashSet();
+        Pattern pattern = Pattern.compile("[0-9a-zA-Z_$\\u0080-\\uffff]+");
+
+        for (String key : dict.keySet()) {
+            if (pattern.matcher(key).matches()) {
+                keys.add(key);
+            }
+        }
+        pattern = Pattern.compile("\\b(" + String.join("|", keys) + ")\\b",
+                Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(explainInfo);
+
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String matchStr = matcher.group();
+            String value = dict.get(matchStr) == null ? dict.get(StringUtils.lowerCase(matchStr)) : dict.get(matchStr);
+            if(value == null) {
+                // failed desensitize ExplainInfo just return empty str
+                return "";
+            }
+            matcher.appendReplacement(result, value);
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 }

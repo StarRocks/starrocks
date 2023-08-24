@@ -63,6 +63,10 @@ public interface DumpInfo {
 
     }
 
+    default void setDesensitizedInfo(boolean desensitizedInfo) {
+
+    }
+
     default void reset() {
     }
 }
