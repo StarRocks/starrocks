@@ -83,8 +83,6 @@ jobs:
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             thirdparty:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
