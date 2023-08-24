@@ -1111,8 +1111,8 @@ Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset,
                                                           index.memory_usage() + upserts[i]->memory_usage());
                 if (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_high_level) ||
                     delete_pks != nullptr) {
-                    st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), upserts,
-                                    index, tablet_id, &new_deletes);
+                    st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(),
+                                    upserts, index, tablet_id, &new_deletes);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1134,8 +1134,8 @@ Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset,
             }
         }
         if (!upsert_ids.empty()) {
-            st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), state.upserts(), index,
-                            tablet_id, &new_deletes);
+            st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(),
+                            state.upserts(), index, tablet_id, &new_deletes);
             if (!st.ok()) {
                 std::string msg =
                         strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1223,8 +1223,8 @@ Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset,
                 loaded_upsert++;
             }
             if (!upsert_ids.empty()) {
-                st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(), state.upserts(), index,
-                                tablet_id, &new_deletes);
+                st = _do_update(rowset_id, upsert_ids, condition_column, latest_applied_version.major_number(),
+                                state.upserts(), index, tablet_id, &new_deletes);
                 if (!st.ok()) {
                     std::string msg =
                             strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1417,8 +1417,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         failure_handler(msg, true);
                         return;
                     }
-                    st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(),
-                                    upserts, index, tablet_id, &new_deletes);
+                    st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(), upserts,
+                                    index, tablet_id, &new_deletes);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1474,8 +1474,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                             return;
                         }
                         manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
-                        st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
-                                        upserts, index, tablet_id, &new_deletes);
+                        st = _do_update(rowset_id, loaded_upsert, conditional_column,
+                                        latest_applied_version.major_number(), upserts, index, tablet_id, &new_deletes);
                         if (!st.ok()) {
                             std::string msg = strings::Substitute(
                                     "_apply_rowset_commit error: apply rowset update state failed: $0 $1",

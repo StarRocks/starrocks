@@ -35,10 +35,10 @@ class UpdateInfos {
 public:
     explicit UpdateInfos(std::vector<uint32_t> seg_ids, std::vector<uint32_t> rowid_start,
                          std::vector<const Column*> pk_columns, std::vector<std::pair<uint32_t, uint32_t>> idx_range)
-             : _seg_ids(std::move(seg_ids)),
-               _rowid_start(std::move(rowid_start)),
-               _pk_columns(std::move(pk_columns)),
-               _idx_range(std::move(idx_range)) {}
+            : _seg_ids(std::move(seg_ids)),
+              _rowid_start(std::move(rowid_start)),
+              _pk_columns(std::move(pk_columns)),
+              _idx_range(std::move(idx_range)) {}
 
     uint32_t total_update_rows() {
         uint32_t n = 0;
@@ -48,9 +48,7 @@ public:
         return n;
     }
 
-    uint32_t row_num(uint32_t col_idx) {
-        return _idx_range[col_idx].second - _idx_range[col_idx].first;
-    }
+    uint32_t row_num(uint32_t col_idx) { return _idx_range[col_idx].second - _idx_range[col_idx].first; }
 
     std::vector<uint32_t> _seg_ids;
     std::vector<uint32_t> _rowid_start;
