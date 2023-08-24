@@ -2469,14 +2469,13 @@ public class OlapTable extends Table {
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
-        if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
-            for (int i = 0; i < fullSchema.size(); i++) {
-                Column column = fullSchema.get(i);
-                if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                    SlotDescriptor slotDescriptor =
-                            new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
-                    slotRefs.get(0).setDesc(slotDescriptor);
-                }
+        // schema change should update slot id
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Column column = fullSchema.get(i);
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                SlotDescriptor slotDescriptor =
+                        new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
+                slotRefs.get(0).setDesc(slotDescriptor);
             }
         }
     }
