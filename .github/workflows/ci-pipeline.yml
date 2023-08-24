@@ -751,8 +751,8 @@ jobs:
       - name: Clean ECS
         if: steps.backup.outcome == 'success'
         env:
-          SQL_TESTER_RESULT: ${{ needs.SQL-Tester.outcome }}
-          ADMIT_RESULT: ${{ needs.admit.outcome }}
+          SQL_TESTER_RESULT: ${{ needs.SQL-Tester.result }}
+          ADMIT_RESULT: ${{ needs.admit.result }}
         run: |
           cd ci-tool && source lib/init.sh
           if [[ "${SQL_TESTER_RESULT}" == 'success' && "${ADMIT_RESULT}" == 'success' ]]; then
