@@ -17,18 +17,20 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
-    private final ConcurrentHashMap<String, Connector> connectors = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CatalogConnector> connectors = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public Connector createConnector(ConnectorContext context) {
+    public CatalogConnector createConnector(ConnectorContext context) {
         String catalogName = context.getCatalogName();
-        Connector connector = null;
+        CatalogConnector connector = null;
         readLock();
         try {
             connector = ConnectorFactory.createConnector(context);
@@ -60,8 +62,8 @@ public class ConnectorMgr {
 
         writeLock();
         try {
-            Connector connector = connectors.remove(catalogName);
-            connector.shutdown();
+            CatalogConnector catalogConnector = connectors.remove(catalogName);
+            catalogConnector.shutdown();
         } finally {
             writeUnLock();
         }
@@ -76,13 +78,17 @@ public class ConnectorMgr {
         }
     }
 
-    public Connector getConnector(String catalogName) {
+    public CatalogConnector getConnector(String catalogName) {
         readLock();
         try {
             return connectors.get(catalogName);
         } finally {
             readUnlock();
         }
+    }
+
+    public List<CatalogConnector> listConnectors() {
+        return new ArrayList<>(connectors.values());
     }
 
     private void readLock() {

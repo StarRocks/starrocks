@@ -35,7 +35,7 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.connector.Connector;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
@@ -107,7 +107,7 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             if (null == connector) {
                 LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
                 throw new DdlException("connector create failed");
@@ -205,8 +205,8 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        if (null == connector) {
+        CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (catalogConnector == null) {
             LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
             throw new DdlException("connector create failed");
         }

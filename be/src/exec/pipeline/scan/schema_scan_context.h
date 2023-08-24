@@ -27,18 +27,18 @@ class SchemaScannerParam;
 class SchemaScanner;
 
 namespace pipeline {
-class OlapSchemaScanContext;
-using OlapSchemaScanContextPtr = std::shared_ptr<OlapSchemaScanContext>;
+class SchemaScanContext;
+using SchemaScanContextPtr = std::shared_ptr<SchemaScanContext>;
 
-class OlapSchemaScanContext {
+class SchemaScanContext {
 public:
-    OlapSchemaScanContext(const TPlanNode& tnode, BalancedChunkBuffer& chunk_buffer)
+    SchemaScanContext(const TPlanNode& tnode, BalancedChunkBuffer& chunk_buffer)
             : _tnode(tnode),
               _table_name(tnode.schema_scan_node.table_name),
               _tuple_id(tnode.schema_scan_node.tuple_id),
               _chunk_buffer(chunk_buffer) {}
 
-    ~OlapSchemaScanContext() = default;
+    ~SchemaScanContext() = default;
 
     Status prepare(RuntimeState* state);
 
