@@ -10,7 +10,7 @@ All the loading methods provided by StarRocks can guarantee atomicity. Atomicity
 
 StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the "[Loading methods](../loading/Loading_intro.md#loading-methods)" section of this topic.
 
-<InsetPrivNote />
+<InsertPrivNote />
 
 ## Supported data types
 
