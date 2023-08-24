@@ -16,7 +16,13 @@ package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.paimon.data.InternalArray;
+import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.MapType;
+import org.apache.paimon.utils.InternalRowUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,8 +30,10 @@ import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
     private final Object fieldData;
-    public PaimonColumnValue(Object fieldData) {
+    private final DataType dataType;
+    public PaimonColumnValue(Object fieldData, DataType dataType) {
         this.fieldData = fieldData;
+        this.dataType = dataType;
     }
     @Override
     public boolean getBoolean() {
@@ -86,12 +94,27 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackArray(List<ColumnValue> values) {
-
+        InternalArray array = (InternalArray) fieldData;
+        toPaimonColumnValue(values, array, ((ArrayType) dataType).getElementType());
     }
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
+        InternalMap map = (InternalMap) fieldData;
+        DataType keyType;
+        DataType valueType;
+        if (dataType instanceof MapType) {
+            keyType = ((MapType) dataType).getKeyType();
+            valueType = ((MapType) dataType).getValueType();
+        } else {
+            throw new UnsupportedOperationException("Unsupported type: " + dataType);
+        }
 
+        InternalArray keyArray = map.keyArray();
+        toPaimonColumnValue(keys, keyArray, keyType);
+
+        InternalArray valueArray = map.valueArray();
+        toPaimonColumnValue(values, valueArray, valueType);
     }
 
     @Override
@@ -102,5 +125,12 @@ public class PaimonColumnValue implements ColumnValue {
     @Override
     public byte getByte() {
         return (byte) fieldData;
+    }
+
+    private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {
+        for (int i = 0; i < array.size(); i++) {
+            PaimonColumnValue cv = new PaimonColumnValue(InternalRowUtils.get(array, i, dataType), dataType);
+            values.add(cv);
+        }
     }
 }
