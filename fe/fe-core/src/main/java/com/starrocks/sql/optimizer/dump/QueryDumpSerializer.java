@@ -320,7 +320,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         while (matcher.find()) {
             String matchStr = matcher.group();
             String value = dict.get(matchStr) == null ? dict.get(StringUtils.lowerCase(matchStr)) : dict.get(matchStr);
-            if(value == null) {
+            if (value == null) {
                 // failed desensitize ExplainInfo just return empty str
                 return "";
             }
