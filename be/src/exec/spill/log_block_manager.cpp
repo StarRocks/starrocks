@@ -167,9 +167,15 @@ public:
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
+        if (_container->dir()->get_current_size() + total_size > _container->dir()->get_max_size()) {
+            return Status::Aborted(
+                    fmt::format("Dir current used size has exceeded limit {}! Current size {}, total_size {}!",
+                                _container->dir()->get_max_size(), _container->dir()->get_current_size(), total_size));
+        }
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
         _size += total_size;
+        _container->dir()->set_current_size(_container->dir()->get_current_size() + total_size);
         return Status::OK();
     }
 
