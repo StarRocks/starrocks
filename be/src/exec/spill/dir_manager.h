@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sys/statfs.h>
+
 #include <atomic>
 #include <memory>
 
@@ -27,14 +29,23 @@ namespace starrocks::spill {
 // @TODO(silverbullet233): maintain some stats, such as the capacity
 class Dir {
 public:
-    Dir(std::string dir, std::shared_ptr<FileSystem> fs) : _dir(std::move(dir)), _fs(fs) {}
+    Dir(std::string dir, std::shared_ptr<FileSystem> fs, int64_t max_dir_size)
+            : _dir(std::move(dir)), _fs(fs), _max_size(max_dir_size) {}
 
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
 
+    int64_t get_current_size() const { return _current_size.load(); }
+
+    void set_current_size(int64_t value) { _current_size.store(value); }
+
+    int64_t get_max_size() const { return _max_size; }
+
 private:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
+    int64_t _max_size;
+    std::atomic<int64_t> _current_size;
 };
 using DirPtr = std::shared_ptr<Dir>;
 
@@ -55,6 +66,13 @@ public:
     StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
+    bool is_same_disk(const std::string& path1, const std::string& path2) {
+        struct statfs stat1, stat2;
+        statfs(path1.c_str(), &stat1);
+        statfs(path2.c_str(), &stat2);
+        return stat1.f_fsid.__val[0] == stat2.f_fsid.__val[0] && stat1.f_fsid.__val[1] == stat2.f_fsid.__val[1];
+    }
+
     std::atomic<size_t> _idx = 0;
     std::vector<DirPtr> _dirs;
 };
