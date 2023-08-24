@@ -40,7 +40,6 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -260,9 +259,8 @@ public class MetadataMgr {
         }
 
         for (View view : views) {
-            Map<TableName, com.starrocks.catalog.Table> usedTable =
-                    AnalyzerUtils.collectAllTableAndView(view.getQueryStatement());
-            if (CollectionUtils.containsAny(usedTable.keySet(), tableNames)) {
+            List<TableName> usedTables = view.getTableRefs();
+            if (CollectionUtils.containsAny(usedTables, tableNames)) {
                 view.setInvalid(reason);
             }
         }
