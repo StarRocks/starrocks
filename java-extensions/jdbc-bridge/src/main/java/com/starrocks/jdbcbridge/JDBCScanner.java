@@ -46,9 +46,20 @@ public class JDBCScanner {
         });
 
         connection = dataSource.getConnection();
+<<<<<<< HEAD
         statement = connection.createStatement();
         statement.setFetchSize(scanContext.getStatementFetchSize());
         statement.execute(scanContext.getSql());
+=======
+        connection.setAutoCommit(false);
+        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+        if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
+            statement.setFetchSize(Integer.MIN_VALUE);
+        } else {
+            statement.setFetchSize(scanContext.getStatementFetchSize());
+        }
+        statement.executeQuery();
+>>>>>>> e95990b2d1 ([BugFix] support cursor fetch for PG JDBCScanner (#29829))
         resultSet = statement.getResultSet();
         resultSetMetaData = resultSet.getMetaData();
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
