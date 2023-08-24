@@ -17,6 +17,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
@@ -29,6 +30,7 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -168,6 +170,12 @@ public class PostgresSchemaResolverTest {
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
             Assert.assertEquals("\"test\".\"tbl1\"", table.getName());
+            Assert.assertNull(properties.get(JDBCTable.ORIGINAL_TABLENAME));
+            PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+            ResultSet columnSet = postgresSchemaResolver.getColumns(connection, "test", "tbl1");
+            List<Column> fullSchema = postgresSchemaResolver.convertToSRTable(columnSet);
+            Table table1 = postgresSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
+            Assert.assertTrue(table1 instanceof JDBCTable);
             Assert.assertNull(properties.get(JDBCTable.ORIGINAL_TABLENAME));
         } catch (Exception e) {
             System.out.println(e.getMessage());
