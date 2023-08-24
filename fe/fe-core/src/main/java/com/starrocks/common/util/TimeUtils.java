@@ -47,7 +47,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.threeten.bp.format.DateTimeParseException;
 import org.threeten.extra.PeriodDuration;
 
 import java.text.ParseException;
@@ -55,6 +54,7 @@ import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.DateTimeException;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
