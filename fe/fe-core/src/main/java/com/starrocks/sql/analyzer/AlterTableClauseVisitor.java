@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropColumnsClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -509,6 +510,48 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
             }
         }
+        return null;
+    }
+
+    @Override
+    public Void visitDropColumnsClause(DropColumnsClause clause, ConnectContext context) {
+        List<String> colNames = clause.getColNames();
+        List<String> remainGeneratedColumn = Lists.newArrayList();
+
+        for (Column column : table.getFullSchema()) {
+            if (column.isGeneratedColumn()) {
+                remainGeneratedColumn.add(column.getName());
+            }
+        }
+
+        clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+        for (String colName : colNames) {
+            if (Strings.isNullOrEmpty(colName)) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(colName));
+            }
+
+            for (Column column : table.getFullSchema()) {
+                if (column.getName().equals(colName)) {
+                    remainGeneratedColumn.remove(colName);
+                }
+            }
+        }
+
+        for (String colName : colNames) {
+            for (Column column : table.getFullSchema()) {
+                if (column.isGeneratedColumn() && remainGeneratedColumn.contains(column.getName())) {
+                    List<SlotRef> slots = column.getGeneratedColumnRef();
+                    for (SlotRef slot : slots) {
+                        if (slot.getColumnName().equals(colName)) {
+                            throw new SemanticException("Column: " + colName + " can not be dropped" +
+                                    ", because expression of Generated Column: " +
+                                    column.getName() + " will refer to it");
+                        }
+                    }
+                }
+            }
+        }
+
         return null;
     }
 

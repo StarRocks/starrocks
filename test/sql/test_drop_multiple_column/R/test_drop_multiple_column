@@ -1,0 +1,40 @@
+-- name: test_drop_multiple_column
+CREATE TABLE t ( id1 INT, id2 INT, id3 INT, col1 BIGINT AS id1 + 10, col2 BIGINT AS id2 + 20, col3 BIGINT AS id3 + 30 ) Primary KEY (id1) DISTRIBUTED BY HASH(id1) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1,2,3);
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	11	22	33
+-- !result
+ALTER TABLE t DROP COLUMN (id2, col1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column: id2 can not be dropped, because expression of Generated Column: col2 will refer to it.')
+-- !result
+ALTER TABLE t DROP COLUMN (col2, col3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1	2	3	11
+-- !result
+ALTER TABLE t DROP COLUMN (id2, id3, col1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t;
+-- result:
+1
+-- !result
+DROP TABLE t;
+-- result:
+-- !result

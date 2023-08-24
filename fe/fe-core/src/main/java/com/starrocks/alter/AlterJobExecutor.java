@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropColumnsClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
@@ -182,6 +183,20 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
         unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitDropColumnsClause(DropColumnsClause clause, ConnectContext context) {
+        String dropColumnName = "";
+        for (int i = 0; i < clause.getColNames().size(); ++i) {
+            String name = clause.getColNames().get(i);
+            dropColumnName = dropColumnName + name;
+            if (i != clause.getColNames().size() - 1) {
+                dropColumnName = dropColumnName + ", ";
+            }
+        }
+        unsupportedException("Not support DROP COLUMNS: " + dropColumnName);
         return null;
     }
 

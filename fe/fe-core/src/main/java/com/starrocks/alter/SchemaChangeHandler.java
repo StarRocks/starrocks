@@ -95,6 +95,7 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropColumnsClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -192,11 +193,26 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void processDropColumns(DropColumnsClause alterClause, OlapTable olapTable,
+                                    Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes)
+            throws DdlException {
+        List<String> colNames = alterClause.getColNames();
+        String targetIndexName = alterClause.getRollupName();
+        for (String colName : colNames) {
+            dropColumnInternal(colName, targetIndexName, olapTable, indexSchemaMap, indexes);
+        }
+    }
+
     private void processDropColumn(DropColumnClause alterClause, OlapTable olapTable,
                                    Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes)
             throws DdlException {
-        String dropColName = alterClause.getColName();
-        String targetIndexName = alterClause.getRollupName();
+        dropColumnInternal(alterClause.getColName(), alterClause.getRollupName(), olapTable,
+                           indexSchemaMap, indexes);
+    }
+
+    private void dropColumnInternal(String dropColName, String targetIndexName, OlapTable olapTable,
+                                    Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes)
+            throws DdlException {
         checkIndexExists(olapTable, targetIndexName);
 
         String baseIndexName = olapTable.getName();
@@ -1315,6 +1331,9 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof DropColumnClause) {
                 // drop column and drop indexes on this column
                 processDropColumn((DropColumnClause) alterClause, olapTable, indexSchemaMap, newIndexes);
+            } else if (alterClause instanceof DropColumnsClause) {
+                // drop columns and drop indexes on all drop column
+                processDropColumns((DropColumnsClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
                 // modify column
                 processModifyColumn((ModifyColumnClause) alterClause, olapTable, indexSchemaMap);
