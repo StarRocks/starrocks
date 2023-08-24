@@ -65,7 +65,7 @@ public:
     // batch erase a range [idx_begin, idx_end) of keys
     virtual void erase(const Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
-    virtual void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) = 0;
+    virtual void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, uint64_t* rowids) = 0;
 
     // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
@@ -151,6 +151,7 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
                                << " rowid=" << rowid_start + i;
                 }
+                LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
@@ -206,16 +207,16 @@ public:
         }
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, uint64_t* rowids) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         for (auto i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             auto iter = _map.find(keys[i]);
             if (iter != _map.end()) {
-                (*rowids)[i] = iter->second.value;
+                rowids[i] = iter->second.value;
             } else {
-                (*rowids)[i] = -1;
+                rowids[i] = -1;
             }
         }
     }
@@ -339,6 +340,7 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
+                    LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -359,6 +361,7 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
+                    LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
@@ -492,7 +495,7 @@ public:
         }
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, uint64_t* rowids) override {
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -507,9 +510,9 @@ public:
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
                 auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
                 if (iter != _map.end()) {
-                    (*rowids)[i] = iter->second.value;
+                    rowids[i] = iter->second.value;
                 } else {
-                    (*rowids)[i] = -1;
+                    rowids[i] = -1;
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
@@ -522,9 +525,9 @@ public:
             for (auto i = idx_begin; i < idx_end; i++) {
                 auto iter = _map.find(FixSlice<S>(keys[i]));
                 if (iter != _map.end()) {
-                    (*rowids)[i] = iter->second.value;
+                    rowids[i] = iter->second.value;
                 } else {
-                    (*rowids)[i] = -1;
+                    rowids[i] = -1;
                 }
             }
         }
@@ -591,6 +594,7 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                 }
+                LOG(INFO) << "erase old kv, rssid:" << (old >> 32) << ", rowid:" << (uint32_t)(old & ROWID_MASK);
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
@@ -645,14 +649,14 @@ public:
         }
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, uint64_t* rowids) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
             if (p != _map.end()) {
-                (*rowids)[i] = p->second;
+                rowids[i] = p->second;
             } else {
-                (*rowids)[i] = -1;
+                rowids[i] = -1;
             }
         }
     }
@@ -837,7 +841,7 @@ public:
         }
     }
 
-    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* rowids) override {
+    void get(const Column& pks, uint32_t idx_begin, uint32_t idx_end, uint64_t* rowids) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
@@ -1190,13 +1194,18 @@ const Slice* PrimaryIndex::_build_persistent_keys(std::vector<const Column*>& ke
     DCHECK(key_cols.size() == idx_ranges.size());
     for (auto i = 0; i < key_cols.size(); i++) {
         if (key_cols[i]->is_binary()) {
+            LOG(INFO) << "key col is binary";
             const Slice* vkeys = reinterpret_cast<const Slice*>(key_cols[i]->raw_data());
-            for (size_t i = idx_ranges[i].first; i < idx_ranges[i].second; i++) {
-                key_slices->emplace_back(vkeys[i]);
+            LOG(INFO) << "cast success";
+            for (size_t j = idx_ranges[i].first; j < idx_ranges[i].second; j++) {
+                LOG(INFO) << "push back slice:" << j;
+                key_slices->emplace_back(vkeys[j]);
             }
         } else {
+            LOG(INFO) << "key col is non-binary";
             const uint8_t* keys = key_cols[i]->raw_data();
-            for (size_t i = idx_ranges[i].first; i < idx_ranges[i].second; i++) {
+            for (size_t j = idx_ranges[i].first; j < idx_ranges[i].second; j++) {
+                LOG(INFO) << "push back slice:" << j;
                 key_slices->emplace_back(keys, _key_size);
                 keys += _key_size;
             }
@@ -1415,6 +1424,7 @@ Status PrimaryIndex::upsert(uint32_t rowset_id, UpdateInfos& info, DeletesMap* d
         st = _upsert_into_persistent_index(rowset_id, info, deletes, stat);
     } else {
         for (auto i = 0; i < info._seg_ids.size(); i++) {
+            LOG(INFO) << "primary index upsert seg:" << info._seg_ids[i];
             _pkey_to_rssid_rowid->upsert(rowset_id + info._seg_ids[i], info._rowid_start[i], *(info._pk_columns[i]),
                                          info._idx_range[i].first, info._idx_range[i].second, deletes);
         }
@@ -1476,7 +1486,7 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
     if (_persistent_index != nullptr) {
         st = _get_from_persistent_index(key_col, rowids);
     } else {
-        _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
+        _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids->data());
     }
     return st;
 }
@@ -1487,8 +1497,10 @@ Status PrimaryIndex::get(std::vector<const Column*>& key_cols, std::vector<uint6
     if (_persistent_index != nullptr) {
         st = _get_from_persistent_index(key_cols, rowids);
     } else {
+        size_t idx_begin = 0;
         for (auto key_col : key_cols) {
-            _pkey_to_rssid_rowid->get(*key_col, 0, key_col->size(), rowids);
+            _pkey_to_rssid_rowid->get(*key_col, 0, key_col->size(), rowids->data() + idx_begin);
+            idx_begin += key_col->size();
         }
     }
     return st;

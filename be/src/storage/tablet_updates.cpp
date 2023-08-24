@@ -1068,7 +1068,7 @@ Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset,
     auto manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     auto state_entry =
-            manager->update_state_cache().get(strings::Substitute("$0_S1", tablet_id, rowset->rowset_id().to_string()));
+            manager->update_state_cache().get(strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     auto index_entry = manager->index_cache().get(tablet_id);
     DCHECK(state_entry != nullptr);
     DCHECK(index_entry != nullptr);
@@ -1082,6 +1082,11 @@ Status TabletUpdates::_update_index_batch_segment(const RowsetSharedPtr& rowset,
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
+
+    DeferOp op([&]() {
+        manager->update_state_cache().release(state_entry);
+        manager->index_cache().release(index_entry);
+    });
 
     Status st;
     if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
@@ -1770,6 +1775,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
         std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
         RETURN_IF_ERROR(index.get(*upserts[upsert_idx], &old_rowids));
         bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+        LOG(INFO) << "non_old_value origin: " << non_old_value;
         if (!non_old_value) {
             std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
             size_t num_default = 0;
@@ -1846,6 +1852,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
 Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upsert_ids, int32_t condition_column,
                                  int64_t read_version, const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                  int64_t tablet_id, DeletesMap* new_deletes) {
+    LOG(INFO) << "call _do_update, upsert_ids size:" << upsert_ids.size();
     auto batch_upsert = [&]() -> Status {
         std::vector<uint32_t> rowid_start(upsert_ids.size(), 0);
         std::vector<std::pair<uint32_t, uint32_t>> idx_range;
@@ -1879,6 +1886,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
         std::vector<uint64_t> old_rowids(row_num);
         RETURN_IF_ERROR(index.get(key_cols, &old_rowids));
         bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+        LOG(INFO) << "non_old_value: " << non_old_value;
         if (!non_old_value) {
             std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
             size_t num_default = 0;
@@ -1907,7 +1915,8 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
             RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
                                               nullptr));
 
-            DCHECK(old_column->size() == new_column->size());
+            LOG(INFO) << "old_column size:" << old_column->size() << ", new_column size:" << new_columns[0]->size();
+            DCHECK(old_column->size() == new_columns[0]->size());
             DCHECK(old_column->size() == row_num);
 
             std::vector<std::pair<uint32_t, uint32_t>> idx_range;
@@ -1921,6 +1930,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
                 int idx_begin = 0;
                 int upsert_idx_step = 0;
                 for (int j = 0; j < upserts[upsert_id]->size(); ++j) {
+                    LOG(INFO) << "old_column value: " << old_column->debug_item(row_idx) << ", new_column value: " << new_columns[0]->debug_item(row_idx);
                     if (num_default > 0 && idxes[row_idx] == 0) {
                         upsert_idx_step++;
                     } else {
@@ -1932,11 +1942,17 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
                             idx_begin = j + 1;
                             upsert_idx_step = 0;
                             condition_deletes[rowset_id + upsert_id].push_back(j);
+                            LOG(INFO) << "delete rssid:" << rowset_id + upsert_id << ", row:" << j;
                         } else {
                             upsert_idx_step++;
                         }
                     }
                     row_idx++;
+                }
+                if (idx_begin < upserts[upsert_id]->size()) {
+                    key_cols.emplace_back(upserts[upsert_id].get());
+                    seg_ids.emplace_back(upsert_id);
+                    idx_range.emplace_back(std::make_pair(idx_begin, idx_begin + upsert_idx_step));
                 }
             }
             rowid_start.resize(seg_ids.size());
@@ -1947,6 +1963,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, std::vector<uint32_t>& upse
             for (auto [rsid, seg_row_ids] : condition_deletes) {
                 for (auto row_id : seg_row_ids) {
                     (*new_deletes)[rsid].emplace_back(row_id);
+                    LOG(INFO) << "delete rsid:" << rsid << ", row_idx:" << row_id;
                 }
             }
 
