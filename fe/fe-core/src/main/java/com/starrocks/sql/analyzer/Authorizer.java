@@ -15,11 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.privilege.AccessControlEPack;
@@ -29,6 +32,7 @@ import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -40,7 +44,11 @@ public class Authorizer {
     private static final AccessControlProvider INSTANCE;
 
     static {
-        INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitorEPack(), new NativeAccessControlEPack());
+        if (Config.access_control.equals("ranger")) {
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessControl());
+        } else {
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitorEPack(), new NativeAccessControlEPack());
+        }
     }
 
     public static AccessControlProvider getInstance() {
@@ -265,5 +273,16 @@ public class Authorizer {
     public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String name) {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnStorageVolume(currentUser, roleIds, name);
+    }
+
+    public static Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        return getInstance().getAccessControlOrDefault(catalog)
+                .getColumnMaskingPolicy(currentUser, tableName, columnName, type);
+    }
+
+    public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
     }
 }

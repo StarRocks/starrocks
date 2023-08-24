@@ -47,6 +47,9 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.NativeAccessControl;
+import com.starrocks.privilege.ranger.hive.RangerHiveAccessControl;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -116,6 +119,13 @@ public class CatalogMgr {
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null) {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+            }
+
             catalogs.put(catalogName, catalog);
 
             if (!isResourceMappingCatalog(catalogName)) {
@@ -138,6 +148,7 @@ public class CatalogMgr {
         writeLock();
         try {
             connectorMgr.removeConnector(catalogName);
+            Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);

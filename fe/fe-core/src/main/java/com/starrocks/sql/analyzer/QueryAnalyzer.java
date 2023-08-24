@@ -47,7 +47,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.epack.privilege.SecurityPolicyRewriteRule;
+import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -323,7 +323,7 @@ public class QueryAnalyzer {
                     return r;
                 }
                 assert tableName != null;
-                QueryStatement policyRewriteQuery = SecurityPolicyRewriteRule.buildView(r, tableName);
+                QueryStatement policyRewriteQuery = SecurityPolicyRewriteRule.buildView(session, r, tableName);
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
