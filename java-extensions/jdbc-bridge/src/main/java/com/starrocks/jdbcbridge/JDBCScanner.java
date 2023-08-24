@@ -83,6 +83,7 @@ public class JDBCScanner {
         classLoader = cacheItem.getClassLoader();
 
         connection = dataSource.getConnection();
+        connection.setAutoCommit(false);
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
             statement.setFetchSize(Integer.MIN_VALUE);
