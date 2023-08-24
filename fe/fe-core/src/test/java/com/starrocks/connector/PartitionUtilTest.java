@@ -31,6 +31,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -50,6 +51,7 @@ import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.fromPartitionKey;
+import static com.starrocks.connector.PartitionUtil.getPartitionName;
 import static com.starrocks.connector.PartitionUtil.getSuffixName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
@@ -265,5 +267,21 @@ public class PartitionUtilTest {
         PartitionKey upperBound = new PartitionKey();
         upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
         Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
+    }
+
+    @Test
+    public void testGetPartition() {
+        String base = "hdfs://hadoop01:9000/mytable";
+        String tableLocation = "hdfs://hadoop01:9000/mytable/";
+        Assert.assertTrue(getPartitionName(base, tableLocation).isEmpty());
+
+        String errorPath = "hdfs://aaa/bbb";
+        ExceptionChecker.expectThrowsWithMsg(
+                IllegalStateException.class,
+                "Can't infer partition name. base path",
+                () -> PartitionUtil.getPartitionName(base, errorPath));
+
+        String partitionPath = "hdfs://hadoop01:9000/mytable/year=2023/month=12/day=30";
+        Assert.assertEquals("year=2023/month=12/day=30", PartitionUtil.getPartitionName(base, partitionPath));
     }
 }

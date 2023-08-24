@@ -174,6 +174,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1112,10 +1113,15 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
-    @Override
-    public int add_partitions(List<Partition> partitions)
-            throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
-        throw new TException("method not implemented");
+    public int add_partitions(List<Partition> new_parts) throws TException {
+        if (new_parts != null && !new_parts.isEmpty() && !((Partition)new_parts.get(0)).isSetCatName()) {
+            String defaultCat = MetaStoreUtils.getDefaultCatalog(this.conf);
+            new_parts.forEach((p) -> {
+                p.setCatName(defaultCat);
+            });
+        }
+
+        return this.client.add_partitions(new_parts);
     }
 
     @Override
@@ -1384,30 +1390,21 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                 name, deleteData, envContext);
     }
 
-    @Override
-    public void alter_table(String databaseName, String tblName, Table table)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+    public void alter_table(String dbname, String tbl_name, Table new_tbl) throws TException {
+        this.alter_table_with_environmentContext(dbname, tbl_name, new_tbl, (EnvironmentContext)null);
     }
 
-    @Override
-    public void alter_table(String catName, String dbName, String tblName, Table newTable)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade) throws TException {
+        EnvironmentContext environmentContext = new EnvironmentContext();
+        if (cascade) {
+            environmentContext.putToProperties("CASCADE", "true");
+        }
 
+        this.alter_table_with_environmentContext(defaultDatabaseName, tblName, table, environmentContext);
     }
 
-    @Override
-    public void alter_table(String catName, String dbName, String tblName, Table newTable,
-                            EnvironmentContext envContext) throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-    }
-
-    @Override
-    public void alter_table(String defaultDatabaseName, String tblName, Table table, boolean cascade)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_table(String catName, String dbName, String tblName, Table newTable, EnvironmentContext envContext) throws TException {
+        this.client.alter_table_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tblName, newTable, envContext);
     }
 
     @Override
@@ -1506,28 +1503,67 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tableName, partName, deleteData);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals,
-                                 boolean deleteData) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public boolean dropPartition(String catName, String db_name, String tbl_name, String name, boolean deleteData) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, name, deleteData, (EnvironmentContext)null);
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    private static EnvironmentContext getEnvironmentContextWithIfPurgeSet() {
+        Map<String, String> warehouseOptions = new HashMap();
+        warehouseOptions.put("ifPurge", "TRUE");
+        return new EnvironmentContext(warehouseOptions);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals,
-                                 PartitionDropOptions options) throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, EnvironmentContext env_context) throws TException {
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(db_name, this.conf), tbl_name, part_vals, true, env_context);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, String partName, boolean dropData, EnvironmentContext ec) throws TException {
+        return this.client.drop_partition_by_name_with_environment_context(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partName, dropData, ec);
+    }
+
+    /** @deprecated */
+    @Deprecated
+    public boolean dropPartition(String dbName, String tableName, List<String> partVals) throws TException {
+        return this.client.drop_partition(MetaStoreUtils.prependCatalogToDbName(dbName, this.conf), tableName, partVals, true);
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, boolean deleteData) throws TException {
+        return this.dropPartition(catName, db_name, tbl_name, part_vals, PartitionDropOptions.instance().deleteData(deleteData));
+    }
+
+    public boolean dropPartition(String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        return this.dropPartition(MetaStoreUtils.getDefaultCatalog(this.conf), db_name, tbl_name, part_vals, options);
+    }
+
+    public boolean dropPartition(String catName, String db_name, String tbl_name, List<String> part_vals, PartitionDropOptions options) throws TException {
+        if (options == null) {
+            options = PartitionDropOptions.instance();
+        }
+
+        if (part_vals != null) {
+            Iterator var6 = part_vals.iterator();
+
+            while(var6.hasNext()) {
+                String partVal = (String)var6.next();
+                if (partVal == null) {
+                    throw new MetaException("The partition value must not be null.");
+                }
+            }
+        }
+
+        return this.client.drop_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, db_name, this.conf), tbl_name, part_vals, options.deleteData, options.purgeData ? getEnvironmentContextWithIfPurgeSet() : null);
     }
 
     @Override
@@ -1573,47 +1609,17 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 
-    @Override
-    public boolean dropPartition(String db_name, String tbl_name, String name, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_partition(String dbName, String tblName, Partition newPart) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, (EnvironmentContext)null);
     }
 
-    @Override
-    public boolean dropPartition(String catName, String db_name, String tbl_name, String name, boolean deleteData)
-            throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+    public void alter_partition(String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws InvalidOperationException, MetaException, TException {
+        this.alter_partition(MetaStoreUtils.getDefaultCatalog(this.conf), dbName, tblName, newPart, environmentContext);
     }
 
-    @Override
-    public void alter_partition(String dbName, String tblName, Partition newPart)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+    public void alter_partition(String catName, String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext) throws TException {
+        this.client.alter_partition_with_environment_context(MetaStoreUtils.prependCatalogToDbName(catName, dbName, this.conf), tblName, newPart, environmentContext);
     }
-
-    @Override
-    public void alter_partition(String catName, String dbName, String tblName, Partition newPart)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void alter_partition(String dbName, String tblName, Partition newPart, EnvironmentContext environmentContext)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void alter_partition(String catName, String dbName, String tblName, Partition newPart,
-                                EnvironmentContext environmentContext)
-            throws InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
     @Override
     public void alter_partitions(String dbName, String tblName, List<Partition> newParts)
             throws InvalidOperationException, MetaException, TException {

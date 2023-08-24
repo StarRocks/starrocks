@@ -95,10 +95,6 @@ public class IcebergTableSink extends DataSink {
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
-    public static boolean isUnSupportedPartitionColumnType(Type type) {
-        return type.isFloat() || type.isDecimalOfAnyVersion() || type.isDatetime();
-    }
-
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();

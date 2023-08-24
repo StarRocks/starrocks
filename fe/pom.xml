@@ -708,6 +708,12 @@ under the License.
                 <version>4.0.9</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>concurrent</artifactId>
+                <version>202</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

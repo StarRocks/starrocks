@@ -74,7 +74,8 @@ public class HudiMetadataTest {
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hudiRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
-        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false, true);
+        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, executorForPullFiles,
+                false, true, new Configuration());
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
 
         UtFrameUtils.createMinStarRocksCluster();

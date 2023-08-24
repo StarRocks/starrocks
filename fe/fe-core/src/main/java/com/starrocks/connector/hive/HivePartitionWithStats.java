@@ -14,15 +14,26 @@
 
 package com.starrocks.connector.hive;
 
-import org.junit.Assert;
-import org.junit.Test;
+public class HivePartitionWithStats {
+    String partitionName;
+    HivePartition hivePartition;
+    HivePartitionStats hivePartitionStats;
 
-public class RemoteFileInputFormatTest {
-    @Test
-    public void testParquetFormat() {
-        Assert.assertSame(RemoteFileInputFormat.PARQUET, RemoteFileInputFormat
-                .fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"));
-        Assert.assertSame(RemoteFileInputFormat.ORC,
-                RemoteFileInputFormat.fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"));
+    public HivePartitionWithStats(String partitionName, HivePartition hivePartition, HivePartitionStats hivePartitionStats) {
+        this.partitionName = partitionName;
+        this.hivePartition = hivePartition;
+        this.hivePartitionStats = hivePartitionStats;
+    }
+
+    public String getPartitionName() {
+        return partitionName;
+    }
+
+    public HivePartition getHivePartition() {
+        return hivePartition;
+    }
+
+    public HivePartitionStats getHivePartitionStats() {
+        return hivePartitionStats;
     }
 }

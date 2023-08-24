@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -33,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,10 +43,14 @@ import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiPartition;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.updateStatisticsParameters;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
 import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
+import static com.starrocks.connector.hive.Partition.TRANSIENT_LAST_DDL_TIME;
 
 public class HiveMetastore implements IHiveMetastore {
 
@@ -127,6 +133,12 @@ public class HiveMetastore implements IHiveMetastore {
         }
     }
 
+    @Override
+    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
+        return !client.getPartitionKeysByValue(dbName, tableName, partitionValues).isEmpty();
+    }
+
+    @Override
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) {
         StorageDescriptor sd;
         Map<String, String> params;
@@ -171,6 +183,28 @@ public class HiveMetastore implements IHiveMetastore {
         return resultBuilder.build();
     }
 
+    @Override
+    public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+        List<org.apache.hadoop.hive.metastore.api.Partition> hivePartitions = partitions.stream()
+                .map(HiveMetastoreApiConverter::toMetastoreApiPartition)
+                .collect(Collectors.toList());
+        client.addPartitions(dbName, tableName, hivePartitions);
+        // TODO(stephen): add partition column statistics
+    }
+
+    @Override
+    public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        client.dropPartition(dbName, tableName, partValues, deleteData);
+    }
+
+    @Override
+    public void alterPartition(HivePartitionWithStats partition) {
+        String dbName = partition.getHivePartition().getDatabaseName();
+        String tableName = partition.getHivePartition().getTableName();
+        org.apache.hadoop.hive.metastore.api.Partition hivePartition = toMetastoreApiPartition(partition);
+        client.alterPartition(dbName, tableName, hivePartition);
+    }
+
     public HivePartitionStats getTableStatistics(String dbName, String tblName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tblName);
         HiveCommonStats commonStats = toHiveCommonStats(table.getParameters());
@@ -186,6 +220,49 @@ public class HiveMetastore implements IHiveMetastore {
         Map<String, HiveColumnStats> columnStatistics =
                 HiveMetastoreApiConverter.toSinglePartitionColumnStats(statisticsObjs, totalRowNums);
         return new HivePartitionStats(commonStats, columnStatistics);
+    }
+
+    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+        org.apache.hadoop.hive.metastore.api.Table originTable = client.getTable(dbName, tableName);
+        if (originTable == null) {
+            throw new StarRocksConnectorException("Table '%s.%s' not found", dbName, tableName);
+        }
+
+        org.apache.hadoop.hive.metastore.api.Table newTable = originTable.deepCopy();
+        HiveCommonStats curCommonStats = toHiveCommonStats(originTable.getParameters());
+        HivePartitionStats curPartitionStats = new HivePartitionStats(curCommonStats, new HashMap<>());
+        HivePartitionStats updatedStats = update.apply(curPartitionStats);
+
+        HiveCommonStats commonStats = updatedStats.getCommonStats();
+        Map<String, String> originParams = newTable.getParameters();
+        originParams.put(TRANSIENT_LAST_DDL_TIME, String.valueOf(System.currentTimeMillis() / 1000));
+        newTable.setParameters(updateStatisticsParameters(originParams, commonStats));
+        client.alterTable(dbName, tableName, newTable);
+
+        //TODO(stephen): update table column statistics
+    }
+
+    public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                          Function<HivePartitionStats, HivePartitionStats> update) {
+        List<org.apache.hadoop.hive.metastore.api.Partition> partitions = client.getPartitionsByNames(
+                dbName, tableName, ImmutableList.of(partitionName));
+        if (partitions.size() != 1) {
+            throw new StarRocksConnectorException("Metastore returned multiple partitions for name: " + partitionName);
+        }
+
+        org.apache.hadoop.hive.metastore.api.Partition originPartition = getOnlyElement(partitions);
+        HiveCommonStats curCommonStats = toHiveCommonStats(originPartition.getParameters());
+        HivePartitionStats curPartitionStats = new HivePartitionStats(curCommonStats, new HashMap<>());
+        HivePartitionStats updatedStats = update.apply(curPartitionStats);
+
+        org.apache.hadoop.hive.metastore.api.Partition modifiedPartition = originPartition.deepCopy();
+        HiveCommonStats commonStats = updatedStats.getCommonStats();
+        Map<String, String> originParams = modifiedPartition.getParameters();
+        originParams.put(TRANSIENT_LAST_DDL_TIME, String.valueOf(System.currentTimeMillis() / 1000));
+        modifiedPartition.setParameters(updateStatisticsParameters(modifiedPartition.getParameters(), commonStats));
+        client.alterPartition(dbName, tableName, modifiedPartition);
+
+        //TODO(stephen): update partition column statistics
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {

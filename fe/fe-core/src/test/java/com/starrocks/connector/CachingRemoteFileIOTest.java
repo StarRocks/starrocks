@@ -17,10 +17,6 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.CachingRemoteFileIO;
-import com.starrocks.connector.RemoteFileBlockDesc;
-import com.starrocks.connector.RemoteFileDesc;
-import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import org.apache.hadoop.conf.Configuration;
@@ -73,5 +69,7 @@ public class CachingRemoteFileIOTest {
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
                 cachingFileIO.getPresentRemoteFiles(Lists.newArrayList(pathKey));
         Assert.assertEquals(1, presentRemoteFileInfos.size());
+
+        queryLevelCache.updateRemoteFiles(pathKey);
     }
 }

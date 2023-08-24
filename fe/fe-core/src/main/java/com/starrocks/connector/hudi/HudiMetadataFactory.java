@@ -72,8 +72,10 @@ public class HudiMetadataFactory {
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
                 pullRemoteFileExecutor,
+                pullRemoteFileExecutor,
                 isRecursive,
-                remoteFileIO instanceof CachingRemoteFileIO);
+                remoteFileIO instanceof CachingRemoteFileIO,
+                hadoopConf);
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
         Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
 

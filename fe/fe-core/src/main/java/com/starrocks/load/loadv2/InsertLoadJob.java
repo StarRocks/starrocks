@@ -40,6 +40,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
@@ -226,7 +227,7 @@ public class InsertLoadJob extends LoadJob {
             return true;
         }
 
-        if (table instanceof SystemTable || table instanceof IcebergTable) {
+        if (table instanceof SystemTable || table instanceof IcebergTable || table instanceof HiveTable) {
             return false;
         } else {
             return true;
