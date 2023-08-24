@@ -120,9 +120,7 @@ public class QueryDumpAction extends RestBaseAction {
         if (dumpInfo != null) {
             if (enableMock && dumpInfo instanceof QueryDumpInfo) {
                 QueryDumpInfo queryDumpInfo = (QueryDumpInfo) dumpInfo;
-                // TODO support desensitize HMS table
-                queryDumpInfo.setDesensitizedInfo(queryDumpInfo.getResourceSet().isEmpty()
-                        && queryDumpInfo.getHmsTableMap().isEmpty());
+                queryDumpInfo.setDesensitizedInfo(true);
             }
             response.getContent().append(GSON.toJson(dumpInfo, QueryDumpInfo.class));
             sendResult(request, response);

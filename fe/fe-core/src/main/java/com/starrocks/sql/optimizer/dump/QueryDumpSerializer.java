@@ -31,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,6 +39,7 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
     private static final Logger LOG = LogManager.getLogger(QueryDumpSerializer.class);
@@ -86,6 +88,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
                 return dumpJson;
             } catch (Exception e) {
                 LOG.info("failed to desensitize content, use the original content", e);
+                dumpInfo.addException(e.getMessage());
                 dumpJson = new JsonObject();
             }
         }
@@ -208,7 +211,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
                         tableTypeObject.addProperty("type", tableEntry.getValue().getType());
                         JsonArray jsonArray = new JsonArray();
                         jsonArray.add(tableTypeObject);
-                        jsonArray.add(GsonUtils.GSON.toJson(tableEntry.getValue()));
+                        HiveMetaStoreTableDumpInfo hiveMeta = tableEntry.getValue();
+                        HiveMetaStoreTableDumpInfo desensitizedMeta = desensitizeHiveMeta(hiveMeta, dict);
+                        jsonArray.add(GsonUtils.GSON.toJson(desensitizedMeta));
                         externalTableInfoData.add(fullName, jsonArray);
                     }
                 }
@@ -221,7 +226,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, Long>> entry : dumpInfo.getPartitionRowCountMap().entrySet()) {
             JsonObject partitionRowCount = new JsonObject();
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
-                partitionRowCount.addProperty(partitionEntry.getKey(), partitionEntry.getValue());
+                String partitionName = partitionEntry.getKey();
+                if (entry.getValue().size() == 1 && dict.containsKey(partitionEntry.getKey())) {
+                    // the partitionName of table without setting partition is the table name
+                    partitionName = DesensitizedSQLBuilder.desensitizeTblName(partitionName, dict);
+                }
+                partitionRowCount.addProperty(partitionName, partitionEntry.getValue());
+
             }
             String[] splits = entry.getKey().split("\\.");
             String tableName = DesensitizedSQLBuilder.desensitizeDbName(splits[0], dict) + "."
@@ -258,5 +269,30 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+    }
+
+    private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
+        HiveTableDumpInfo hiveTableDumpInfo = new HiveTableDumpInfo();
+        if (CollectionUtils.isNotEmpty(hiveMeta.getDataColumnNames())) {
+            hiveTableDumpInfo.setDataColumnNames(
+                    hiveMeta.getDataColumnNames().stream()
+                    .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                    .collect(Collectors.toList())
+            );
+        }
+
+        if (CollectionUtils.isNotEmpty(hiveMeta.getPartColumnNames())) {
+            hiveTableDumpInfo.setPartColumnNames(
+                    hiveMeta.getPartColumnNames().stream()
+                            .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                            .collect(Collectors.toList())
+            );
+        }
+
+        if (CollectionUtils.isNotEmpty(hiveMeta.getPartitionNames())) {
+            hiveTableDumpInfo.setPartitionNames(hiveMeta.getPartitionNames());
+        }
+
+        return hiveTableDumpInfo;
     }
 }

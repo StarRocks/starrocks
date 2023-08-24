@@ -50,6 +50,7 @@ import com.starrocks.credential.CredentialUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Field;
@@ -113,6 +114,7 @@ public class DesensitizedSQLBuilder {
         DesensitizedSQLVisitor visitor = new DesensitizedSQLVisitor(true, true, desensitizedDict);
         String tableDef = "";
         if (table.isMaterializedView()) {
+            visitor = new DesensitizedSQLVisitor(true, false, desensitizedDict);
             tableDef = visitor.desensitizeMvDef(table);
         } else if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
@@ -433,7 +435,7 @@ public class DesensitizedSQLBuilder {
             String desensitizedDbName = "db_" + desensitizeValue(dbName, "db name");
             String desensitizedTblName = "tbl_" + desensitizeValue(table.getName(), "table name");
             sb.append("CREATE EXTERNAL TABLE ").append(desensitizedDbName).append(".");
-            sb.append("tbl_").append(desensitizedTblName).append(" (\n");
+            sb.append(desensitizedTblName).append(" (\n");
 
             List<String> colDefs = Lists.newArrayList();
             for (Column col : table.getBaseSchema()) {
@@ -523,7 +525,7 @@ public class DesensitizedSQLBuilder {
             for (Column column : materializedView.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
                 // Since mv supports complex expressions as the output column, add `` to support to replay it.
-                colSb.append("`" + desensitizeValue(column.getName(), "column name") + "`");
+                colSb.append("`" + desensitizeValue(StringUtils.lowerCase(column.getName()), "column name") + "`");
                 colDef.add(colSb.toString());
             }
             sb.append(Joiner.on(", ").join(colDef));
@@ -540,7 +542,7 @@ public class DesensitizedSQLBuilder {
             sb.append("\n").append(desensitizeDistributionInfo(distributionInfo));
 
             // refresh scheme
-            sb.append("\nREFRESH ").append("UNKNOWN");
+            sb.append("\nREFRESH ").append("MANUAL");
             // properties
             sb.append("\nPROPERTIES (\n");
 
@@ -612,6 +614,7 @@ public class DesensitizedSQLBuilder {
                 define = materializedView.getViewDefineSql();
             }
             StatementBase stmt = SqlParser.parse(define, SessionVariable.DEFAULT_SESSION_VARIABLE).get(0);
+            Analyzer.analyze(stmt, ConnectContext.get());
             sb.append("\nAS ").append(visit(stmt));
             sb.append(";");
             return sb.toString();
