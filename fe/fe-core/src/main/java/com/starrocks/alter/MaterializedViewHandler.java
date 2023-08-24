@@ -203,6 +203,7 @@ public class MaterializedViewHandler extends AlterHandler {
         String baseIndexName = addMVClause.getBaseIndexName();
         String mvIndexName = addMVClause.getMVName();
         LOG.info("process add materialized view[{}] based on [{}]", mvIndexName, baseIndexName);
+        LOG.info("test");
 
         // avoid conflict against with batch add rollup job
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL);
