@@ -91,7 +91,7 @@ public class ResourceGroupMetricMgr {
     public static void increaseTimeoutQueuedQuery(ConnectContext ctx, long delta) {
         LongCounterMetric metrics = createQueryResourceGroupMetrics(
                 RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT_MAP, RESOURCE_GROUP_QUERY_QUEUE_TIMEOUT,
-                "the number of pending queries of this resource group", ctx);
+                "the number of pending timeout queries of this resource group", ctx);
         metrics.increase(delta);
     }
 
