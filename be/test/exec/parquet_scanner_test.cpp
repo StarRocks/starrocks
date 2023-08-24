@@ -459,7 +459,7 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
-            ASSERT_TRUE(!col->is_nullable() && !col->is_constant());
+            ASSERT_TRUE(col->is_nullable() && !col->is_constant());
         }
     };
     validate(scanner, 36865, check);
@@ -625,7 +625,7 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
-            ASSERT_TRUE(!col->is_nullable() && !col->is_constant());
+            ASSERT_TRUE(col->is_nullable() && !col->is_constant());
         }
     };
     validate(scanner, 36865, check);
