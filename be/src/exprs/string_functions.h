@@ -330,6 +330,15 @@ public:
     static Status replace_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
+     * @param: [string_value, from_value, to_value]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(translate);
+    static Status translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
      * @param: [DOUBLE]
      * @paramType: [DoubleColumn]
      * @return: BinaryColumn
