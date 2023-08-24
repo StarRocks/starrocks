@@ -58,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
@@ -688,6 +689,19 @@ public class PropertyAnalyzer {
             return Boolean.parseBoolean(val);
         }
         return defaultVal;
+    }
+
+    public static Pair<Boolean, Boolean> analyzeEnablePersistentIndex(Map<String, String> properties, boolean isPrimaryKey) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+            String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            return Pair.create(Boolean.parseBoolean(val), true);
+        } else {
+            if (isPrimaryKey) {
+                return Pair.create(Config.enable_persistent_index_by_default, false);
+            }
+            return Pair.create(false, false);
+        }
     }
 
     // analyze property like : "type" = "xxx";

@@ -216,6 +216,55 @@ public class PropertyAnalyzerTest {
     }
 
     @Test
+    public void testEnablePersistentIndex() throws AnalysisException {
+        // empty property
+        Map<String, String> property = new HashMap<>();
+        Pair<Boolean, Boolean> ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property, true);
+        Assert.assertEquals(false, ret.first);
+        Assert.assertEquals(false, ret.second);
+        // with property
+        Map<String, String> property2 = new HashMap<>();
+        property2.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property2, true);
+        Assert.assertEquals(true, ret.first);
+        Assert.assertEquals(true, ret.second);
+
+        Map<String, String> property3 = new HashMap<>();
+        property3.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property3, true);
+        Assert.assertEquals(false, ret.first);
+        Assert.assertEquals(true, ret.second);
+
+        // change config
+        Config.enable_persistent_index_by_default = false;
+
+        // empty property
+        Map<String, String> property4 = new HashMap<>();
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property4, true);
+        Assert.assertEquals(false, ret.first);
+        Assert.assertEquals(false, ret.second);
+        // with property
+        Map<String, String> property5 = new HashMap<>();
+        property5.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property5, true);
+        Assert.assertEquals(true, ret.first);
+        Assert.assertEquals(true, ret.second);
+
+        Map<String, String> property6 = new HashMap<>();
+        property6.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property6, true);
+        Assert.assertEquals(false, ret.first);
+        Assert.assertEquals(true, ret.second);
+        Config.enable_persistent_index_by_default = true;
+        
+        // non primary key
+        Map<String, String> property7 = new HashMap<>();
+        ret = PropertyAnalyzer.analyzeEnablePersistentIndex(property7, false);
+        Assert.assertEquals(false, ret.first);
+        Assert.assertEquals(false, ret.second);
+    }
+
+    @Test
     public void testDefaultTableCompression() throws AnalysisException {
         // No session
         Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
