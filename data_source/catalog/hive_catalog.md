@@ -244,8 +244,8 @@ Hive Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -256,7 +256,7 @@ Hive Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 | 参数                             | 是否必须   | 说明                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。<br>取值范围：`true` 和 `false`。默认值：`true`。 |
-| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br>取值范围：`true` 和 `false`。默认值：`false`。<br>路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
+| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型访问 (Path-Style Access)。<br>取值范围：`true` 和 `false`。默认值：`false`。对于 MinIO，必须设置为 `true`。<br>路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
 | aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
 | aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
 | aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |

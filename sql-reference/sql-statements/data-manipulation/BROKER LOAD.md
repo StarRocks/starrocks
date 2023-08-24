@@ -466,8 +466,8 @@ StarRocks 访问存储系统的认证配置。
 如果存储系统为其他兼容 S3 协议的对象存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -477,7 +477,7 @@ StarRocks 访问存储系统的认证配置。
 
 | 参数                            | 是否必须 | 描述                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl               | 是       | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_ssl               | 是       | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。对于 MinIO，必须设置为 `true`。 |
 | aws.s3.enable_path_style_access | 是       | 是否开启路径类型 URL 访问 (Path-Style URL Access)。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.endpoint                 | 是       | 用于访问兼容 S3 协议的对象存储的 Endpoint。                         |
 | aws.s3.access_key               | 是       | IAM User 的 Access Key。                                     |
