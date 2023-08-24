@@ -215,7 +215,11 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
+        sb.append(Joiner.on(", ").join(firstNChildrenToSql(children.size() - fnParams.getOrderByElemNum())));
+        if (fnParams.getOrderByElements() != null) {
+            sb.append(fnParams.getOrderByStringToSql());
+        }
+        sb.append(')');
         return sb.toString();
     }
 

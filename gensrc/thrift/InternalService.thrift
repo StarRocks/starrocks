@@ -232,6 +232,7 @@ struct TQueryOptions {
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
 
+  100: optional i64 group_concat_max_len = 1024;
   102: optional bool enable_collect_table_level_scan_stats;
 }
 

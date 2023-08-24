@@ -750,6 +750,49 @@ public class ExpressionAnalyzer {
                             fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                // move order by expr to node child, and extract is_asc and null_first information.
+                fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
+                List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
+                List<Boolean> isAscOrder = new ArrayList<>();
+                List<Boolean> nullsFirst = new ArrayList<>();
+                if (orderByElements != null) {
+                    for (OrderByElement elem : orderByElements) {
+                        isAscOrder.add(elem.getIsAsc());
+                        nullsFirst.add(elem.getNullsFirstParam());
+                    }
+                }
+                Type[] argsTypes = new Type[argumentTypes.length];
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
+                        argsTypes[i] = Type.VARCHAR;
+                    }
+                }
+                fn.setArgsType(argsTypes); // as accepting various types
+                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
+                for (Type t : argsTypes) {
+                    structTypes.add(new ArrayType(t));
+                }
+                ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
+                ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
+                ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                    fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                } else {
+                    boolean outputConst = true;
+                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
+                        if (!node.getChild(i).isConstant()) {
+                            outputConst = false;
+                            break;
+                        }
+                    }
+                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                            (!isAscOrder.isEmpty() || outputConst));
+                    fn.setRetType(Type.VARCHAR);
+                }
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);

@@ -106,6 +106,18 @@ static const AggregateFunction* get_function(const std::string& name, PrimitiveT
         }
     }
 
+    if (func_version > 5) {
+        if (name == "array_agg") {
+            func_name = "array_agg2";
+        }
+    }
+
+    if (func_version > 6) {
+        if (name == "group_concat") {
+            func_name = "group_concat2";
+        }
+    }
+
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
                                                                      is_window_function, is_null);

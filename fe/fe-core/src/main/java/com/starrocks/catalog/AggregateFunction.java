@@ -75,6 +75,12 @@ public class AggregateFunction extends Function {
     // function. e.g. org.example.MyUdf.class.
     private String symbolName;
 
+    private boolean isDistinct = false;
+
+    public void setIsDistinct(boolean isDistinct) {
+        this.isDistinct = isDistinct;
+    }
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -158,7 +164,9 @@ public class AggregateFunction extends Function {
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
         symbolName = other.symbolName;
-
+        isAscOrder = other.isAscOrder;
+        nullsFirst = other.nullsFirst;
+        isDistinct = other.isDistinct;
     }
 
     public String getSymbolName() {
@@ -286,6 +294,14 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+        if (isAscOrder != null && !isAscOrder.isEmpty()) {
+            aggFn.setIs_asc_order(isAscOrder);
+        }
+        if (nullsFirst != null && !nullsFirst.isEmpty()) {
+            aggFn.setNulls_first(nullsFirst);
+        }
+        aggFn.setIs_distinct(isDistinct);
+
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;

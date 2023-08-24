@@ -96,7 +96,15 @@ public:
         return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
     }
 
-    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeArrayAggAggregateFunctionV2() {
+        return std::make_shared<ArrayAggAggregateFunctionV2>();
+    }
+
+    static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() {
+        return std::make_shared<GroupConcatAggregateFunctionV2>();
+    }
+
+    template <PrimitiveType LT>
     static auto MakeMaxAggregateFunction();
 
     template <PrimitiveType PT>
