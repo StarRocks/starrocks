@@ -2469,6 +2469,7 @@ public class OlapTable extends Table {
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
+<<<<<<< HEAD
         if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
             for (int i = 0; i < fullSchema.size(); i++) {
                 Column column = fullSchema.get(i);
@@ -2477,6 +2478,15 @@ public class OlapTable extends Table {
                             new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
                     slotRefs.get(0).setDesc(slotDescriptor);
                 }
+=======
+        // schema change should update slot id
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Column column = fullSchema.get(i);
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
+                        column.getType(), column.isAllowNull());
+                slotRefs.get(0).setDesc(slotDescriptor);
+>>>>>>> 14d779e3b1 ([BugFix] Fix bug automatic partition table slot_id is not update after schema … (#29849))
             }
         }
     }
