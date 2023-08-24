@@ -524,7 +524,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
 
             inactiveRelatedMv(modifiedColumns, table);
-
+            table.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 

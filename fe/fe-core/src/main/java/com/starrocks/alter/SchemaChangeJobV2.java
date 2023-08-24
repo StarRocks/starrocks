@@ -758,6 +758,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             inactiveViews(dropModifiedColumns.second, tbl);
 
             pruneMeta();
+            tbl.onReload();
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
