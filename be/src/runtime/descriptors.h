@@ -130,6 +130,9 @@ private:
     const bool _is_materialized;
     const bool _is_output_column;
 
+    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
+    const bool _is_nullable;
+
     SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);
 };

@@ -163,7 +163,10 @@ public class TupleDescriptor {
     }
 
     public TTupleDescriptor toThrift() {
-        TTupleDescriptor ttupleDesc = new TTupleDescriptor(id.asInt(), -1, -1);
+        TTupleDescriptor ttupleDesc = new TTupleDescriptor();
+        ttupleDesc.setId(id.asInt());
+        ttupleDesc.setByteSize(-1);
+        ttupleDesc.setNumNullBytes(-1);
         ttupleDesc.setNumNullSlots(-1);
         if (table != null && table.getId() >= 0) {
             ttupleDesc.setTableId((int) table.getId());
