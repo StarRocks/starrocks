@@ -397,6 +397,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -3932,6 +3933,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 String fileName = ((StringLiteral) visitString(context.fileName)).getStringValue();
                 return new AlterPipeClauseRetry(createPos(context), false, fileName);
             }
+        } else if (context.SET() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            if (MapUtils.isEmpty(properties)) {
+                throw new ParsingException("empty property");
+            }
+            return new AlterPipeSetProperty(createPos(context), properties);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo(context.toString()));
         }
@@ -6818,7 +6825,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Map<String, String> getPropertyList(StarRocksParser.PropertyListContext context) {
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);
             for (Property property : propertyList) {

@@ -23,6 +23,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,8 +37,15 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String FILE_LIST_TABLE_NAME = "pipe_file_list";
     protected static final String FILE_LIST_FULL_NAME = FILE_LIST_DB_NAME + "." + FILE_LIST_TABLE_NAME;
 
+    // Split the records into batches, to avoid build a tremendous SQL
+    public static final int SELECT_BATCH_SIZE = 20;
+    public static final int WRITE_BATCH_SIZE = 2000;
+
+    // NOTE: why not use the (pipe_id, file_name, file_version) as primary key since it's unique
+    // Because current primary key implementation limit the length to 128
     protected static final String FILE_LIST_TABLE_CREATE =
             "CREATE TABLE IF NOT EXISTS %s (" +
+                    "id bigint not null auto_increment, " +
                     "pipe_id bigint, " +
                     "file_name string, " +
                     "file_version string, " +
@@ -49,8 +57,9 @@ public class FileListTableRepo extends FileListRepo {
                     "finish_load datetime, " +
                     "error_info string, " +
                     "insert_label string" +
-                    " ) PRIMARY KEY(pipe_id, file_name, file_version) " +
-                    "DISTRIBUTED BY HASH(pipe_id, file_name) BUCKETS 8 " +
+                    " ) PRIMARY KEY(id) " +
+                    "DISTRIBUTED BY HASH(id) BUCKETS 8 " +
+                    "ORDER BY (pipe_id, file_name) " +
                     "properties('replication_num' = '%d') ";
 
     protected static final String CORRECT_FILE_LIST_REPLICATION_NUM =
@@ -65,6 +74,9 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
+    protected static final String SELECT_FILES_BY_STATE_WITH_LIMIT =
+            SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s LIMIT %d";
+
     protected static final String UPDATE_FILE_STATE =
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `error_info` = %s WHERE ";
 
@@ -75,7 +87,7 @@ public class FileListTableRepo extends FileListRepo {
             "UPDATE " + FILE_LIST_FULL_NAME + " SET `state` = %s, `finish_load` = now() WHERE ";
 
     protected static final String INSERT_FILES =
-            "INSERT INTO " + FILE_LIST_FULL_NAME + " VALUES ";
+            "INSERT INTO " + FILE_LIST_FULL_NAME + "(" + ALL_COLUMNS + ")" + " VALUES ";
 
     protected static final String SELECTED_STAGED_FILES =
             "SELECT " + ALL_COLUMNS + " FROM " + FILE_LIST_FULL_NAME + " WHERE ";
@@ -83,20 +95,35 @@ public class FileListTableRepo extends FileListRepo {
     protected static final String DELETE_BY_PIPE = "DELETE FROM " + FILE_LIST_FULL_NAME + " WHERE `pipe_id` = %d";
 
     @Override
-    public List<PipeFileRecord> listFilesByState(PipeFileState state) {
-        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state);
+    public List<PipeFileRecord> listFilesByState(PipeFileState state, long limit) {
+        return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state, limit);
     }
 
     @Override
-    public void addFiles(List<PipeFileRecord> records) {
+    public void stageFiles(List<PipeFileRecord> records) {
         records.forEach(file -> file.pipeId = pipeId.getId());
-        List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(records);
-        List<PipeFileRecord> newFiles = ListUtils.subtract(records, stagedFiles);
-        if (CollectionUtils.isEmpty(newFiles)) {
-            return;
+
+        List<PipeFileRecord> stagingFile = new ArrayList<>();
+        for (List<PipeFileRecord> batch : ListUtils.partition(records, SELECT_BATCH_SIZE)) {
+            List<PipeFileRecord> stagedFiles = RepoAccessor.getInstance().selectStagedFiles(batch);
+            List<PipeFileRecord> newFiles = ListUtils.subtract(batch, stagedFiles);
+            if (CollectionUtils.isEmpty(newFiles)) {
+                return;
+            }
+            stagingFile.addAll(newFiles);
+
+            if (stagingFile.size() >= WRITE_BATCH_SIZE) {
+                RepoAccessor.getInstance().addFiles(stagingFile);
+                LOG.info("stage {} files into file-list, pipe={}, newFiles={}",
+                        stagingFile.size(), pipeId, stagingFile);
+                stagingFile.clear();
+            }
         }
-        RepoAccessor.getInstance().addFiles(records);
-        LOG.info("add files into file-list, pipe={}, alreadyStagedFile={}, newFiles={}", pipeId, stagedFiles, newFiles);
+        if (CollectionUtils.isNotEmpty(stagingFile)) {
+            RepoAccessor.getInstance().addFiles(stagingFile);
+            LOG.info("stage {} files into file-list, pipe={}, newFiles={}",
+                    stagingFile.size(), pipeId, stagingFile);
+        }
     }
 
     @Override

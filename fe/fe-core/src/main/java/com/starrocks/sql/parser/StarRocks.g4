@@ -1816,7 +1816,8 @@ alterPipeClause
     : SUSPEND |
         RESUME |
         RETRY ALL |
-        RETRY FILE fileName=string
+        RETRY FILE fileName=string |
+        SET propertyList
     ;
 
 alterPipeStatement
