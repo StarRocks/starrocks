@@ -705,8 +705,8 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
             auto src_const = ConstColumn::create(BinaryColumn::create());
             auto delim_const = ConstColumn::create(BinaryColumn::create());
 
-            src_const->append_datum(src);
-            delim_const->append_datum(delimiter);
+            src_const->append_datum(Slice(src));
+            delim_const->append_datum(Slice(delimiter));
 
             columns.clear();
             columns.push_back(src_const);
