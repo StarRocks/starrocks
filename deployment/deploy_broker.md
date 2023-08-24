@@ -8,7 +8,7 @@ Broker 节点与 BE 节点之间使用网络传输数据。当 Broker 节点和 
 
 ## 准备工作
 
-请参照[部署前提条件](../deployment/deployment_prerequisites.md)、[检查境配置](../deployment/environment_configurations.md)、[准备部署文件](../deployment/prepare_deployment_files.md)完成准备工作。
+请参照[部署前提条件](../deployment/deployment_prerequisites.md)、[检查环境配置](../deployment/environment_configurations.md)、[准备部署文件](../deployment/prepare_deployment_files.md)完成准备工作。
 
 ## 启动 Broker 服务
 
