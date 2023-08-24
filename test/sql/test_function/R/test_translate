@@ -1,0 +1,2132 @@
+-- name: test_translate_null
+SELECT TRANSLATE('abc', 'ab', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('abc', NULL, 'ab');
+-- result:
+None
+-- !result
+SELECT TRANSLATE(NULL, 'CS', '测试');
+-- result:
+None
+-- !result
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('abc', 'ab', NULL),
+    (NULL, 'CS', '测试'),
+    ('abc', null, 'ab');
+-- result:
+-- !result
+SELECT TRANSLATE(src, from_str, to_str) from t1;
+-- result:
+None
+None
+None
+-- !result
+-- name: test_translate_empty
+SELECT TRANSLATE('abc', 'ab', '');
+-- result:
+c
+-- !result
+SELECT TRANSLATE('abc', '', 'ab');
+-- result:
+abc
+-- !result
+SELECT TRANSLATE('', 'CS', '测试');
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('abc', 'ab', ''),
+    ('', 'CS', '测试');
+-- result:
+-- !result
+SELECT TRANSLATE(src, from_str, to_str) from t1;
+-- result:
+
+c
+-- !result
+INSERT INTO t1 VALUES ('abc', '', 'ab');
+-- result:
+-- !result
+SELECT TRANSLATE(src, from_str, to_str) from t1;
+-- result:
+
+c
+abc
+-- !result
+-- name: test_translate_utf8_constant_from_and_to
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '测');
+-- result:
+˜›测ä试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', 'b');
+-- result:
+˜›bä试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', 'b测');
+-- result:
+˜›bä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '😂');
+-- result:
+˜›😂ä试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '😂测');
+-- result:
+˜›😂ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '😂b');
+-- result:
+˜›😂äb试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '😂b测');
+-- result:
+˜›😂äb试测😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '试');
+-- result:
+˜›试ä试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '试测');
+-- result:
+˜›试ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测😄', '试b');
+-- result:
+˜›试äb试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '测');
+-- result:
+˜›âä测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', 'b');
+-- result:
+˜›âäb😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', 'b测');
+-- result:
+˜›âäb测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '😂');
+-- result:
+˜›âä😂😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '😂测');
+-- result:
+˜›âä😂测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '😂b');
+-- result:
+˜›âä😂b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '😂b测');
+-- result:
+˜›âä😂b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '试');
+-- result:
+˜›âä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '试测');
+-- result:
+˜›âä试测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '测试', '试b');
+-- result:
+˜›âä试b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '测');
+-- result:
+测›ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', 'b');
+-- result:
+b›ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', 'b测');
+-- result:
+b›测ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '😂');
+-- result:
+😂›ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '😂测');
+-- result:
+😂›测ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '😂b');
+-- result:
+😂›bä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '😂b测');
+-- result:
+😂›bä测试测😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '试');
+-- result:
+试›ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '试测');
+-- result:
+试›测ä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â😄', '试b');
+-- result:
+试›bä测试😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '测');
+-- result:
+˜›测ä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', 'b');
+-- result:
+˜›bä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', 'b测');
+-- result:
+˜›bä测😄😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '😂');
+-- result:
+˜›😂ä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '😂测');
+-- result:
+˜›😂ä测😄😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '😂b');
+-- result:
+˜›😂ä测😄😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '😂b测');
+-- result:
+˜›😂ä测测😄😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '试');
+-- result:
+˜›试ä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '试测');
+-- result:
+˜›试ä测😄😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'âa试', '试b');
+-- result:
+˜›试ä测😄😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '测');
+-- result:
+测›âä测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', 'b');
+-- result:
+b›âä测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', 'b测');
+-- result:
+b›âä测测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '😂');
+-- result:
+😂›âä测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '😂测');
+-- result:
+😂›âä测测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '😂b');
+-- result:
+😂›âä测b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '😂b测');
+-- result:
+😂›âä测b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '试');
+-- result:
+试›âä测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '试测');
+-- result:
+试›âä测测😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜试', '试b');
+-- result:
+试›âä测b😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '测');
+-- result:
+测›ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', 'b');
+-- result:
+b›ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', 'b测');
+-- result:
+b›测ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '😂');
+-- result:
+😂›ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '😂测');
+-- result:
+😂›测ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '😂b');
+-- result:
+😂›bä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '😂b测');
+-- result:
+😂›bä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '试');
+-- result:
+试›ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '试测');
+-- result:
+试›测ä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '˜â测', '试b');
+-- result:
+试›bä试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '测');
+-- result:
+˜›测ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', 'b');
+-- result:
+˜›bä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', 'b测');
+-- result:
+˜›bä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '😂');
+-- result:
+˜›😂ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '😂测');
+-- result:
+˜›😂ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '😂b');
+-- result:
+˜›😂ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '😂b测');
+-- result:
+˜›😂ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '试');
+-- result:
+˜›试ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '试测');
+-- result:
+˜›试ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â', '试b');
+-- result:
+˜›试ä测试😄😂ab
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '测');
+-- result:
+˜›测ä😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', 'b');
+-- result:
+˜›bä😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', 'b测');
+-- result:
+˜›bä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '😂');
+-- result:
+˜›😂ä😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '😂测');
+-- result:
+˜›😂ä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '😂b');
+-- result:
+˜›😂äb😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '😂b测');
+-- result:
+˜›😂äb😄😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '试');
+-- result:
+˜›试ä😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '试测');
+-- result:
+˜›试ä测😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'â测a试', '试b');
+-- result:
+˜›试äb😄😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '测');
+-- result:
+˜›âä测测😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', 'b');
+-- result:
+˜›âä测b😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', 'b测');
+-- result:
+˜›âä测b😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '😂');
+-- result:
+˜›âä测😂😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '😂测');
+-- result:
+˜›âä测😂😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '😂b');
+-- result:
+˜›âä测😂😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '😂b测');
+-- result:
+˜›âä测测😂😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '试');
+-- result:
+˜›âä测试😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '试测');
+-- result:
+˜›âä测试😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', '😄a试', '试b');
+-- result:
+˜›âä测试😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '测');
+-- result:
+˜›âä测试😄😂测b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', 'b');
+-- result:
+˜›âä测试😄😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', 'b测');
+-- result:
+˜›âä测试😄😂bb
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '😂');
+-- result:
+˜›âä测试😄😂😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '😂测');
+-- result:
+˜›âä测试😄😂😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '😂b');
+-- result:
+˜›âä测试😄😂😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '😂b测');
+-- result:
+˜›âä测试😄😂😂b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '试');
+-- result:
+˜›âä测试😄😂试b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '试测');
+-- result:
+˜›âä测试😄😂试b
+-- !result
+SELECT TRANSLATE('˜›âä测试😄😂ab', 'a', '试b');
+-- result:
+˜›âä测试😄😂试b
+-- !result
+-- name: test_translate_to_str_greater_than_from_str
+SELECT TRANSLATE('a|b|c', 'ab', '123');
+-- result:
+1|2|c
+-- !result
+SELECT TRANSLATE('a|b|c', 'abc', '12');
+-- result:
+1|2|
+-- !result
+SELECT TRANSLATE('C|S', 'CS', '测试');
+-- result:
+测|试
+-- !result
+SELECT TRANSLATE('测|试', '测试', 'CS');
+-- result:
+C|S
+-- !result
+SELECT TRANSLATE('测|试', '测试', 'C');
+-- result:
+C|
+-- !result
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('a|b|c', 'ab', '123'),
+    ('a|b|c', 'abc', '12'),
+    ('C|S', 'CS', '测试'),
+    ('测|试', '测试', 'CS'),
+    ('测|试', '测试', 'C');
+-- result:
+-- !result
+SELECT TRANSLATE(src, from_str, to_str) from t1;
+-- result:
+测|试
+1|2|c
+1|2|
+C|S
+C|
+-- !result
+-- name: test_translate_exceed_OLAP_STRING_MAX_LENGTH
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(REPEAT('a', 1024*1024), 'a', 'b')
+)), 0);
+-- result:
+1624733713
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(CONCAT(REPEAT('a', 1024*1024-1024*3), REPEAT('膨', 1024)), '膨', 'p')
+)), 0);
+-- result:
+-308607422
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(CONCAT('a', REPEAT('b', 1024*1024 - 1 - 2)), 'a', '膨')
+)), 0);
+-- result:
+777398045
+-- !result
+SELECT TRANSLATE(REPEAT('a', 1024*1024), 'a', '膨');
+-- result:
+None
+-- !result
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values ('placeholder', 'a', 'b');
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(REPEAT('a', 1024*1024), from_str, to_str)
+)), 0) from t1;  
+truncate table t1;
+-- result:
+1624733713
+-- !result
+insert into t1 values ('placeholder', '膨', 'p');
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(CONCAT(REPEAT('a', 1024*1024-1024*3), REPEAT('膨', 1024)), from_str, to_str)
+)), 0) from t1; 
+truncate table t1;
+-- result:
+-308607422
+-- !result
+insert into t1 values ('placeholder', 'a', '膨');
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(CONCAT('a', REPEAT('b', 1024*1024 - 1 - 2)), from_str, to_str)
+)), 0) from t1; 
+truncate table t1;
+-- result:
+777398045
+-- !result
+insert into t1 values ('placeholder', 'a', '膨');
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(
+    TRANSLATE(REPEAT('a', 1024*1024), from_str, to_str)
+)), 0) from t1; 
+truncate table t1;
+-- result:
+0
+-- !result
+-- name: test_translate_multiple_chunks
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 SELECT CONCAT('a|b|c', generate_series), 'ab', '123' FROM TABLE(generate_series(1, 4095*2));
+-- result:
+-- !result
+INSERT INTO t1 SELECT CONCAT('a|b|c', generate_series), 'abc', '12' FROM TABLE(generate_series(1, 4095*2));
+-- result:
+-- !result
+INSERT INTO t1 SELECT CONCAT('C|S', generate_series), 'CS', '测试' FROM TABLE(generate_series(1, 4095*2));
+-- result:
+-- !result
+INSERT INTO t1 SELECT CONCAT('测|试', generate_series), '测试', 'CS' FROM TABLE(generate_series(1, 4095*2));
+-- result:
+-- !result
+INSERT INTO t1 SELECT CONCAT('测|试', generate_series), '测试', 'C' FROM TABLE(generate_series(1, 4095*2));
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, to_str))), 0) from t1;
+-- result:
+-86245165969
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ab', '123'))), 0) from t1;
+-- result:
+86181275310
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'abc', '12'))), 0) from t1;
+-- result:
+39300678040
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'CS', '测试'))), 0) from t1;
+-- result:
+291352620470
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '测试', 'CS'))), 0) from t1;
+-- result:
+-473683291648
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '测试', 'C'))), 0) from t1;
+-- result:
+-261631635524
+-- !result
+-- name: test_translate_invalid
+SELECT TRANSLATE('abc', 'ab');
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 28. Detail message: No matching function with signature: translate(varchar, varchar).')
+-- !result
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('abc', 'ab', NULL),
+    (NULL, 'CS', '测试'),
+    ('abc', null, 'ab');
+-- result:
+-- !result
+SELECT TRANSLATE(src, from_str) from t1;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 30. Detail message: No matching function with signature: translate(varchar(65533), varchar(65533)).')
+-- !result
+-- name: test_translate_random
+CREATE TABLE `t1` (
+  `src` varchar(65533) NULL COMMENT "",
+  `from_str` varchar(65533) NULL COMMENT "",
+  `to_str` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`src`)
+DISTRIBUTED BY HASH(`src`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+    ('ba1+E^]-', NULL, 'EE1aaababb'),
+    ('(2%&j四[iH%û一G*%ù😂cûg˜', '%2(û*û😍😂在四', 'HjiiiG22'),
+    ('🙂', 'K🙂🙂🙂🙂🙂🙂测🙂🙂🙂', '0wCnAcyybBK'),
+    ('八*二四试DA%$aF[?^â%一›*Ji›a七+(cJ五^😄D三gûæ五', 'VFaiAgAJFcDu', 'DFJAFgF'),
+    ('E?jjj?FE4二&3#$]æ#七二#eh三B*e^试4B˜E一(E', 'B*›æe?&', '七#eE*A?d'),
+    ('*›Jù2âd0g-ga(#[di八%七🙂四%aH九âHcA--五I0›', 'i%-0-›cg四q0*eJ', 'Hcgk4gisgHHaaa'),
+    ('ûbe', 'ûûbeeûBeûb', 'bûege在beQeeVx'),
+    ('七0三$ei+DBgi测ùc(C试i˜试#)0+😄^)😄]e😇c4F八1G)三七ùHg🙂', 'K34Fc2E44e', 'B1e4HFgJDw'),
+    (')g六BæùhähI)JB五j二', 'hJæ😍五âCBIBJ', 'JBDhBgvBI9Jeh'),
+    ('HDa$四0d八测%😇æ)J一c?0)2测九jdaûf›二Câ', '九测)😇九aâ', 'a0dcad23DJKb'),
+    ('Id二?-😇ba二Bg一f九E测E一(😇C测3JB?^2j😇A九&[+3JCh😂五五›', '😇J😇一-[Ej', 'Eb(+hg二'),
+    ('九HB2😄六D🙂C七试三D五d3?D😇JùFA3I^?2#fa😇试😇七›dJ(b二iDb', 'F三f😇DJ试六xA2不J九', 'bobJAD3IH'),
+    ('六G3一🙂a#', 'aG3G3F3a34', 'boaG3G'),
+    ('七四c*û😂0七›测ââ2[三g]f*五Eä[Di测ù&2ä八-一', '四iâYNEù2', '20cC0cW2iE'),
+    ('[h试û]八3六五i4Hb1äJ🙂😇🙂DB六🙂Efa八$f*0四i]Hâj1二G?一?I测😂', 'Hfh3r43JEnhD9I', 'fwhIGb'),
+    ('1ù)一fC🙂G🙂Bd*😂^C$AI]]j?23hH˜?😄E)Cb1Ah4D3%😇三🙂]*â二û*', 'CIyjA31zGIZ', NULL),
+    ('*试Jû😇三😇Ea四一+æ🙂G$F+›二八+🙂🙂😂😄cA#a#?c&äI四f˜iiæ试›ej😄🙂c', 'tceTni55ie', 'AGAFceF'),
+    ('g-$一A˜g七afD+😂)一e^]ù😇Ah五D😇G*jI+试二G四#😇八#F&[2$0', 'WGuVZ4vG2DDDg', 'g0hAhe'),
+    ('-D&i😇😇七Bù?#gä[G&😇', NULL, 'ä😇?😇&测ù不&D'),
+    ('🙂四dc测äF^$))g4B😇äd4gG^eAaF😇九4G[I$]›Ib八-0七五五+😂#', '4Gbdg44IIAFgd', 'cSdIbqBHeAGBb'),
+    ('😇😄试九äæ1七]A[J🙂七^五2g六😄ûû?3jf1e4?a😂ù🙂一Ed😇BfäI[j😇0e', 'g4LI😍J😇ä1😄🙂😂测a', 'f1测f😇û'),
+    ('-F%âI4🙂六af', '六âqF%âII', '34jQ8IIIII'),
+    ('A三e%😂›+(*三A试&一h%dä一ä&^cæj🙂五››ha(Câ四*Gû]#a??😇', 'd›h一😄ä›2', 'AG9ZjGIAePda'),
+    ('D一#)', 'DsDDgDDbJDDZdD', 'zDDtDDD'),
+    (NULL, '不😍1U˜试Ni', '9JLv在试😍0V😂˜x'),
+    ('😂â😇2)#?1aA2ä五?测Gf˜æ%2%😇', 'GeG2Cf21a', 'G122pid2'),
+    ('😄#2%六B😄[3)*gæ(A)试A[ä˜五^*😂三?😂二aF?äC八û0aI[F测4六æ&1', 'F14B1a', 'FFI52FAFAF10ag'),
+    ('%›1Ga😂', 'NGGb11', 'aGaaa1'),
+    ('(五û试%H试GH三ä四九3ah😇三(&âbâFib(Bâä试Iai[九4六3)â', '六âH试不âa三˜Bû(九九', 'âK(iFG[GH六Bi😇'),
+    (NULL, NULL, 'QJngp57'),
+    ('😂[六›˜&六三^]âE2A四0âb二JFf?û[六3^-d🙂˜dä', 'd六û˜câ😂d-六s[', 'E3s03yd'),
+    ('+', 'BnloXjep1Vosfz', 'asJO5T'),
+    ('#bC3*六八?**J试a七)äBi😇E试d😂]五九(˜)-E)😇六i4+一-Cd]2九七', 'diCdJEB', '›4a九测˜-在-b'),
+    ('1[a-˜Fbiæj', 'ba1b1j', 'VFâF˜1j[b'),
+    ('测G', 'GGEGGG', '😍qGn测测G测GG6不G'),
+    ('*j)😂(F-B#â+😇d3测H#三五试(ù0e+f八七[äI#f˜G4A#', '63O0fnds3', 'IffFddRFjI34'),
+    ('六c八0)GâûFgCä一i›gF', 'iCFcHGd', 'iCwcGgFggP'),
+    ('f😂三-&â)J4', 'hJffJfIBfJJ', '-â&â不试e)&'),
+    ('三e*FaE$4e%测?C#二JæHc]四六+)九B˜四æj››😇😄一gIfgdDG七ù4', '4😂g😄R$不D', NULL),
+    ('九g九%😂(0九b七›j)fi试F😇八😄[一0ùE›F八3ûûhc3测八+äe', 'a%Xnf😂', 'hF0giZE0e3'),
+    ('e二d*D%4eäcæ*û😂*', '在ä测û在在eBb8e*æ', 'e4cc4Ddge'),
+    (NULL, '8VjLoB8', 'bDNPgO3f'),
+    ('Câ测六三A😇😂Ggc一+1›f21j2%f😇â五æaBj*-#C六C', '1AcGcB1QICBjG', 'g😇j😂›GH˜六o'),
+    ('hE九H一cC测测cj2%', 'EEEcC1cczmHr', 'jEHHhDj'),
+    ('', 'jqIPRsQc', '3S4KSpB'),
+    ('bH二ùD八J😂j2b八2😂B-ghä#&😂D+Hdûf😂e测', 'hBDE1HSjJHHJj', 'U2bjmbb8dhI2'),
+    ('[😇二0C试ä', '01CC00CCaC', '0CHCCC0CC0CCvC'),
+    ('😄D1˜九C八0六三jea-e3&e试e', 'et2J03G', 'eUok00jCDDGa'),
+    (NULL, '›Y测l😜fâN', 'D不âmâ6e😜'),
+    ('#]九â*JCg)jû^äHùAi四Jf#3', 'ACfgj3jhUC', '#ä)ä九J'),
+    ('?hA七🙂HI二#0试😇(四七ùI+a˜ä]二fEb九H12', '2I20hAbOEF', 'hHGI4TAaH'),
+    ('Fc˜D4二八Fj😂4i三2😄六二四E34h%g九%D24˜&七Bdedjj😂😂a1试二', NULL, 'v3x%2😂437试&D'),
+    ('%I八五四JfJ六&Gc测E3D七+H1e0#Jâäe', 'eNJfgIHEJ', 'ä测0I3JJ七四'),
+    ('六#i)˜äigù2DC32c1â六3gd九J3b五$1😂1😇🙂3九æBd^七J%a', '^)S2bd', '33B29五A九dC'),
+    ('fE六fb二)I七3?[*😂0G#JA🙂BG3J五测测', 'IfEJGEJJBJbG3b', '?*3J😂二G'),
+    ('0😄c-三g😂E2â+-)😂â二#C', 'ä-c2😂˜OCâm', '二â#😂#2-g😂a2三'),
+    ('aäAgCæ4一˜😂B4测3æg-3û1三æ›H#?', '43A4HAHa3', '1三?-1F›测一g一'),
+    ('If测七Fi4ùFc', 'mIfif4FiFF测i😂', 'fFFF4iaI'),
+    ('😄H[五A+试1c🙂J七I六bä+E😇[', '1HwccAJ1EJo', 'HbAbAA'),
+    ('æ三测ûfi][)42û˜jd3i1i?gcI😂(fD[e?FI', 'Icddie', 'ibfgfiij3Dfbi'),
+    ('D*^D八😂1😄测H4八Df九ebe4', '😄f*fâDDf😂›😂九f', '4D14s1eH6D4b'),
+    ('八c-0e九g3二二a二i八igJ七e', 'kJcJ二e二ig二m', 'caaMgigdiyJF'),
+    ('D#GD^4九试cE[八?-j0F03D', 'w试-DE-pb-[E试9#', '03LDF3D'),
+    ('三%-&一û二F', 'FFPFFFFF', 'FFFFFsQw91'),
+    ('Ji三æG0(0dùûh六[G^七3]八2', 'Ge0i0Fn0h3', 'GGG303'),
+    ('jC*八^八六ce›a(GâB', 'cC1GeePGC', 'a6GjcC'),
+    ('三3一四â4˜', '43G3333344I4', '😍四一˜ââ34一˜😜3'),
+    ('八😄hbEdG一H?😇gFù🙂🙂+1û*五æ(😄D', 'EGgdZbFyEbE', 'GQgX1hFEghDHE'),
+    ('😂FFj🙂D%D?一ùùûä0fi2ba(A#a*fû', 'bAffaojiDfU2i7', '?m2˜%😍D0anâfù'),
+    ('3*i八I八(五j-🙂?', 'W八😄?八IIi?八i🙂', '3ULIIPu'),
+    ('fhI二hIf˜âaC三', 'fC˜˜I二˜IhaGq', '😜˜Ehâa三hä'),
+    ('Gæj1^', 'G1jGy111j', 'j3QG1jG'),
+    ('😂0C%🙂$?äi😄六h三测^🙂0Eù0))æIæ›h0i七i-4)3B›E#4😄', ')hæh😄😄BEæ?', 'ih4Ei0I0'),
+    ('˜四I*CEg1🙂]+', 'CCCgIgIC', 'EsECCIC2111'),
+    ('c0C😇0😄', NULL, '0CJp0c00V0'),
+    ('4%?j测[])0FGBg]六九db九i*四四I😄九😄', 'oZ测九Q九B', 'biGFVbRbgB'),
+    ('äda1五4$&0I#😄😄ä五$试测$🙂I测æG七›æ😄😇', 'IIIIG11pdG1', 'dG1ddd'),
+    ('^]?测äc🙂e七dbcû😄f4â😇+*I)+û测Bd八😇四1', '4beB1c1IdfIQ1b', 'bbdRIf'),
+    ('三g二😄测[-😇*', 'gggHggggogg', 'ggggIgrgggg'),
+    ('2IæIGj😇[(^I+G一B*c-hâ九😇00八jC', 'CCGxhI', 'cGG😜J˜It0在j一'),
+    ('4›ää0😄2测IJDe', 'ZDo4D4e', '😄😂不😄I›😄4'),
+    ('jj(f七[e', '不😜j七IAjFe七j(ej', 'jjjjfefjjfffew'),
+    ('h$3%-CBæDeG八)›#三#I#&gc😇六Ii$八-+e', 'D-#+😂#DI😜âæd', 'h7eBihgcDjgB'),
+    ('BC七四?i-Bd3]', 'BC38di', 'B33B3BBdC3Y'),
+    ('F(五#›H[七%H%四一九D›3😇e-😂九)1二D&ä', '😇1yF#九)(😂', 'UFR五😂C[二'),
+    ('DjHGJ˜dBûa˜试H)&#d一â›0j›D', 'Hl试D)››H', NULL),
+    ('C*#测›hâFc', 'Câ测Fc测oV›', 'CchFChchFhDcfF'),
+    ('六*六bæ九gg[&三🙂(4C&H1^3›^d˜D%ù六测试4E一)六0ù', 'H[D4😂J三一六在九˜试', 'b4g1DggCp04'),
+    ('🙂一八C五C', 'CrCCCC', 'ClCCCC'),
+    ('eæE一û+I]3八ä试四?七试jfFBGB0â三四', '5EGo09En', '八++?FbG]一😂四WEf'),
+    ('â😄0Fû', 'p0FFAF', 'D0â😄00a'),
+    ('六🙂一测Bfcj0AaC九😇D七gG[1^八1九GCAe1æiB😇(🙂+D😄六c', 'ioY1cgD', '九B1G一c'),
+    ('H五G六d试›ca(+?gC^ù$g[三e&Aj四😄ä', 'b五六四?03H+😄›三+', 'jHCSjAeecd1BH'),
+    ('[$aâj二😄C]?ù八ûù[试æ˜四', 'ajDCgajaaj', 'û˜测d?â测æùj试'),
+    ('GCcf+i五31🙂🙂八?)˜˜d😇$九试ûe0+æ1🙂#', '1aG🙂?)', 'C˜E🙂äCCB不$五🙂试'),
+    ('^›测#]J)ihâI九2九八2^J-)˜3四1😇1B1g二&B二gj', 'lggjB2j63gh', '))˜1B3]J-ji&J'),
+    (NULL, '˜q在不GN在X测', '˜在âMBy😄6'),
+    ('', 'QTL3ND', 'UTs1QEhpnf'),
+    ('iEJG2A六0AB#(', 'BE六AAGG(六', 'EiGAi0GigA'),
+    (')i-五二+$Bc+六â&三四^eG*七1ûcæ0äF?J八(*六D四五û九%CfJ*C九â', 'J四%O(测三B0', NULL);
+-- result:
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, to_str))), 0) FROM t1;
+-- result:
+-9273119353
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', to_str))), 0) from t1;
+-- result:
+-22759771935
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+-15403808815
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', 'hdA4ZE'))), 0) FROM t1;
+-- result:
+-24092076350
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'ù七[I%10', '4AlJzF'))), 0) FROM t1;
+-- result:
+-1691897153
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', to_str))), 0) from t1;
+-- result:
+-6047668112
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+-14679810324
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', 'hdA4ZE'))), 0) FROM t1;
+-- result:
+-2972280345
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'AaPWie', '4AlJzF'))), 0) FROM t1;
+-- result:
+-23919732251
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', to_str))), 0) from t1;
+-- result:
+6117043467
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+-15175674670
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', 'hdA4ZE'))), 0) FROM t1;
+-- result:
+1122895566
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'D不b06&😄0IF😂˜', '4AlJzF'))), 0) FROM t1;
+-- result:
+1433959053
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', to_str))), 0) from t1;
+-- result:
+-9201369252
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+-11074428993
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', 'hdA4ZE'))), 0) FROM t1;
+-- result:
+617634882
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, 'Jf😄dJeCc😂f六˜', '4AlJzF'))), 0) FROM t1;
+-- result:
+32149779
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+8038977823
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, NULL, '1d44cdQjCX'))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, 'hdA4ZE'))), 0) FROM t1;
+-- result:
+-3519052013
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, NULL, 'hdA4ZE'))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, NULL, NULL))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, from_str, '4AlJzF'))), 0) FROM t1;
+-- result:
+3752409022
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, NULL, '4AlJzF'))), 0) FROM t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('4*一测1-F六g五八G八😇I测iJ😂id3-b二j(试&九e^二h&H二cæB%AæB]g0六[', from_str, to_str))), 0) from t1;
+-- result:
+-20138841983
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('æ˜三3h(DIä1j七F试a四G1I›43e›🙂GA二˜##ac五HjD😄jä', from_str, to_str))), 0) from t1;
+-- result:
+10595944852
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('[˜一Gi', from_str, to_str))), 0) from t1;
+-- result:
+70372815234
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('e四i)1😄eJD^*C2ù-Fj]测七', from_str, to_str))), 0) from t1;
+-- result:
+11079547357
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('一1bh二H*02😇^', from_str, to_str))), 0) from t1;
+-- result:
+50301729002
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('^😂2æ六d]iBdcc五4?a(😂B1七八1[DC三四])(E0æIæ八一', from_str, to_str))), 0) from t1;
+-- result:
+-3203593422
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('😂#b五ä一æGi一🙂3h五1hJH六ù#六A试$fG^Debâ0&', from_str, to_str))), 0) from t1;
+-- result:
+16668038962
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('*#六^%1æ测八bHe+', from_str, to_str))), 0) from t1;
+-- result:
+-13019219566
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›gH六🙂九›-一B#二EC(', from_str, to_str))), 0) from t1;
+-- result:
+-30345492435
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('æâ八e😇G😄dj😇D😂JJùaG$)+Ai*ûû*1&$B试C😇i#', from_str, to_str))), 0) from t1;
+-- result:
+19318124858
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('f^ä?]GhB三˜&Hb]A😂七七æ六?', from_str, to_str))), 0) from t1;
+-- result:
+28728196157
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('ag😇1试七二+测›😇测#四I😂😄D*3', from_str, to_str))), 0) from t1;
+-- result:
+-6548826103
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('J😇D]&4', from_str, to_str))), 0) from t1;
+-- result:
+-78344961444
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('1›i😇一?试0测dh六三BI2%四[]ù%j-c一🙂1û六三âaE一😇😄七fe*4五Egg', from_str, to_str))), 0) from t1;
+-- result:
+-4664284260
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('+#H😇]3*#f^', from_str, to_str))), 0) from t1;
+-- result:
+92640188315
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('*😂一æ*0[一EjC😄â2A四˜^âjdfC😂c七Gj-🙂J14JæD五八😂二😇四A', from_str, to_str))), 0) from t1;
+-- result:
+-9155353443
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('#æAfEhbg)试ha😇^j*â测八dEB]测$E三iûj3[æ三😇1?Jæ测😄0›2b$bû', from_str, to_str))), 0) from t1;
+-- result:
+4483035352
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›2[+^æ四4八-五1j?(ûhFh]😇û*]🙂', from_str, to_str))), 0) from t1;
+-- result:
+67496809940
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›2%H九六G(h试)😂d)ä#一*CF˜*五2æd?a一c˜˜äû😄a›', from_str, to_str))), 0) from t1;
+-- result:
+12780867281
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('gf五[eIb#', from_str, to_str))), 0) from t1;
+-- result:
+-51986711848
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('', from_str, to_str))), 0) from t1;
+-- result:
+-87849464430
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('fiBC#🙂^F八4æJ3ù+˜D试-一+$*😄CæC?›ùJ五2›B二八%%G?五D八b4', from_str, to_str))), 0) from t1;
+-- result:
+876284037
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('äecH4I二3😇试û2😇ùa0[jF三aB#六G4æEHJ˜jJ3三🙂-', from_str, to_str))), 0) from t1;
+-- result:
+2609593750
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('IgG1h五九û九二H˜Ff测二]CF二#i*测bI[ùiFûA0j03#五)%😇', from_str, to_str))), 0) from t1;
+-- result:
+-8617470360
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('G二H五cdææH九Bf2i4f七😄›五六f一试˜五3bc一[', from_str, to_str))), 0) from t1;
+-- result:
+-14290357014
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('û八2😄二›测%九-[测$i$]A试æf-+bHJ+', from_str, to_str))), 0) from t1;
+-- result:
+17112691756
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('试ù^d二八0', from_str, to_str))), 0) from t1;
+-- result:
+-119311709439
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('四1h', from_str, to_str))), 0) from t1;
+-- result:
+91564110027
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('C九八三))H#˜I八gI🙂e测九(˜二gä›+›b3(六+😄五g八dg二G试)七四测', from_str, to_str))), 0) from t1;
+-- result:
+-1959690533
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(']C五%四^三🙂Bf一[F六五+一icä八CJBgjJd', from_str, to_str))), 0) from t1;
+-- result:
+23356134316
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('Aâ%四ûHe0f五e+›ff[😇d', from_str, to_str))), 0) from t1;
+-- result:
+-41680567391
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('cûB01E?四(#0JAHæb)Djhb三F-D2›?八七(ef#六😄A', from_str, to_str))), 0) from t1;
+-- result:
+-14183931690
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('A三试û1四九Je(b试五f2二五四?Ieâ(2*-i八😂&试f😄Ci%Dùb五#0(dF&', from_str, to_str))), 0) from t1;
+-- result:
+-29051106821
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('û%)ä', from_str, to_str))), 0) from t1;
+-- result:
+-26461232395
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('五G四测$九#c一^[IJ0二A^😇E😄二+*测六b0(🙂+â二fEIä)六九😂E八&$e八]4', from_str, to_str))), 0) from t1;
+-- result:
+-12827986341
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('3五˜+F-&G1âf4&Fai?b四BC', from_str, to_str))), 0) from t1;
+-- result:
+-8442653577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('1jiûâæ$+ù四五ac1', from_str, to_str))), 0) from t1;
+-- result:
+-36717113279
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('â试fe?CH+a😇äFC八&c^â?+AAd˜^😂d', from_str, to_str))), 0) from t1;
+-- result:
+-3986430112
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('试h', from_str, to_str))), 0) from t1;
+-- result:
+20652994651
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('æF九&1â', from_str, to_str))), 0) from t1;
+-- result:
+-24636898029
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('八测]+˜一2😄七˜û九ä%六😂三cD[F0八4hi一E三-3Fb七四?cæ二E˜', from_str, to_str))), 0) from t1;
+-- result:
+-25023670805
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('%四C八()i%%六a四?â三B#ic试d-ab1*adE[]A七i?j3', from_str, to_str))), 0) from t1;
+-- result:
+2960854622
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(NULL, from_str, to_str))), 0) from t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('F四)(3A二%32😄aæ😄^八五二Jhh1三bG八f五ha🙂)h七G3😂测1六九&E二', from_str, to_str))), 0) from t1;
+-- result:
+2765931661
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›)[F试🙂+%#A›æ八?˜0Ig3^ä)G六c+G二G^', from_str, to_str))), 0) from t1;
+-- result:
+19492107462
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('*六', from_str, to_str))), 0) from t1;
+-- result:
+106834953436
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('🙂^e九H2I$*3八#+四+二一一aâDe$B]*e九1$3##3â三û22›20]六›?', from_str, to_str))), 0) from t1;
+-- result:
+20593068854
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('-0]eF😂😄[A#[âEaD🙂二😄4', from_str, to_str))), 0) from t1;
+-- result:
+-16460140373
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›1bF三九九二C七一I2[0jF🙂d+&😂I^ù&😂˜â一âeg1$^(一', from_str, to_str))), 0) from t1;
+-- result:
+12064342709
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('ù五FC七)E0ahEâ一æ九一æ😂九试😂e😇B%J试ûDâ›&1h1^F#f六˜ei#六六c', from_str, to_str))), 0) from t1;
+-- result:
+18111825143
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(NULL, from_str, to_str))), 0) from t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('F%F4iùi七七^-测[äEBù1%', from_str, to_str))), 0) from t1;
+-- result:
+14110446236
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('^(#D五$$›六D$AD(û😇i-i3四d😂+😄e😇四😇h', from_str, to_str))), 0) from t1;
+-- result:
+-15599121535
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(NULL, from_str, to_str))), 0) from t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('%ùâûhùæ0i', from_str, to_str))), 0) from t1;
+-- result:
+73247152293
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('五b›ûûcec)æ+i%cd4iC', from_str, to_str))), 0) from t1;
+-- result:
+39566100145
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('44B-æù😇八B?试?IEH$&(âù)IJ😄一试%›))', from_str, to_str))), 0) from t1;
+-- result:
+36723313209
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('b试b(?g]1试ä)f😂3四03eB1二ùJ一(试û*-六+ä*测', from_str, to_str))), 0) from t1;
+-- result:
+-15224065086
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('a˜0四]DEbûI九›+#ù)I&1F😇测%🙂', from_str, to_str))), 0) from t1;
+-- result:
+-25093497733
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('3æBâe😄八0bæ3[一三[1D二d-五BF三dG一', from_str, to_str))), 0) from t1;
+-- result:
+-800760060
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('2ùäd$#æ4E3›âB^aAiù测)$G›]˜ûdæJ%试#ä一)ID2四😂e', from_str, to_str))), 0) from t1;
+-- result:
+-8272410912
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('æ测ùc#试ä二2试试4ch四EE1^2', from_str, to_str))), 0) from t1;
+-- result:
+11231413357
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('0', from_str, to_str))), 0) from t1;
+-- result:
+-116630637114
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('六六+Idd?æû+四四0二?)*2i四?😂â测-F1H😂[ä三)&]]cD', from_str, to_str))), 0) from t1;
+-- result:
+10731748984
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('jd1&H*^七C二(˜F😄🙂🙂4?dG-0)六$Dù七æ测三', from_str, to_str))), 0) from t1;
+-- result:
+17262351351
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(NULL, from_str, to_str))), 0) from t1;
+-- result:
+0
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('^iA%â-˜六😄ùI七^B?二e0âc四六0De[', from_str, to_str))), 0) from t1;
+-- result:
+37735363955
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('🙂]六ù😇F', from_str, to_str))), 0) from t1;
+-- result:
+124780955113
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('?û四i32h?F#]æ试fEEc', from_str, to_str))), 0) from t1;
+-- result:
+22137823310
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('B五â五试三+31aJaggûdùF😂jg(]a🙂eâ测😇]J试', from_str, to_str))), 0) from t1;
+-- result:
+-12232125551
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('J四+E++九û2ej&E-😇3g›试B测Hfâ&四六âh›g(七g)二-&e3?h', from_str, to_str))), 0) from t1;
+-- result:
+-2230950329
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('i*BgB+$ci+七😄i˜ä2九试七%-试[äD˜四$2九a四30', from_str, to_str))), 0) from t1;
+-- result:
+31143939249
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('f+七a😂æ五A😄四d一', from_str, to_str))), 0) from t1;
+-- result:
+-1358412466
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('B)H+j😂H六?d^$', from_str, to_str))), 0) from t1;
+-- result:
+-43123755922
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('😇)AH&iD九gf😂ib]EFf%G六六?ùAùig3[2😄ââ三D测â七', from_str, to_str))), 0) from t1;
+-- result:
+1968460839
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('43%g-eC四五JæE-%)û2七八c(d›八)ûû+3a)^试ej4九B一1he七h测一A', from_str, to_str))), 0) from t1;
+-- result:
+287784180
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('EA八😄]^IBC😇+ä🙂$&i九f九C一d3a-ûChäd', from_str, to_str))), 0) from t1;
+-- result:
+24532519152
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('›试四cB六%1bcûC😇Gd]五试3$fæ', from_str, to_str))), 0) from t1;
+-- result:
+-10507669050
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('八J🙂b(+😇*ùb4b测e七4*二八$›4-?&三C?)%', from_str, to_str))), 0) from t1;
+-- result:
+13242171289
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('D二B(?Bf🙂F试›😄)F1一fc[j八ù五˜äâ(æG六æf?九c˜😂›ä二', from_str, to_str))), 0) from t1;
+-- result:
+1880260845
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('âf›', from_str, to_str))), 0) from t1;
+-- result:
+-102327993755
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('试bAIg0Jb›%(æ42f%*#*%Jh[2测测a七i0七*🙂4😄测七🙂*I😄测测😇?A', from_str, to_str))), 0) from t1;
+-- result:
+-5594758036
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('bfâ(æ测六2û七(三2c+gA六2B五F三😇A测)cf?一bj三#)ie一一', from_str, to_str))), 0) from t1;
+-- result:
+-17124977595
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('&四2h😄i%3', from_str, to_str))), 0) from t1;
+-- result:
+21948242781
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('A六0#🙂û😄(E+*[?$🙂J四😂二二%', from_str, to_str))), 0) from t1;
+-- result:
+44245899716
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('七a›I😂-04eCC😄E六›六😄H🙂f%eI(八cIhaùh', from_str, to_str))), 0) from t1;
+-- result:
+-1273984409
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('测ä😇1🙂', from_str, to_str))), 0) from t1;
+-- result:
+-4681300395
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('2bBg七😄🙂😂🙂测八j2四Jf^C', from_str, to_str))), 0) from t1;
+-- result:
+-7267975289
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('七]三一)æ', from_str, to_str))), 0) from t1;
+-- result:
+156246674145
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(']', from_str, to_str))), 0) from t1;
+-- result:
+152340611605
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('H›C五#八›试1Fj$]+🙂e五😇五ji*二B😂一#JGIJ三+二ûA1🙂&I', from_str, to_str))), 0) from t1;
+-- result:
+26589726863
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('H›ùä四四ûD五?', from_str, to_str))), 0) from t1;
+-- result:
+-23219215812
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('', from_str, to_str))), 0) from t1;
+-- result:
+-87849464430
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('七', from_str, to_str))), 0) from t1;
+-- result:
+-88010173341
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('H&Aä^试3bEB%33七gD%b五âgB4三', from_str, to_str))), 0) from t1;
+-- result:
+4109505571
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('三#', from_str, to_str))), 0) from t1;
+-- result:
+-83354753179
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('试û+-b', from_str, to_str))), 0) from t1;
+-- result:
+-72205235053
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('八五(^', from_str, to_str))), 0) from t1;
+-- result:
+70869915465
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE('I八四]三F#ù$-æD测七三aäJ', from_str, to_str))), 0) from t1;
+-- result:
+20102959860
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(']一', from_str, to_str))), 0) from t1;
+-- result:
+-58659638217
+-- !result
+SELECT TRANSLATE('f›˜IGi?hB?😄二E[-E$›)😂›f)0六2e)八2d测Ih四]四c九DFa^', ')0f)›Z', 'ldbcEEDFIG');
+-- result:
+bE˜IGi?hB?😄二E[-E$El😂Ebld六2el八2d测Ih四]四c九DFa^
+-- !result
+SELECT TRANSLATE('3bh$^)g(G八?八-cd4一I3D三cFe二#AICâ😄cB#五ää', '在4A7三g', 'tbDbkc');
+-- result:
+3bh$^)c(G八?八-cdb一I3DkcFe二#DICâ😄cB#五ää
+-- !result
+SELECT TRANSLATE('七ca&+âDù三˜六九#ûc+%六h$›B测æ四🙂七â*1*', NULL, 'a1B1DhDhgDc');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('hC😇😇3?', 'hCCChh5C3DH3y', '3ChC03Chl3h3');
+-- result:
+3C😇😇l?
+-- !result
+SELECT TRANSLATE('试&4😂', 'T4😂😂&试t&&试4', '4&&试ä&试xHZ&K4');
+-- result:
+&ä&&
+-- !result
+SELECT TRANSLATE('-二c%🙂G九c%^#C-^h四›九0三', 'b›不%G试0九cd二cc', '3GCChhc');
+-- result:
+-C🙂hC^#C-^h四Gc三
+-- !result
+SELECT TRANSLATE('九Bb-jâC2三Eû🙂F*)0😄æEbjû四八九😂d*â˜D1ceJ🙂›八+-32ùG˜试4', 'bbbF1DI', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('?h*I3hD›j测八â]fG1🙂GBB4试dijæ0gg1😄F🙂â四三&e*[九', NULL, '›âx3&B');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('æ˜😂😂gD›E测JE一˜3😄i四五äF3^ùHâ)九geHF😄˜1h五&I#a', 'MFivH3', 'ggFUEEa3');
+-- result:
+æ˜😂😂gD›E测JE一˜E😄F四五ägE^ùEâ)九geEg😄˜1h五&I#a
+-- !result
+SELECT TRANSLATE(')AI😂#æ?Fûg2äDû试九', 'gggwA2uVFUd3D', 'Y4RFIx2I');
+-- result:
+)II😂#æ?ûYxäû试九
+-- !result
+SELECT TRANSLATE('🙂[1九(dA4f三FB3B三二ab)三Ff', 'la三B˜nf3', '三九c九dF›a[九');
+-- result:
+🙂[1九(dA4›cF九a九c二九b)cF›
+-- !result
+SELECT TRANSLATE(NULL, 'USYiLqixr', '7iext05GARPW4A');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('四J四六G一g六Bj二测四æiF0C?fGF九六D1😂一1?$四D七九?#A五â0三二', 'i三一S一六D', '四六四0四五˜J?四');
+-- result:
+四J四五G四g五Bj二测四æ四F0C?fGF九五˜1😂四1?$四˜七九?#A五â0六二
+-- !result
+SELECT TRANSLATE('ie4eC[g-2九*I😄八jfI😄八)a九âäE🙂4?1一æ六😄4🙂ù四3九3j一?', 'Jg😍9😂😍I一?😄ùC', '3Najg2ei44I');
+-- result:
+ie4e[N-2九*e4八jfe4八)a九âäE🙂441iæ六44🙂I四3九3ji4
+-- !result
+SELECT TRANSLATE('测â九iâe[', 'â测W[[[测[8', 'hiixie');
+-- result:
+ih九ihex
+-- !result
+SELECT TRANSLATE('E2#›&I+%', 'I2EIE2C2222II', '试I😄%›E+EI😍测&');
+-- result:
+😄I#›&试+%
+-- !result
+SELECT TRANSLATE('ec2$gâG3ù$五九û[ag&七B4acf四😂3七*#七ä4â九(四û七B', 'f四😜九五(A四四g九七', 'eVf😜4四GG七ac');
+-- result:
+ec2$aâG3ù$4😜û[aa&B4aceV😂3*#ä4â😜四VûB
+-- !result
+SELECT TRANSLATE('ä四四*试😂2测*æ七😄七IB二âJ%›âd2J测i+三˜🙂-ab九?😂[1$b4æh$C', 'btBBIab9x', 'CB44C2hhh');
+-- result:
+ä四四*试😂2测*æ七😄七C4二âJ%›âd2J测i+三˜🙂-2C九?😂[1$C4æh$C
+-- !result
+SELECT TRANSLATE('(Fd$bFfäF五九二Ij', 'FFNj九bd试jf九ä', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('?^😂五aJgc😇🙂三Ae试J😂六$fdCù1fB', '试fJg试测ùfaB测$', 'f?f$KPùBJ');
+-- result:
+?^😂五Jf$c😇🙂三Aeff😂六?dCù1?
+-- !result
+SELECT TRANSLATE(']3😇😂二五I+IGa##E八Hæah', '二五#Ea]', 'caIhVya3HIIfGJ');
+-- result:
+y3😇😂caI+IGVIIh八HæVh
+-- !result
+SELECT TRANSLATE('三aG七^c七*[1CJ九g0æû测äc一🙂C2Fâh四1âf2D2-七j%一âa四cF%e&', 'c测2Fxr0', 'aCSacB7CJa22D');
+-- result:
+三aG七^a七*[1CJ九g7æûCäa一🙂CSaâh四1âfSDS-七j%一âa四aa%e&
+-- !result
+SELECT TRANSLATE('六eJH五C九^', 'eAYeeCJH', '^五e九九C');
+-- result:
+六^五C九^
+-- !result
+SELECT TRANSLATE('-a1J😇-ädI˜IGa4AeAæ七2九ä3', 'wMdqakd7RIGA4', 'aaVGdAed');
+-- result:
+-d1J😇-äV˜deæ七2九ä3
+-- !result
+SELECT TRANSLATE('1E😇c😄IA›1五F›E🙂hF八h五七ùGgC😂-Eäa-h#ä七-测&ù😄i一2$(FB^', '一EcB˜😄h-Av', 'fSaE7â-F1');
+-- result:
+1S😇aâI1›1五F›S🙂-F八-五七ùGgC😂FSäaF-#ä七F测&ùâif2$(FE^
+-- !result
+SELECT TRANSLATE('六😄1C›+eJ二%â七😂H[]›aHù一', 'HoaAmFe1JN', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('Fæ˜b(E三Gf3?一&(h五九四[]+😂[f&二4ùace一', '(一f8o一Fh五˜›一', 'A]九]ff一9');
+-- result:
+一æbAE三G九3?]&A9九四[]+😂[九&二4ùace]
+-- !result
+SELECT TRANSLATE('Cgû试试a二ä测˜æEb六ID4😄😄三?H#', 'EnCI44a', '8CEIDHgl4');
+-- result:
+Egû试试g二ä测˜æ8b六IDD😄😄三?H#
+-- !result
+SELECT TRANSLATE('Jû+%^â(4hGG试+eä4😄&测F)›E二b0F三HI测E0#', 'G)三三F😄', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE(']一BFj-Ggei*ûh😇+(I#😂七dä', ']😂äh😜😇âä', 'dteGMiFhIIkh0');
+-- result:
+d一BFj-Ggei*ûGi+(I#t七de
+-- !result
+SELECT TRANSLATE('?九1*[D六一一2ùi˜😂😇九›J^e六试$%#J三˜😂三d六cg', '九˜一一1Di', 'ùN›˜一e');
+-- result:
+?ù一*[e六››2ùN😂😇ù›J^e六试$%#J三N😂三d六cg
+-- !result
+SELECT TRANSLATE('八Ba九😄3#Af3😇û$^%+dEc*😄七E三*🙂😂^C八)😂0二一›f*😇ù四&3FE-', 'yENfFc3Z', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('ä六›ùhæ˜B-hI😂^I二🙂六0^âEj😂HC七', 'IjV0htCCa6HEBE', '0jDEIEjIaLEhh');
+-- result:
+ä六›ùIæ˜h-I0😂^0二🙂六E^âhj😂Ej七
+-- !result
+SELECT TRANSLATE(NULL, 'bCb0r0NTh', 'DJBQcsGL99EDOU');
+-- result:
+None
+-- !result
+SELECT TRANSLATE(NULL, 'sMZEFdwNlGO', 'ä4W😄FPä6âv');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('ûj3DI一e🙂*三😄^二H+2%iIF🙂Ghc0æ二😄测一*三😂七', '˜3三jD测三i', '03jMFG8e0');
+-- result:
+ûM3FI一e🙂*j😄^二H+2%eIF🙂Ghc0æ二😄G一*j😂七
+-- !result
+SELECT TRANSLATE(NULL, 'SH9CtedfrYnz4v', '6wNGh1mfF');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('😄4jCdha九?😇3H]Fef4试八hgF五五J三c)🙂七2%hF🙂a-If😂a›[#j˜J', '4cxIhufm3hn', '5GxFgChdkHdIa');
+-- result:
+😄5jCdga九?😇kH]Feh5试八ggF五五J三G)🙂七2%gF🙂a-Fh😂a›[#j˜J
+-- !result
+SELECT TRANSLATE('测›0五$三ûhB', 'BNUBB0JBNhX00h', 'BBB0h7BrB0B');
+-- result:
+测›7五$三û0B
+-- !result
+SELECT TRANSLATE('%^dD#%[û🙂😄😂)?', '😍›%😜?d😂[', '%P%😄在#🙂');
+-- result:
+%^#D#%û🙂😄🙂)在
+-- !result
+SELECT TRANSLATE('AbG4试六j›二(😂#]4E-B三AC›[[九😇ä九😇c^û🙂', 'AAP4bAbjAb', '4三›🙂4试›😍e[😄ûb-');
+-- result:
+44G🙂试六😍›二(😂#]🙂E-B三4C›[[九😇ä九😇c^û🙂
+-- !result
+SELECT TRANSLATE('$gjF五b+4测ùh?A', '不4jj不五$五ù', '++j4b˜测Re4A测j测');
+-- result:
+测gjF˜b++测eh?A
+-- !result
+SELECT TRANSLATE('^😄2G六fbF五-%abûûù212A%I😇dA', '1GM1I2s1G12bG', '202Jab1AGbb');
+-- result:
+^😄b0六fF五-%aûûùb2bA%a😇dA
+-- !result
+SELECT TRANSLATE('%*Dj七j+efâaû$FJ˜0试äC4Jä˜)ûC一âäBG›Di2a😂[+2$I四', '+2g一C😂âTBûû😄2', '$不Dfä在F%ä七4*');
+-- result:
+%*Dj七j$efFa七$FJ˜0试ää4Jä˜)七äfFääG›Di不a在[$不$I四
+-- !result
+SELECT TRANSLATE('#1😂😇)˜一&五ù+&Bf[ù二b四i试df?I%五+E二jäJHhû', NULL, 'VRff1j2hrf');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('-1%0æa0ä六试测2😄😄dæ🙂h+igE😇A八F3六û八😇â+', 'h00gCT0F1kF1', 'aJ测3âihii😍ûnæ%');
+-- result:
+-i%JæaJä六试测2😄😄dæ🙂a+i3E😇A八i3六û八😇â+
+-- !result
+SELECT TRANSLATE('-四^3b?›b😇&G二一*(^j😄测四*A试ù二一A八一â五%七3^Hâ]]😇😇i🙂九', '3jAuVLb', '测^四😄]测');
+-- result:
+-四^测?›😇&G二一*(^^😄测四*四试ù二一四八一â五%七测^Hâ]]😇😇i🙂九
+-- !result
+SELECT TRANSLATE('û4😂[试三2五ä试^H#七ù测æ*i#b三a试1八0CG$😄', 'Gg4ti2YCab', '4iHb414');
+-- result:
+ûH😂[试三1五ä试^H#七ù测æ*4#三试1八04$😄
+-- !result
+SELECT TRANSLATE(')测五0七ä😂gJ九bfGID七2E三ûG4六😄-(˜3五五', 'gb4d0G', 'JG˜😂Yû');
+-- result:
+)测五Y七ä😂JJ九GfûID七2E三ûû˜六😄-(˜3五五
+-- !result
+SELECT TRANSLATE('1E(c3)æù😂0四Geeb*f😇六😇4%e🙂3?â三eC$', 'r5beeCf4ecc', 'Eefe0Q1E');
+-- result:
+1E(3)æù😂0四Geef*1😇六😇E%e🙂3?â三eQ$
+-- !result
+SELECT TRANSLATE('jæ?ù', 'Q??jù?æ?ùQùù0ù', 'wjjjjkHvjjjj');
+-- result:
+jHjj
+-- !result
+SELECT TRANSLATE('一$C😇六D😂+', 'DDDDCC', 'CCDcDCDsCD');
+-- result:
+一$D😇六C😂+
+-- !result
+SELECT TRANSLATE('B1c0D🙂二bbaä#$#试4ihJ七û2*&c测ä)*一+bBjæC[^C测二^1', '1äBjuLYb试ejD', 'hjCha1lb');
+-- result:
+Chc0🙂二bbaj#$#4ihJ七û2*&c测j)*一+bChæC[^C测二^h
+-- !result
+SELECT TRANSLATE('%四›-)gF😂›dB+二0bC', '›😂+%四B二Q', 'gC试)›在›+');
+-- result:
+)›g-)gFCgd在试›0bC
+-- !result
+SELECT TRANSLATE('E˜%六四â+试iù&%H😇e0G˜d二五4[û1四D九æHj', 'eEEeEHGHEdHdDS', 'AipGe18E0');
+-- result:
+i˜%六四â+试iù&%1😇A08˜二五4[û1四九æ1j
+-- !result
+SELECT TRANSLATE('i3C测fâ*e›', 'CifqOC3ii3iZiC', 'CC3eCp5O');
+-- result:
+C5C测3â*e›
+-- !result
+SELECT TRANSLATE(NULL, 'lzBdVWKd', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('-â˜eDBcâ😂++D*ùä+caeD0G4j😄æä😇九(H一Fae', 'DBjNBFca', 'BGCecDZ4a');
+-- result:
+-â˜eBGZâ😂++B*ùä+Z4eB0G4C😄æä😇九(H一D4e
+-- !result
+SELECT TRANSLATE('äcâ#˜)A二CJâæ›iFæf🙂)😂六D试$九😄1d四ge😄&测-›(b😄(â四bû', 'bcuAi1RJAdbdbC', 'KOAJ1iCcydCA');
+-- result:
+äOâ#˜)J二câæ›1Fæf🙂)😂六D试$九😄id四ge😄&测-›(K😄(â四Kû
+-- !result
+SELECT TRANSLATE('&›🙂)三^$G*😄BûF$jäEæ˜B#äE4三[四五c˜G&?[*BûGI-测I测g]hhh4', 'B试T测˜测]˜😍三]🙂˜', 'IhF4hGGE4');
+-- result:
+&›)^$G*😄IûF$jäEæhI#äE4[四五chG&?[*IûGI-4I4gGhhh4
+-- !result
+SELECT TRANSLATE('?BæD(›$', 'BBDkgD3', 'BDDYBBBDuDDBx');
+-- result:
+?BæD(›$
+-- !result
+SELECT TRANSLATE('31aEi测四3试&a%g', 'i3i3ggN33aiU3a', 'aDaRg1');
+-- result:
+D1Ea测四D试&%g
+-- !result
+SELECT TRANSLATE('😂ù五$(%æ›%Iä%D›六]gä二[$#a])0]一3七)f二', 'D3gAgZ3ifaD3f', 'cII$I%]X五y试g(');
+-- result:
+😂ù五$(%æ›%Iä%c›六]Iä二[$#y])0]一I七)五二
+-- !result
+SELECT TRANSLATE('^)3五ä七+二[˜›😇f˜]3?$E3j+j34ägIe-34六七*â4', '333m4444', 'I33OI3G44333I');
+-- result:
+^)I五ä七+二[˜›😇f˜]I?$EIj+jIIägIe-II六七*âI
+-- !result
+SELECT TRANSLATE('E四五äcc六*j0ûadh八A九1B七(H›â', 'cME0BhWacB', 'AABH1Ea1a');
+-- result:
+B四五äAA六*jHû1dE八A九11七(H›â
+-- !result
+SELECT TRANSLATE('😂jù🙂A😇˜äD^[›[?', '🙂˜😂?A😍🙂käD?˜D😂', 'AAA1jASvAjA');
+-- result:
+AjùAj😇AAj^[›[1
+-- !result
+SELECT TRANSLATE('测🙂æùC#试ûä^Hæ五[六ECc三-iE二九ùG', 'ElcHLE', 'CE#l6äùùoc');
+-- result:
+测🙂æùC#试ûä^læ五[六CC#三-iC二九ùG
+-- !result
+SELECT TRANSLATE('&˜&3f?&cC🙂4eg$', '4f3C4DCc4f36', 'eeP0R3Hetef4fZ');
+-- result:
+&˜&Pe?&e0🙂eeg$
+-- !result
+SELECT TRANSLATE('e%六#&?试ùùC^b]4[G', '4Ce6eC4Ub4C', 'CbC4GCGC2G');
+-- result:
+C%六#&?试ùùb^2]C[G
+-- !result
+SELECT TRANSLATE(']æâ八试五一jd4AJ九%四2b+四D😂ä)]BAhg二E😄九😄Aaù[八AB二&六', 'ABhAgl', '四一A[AD&g二hAX%');
+-- result:
+]æâ八试五一jd4四J九%四2b+四D😂ä)]一四AA二E😄九😄四aù[八四一二&六
+-- !result
+SELECT TRANSLATE('%🙂Ff*41ùBB(j›$g*˜A[B七', 'fB18B1A', 'L1ZAHf6gf');
+-- result:
+%🙂FL*4Zù11(j›$g*˜6[1七
+-- !result
+SELECT TRANSLATE('四f八c&?21fJb', 'bckvh2C1JcQc', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('😄二c#3😇ù&八›😇一*æ', '3cc3HcE3', '3c3c3Cl33c3');
+-- result:
+😄二c#3😇ù&八›😇一*æ
+-- !result
+SELECT TRANSLATE('😄4$[1八IG五&j^˜â3^三›Gæ一四五🙂CAû三Ic二û˜âgF', '˜😄â8C😄û', 'tcjIg40wA');
+-- result:
+c4$[1八IG五&j^tj3^三›Gæ一四五🙂gA0三Ic二0tjgF
+-- !result
+SELECT TRANSLATE('🙂D四😇FG+&2六六Dg九*😇42😄bD)d七😂Be二[-j$[测c九八测cDHæ一i)J', 'cD2iS4Be5DG4FD', 'XGGcojJFJci35c');
+-- result:
+🙂G四😇5i+&G六六Gg九*😇jG😄bG)d七😂JF二[-j$[测X九八测XGHæ一c)J
+-- !result
+SELECT TRANSLATE('试%G0â😄C%七Cg五五测4æ4?&)+H二fDa七b3H˜测五D13û😄H😂六b😇ä试八BH', 'GaUGbRg', ')Z143试ä3&😍â3');
+-- result:
+试%)0â😄C%七Cä五五测4æ4?&)+H二fDZ七33H˜测五D13û😄H😂六3😇ä试八BH
+-- !result
+SELECT TRANSLATE('daDä([#j›*20*E八[]4â0Ff1[2一-', 'ga02dEF2jPx', 'i4lDjdfFE');
+-- result:
+j4Dä([#E›*Dl*d八[]4âlff1[D一-
+-- !result
+SELECT TRANSLATE('cJe🙂八A#+]d三]九g?%DB›e九DûgCc˜三(i二j四%hH😄H?', 'hA5BHA', 'û三D0二i');
+-- result:
+cJe🙂八三#+]d三]九g?%D0›e九DûgCc˜三(i二j四%û二😄二?
+-- !result
+SELECT TRANSLATE('$$E二D(二JcDA', 'D$二JV$在cE', 'DDrWJA');
+-- result:
+DDrD(rWDA
+-- !result
+SELECT TRANSLATE(NULL, 'iX测XoNI试x', 'EKh7Uc7');
+-- result:
+None
+-- !result
+SELECT TRANSLATE('🙂+五😄J测]试G(4b$1二û', 'J114FGb4D1bb', 'J14Zyb');
+-- result:
+🙂+五😄J测]试b(Z$1二û
+-- !result
+SELECT TRANSLATE('Fâ一C😂˜ä四dD%六d😂â试H0h二*九', 'Fâ😄DCOâ˜Dj', 'FHhy一*');
+-- result:
+FH一一😂ä四dy%六d😂H试H0h二*九
+-- !result
+SELECT TRANSLATE('I😄ä3˜试?试&j0&六二GH八1七›d三六4D三4九ù[a', 'Ga˜七😂4d?j六六S&3', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('›˜🙂j', '🙂jj›3J8j›', 'jjiPjjjjjjfj');
+-- result:
+P˜jj
+-- !result
+SELECT TRANSLATE('三?›04^ùi*三Gh六C二æ😂六测&D七*B^+ûD3]七˜--一G', 'iGBNif1', 'DfDobBGGh');
+-- result:
+三?›04^ùD*三fh六C二æ😂六测&D七*D^+ûD3]七˜--一f
+-- !result
+SELECT TRANSLATE(')j九F(›e五[a3[五*eD测😇fûDh七🙂🙂?+六eA测d&]dä五ä八Bgûd-', 'ddjFBG03DeaQfT', 'zBeddd');
+-- result:
+)e九d(›五[[五*测😇ûh七🙂🙂?+六A测z&]zä五ä八dgûz-
+-- !result
+SELECT TRANSLATE('+I#C*û%]›😂iA🙂', 'iIAiIiiiAACii', 'Apt›C›%😂›%IAx');
+-- result:
++p#I*û%]›😂At🙂
+-- !result
+SELECT TRANSLATE('2B三测?试ùGfA4ûi五ùù😄', '😄AJ五û测', 'AYA2BuABG242');
+-- result:
+2B三u?试ùGfY4Bi2ùùA
+-- !result
+SELECT TRANSLATE('BaF&+ä八六一g😂', 'FF测😂ag不', 'BBgaBBBF');
+-- result:
+BBB&+ä八六一Ba
+-- !result
+SELECT TRANSLATE('gc(🙂+^˜2E😂)H4]aäe[四0^%æ😂+f三0g二2四˜FæGd$[CäC3九九(0九', 't4gcqcL0E0egH', 'a[adFFI九%cEdi');
+-- result:
+ad(🙂+^˜2%😂)i[]aäE[四九^%æ😂+f三九a二2四˜FæGd$[CäC3九九(九九
+-- !result
+SELECT TRANSLATE('g&c😇*hj二BC试[eiB%测gF%jDaâ2]æ0😂bAh?d&f]😂六Che八I&0八^', 'j😂😂h试八âgI', '2e2a09h');
+-- result:
+&c😇*a2二BC0[eiB%测F%2Dah2]æ0ebAa?d&f]e六Cae9&09^
+-- !result
+SELECT TRANSLATE('E)六E九七%测😂IJG七j3', 'Gj七3EnJGäFJ3', NULL);
+-- result:
+None
+-- !result
+SELECT TRANSLATE('â-😇2]^八Jâ😂c😂&j四?ù)试一-æ-九&]F2五四4bù3H[F3', 'h3j😜æ3八b-F四😍', '2832F20F42');
+-- result:
+â4😇2]^0Jâ😂c😂&3?ù)试一4F4九&]22五4Fù8H[28
+-- !result
+SELECT TRANSLATE(')二[ù六一d七&一aB$🙂B😄HùG四+dc😂ha', 'daaBcG', 'dcYaGBZGd');
+-- result:
+)二[ù六一d七&一ca$🙂a😄HùB四+dG😂hc
+-- !result
+SELECT TRANSLATE('h', 'hhzhhhhhChFh', 'hhhh8hhh');
+-- result:
+h
+-- !result
+SELECT TRANSLATE('?F试a&gCBa八八?%^Fj1九gfù测I😇)Iiä一Ghjb', 'IfjigGjB', 'jgVCFmjUj1yjj');
+-- result:
+?F试a&FCUa八八?%^FV1九Fgù测j😇)jCä一mhVb
+-- !result
+SELECT TRANSLATE('%😇B五4四)H*八æE)]六八😂d', 'BmHdBdHAEE44d', '4*EZæ%😂五âOd0d😇');
+-- result:
+%😇4五d四)E*八æâ)]六八😂Z
+-- !result
+SELECT TRANSLATE('3七æ🙂😄)C🙂', '😄试Cæ😄🙂J🙂七😄Ch🙂😂', 'mn3v33C33CnOKC');
+-- result:
+33v3m)33
+-- !result
+SELECT TRANSLATE('😇六一二二😄æâ&%一%二f试G*c4dF三b]˜😇五七gû😇😄D五^h2*C)六二a›六', 'bCdgCgfAg', '˜*)g&i五ûa😍da');
+-- result:
+😇六一二二😄æâ&%一%二五试G*c4)F三˜]˜😇五七gû😇😄D五^h2**)六二a›六
+-- !result
+SELECT TRANSLATE('测2I$D^-五七)1四F', '1DF2mIF228', 'wDID1IlFD228');
+-- result:
+测DI$D^-五七)w四I
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜â测😄a试'))), 0) from t1;
+-- result:
+-18777612328
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜试'))), 0) from t1;
+-- result:
+-24312133682
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜âa试'))), 0) from t1;
+-- result:
+-17664875903
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜a'))), 0) from t1;
+-- result:
+-7748478770
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测😄a'))), 0) from t1;
+-- result:
+-5671249146
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', 'â测试'))), 0) from t1;
+-- result:
+-21220295577
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄a试'))), 0) from t1;
+-- result:
+-18656381789
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '测😄'))), 0) from t1;
+-- result:
+-20066567366
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜😄试'))), 0) from t1;
+-- result:
+-10705596896
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result
+SELECT ifnull(sum(murmur_hash3_32(TRANSLATE(src, '˜›âä测试😄😂ab', '˜测😄'))), 0) from t1;
+-- result:
+-6254708075
+-- !result

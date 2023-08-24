@@ -50,6 +50,7 @@
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
+#include "util/utf8_encoding.h"
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
@@ -1047,6 +1048,400 @@ StatusOr<ColumnPtr> StringFunctions::repeat(FunctionContext* context, const Colu
         return repeat_not_const(columns);
     }
 }
+
+// ------------------------------------------------------------------------------------
+// Methods for TRANSLATE.
+// ------------------------------------------------------------------------------------
+
+struct TranslateState {
+    using ASCII_MAP = char[0xff];
+    using UTF8_MAP = phmap::flat_hash_map<EncodedUtf8Char, EncodedUtf8Char, EncodedUtf8CharHash>;
+
+    static constexpr int SRC_STR_INDEX = 0;
+    static constexpr int FROM_STR_INDEX = 1;
+    static constexpr int TO_STR_INDEX = 2;
+
+    // The bytes not less than 0b1111'1000 will never occur in a UTF-8 character.
+    static constexpr char UNINIT_ASCII = 0b1111'1001;
+    static constexpr char DELETED_ASCII = 0b1111'1111;
+
+    bool is_from_and_to_const = false;
+
+    bool is_ascii_map = false;
+    ASCII_MAP ascii_map; // effective when is_ascii_map is true.
+    UTF8_MAP utf8_map;   // effective when is_ascii_map is false.
+
+    void clear_ascii_map() { std::memset(ascii_map, UNINIT_ASCII, sizeof(ascii_map)); }
+
+    void clear_utf8_map() { utf8_map.clear(); }
+};
+
+/**
+ * Build the translate map.
+ * - If all the characters in `from_str` and `to_str`, it will set `dst_state.is_ascii_map` to true and store the map
+ *   to `dst_state.ascii_map`.
+ * - Otherwise, it will set `dst_state.is_ascii_map` to false and store the map to `dst_state.utf8_map`.
+ * @param from_str the from string.
+ * @param to_str the to string.
+ * @param dst_state the destination state to store map.
+ */
+static inline void build_translate_map(const Slice& from_str, const Slice& to_str, TranslateState* dst_state) {
+    std::vector<EncodedUtf8Char> encoded_from_values;
+    encode_utf8_chars(from_str, &encoded_from_values);
+
+    std::vector<EncodedUtf8Char> encoded_to_values;
+    encode_utf8_chars(to_str, &encoded_to_values);
+
+    const bool is_ascii_map = encoded_from_values.size() == from_str.size && encoded_to_values.size() == to_str.size;
+    dst_state->is_ascii_map = is_ascii_map;
+    if (is_ascii_map) {
+        dst_state->clear_ascii_map();
+
+        size_t common_size = std::min(to_str.size, from_str.size);
+        int i = 0;
+        for (; i < common_size; i++) {
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = to_str[i];
+            }
+        }
+        for (; i < from_str.size; i++) {
+            auto& v = dst_state->ascii_map[static_cast<uint8_t>(from_str[i])];
+            if (v == TranslateState::UNINIT_ASCII) {
+                v = TranslateState::DELETED_ASCII;
+            }
+        }
+    } else {
+        dst_state->clear_utf8_map();
+
+        size_t common_size = std::min(encoded_to_values.size(), encoded_from_values.size());
+        int i = 0;
+        for (; i < common_size; i++) {
+            dst_state->utf8_map.emplace(encoded_from_values[i], encoded_to_values[i]);
+        }
+        for (; i < encoded_from_values.size(); i++) {
+            dst_state->utf8_map.emplace(encoded_from_values[i], EncodedUtf8Char{});
+        }
+    }
+}
+
+/**
+ * Translate a string by the UTF-8 map.
+ *
+ * @param src_encoded_values the string to translate, which has already been encoded.
+ * @param utf8_map the UTF-8 map.
+ * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
+ * @return [is_null, num_bytes].
+ * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+ * - `num_bytes`: the number of translated chars.
+ */
+static inline std::pair<bool, size_t> translate_string_with_utf8_map(
+        const std::vector<EncodedUtf8Char>& src_encoded_values, const TranslateState::UTF8_MAP& utf8_map,
+        uint8_t* dst) {
+    size_t num_bytes = 0;
+    Slice dst_utf_char;
+    for (const auto& src_encoded_value : src_encoded_values) {
+        auto it = utf8_map.find(src_encoded_value);
+        if (it == utf8_map.end()) {
+            dst_utf_char = Slice(src_encoded_value);
+        } else if (!it->second.is_empty()) {
+            dst_utf_char = Slice(it->second);
+        } else {
+            continue;
+        }
+
+        if (num_bytes + dst_utf_char.size > OLAP_STRING_MAX_LENGTH) {
+            return {true, 0};
+        }
+        strings::memcpy_inlined(dst + num_bytes, dst_utf_char.data, dst_utf_char.size);
+        num_bytes += dst_utf_char.size;
+    }
+
+    return {false, num_bytes};
+}
+
+/**
+ * Translate a string by the ASCII map.
+ *
+ * @param src the string to translate.
+ * @param ascii_map the ASCII map.
+ * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
+ * @return the number of translated chars.
+ */
+static inline size_t translate_string_with_ascii_map(const Slice& src, const TranslateState::ASCII_MAP& ascii_map,
+                                                     uint8_t* dst) {
+    uint8_t* const dst_begin = dst;
+    for (int i = 0; i < src.size; i++) {
+        char v = ascii_map[static_cast<uint8_t>(src[i])];
+        if (v == TranslateState::UNINIT_ASCII) {
+            *(dst++) = src[i];
+        } else if (v != TranslateState::DELETED_ASCII) {
+            *(dst++) = v;
+        }
+    }
+
+    return dst - dst_begin;
+}
+
+Status StringFunctions::translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new TranslateState();
+    context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
+
+    // const null case is handled by non_const implementation.
+    if (!context->is_notnull_constant_column(TranslateState::FROM_STR_INDEX) ||
+        !context->is_notnull_constant_column(TranslateState::TO_STR_INDEX)) {
+        return Status::OK();
+    }
+    state->is_from_and_to_const = true;
+
+    const auto from_str_col = context->get_constant_column(TranslateState::FROM_STR_INDEX);
+    const Slice from_str = ColumnHelper::get_const_value<TYPE_CHAR>(from_str_col);
+
+    const auto to_str_col = context->get_constant_column(TranslateState::TO_STR_INDEX);
+    const Slice to_str = ColumnHelper::get_const_value<TYPE_CHAR>(to_str_col);
+
+    build_translate_map(from_str, to_str, state);
+
+    return Status::OK();
+}
+
+Status StringFunctions::translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto state = (TranslateState*)(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+/**
+ * Translate strings of `src_column` with the constant ASCII map.
+ *
+ * The `src_column` can be a non-constant column.
+ * The `from_string` and `to_string` column must be constant columns and only contain ASCII characters,
+ * to make all the rows able to use the same ASCII map, which is stored in `state`.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param src the source column, which may be de-wrapped from NullableColumn.
+ * @param state stores the ASCII map.
+ * @return The translated column, which is a non-nullable BinaryColumn.
+ */
+static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+                                                                       const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(state->is_ascii_map);
+
+    auto dst = BinaryColumn::create();
+    auto& dst_offsets = dst->get_offset();
+    auto& dst_bytes = dst->get_bytes();
+    const auto& src_offsets = src->get_offset();
+
+    const size_t num_rows = src->size();
+    if (num_rows == 0) {
+        return dst;
+    }
+
+    const int num_src_bytes = src_offsets.back();
+    dst_bytes.resize(num_src_bytes);
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+
+    uint8_t* dst_begin = dst_bytes.data();
+    size_t dst_offset = 0;
+
+    const auto& ascii_map = state->ascii_map;
+    for (int i = 0; i < num_rows; i++) {
+        const Slice s = src->get_slice(i);
+        size_t num_row_bytes = translate_string_with_ascii_map(s, ascii_map, dst_begin + dst_offset);
+        dst_offset += num_row_bytes;
+        dst_offsets[i + 1] = dst_offset;
+    }
+
+    dst_bytes.resize(dst_offset);
+
+    return dst;
+}
+
+/**
+ * Translate strings of `src_column` with the constant UTF-8 map.
+ *
+ * The `src_column` can be a non-constant column.
+ * The `from_string` and `to_string` column must be constant columns and contain non-ASCII characters,
+ * to make all the rows able to use the same UTF-8 map, which is stored in `state`.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param src the source column, which may be de-wrapped from NullableColumn.
+ * @param state stores the UTF-8 map.
+ * @return the translated column, which may be a nullable BinaryColumn.
+ *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ */
+static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+                                                                      const TranslateState* state) {
+    DCHECK(state->is_from_and_to_const);
+    DCHECK(!state->is_ascii_map);
+
+    NullableBinaryColumnBuilder builder;
+    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_nulls = builder.get_null_data();
+
+    const size_t num_rows = src->size();
+    if (num_rows == 0) {
+        return builder.build(ColumnHelper::is_all_const(columns));
+    }
+
+    const auto& src_offsets = src->get_offset();
+    const int num_src_bytes = src_offsets.back();
+    // The `dst_bytes` can be at most four times larger than `src_bytes`, as in the worst-case scenario, each
+    // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
+    // UTF-8 character.
+    dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+    dst_nulls.resize(num_rows);
+
+    bool has_null = false;
+    size_t dst_offset = 0;
+    std::vector<EncodedUtf8Char> src_encoded_values;
+
+    const auto& utf8_map = state->utf8_map;
+    for (int i = 0; i < num_rows; i++) {
+        const Slice s = src->get_slice(i);
+
+        src_encoded_values.clear();
+        src_encoded_values.reserve(s.size);
+        encode_utf8_chars(s, &src_encoded_values);
+
+        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, OLAP_STRING_MAX_LENGTH));
+        uint8_t* dst_begin = dst_bytes.data() + dst_offset;
+
+        const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
+        if (is_null) {
+            has_null = true;
+            dst_offsets[i + 1] = dst_offset;
+            dst_nulls[i] = 1;
+        } else {
+            dst_offset += num_row_bytes;
+            dst_offsets[i + 1] = dst_offset;
+        }
+    }
+
+    dst_bytes.resize(dst_offset);
+    builder.set_has_null(has_null);
+
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "translate");
+}
+
+/**
+ * Translate strings of `src_column` with the maps different between the source strings.
+ *
+ * The `src_column`, `from_string`, `to_string` can be non-constant columns.
+ *
+ * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
+ * @param state useless, `state` is useful only for the constant `from_string`, `to_string` for now.
+ * @return the translated column, which may be a nullable BinaryColumn.
+ *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ */
+ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
+    DCHECK(state == nullptr || !state->is_from_and_to_const);
+
+    ColumnViewer<TYPE_VARCHAR> src_viewer(columns[TranslateState::SRC_STR_INDEX]);
+    ColumnViewer<TYPE_VARCHAR> from_viewer(columns[TranslateState::FROM_STR_INDEX]);
+    ColumnViewer<TYPE_VARCHAR> to_viewer(columns[TranslateState::TO_STR_INDEX]);
+
+    NullableBinaryColumnBuilder builder;
+    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_bytes = builder.data_column()->get_bytes();
+    auto& dst_nulls = builder.get_null_data();
+
+    const size_t num_rows = columns[TranslateState::SRC_STR_INDEX]->size();
+    if (num_rows == 0) {
+        return builder.build(ColumnHelper::is_all_const(columns));
+    }
+
+    const auto& src_offsets = src_viewer.column()->get_offset();
+    const int num_src_bytes = src_offsets.back();
+    dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
+    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets[0] = 0;
+    dst_nulls.resize(num_rows);
+
+    bool has_null = false;
+    size_t dst_offset = 0;
+    std::vector<EncodedUtf8Char> src_encoded_values;
+    TranslateState local_state;
+
+    for (int i = 0; i < num_rows; i++) {
+        if (src_viewer.is_null(i) || from_viewer.is_null(i) || to_viewer.is_null(i)) {
+            has_null = true;
+            dst_offsets[i + 1] = dst_offset;
+            dst_nulls[i] = 1;
+            continue;
+        }
+
+        const Slice src = src_viewer.value(i);
+        const Slice from_str = from_viewer.value(i);
+        const Slice to_str = to_viewer.value(i);
+
+        build_translate_map(from_str, to_str, &local_state);
+        if (local_state.is_ascii_map) {
+            dst_bytes.resize(dst_offset + src.size);
+            size_t num_row_bytes =
+                    translate_string_with_ascii_map(src, local_state.ascii_map, dst_bytes.data() + dst_offset);
+            dst_offset += num_row_bytes;
+            dst_offsets[i + 1] = dst_offset;
+        } else {
+            src_encoded_values.clear();
+            src_encoded_values.reserve(src.size);
+            encode_utf8_chars(src, &src_encoded_values);
+
+            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, OLAP_STRING_MAX_LENGTH));
+            uint8_t* dst_begin = dst_bytes.data() + dst_offset;
+
+            const auto [is_null, num_row_bytes] =
+                    translate_string_with_utf8_map(src_encoded_values, local_state.utf8_map, dst_begin);
+            if (is_null) {
+                has_null = true;
+                dst_offsets[i + 1] = dst_offset;
+                dst_nulls[i] = 1;
+            } else {
+                dst_offset += num_row_bytes;
+                dst_offsets[i + 1] = dst_offset;
+            }
+        }
+    }
+
+    dst_bytes.resize(dst_offset);
+    builder.set_has_null(has_null);
+
+    RETURN_COLUMN(builder.build(ColumnHelper::is_all_const(columns)), "translate");
+}
+
+StatusOr<ColumnPtr> StringFunctions::translate(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto state = (TranslateState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    if (state != nullptr) {
+        if (state->is_from_and_to_const) {
+            if (state->is_ascii_map) {
+                return string_func_const(translate_with_ascii_const_nonnull_from_and_to, columns, state);
+            } else {
+                return string_func_const(translate_with_utf8_const_nonnull_from_and_to, columns, state);
+            }
+        } else {
+            return translate_with_non_const_from_or_to(columns, state);
+        }
+    } else {
+        return translate_with_non_const_from_or_to(columns, nullptr);
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// Methods for PAD.
+// ------------------------------------------------------------------------------------
 
 Status StringFunctions::pad_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
