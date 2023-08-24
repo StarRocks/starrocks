@@ -1851,6 +1851,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
     auto st = index.load(&_tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
@@ -2735,6 +2736,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
     info->__set_is_error_state(_error);
+    info->__set_max_rowset_creation_time(max_rowset_creation_time());
 }
 
 int64_t TabletUpdates::get_average_row_size() {
@@ -4580,6 +4582,36 @@ Status TabletUpdates::get_rowset_and_segment_idx_by_rssid(uint32_t rssid, Rowset
         }
     }
     return Status::NotFound(strings::Substitute("rowset for rssid $0 not found", rssid));
+}
+
+int64_t TabletUpdates::max_rowset_creation_time() {
+    std::lock_guard l1(_lock);
+    std::lock_guard l2(_rowsets_lock);
+
+    if (_edit_version_infos.empty()) {
+        LOG(WARNING) << "tablet deleted when call max_rowset_creation_time() tablet:" << _tablet.tablet_id();
+        return 0;
+    }
+
+    int cur_max_major_idx = 0;
+    int cur_max_major = 0;
+    for (int i = 0; i < _edit_version_infos.size(); ++i) {
+        if (_edit_version_infos[i]->version.major_number() > cur_max_major) {
+            cur_max_major = _edit_version_infos[i]->version.major_number();
+            cur_max_major_idx = i;
+        }
+    }
+
+    const std::vector<uint32_t>& rowsets = _edit_version_infos[cur_max_major_idx]->rowsets;
+    int64_t max_rowset_creation_time = 0;
+    for (uint32_t rowsetid : rowsets) {
+        auto itr = _rowsets.find(rowsetid);
+        if (itr == _rowsets.end()) {
+            continue;
+        }
+        max_rowset_creation_time = std::max(max_rowset_creation_time, itr->second->creation_time());
+    }
+    return max_rowset_creation_time;
 }
 
 } // namespace starrocks

@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -24,9 +25,13 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -34,6 +39,9 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
+import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class MvRewriteTest extends MvRewriteTestBase {
     @Test
@@ -924,6 +932,85 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testMVCacheInvalidAndReValid() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_base_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` bigint(20) DEFAULT NULL,\n" +
+                "  `col2` bigint(20) DEFAULT NULL,\n" +
+                "  `col3` bigint(20) DEFAULT NULL,\n" +
+                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_cache_mv1 \n" +
+                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "partition by date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select\n" +
+                "      col1,\n" +
+                "        dt,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_base_tbl AS f\n" +
+                "    GROUP BY\n" +
+                "        col1,\n" +
+                "        dt;");
+        refreshMaterializedView("test", "test_cache_mv1");
+
+        {
+            String sql = "select\n" +
+                    "      col1,\n" +
+                    "        sum(col2) AS sum_col2,\n" +
+                    "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                    "    FROM\n" +
+                    "        test_base_tbl AS f\n" +
+                    "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                    "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                    "    GROUP BY col1;";
+            String plan = getFragmentPlan(sql);
+            PlanTestBase.assertContains(plan, "test_cache_mv1");
+        }
+
+        {
+            // invalid base table
+            String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                    connectContext);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            waitForSchemaChangeAlterJobFinish();
+
+            // check mv invalid
+            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
+            Assert.assertFalse(mv1.isActive());
+
+            String sql = "select\n" +
+                    "      col1,\n" +
+                    "        sum(col2) AS sum_col2,\n" +
+                    "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                    "    FROM\n" +
+                    "        test_base_tbl AS f\n" +
+                    "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                    "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                    "    GROUP BY col1;";
+            String plan = getFragmentPlan(sql);
+            PlanTestBase.assertNotContains(plan, "test_cache_mv1");
+
+            cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
+            plan = getFragmentPlan(sql);
+            PlanTestBase.assertContains(plan, "test_cache_mv1");
+        }
+    }
+
+    @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1660,10 +1747,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "                \"storage_format\" = \"DEFAULT\",\n" +
                 "                \"enable_persistent_index\" = \"false\"\n" +
                 "                );");
-        cluster.runSql("test", "insert into sync_tbl_t1 values ('2022-05-01',1,2,3), " +
-                "('2022-05-01',2,2,2), ('2022-05-01',3,2,3);");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW sync_mv1 AS " +
-                "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;");
+        String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);
@@ -1755,5 +1841,100 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 PlanTestBase.assertContains(plan, mvName);
             }
         }
+    }
+
+    @Test
+    public void testProjectConstant() throws Exception {
+        String tableName = "test_tbl_project_constant";
+        starRocksAssert.withTable(String.format("CREATE TABLE %s(\n" +
+                "                            k1 date,\n" +
+                "                            k2 varchar(20),\n" +
+                "                            v3 int)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        DISTRIBUTED BY HASH(k1);", tableName));
+
+        // MV1: Projection MV
+        {
+            String mvName = "mv_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, k2, v3 " +
+                            "FROM " + tableName);
+            {
+                String query = "SELECT 'hehe', k1, k2" +
+                        " FROM " + tableName;
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+        // MV2: Aggregation MV
+        {
+            String mvName = "mv_aggregation_projection_const";
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW \n" + mvName +
+                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                            "REFRESH ASYNC \n" +
+                            "AS SELECT k1, sum(v3) as sum_v3 \n" +
+                            "FROM " + tableName + "\n" +
+                            "GROUP BY k1");
+
+            {
+                String query = String.format("SELECT 'hehe', k1, sum(v3) as sum_v1 " +
+                        " FROM %s group by 'hehe', k1", tableName);
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, mvName);
+            }
+        }
+    }
+
+    @Test
+    public void testMVWithAutomaticPartitionBaseTable() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_empty_partition_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` bigint(20) DEFAULT NULL,\n" +
+                "  `col2` bigint(20) DEFAULT NULL,\n" +
+                "  `col3` bigint(20) DEFAULT NULL,\n" +
+                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt, col1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_empty_partition_mv1 \n" +
+                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "partition by date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select\n" +
+                "      col1,\n" +
+                "        dt,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    GROUP BY\n" +
+                "        col1,\n" +
+                "        dt;");
+        String insertSql = "insert into test_empty_partition_tbl values('2022-08-16', 1, 1, 1, 'a')";
+        cluster.runSql("test", insertSql);
+        refreshMaterializedView("test", "test_empty_partition_mv1");
+
+        String sql = "select\n" +
+                "      col1,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "    GROUP BY col1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
     }
 }

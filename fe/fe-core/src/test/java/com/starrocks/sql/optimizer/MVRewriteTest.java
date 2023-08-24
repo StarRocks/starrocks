@@ -865,7 +865,6 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select `" + FunctionSet.HLL_UNION + "`(" + FunctionSet.HLL_HASH + "(tag_id)) from " +
                 USER_TAG_TABLE_NAME + ";";
-        System.out.println(starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
         query = "select hll_union_agg(" + FunctionSet.HLL_HASH + "(tag_id)) from " + USER_TAG_TABLE_NAME + ";";
         starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, FunctionSet.HLL_UNION_AGG);
@@ -907,7 +906,6 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query =
                 "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
-        System.out.println(starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n",
                 "output: percentile_union");
         starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);

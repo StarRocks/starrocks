@@ -15,7 +15,6 @@
 package com.starrocks.privilege;
 
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 
 public class AccessDeniedException extends RuntimeException {
     public AccessDeniedException(String message) {
@@ -23,7 +22,8 @@ public class AccessDeniedException extends RuntimeException {
     }
 
     public static void reportAccessDenied(String privilegeMessage, ObjectType objectType, String object) {
-        throw new AccessDeniedException(ErrorReport.reportCommon(null,
-                ErrorCode.ERR_ACCESS_DENIED, privilegeMessage, objectType.name(), object == null ? "" : " " + object));
+        String errMsg = ErrorCode.ERR_ACCESS_DENIED.formatErrorMsg(
+                privilegeMessage, objectType.name(), object == null ? "" : " " + object);
+        throw new AccessDeniedException(errMsg);
     }
 }

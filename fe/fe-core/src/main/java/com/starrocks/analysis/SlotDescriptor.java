@@ -250,32 +250,28 @@ public class SlotDescriptor {
             nullIndicatorBit = -1;
         }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
-
-        TSlotDescriptor tSlotDescriptor;
+        TSlotDescriptor tSlotDescriptor = new TSlotDescriptor();
+        tSlotDescriptor.setId(id.asInt());
+        tSlotDescriptor.setParent(parent.getId().asInt());
         if (originType != null) {
-            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
-                    -1, -1,
-                    nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    -1, true);
-            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+            tSlotDescriptor.setSlotType(originType.toThrift());
         } else {
-            /**
-             * Refer to {@link Expr#treeToThrift}
-             */
-            if (type.isNull()) {
-                type = ScalarType.BOOLEAN;
-            }
-            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
-                    -1, -1,
-                    nullIndicatorBit, ((column != null) ? column.getName() : ""),
-                    -1, true);
-            tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+            type = type.isNull() ? ScalarType.BOOLEAN : type;
+            tSlotDescriptor.setSlotType(type.toThrift());
             if (column != null) {
                 LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
             }
         }
-
+        tSlotDescriptor.setColumnPos(-1);
+        tSlotDescriptor.setByteOffset(-1);
+        tSlotDescriptor.setNullIndicatorByte(-1);
+        tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
+        tSlotDescriptor.setColName(((column != null) ? column.getName() : ""));
+        tSlotDescriptor.setSlotIdx(-1);
+        tSlotDescriptor.setIsMaterialized(true);
+        tSlotDescriptor.setIsOutputColumn(isOutputColumn);
+        tSlotDescriptor.setIsNullable(isNullable);
         return tSlotDescriptor;
     }
 

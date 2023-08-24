@@ -93,6 +93,7 @@ import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -1953,7 +1954,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     } else {
                         LOG.warn("unique constraint is the same as origin");
                     }
-                } catch (AnalysisException e) {
+                } catch (SemanticException e) {
                     throw new DdlException(
                             String.format("analyze table unique constraint:%s failed",
                                     properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)), e);
@@ -1973,7 +1974,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     } else {
                         LOG.warn("foreign constraint is the same as origin");
                     }
-                } catch (AnalysisException e) {
+                } catch (SemanticException e) {
                     throw new DdlException(
                             String.format("analyze table foreign key constraint:%s failed",
                                     properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)), e);

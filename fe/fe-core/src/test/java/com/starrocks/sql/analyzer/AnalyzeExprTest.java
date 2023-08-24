@@ -318,7 +318,6 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(v1 order by 1) from t0;");
         analyzeSuccess("select array_agg(null);");
         analyzeSuccess("select array_agg(v1 order by v1) from t0;");
-        analyzeSuccess("select array_agg(null order by 11);");
         analyzeSuccess("select array_agg(null order by 1,1);");
         analyzeSuccess("select array_agg(1 order by null,null);");
         analyzeSuccess("select array_agg(1 order by null,null,v1) from t0 group by v2;");
@@ -332,7 +331,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
 
-
+        analyzeFail("select array_agg(null order by 11);");
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
         analyzeFail("select array_agg(1,1);");
@@ -341,6 +340,44 @@ public class AnalyzeExprTest {
                 " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+    }
+
+    @Test
+    public void testGroupConcat() {
+        analyzeSuccess("select group_concat(v1 order by v2 desc), group_concat(distinct v1 order by v2) from t0;");
+        analyzeSuccess("select group_concat(v1 order by v2, v3 desc nulls last) from t0 group by v3;");
+        analyzeSuccess("select group_concat(null) from t0;");
+        analyzeSuccess("select group_concat(null order by null) from t0;");
+        analyzeSuccess("select group_concat(v1 order by null) from t0;");
+        analyzeSuccess("select group_concat(v1 order by 1) from t0;");
+        analyzeSuccess("select group_concat(null);");
+        analyzeSuccess("select group_concat(v1 order by v1) from t0;");
+        analyzeSuccess("select group_concat(distinct null order by 1,1);");
+        analyzeSuccess("select group_concat(1 order by null,null);");
+        analyzeSuccess("select group_concat(1 order by null,null,v1) from t0 group by v2;");
+        analyzeSuccess("select group_concat(a order by b) from (select null as a, null as b " +
+                "union all select v1 as a, v3 as b from t0)A;");
+        analyzeSuccess("select group_concat(v1 order by v1), group_concat(v1),group_concat(v2) from t0;");
+        analyzeSuccess("select group_concat(null,'a');");
+        analyzeSuccess("select group_concat(1,1);");
+        analyzeSuccess("select group_concat(1 order by 1 desc nulls first)");
+
+        analyzeFail("select group_concat(case when c1='a' then [1,3] else [1,2] end order by c3) as arr1 " +
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then map(1,3) else map(1,2) end order by c3) as arr1 " +
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(null order by 11);");
+        analyzeFail("select group_concat(null order by);");
+        analyzeFail("select group_concat()");
+        analyzeFail("select group_concat(separator '')");
+        analyzeFail("select group_concat(case when c1='a' then struct(1,3) else map(1,2) end order by c3) as arr1 from " +
+                " (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select group_concat(1 order by 1 nulls first desc)");
+        analyzeFail("select group_concat(name) over (partition by id) from ss");
     }
 
     @Test

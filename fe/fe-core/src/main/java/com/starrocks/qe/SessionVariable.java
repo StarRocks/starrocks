@@ -410,6 +410,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ANALYZE_FOR_MV = "analyze_mv";
     public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE =
+            "enable_materialized_view_rewrite_greedy_mode";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -484,6 +486,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
+
+    public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1130,6 +1134,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
+    // Enable greedy mode in mv rewrite to cut down optimizer time for mv rewrite:
+    // - Use plan cache if possible to avoid regenerating plan tree.
+    // - Use the max plan tree to rewrite in view-delta mode to avoid too many rewrites.
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
+    private boolean enableMaterializedViewRewriteGreedyMode = false;
+
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
 
@@ -1180,7 +1190,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
 
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
-    private long groupConcatMaxLen = 65535;
+    private long groupConcatMaxLen = 1024;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedRows = 1024000;
@@ -1224,6 +1234,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
+
+    // This variable is introduced to solve compatibility issues/
+    // see more details: https://github.com/StarRocks/starrocks/pull/29678
+    @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
+    private boolean enableCollectTableLevelScanStats = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2203,6 +2218,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
+    public void setEnableMaterializedViewRewriteGreedyMode(boolean enableMaterializedViewRewriteGreedyMode) {
+        this.enableMaterializedViewRewriteGreedyMode = enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public boolean isEnableMaterializedViewRewriteGreedyMode() {
+        return this.enableMaterializedViewRewriteGreedyMode;
+    }
+
     public String getQueryExcludingMVNames() {
         return queryExcludingMVNames;
     }
@@ -2438,6 +2461,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
+        tResult.setGroup_concat_max_len(groupConcatMaxLen);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
 
         TCompressionType loadCompressionType =
@@ -2489,6 +2513,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
+        tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         return tResult;
     }
 

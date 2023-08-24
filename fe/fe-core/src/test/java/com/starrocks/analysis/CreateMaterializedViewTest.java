@@ -50,7 +50,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -77,6 +77,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class CreateMaterializedViewTest {
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
@@ -299,23 +301,6 @@ public class CreateMaterializedViewTest {
             LOG.info("waiting for TaskRunState retryCount:" + retryCount);
         }
         return taskRuns;
-    }
-
-    private void waitingRollupJobV2Finish() throws Exception {
-        // waiting alterJobV2 finish
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        //Assert.assertEquals(1, alterJobs.size());
-
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
-                continue;
-            }
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            }
-        }
     }
 
     // ========== full test ==========
@@ -542,7 +527,7 @@ public class CreateMaterializedViewTest {
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
                 UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+        RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
         Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
     }
 
@@ -1275,7 +1260,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
             Assert.assertNotNull(asyncRefreshSchemeDesc.getStartTime());
@@ -1303,7 +1288,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -1324,7 +1309,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
-            RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+            RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -1522,7 +1507,7 @@ public class CreateMaterializedViewTest {
         }
 
         MaterializedView baseInactiveMv = ((MaterializedView) testDb.getTable("base_inactive_mv"));
-        baseInactiveMv.setActive(false);
+        baseInactiveMv.setInactiveAndReason("");
 
         String sql2 = "create materialized view mv_from_base_inactive_mv " +
                 "partition by k1 " +
@@ -1556,7 +1541,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsHasStar"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Table baseTable = testDb.getTable("tbl1");
@@ -1649,7 +1634,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias1"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());
@@ -1680,7 +1665,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias2"));
-            mv.setActive(false);
+            mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
 
             Assert.assertEquals("date_trunc('month', tbl1.k1)", mvColumns.get(0).getName());

@@ -1730,11 +1730,11 @@ public class AuthorizationMgrTest {
         MetadataMgr metadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadataMgr) {
             {
-                metadataMgr.getDb((String) any, (String) any);
+                metadataMgr.getDb("hive_catalog_1", "db");
                 result = new com.starrocks.catalog.Database(0, "db");
                 minTimes = 0;
 
-                metadataMgr.getTable((String) any, (String) any, (String) any);
+                metadataMgr.getTable("hive_catalog_1", "db", "tbl");
                 result = HiveTable.builder().setHiveTableName("tbl")
                         .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
                 minTimes = 0;
