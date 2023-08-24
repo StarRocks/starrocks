@@ -280,6 +280,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             CallOperator aggCallOperator = aggregate.getAggregations().get(distinctAggRef);
             if (aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
                     aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM) ||
+                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG) ||
                     aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
                 allCteConsumes.offer(buildCountSumDistinctCTEConsume(distinctAggRef, aggCallOperator,
                         aggregate, cteProduce, factory));

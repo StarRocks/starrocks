@@ -1902,6 +1902,9 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                } else if (functionName.equalsIgnoreCase(FunctionSet.GROUP_CONCAT) ||
+                        functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = functionCallExpr;
                 }
                 Preconditions.checkState(replaceExpr != null);
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());

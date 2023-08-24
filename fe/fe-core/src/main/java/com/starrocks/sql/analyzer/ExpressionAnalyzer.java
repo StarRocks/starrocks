@@ -996,20 +996,22 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                boolean outputConst = true;
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                     fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                    outputConst = node.getChild(0).isConstant();
                 } else {
-                    boolean outputConst = true;
+                    fn.setRetType(Type.VARCHAR);
                     for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
                         if (!node.getChild(i).isConstant()) {
                             outputConst = false;
                             break;
                         }
                     }
-                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
-                            (!isAscOrder.isEmpty() || outputConst));
-                    fn.setRetType(Type.VARCHAR);
                 }
+                // need to distinct output columns in finalize phase
+                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                        (!isAscOrder.isEmpty() || outputConst));
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);

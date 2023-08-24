@@ -121,13 +121,12 @@ struct ArrayAggAggregateStateV2 {
                 col.reset();
             }
             data_columns->clear();
-            delete data_columns;
-            data_columns = nullptr;
+            data_columns.reset(nullptr);
         }
     }
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
-    Columns* data_columns = nullptr;
+    std::unique_ptr<Columns> data_columns = nullptr;
 };
 
 class ArrayAggAggregateFunctionV2
@@ -136,7 +135,7 @@ public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto num = ctx->get_num_args();
         auto* state = new (ptr) ArrayAggAggregateStateV2;
-        state->data_columns = new Columns;
+        state->data_columns = std::make_unique<Columns>();
         for (auto i = 0; i < num; ++i) {
             state->data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
         }
@@ -249,6 +248,25 @@ public:
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));
         }
+        // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
+        // TODO(fzh) optimize it later
+        if (ctx->get_is_distinct()) {
+            bool is_duplicated = false;
+            Filter filter(elem_size, 1);
+            for (auto row_id = 0; row_id < elem_size; row_id++) {
+                for (auto next_id = row_id + 1; next_id < elem_size; next_id++) {
+                    if (res->equals(next_id, *res, row_id)) {
+                        is_duplicated = true;
+                        filter[row_id] = 0;
+                        break;
+                    }
+                }
+            }
+            if (is_duplicated) {
+                elem_size = res->filter(filter);
+            }
+        }
+
         auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);

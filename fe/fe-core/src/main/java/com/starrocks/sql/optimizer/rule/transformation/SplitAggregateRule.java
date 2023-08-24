@@ -317,7 +317,7 @@ public class SplitAggregateRule extends TransformationRule {
                     fnCall.getFunction(), fnCall.getChild(0).getType());
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
-        } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+        } else if (functionName.equals(FunctionSet.GROUP_CONCAT) || functionName.equals(FunctionSet.ARRAY_AGG)) {
             return fnCall;
         }
         return null;
