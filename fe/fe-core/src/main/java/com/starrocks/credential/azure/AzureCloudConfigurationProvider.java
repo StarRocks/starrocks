@@ -17,7 +17,7 @@ package com.starrocks.credential.azure;
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 
 import java.util.Map;
 
