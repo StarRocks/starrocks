@@ -51,12 +51,12 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     MonotonicStopWatch watch;
     watch.start();
     // 1. create and set key column schema
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta

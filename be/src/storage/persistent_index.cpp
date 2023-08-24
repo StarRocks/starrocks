@@ -3087,12 +3087,12 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
 
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
-    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+    auto tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     // Init PersistentIndex

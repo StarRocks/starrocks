@@ -47,7 +47,12 @@ import com.starrocks.thrift.TSlotDescriptor;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 public class SlotDescriptor {
+
+    private static final Logger LOG = LogManager.getLogger(SlotDescriptor.class);
     private final SlotId id;
     private final TupleDescriptor parent;
     private Type type;
@@ -253,6 +258,10 @@ public class SlotDescriptor {
         } else {
             type = type.isNull() ? ScalarType.BOOLEAN : type;
             tSlotDescriptor.setSlotType(type.toThrift());
+            if (column != null) {
+                LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
         }
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);

@@ -32,7 +32,7 @@ using MaterializedViewParamMap = std::unordered_map<std::string, AlterMaterializ
 
 class ChunkChanger {
 public:
-    ChunkChanger(const TabletSchema& tablet_schema);
+    ChunkChanger(const TabletSchemaCSPtr& tablet_schema);
     ~ChunkChanger();
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
@@ -91,7 +91,7 @@ public:
     static void init_materialized_params(const TAlterTabletReqV2& request,
                                          MaterializedViewParamMap* materialized_view_param_map);
 
-    static Status parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
+    static Status parse_request(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
                                 ChunkChanger* chunk_changer,
                                 const MaterializedViewParamMap& materialized_view_param_map, bool has_delete_predicates,
                                 bool* sc_sorting, bool* sc_directly, std::unordered_set<int>* materialized_column_idxs);

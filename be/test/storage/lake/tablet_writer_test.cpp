@@ -71,7 +71,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
     void SetUp() override {
@@ -134,9 +134,9 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema.get()));
+                                             _tablet_schema));
     ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema.get()));
+                                             _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -183,8 +183,8 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {0}));
-    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema, {1}));
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
 
     Chunk c0_chunk({c0}, schema0);
     Chunk c1_chunk({c1}, schema1);
@@ -220,9 +220,9 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema.get()));
+                                             _tablet_schema));
     ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema.get()));
+                                             _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;

@@ -2728,6 +2728,12 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
+                // show lightSchemaChange only when it is set true
+                if (olapTable.getUseLightSchemaChange()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
+                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                }
+
                 // storage media
                 Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
