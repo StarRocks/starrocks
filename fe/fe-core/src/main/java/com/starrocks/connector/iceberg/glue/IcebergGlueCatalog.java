@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.iceberg.glue;
+package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import org.apache.iceberg.aws.AwsClientFactory;
@@ -116,7 +116,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                                                                               String region) {
         // Build sts client
         StsClientBuilder stsClientBuilder = StsClient.builder().credentialsProvider(baseCredentials);
-        stsClientBuilder.applyMutation(awsProperties::applyHttpClientConfigurations);
         if (!region.isEmpty()) {
             stsClientBuilder.region(Region.of(region));
         }
@@ -159,8 +158,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             s3ClientBuilder.endpointOverride(URI.create(s3Endpoint));
         }
 
-        s3ClientBuilder.applyMutation(awsProperties::applyHttpClientConfigurations);
-
         return s3ClientBuilder.build();
     }
 
@@ -185,7 +182,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             glueClientBuilder.endpointOverride(URI.create(glueEndpoint));
         }
 
-        glueClientBuilder.applyMutation(awsProperties::applyHttpClientConfigurations);
         return glueClientBuilder.build();
     }
 
