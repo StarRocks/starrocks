@@ -202,6 +202,7 @@ jobs:
           files: ${{ github.workspace }}/coverage.xml
           dry_run: false
           name: fe-total
+          flags: fe-total
           fail_ci_if_error: false
           verbose: true
           override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
@@ -304,6 +305,7 @@ jobs:
           files: ${{ github.workspace }}/be/be_ut_coverage.xml
           dry_run: false
           name: be-total
+          flags: be-total
           fail_ci_if_error: false
           verbose: true
           override_pr: ${{ needs.INFO.outputs.PR_NUMBER }}
