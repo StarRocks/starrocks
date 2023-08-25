@@ -480,7 +480,7 @@ Status OrcChunkReader::_init_column_readers() {
         ASSIGN_OR_RETURN(
                 std::unique_ptr<ORCColumnReader> column_reader,
                 ORCColumnReader::create(
-                        _src_types[column_pos], _root_selected_mapping->get_orc_type_child_mapping(column_pos).orc_type,
+                        slot_desc->type(), _root_selected_mapping->get_orc_type_child_mapping(column_pos).orc_type,
                         slot_desc->is_nullable(),
                         _root_selected_mapping->get_orc_type_child_mapping(column_pos).orc_mapping, this));
         _column_readers.emplace_back(std::move(column_reader));
