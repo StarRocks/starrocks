@@ -160,6 +160,18 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         }
     }
 
+    public void initPartitions() {
+        readLock();
+        try {
+            partitionNames = Arrays.asList("20230801", "20230802", "20230803");
+            partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L));
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void addPartitions() {
         readLock();
         try {

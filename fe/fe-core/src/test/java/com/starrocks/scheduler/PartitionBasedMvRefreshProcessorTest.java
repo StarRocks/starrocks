@@ -1177,6 +1177,11 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRangePartitionRefreshWithJDBCTable() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv0"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -1193,9 +1198,6 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotNull(materializedView.getPartition("P20230802"));
         Assert.assertNotNull(materializedView.getPartition("P20230803"));
 
-        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
-        MockedJDBCMetadata mockedJDBCMetadata =
-                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
         mockedJDBCMetadata.addPartitions();
         taskRun.executeTaskRun();
         Collection<Partition> incrementalPartitions = materializedView.getPartitions();
@@ -1208,6 +1210,11 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testRangePartitionRefreshWithJDBCTableUseStr2Date() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv1"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -1224,9 +1231,6 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertNotNull(materializedView.getPartition("P20230802"));
         Assert.assertNotNull(materializedView.getPartition("P20230803"));
 
-        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
-        MockedJDBCMetadata mockedJDBCMetadata =
-                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
         mockedJDBCMetadata.addPartitions();
         taskRun.executeTaskRun();
         Collection<Partition> incrementalPartitions = materializedView.getPartitions();
