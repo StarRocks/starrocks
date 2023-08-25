@@ -488,7 +488,7 @@ TEST_F(TimeFunctionsTest, dateDiffTest) {
                  {TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
                   TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
                   TimestampValue::create(2020, 6, 20, 13, 48, 30), TimestampValue::create(2020, 6, 20, 13, 48, 25)},
-                 "[5, 6, 0, 8, 0, 0]"},
+                 "[5, 6, 8, 0, 0, 0]"},
                 {"month",
                  {TimestampValue::create(2012, 8, 30, 0, 0, 0), TimestampValue::create(2012, 8, 30, 0, 0, 1),
                   TimestampValue::create(2012, 9, 1, 0, 0, 1), TimestampValue::create(2012, 8, 23, 0, 0, 5),
