@@ -198,4 +198,14 @@ public class StructTypePlanTest extends PlanTestBase {
                 "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
                 "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
     }
+
+    @Test
+    public void testCastArrayIndex() throws Exception {
+        String sql = "select c1.b[cast('  111   ' as bigint)] from test";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> 2: c1.b[111]",
+                "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
+    }
 }
