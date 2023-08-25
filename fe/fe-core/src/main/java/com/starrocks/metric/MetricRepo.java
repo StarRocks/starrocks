@@ -74,6 +74,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -729,6 +730,16 @@ public final class MetricRepo {
         };
         queryCoordinatorCount.addLabel(new MetricLabel("type", "query_coordinator_count"));
         STARROCKS_METRIC_REGISTER.addMetric(queryCoordinatorCount);
+
+        GaugeMetric<Long> agentTaskCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of agent task") {
+            @Override
+            public Long getValue() {
+                return (long) AgentTaskQueue.getTaskNum();
+            }
+        };
+        agentTaskCount.addLabel(new MetricLabel("type", "agent_task_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
     // to generate the metrics related to tablets of each backends
