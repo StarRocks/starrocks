@@ -94,6 +94,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
         }
 
+        LOG(INFO) << "COV TEST";
         if (!_reader || !_reader->parquet_reader()) {
             LOG(INFO) << "Ignore the parquet file because of unexpected nullptr ParquetReader";
             return Status::EndOfFile("Unexpected nullptr ParquetReader");

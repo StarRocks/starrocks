@@ -28,32 +28,13 @@ jobs:
       PASS: ${{ steps.check.outputs.pass }}
       THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
-      - name: upload info
-        run: |
-          echo $PR_NUMBER > pr_num.txt
-          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
-          echo ${GITHUB_SHA} > head_sha.txt
-
-      - name: Upload the PR number
-        uses: actions/upload-artifact@v2
-        with:
-          name: pr_num
-          path: ./pr_num.txt
-          retention-days: 3
-
-      - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
-        with:
-          name: head_sha
-          path: ./head_sha.txt
-          retention-days: 3
-
       - name: Check
         id: check
         if: >
-          !contains(github.event.pull_request.title, '(sync #') &&
+          (!contains(github.event.pull_request.title, '(sync #') &&
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
-          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))) ||
+          contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
@@ -214,6 +195,7 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
+          git checkout coverage
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --with-gcov
 
       - name: clean ECI
@@ -541,7 +523,8 @@ jobs:
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} 
+          git checkout coverage
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --with-gcov
 
       - name: build result
         run: |
@@ -594,6 +577,7 @@ jobs:
         id: apply_resource
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout coverage
           ./bin/elastic-cluster.sh --template ci-admit
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
@@ -665,6 +649,7 @@ jobs:
         id: run_case
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout coverage
           ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
@@ -717,6 +702,7 @@ jobs:
           echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
 
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout coverage
 
           cd ${{ github.workspace }}
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
