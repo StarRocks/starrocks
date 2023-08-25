@@ -219,6 +219,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueLoad(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueLoad(false);
         }
 
         {
@@ -228,6 +229,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueSelect(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueSelect(false);
         }
 
         {
@@ -249,6 +251,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueStatistic(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+            connectContext.setStatisticsContext(false);
+            GlobalVariable.setEnableQueryQueueStatistic(false);
         }
     }
 
