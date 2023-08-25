@@ -94,6 +94,7 @@
   + [使用 Lateral Join 实现列转行](/using_starrocks/Lateral_join.md)
   + [Query Cache](/using_starrocks/query_cache.md)
   + [Sorted streaming aggregate](/using_starrocks/sorted_aggregate.md)
+  + [使用 AUTO INCREMENT 列构建全局字典以加速去重计数和 Join](/using_starrocks/query_acceleration_with_auto_increment.md)
 + 外部系统集成
   + [配置 AWS 认证信息](/integrations/authenticate_to_aws_resources.md)
   + [配置 Microsoft Azure Storage 认证信息](/integrations/authenticate_to_azure_storage.md)
