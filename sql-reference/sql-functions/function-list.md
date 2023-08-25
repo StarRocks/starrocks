@@ -144,6 +144,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [strleft](/sql-reference/sql-functions/string-functions/strleft.md) | 从字符串左边部分返回指定长度的字符。  |
 | [strright](/sql-reference/sql-functions/string-functions/strright.md) | 从字符串右边部分返回指定长度的字符。  |
 | [substr, substring](/sql-reference/sql-functions/string-functions/substr.md) | 返回字符串中从位置 pos 开始的指定长度的子字符串。  |
+| [translate](/sql-reference/sql-functions/string-functions/translate.md) | 将字符串中出现在 `from_string` 中的字符替换为对应位置的 `to_string` 中的字符。 |
 | [trim](/sql-reference/sql-functions/string-functions/trim.md) | 从字符串的左侧和右侧移除连续出现的空格或指定的字符。  |
 | [ucase](/sql-reference/sql-functions/string-functions/ucase.md) | 该函数与 upper 一致，将字符串转换为大写形式。  |
 | [unhex](/sql-reference/sql-functions/string-functions/unhex.md) | 将输入的字符串中的两个字符为一组转化为 16 进制的字符，然后拼接成字符串输出。  |
