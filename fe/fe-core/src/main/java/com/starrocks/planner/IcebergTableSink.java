@@ -31,6 +31,7 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
 
 import java.util.Locale;
 
@@ -80,7 +81,7 @@ public class IcebergTableSink extends DataSink {
                 String.format("connector of catalog %s should not be null", catalogName));
 
         // Try to set for tabular
-        if (icebergTable.getNativeTable().io().properties().containsKey(IcebergRESTCatalog.KEY_ENABLE_TABULAR_SUPPORT)) {
+        if (icebergTable.getNativeTable().io().properties().containsKey(AwsProperties.S3FILEIO_ACCESS_KEY_ID)) {
             CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
                     buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
             // Tabular must using aws
