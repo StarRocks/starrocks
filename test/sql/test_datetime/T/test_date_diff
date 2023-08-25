@@ -174,14 +174,14 @@ VALUES
     ('day', NULL, '2016-02-27'),
     ('day', '2016-02-27', NULL);
 
-select date_diff(t, lhs, rhs) from t1;
+select date_diff(t, lhs, rhs), t, lhs, rhs from t1 order by t, lhs, rhs;
 
-select date_diff('day', lhs, rhs) from t1;
-select date_diff('month', lhs, rhs) from t1;
-select date_diff(NULL, lhs, rhs) from t1;
+select date_diff('day', lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
+select date_diff('month', lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
+select date_diff(NULL, lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
 
-select date_diff(t, '2017-02-28', rhs) from t1;
-select date_diff(t, NULL, rhs) from t1;
+select date_diff(t, '2017-02-28', rhs), t, rhs from t1 order by t, lhs, rhs;
+select date_diff(t, NULL, rhs), t, rhs from t1 order by t, lhs, rhs;
 
-select date_diff(t, lhs, '2016-02-28') from t1;
-select date_diff(t, lhs, NULL) from t1;
+select date_diff(t, lhs, '2016-02-28'), t, lhs from t1 order by t, lhs, rhs;
+select date_diff(t, lhs, NULL), t, lhs from t1 order by t, lhs, rhs;
