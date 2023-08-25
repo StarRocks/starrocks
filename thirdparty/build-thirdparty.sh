@@ -221,95 +221,31 @@ build_thrift() {
 
 # llvm
 build_llvm() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=199309L"
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
-
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
     fi
 
-    LLVM_TARGETS_TO_BUILD=(
-        "LLVMBitstreamReader"
-        "LLVMRuntimeDyld" 
-        "LLVMOption"
-        "LLVMAsmPrinter"
-        "LLVMProfileData"
-        "LLVMAsmParser"
-        "LLVMOrcTargetProcess"
-        "LLVMExecutionEngine"
-        "LLVMBinaryFormat"
-        "LLVMDebugInfoDWARF"
-        "LLVMObjCARCOpts"
-        "LLVMCodeGen"
-        "LLVMMCDisassembler"
-        "LLVMSupport"
-        "LLVMJITLink"
-        "LLVMCFGuard"
-        "LLVMInstrumentation"
-        "LLVMIRReader"
-        "LLVMCore"
-        "LLVMTarget"
-        "LLVMMC"
-        "LLVMAnalysis"
-        "LLVMGlobalISel"
-        "LLVMScalarOpts"
-        "LLVMTargetParser"
-        "LLVMDemangle"
-        "LLVMRemarks"
-        "LLVMDebugInfoCodeView"
-        "LLVMOrcShared"
-        "LLVMOrcJIT"
-        "LLVMTextAPI"
-        "LLVMBitWriter"
-        "LLVMBitReader"
-        "LLVMObject"
-        "LLVMTransformUtils"
-        "LLVMSelectionDAG"
-        "LLVMMCParser"
-    )
-    if [ "${LLVM_TARGET}" == "X86" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
-    elif [ "${LLVM_TARGET}" == "AArch64" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
+    check_if_source_exist $LLVM_SOURCE
+    check_if_source_exist $CLANG_SOURCE
+    check_if_source_exist $COMPILER_RT_SOURCE
+
+    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang ]; then
+        cp -rf $TP_SOURCE_DIR/$CLANG_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/tools/clang
     fi
 
-    LLVM_TARGETS_TO_INSTALL=()
-    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
-        LLVM_TARGETS_TO_INSTALL+=("install-${target}")
-    done
-
-    check_if_source_exist $LLVM_SOURCE
+    if [ ! -d $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt ]; then
+        cp -rf $TP_SOURCE_DIR/$COMPILER_RT_SOURCE $TP_SOURCE_DIR/$LLVM_SOURCE/projects/compiler-rt
+    fi
 
     cd $TP_SOURCE_DIR
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
-
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
-    -DLLVM_ENABLE_EH:Bool=True \
-    -DLLVM_ENABLE_RTTI:Bool=True \
-    -DLLVM_ENABLE_PIC:Bool=True \
-    -DLLVM_ENABLE_TERMINFO:Bool=False \
-    -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
-    -DLLVM_BUILD_TOOLS:BOOL=False \
-    -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
-    -DLLVM_INCLUDE_TESTS:BOOL=False \
-    -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
-    -DBUILD_SHARED_LIBS:BOOL=False \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
-
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
-    ${BUILD_SYSTEM} install-llvm-headers
-    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
-
-    restore_compile_flags
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DLLVM_REQUIRES_RTTI:Bool=True -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} -DLLVM_ENABLE_TERMINFO=OFF LLVM_BUILD_LLVM_DYLIB:BOOL=OFF -DLLVM_ENABLE_PIC=true -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE="RELEASE" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/llvm ../$LLVM_SOURCE
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
+    ${BUILD_SYSTEM} install
 }
 
 # protobuf
@@ -1281,7 +1217,6 @@ build_serdes
 build_datasketches
 build_async_profiler
 build_fiu
-build_llvm
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
