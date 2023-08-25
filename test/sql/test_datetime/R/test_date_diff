@@ -164,7 +164,7 @@ None
 -- !result
 select date_diff('unknown_unit', '2016-03-01', '2016-02-27');
 -- result:
-E: (1064, 'type column should be one of day/hour/minute/second/millisecond backend [id=10005] [host=172.26.92.195]')
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
 -- !result
 select date_diff('day', NULL, '2016-02-27');
 -- result:
@@ -305,7 +305,7 @@ select date_diff('month', lhs, rhs) from t1;
 -- !result
 select date_diff('invalid-type', lhs, rhs) from t1;
 -- result:
-E: (1064, 'type column should be one of day/hour/minute/second/millisecond backend [id=10005] [host=172.26.92.195]')
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
 -- !result
 select date_diff(NULL, lhs, rhs) from t1;
 -- result:
