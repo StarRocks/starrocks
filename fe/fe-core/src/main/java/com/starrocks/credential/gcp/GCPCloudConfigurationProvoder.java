@@ -16,7 +16,7 @@ package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
@@ -26,15 +26,10 @@ import static com.starrocks.credential.CloudConfigurationConstants.GCP_GCS_SERVI
 import static com.starrocks.credential.CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID;
 import static com.starrocks.credential.CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT;
 
-public class GCPCloudConfigurationFactory extends CloudConfigurationFactory {
-    private final Map<String, String> properties;
-
-    public GCPCloudConfigurationFactory(Map<String, String> properties) {
-        this.properties = properties;
-    }
+public class GCPCloudConfigurationProvoder implements CloudConfigurationProvider {
 
     @Override
-    protected CloudConfiguration buildForStorage() {
+    public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
 
         GCPCloudCredential gcpCloudCredential = new GCPCloudCredential(

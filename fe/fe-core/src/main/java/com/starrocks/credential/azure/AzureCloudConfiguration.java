@@ -58,8 +58,6 @@ public class AzureCloudConfiguration implements CloudConfiguration {
 
     @Override
     public String getCredentialString() {
-        return "AzureCloudConfiguration{" +
-                "azureStorageCloudCredential=" + azureStorageCloudCredential +
-                '}';
+        return azureStorageCloudCredential.getCredentialString();
     }
 }
