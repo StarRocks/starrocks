@@ -491,6 +491,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HIVE_TEMP_STAGING_DIR = "hive_temp_staging_dir";
 
+    // binary, json, compact
+    public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1033,6 +1036,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 32;
+
+    // binary, json, compact,
+    @VarAttr(name = THRIFT_PLAN_PROTOCOL)
+    private String thriftPlanProtocol = "binary";
+
+    public String getThriftPlanProtocol() {
+        return thriftPlanProtocol;
+    }
 
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
