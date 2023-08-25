@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import mockit.Expectations;
@@ -39,9 +38,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+
 public class HiveMetaClientTest {
     @Test
     public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
+        RecyclableClient.clear();
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -65,8 +67,7 @@ public class HiveMetaClientTest {
         HiveConf hiveConf = new HiveConf();
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
-        // NOTE: this is HiveMetaClient.MAX_HMS_CONNECTION_POOL_SIZE
-        int poolSize = 32;
+        int poolSize = RecyclableClient.MAX_HMS_CONNECTION_POOL_SIZE;
 
         // call client method concurrently,
         // and make sure the number of hive clients will not exceed poolSize
@@ -103,8 +104,9 @@ public class HiveMetaClientTest {
         }
     }
 
-    @Test
-    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+    public void testRecyclableClientWithType(@Mocked HiveMetaStoreClient metaStoreClient, String metaStoreType)
+            throws TException, InterruptedException {
+        RecyclableClient.clear();
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -123,6 +125,7 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
+        hiveConf.set(HIVE_METASTORE_TYPE, metaStoreType);
         hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
@@ -146,6 +149,27 @@ public class HiveMetaClientTest {
         client.getTable("db", "tbl");
         Assert.assertEquals(1, client.getClientSize());
 
+        Thread[] threads = new Thread[2 * RecyclableClient.MAX_HMS_CONNECTION_POOL_SIZE];
+        for (int i = 0; i < threads.length; i++) {
+            Thread r = new Thread(() -> {
+                client.getTable("db", "tbl");
+            });
+            threads[i] = r;
+        }
+        for (int i = 0; i < threads.length; i++) {
+            threads[i].start();
+        }
+        for (int i = 0; i < threads.length; i++) {
+            threads[i].join();
+        }
+    }
+
+    @Test
+    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient)
+            throws TException, InterruptedException {
+        testRecyclableClientWithType(metaStoreClient, RecyclableClient.DLF_HIVE_METASTORE);
+        testRecyclableClientWithType(metaStoreClient, RecyclableClient.GLUE_HIVE_METASTORE);
+        testRecyclableClientWithType(metaStoreClient, RecyclableClient.HADOOP_HIVE_METASTORE);
     }
 
     @Test
