@@ -16,7 +16,7 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.Map;
 
@@ -24,15 +24,10 @@ import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_AC
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
 
-public class AliyunCloudConfigurationFactory extends CloudConfigurationFactory {
-    private final Map<String, String> properties;
-
-    public AliyunCloudConfigurationFactory(Map<String, String> properties) {
-        this.properties = properties;
-    }
+public class AliyunCloudConfigurationProvider implements CloudConfigurationProvider {
 
     @Override
-    protected CloudConfiguration buildForStorage() {
+    public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
 
         AliyunCloudCredential aliyunCloudCredential = new AliyunCloudCredential(

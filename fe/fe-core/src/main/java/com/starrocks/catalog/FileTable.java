@@ -31,7 +31,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -82,7 +82,7 @@ public class FileTable extends Table {
             throw new DdlException("not supported format: " + format);
         }
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        fileProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
+        fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
     }
 
     public String getTableLocation() {

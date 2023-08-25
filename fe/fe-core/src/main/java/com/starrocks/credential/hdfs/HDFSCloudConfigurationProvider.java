@@ -16,7 +16,7 @@ package com.starrocks.credential.hdfs;
 
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudConfigurationProvider;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,15 +28,10 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME;
 
-public class HDFSCloudConfigurationFactory extends CloudConfigurationFactory {
-    private final Map<String, String> properties;
-
-    public HDFSCloudConfigurationFactory(Map<String, String> properties) {
-        this.properties = properties;
-    }
+public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
 
     @Override
-    protected CloudConfiguration buildForStorage() {
+    public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
         Map<String, String> haConfigurations = new HashMap<>(properties);
         haConfigurations.remove(HDFS_AUTHENTICATION);
