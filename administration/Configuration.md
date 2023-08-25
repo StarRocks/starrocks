@@ -223,7 +223,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | mysql_service_io_threads_num         | 4                 | MySQL 服务器中用于处理 I/O 事件的最大线程数。                |
 | mysql_nio_backlog_num                | 1024              | MySQL 服务器支持的 Backlog 队列长度。                        |
 | max_mysql_service_task_threads_num   | 4096              | MySQL 服务器中用于处理任务的最大线程数。                     |
-| mysql_server_version                 | 5.1.0             | MySQL 服务器的版本。修改该参数配置会影响以下场景中返回的版本号：1. `select version();` 2. Handshake packet 版本 3. 全局变量 `version` 的取值 (`show variables like 'versions';`) |
+| mysql_server_version                 | 5.1.0             | MySQL 服务器的版本。修改该参数配置会影响以下场景中返回的版本号：1. `select version();` 2. Handshake packet 版本 3. 全局变量 `version` 的取值 (`show variables like 'version';`) |
 | max_connection_scheduler_threads_num | 4096              | 连接调度器支持的最大线程数。                                 |
 | qe_max_connection                    | 1024              | FE 支持的最大连接数，包括所有用户发起的连接。                |
 | check_java_version                   | TRUE              | 检查已编译的 Java 版本与运行的 Java 版本是否兼容。<br>如果不兼容，则上报 Java 版本不匹配的异常信息，并终止启动。 |
