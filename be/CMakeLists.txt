@@ -982,6 +982,7 @@ install(FILES
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j2.properties
+    ${BASE_DIR}/../conf/udf_security.policy
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
