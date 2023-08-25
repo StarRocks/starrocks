@@ -34,6 +34,7 @@ import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -226,6 +227,7 @@ public class FileListRepoTest {
     }
 
     @Test
+    @Ignore("jvm crash FIXME(murphy)")
     public void testRepo() {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
@@ -335,6 +337,7 @@ public class FileListRepoTest {
     }
 
     @Test
+    @Ignore("jvm crash FIXME(murphy)")
     public void testDMLException() throws Exception {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
