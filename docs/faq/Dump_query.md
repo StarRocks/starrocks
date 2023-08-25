@@ -18,6 +18,7 @@ The query_dump interface returns the information that FE relies on when executin
 * Number of BEs
 * Statistics information (Min, Max values in a column)
 * Exception
+* Explain costs info
 
 To ensure data privacy, we desensitize the meta information such as database names, table names, column names, etc. We also utilize the desensitized metadata to rewrite the query statements.
 Meta information desensitization is enabled by default. If an exception occurs during the desensitization process, use the original info directly. If desensitization needs to be bypassed, you can add the "mock=false" parameter in the HTTP URI.
