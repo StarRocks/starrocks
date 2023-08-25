@@ -51,6 +51,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
+    seg_options.tablet_schema = options.tablet_schema;
     seg_options.fill_data_cache = options.fill_data_cache;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
