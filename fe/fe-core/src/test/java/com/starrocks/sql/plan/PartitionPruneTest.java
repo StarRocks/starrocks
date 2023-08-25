@@ -146,5 +146,9 @@ public class PartitionPruneTest extends PlanTestBase {
         sql = "select * from ptest where cast('  -111.12  ' as double) = k1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: CAST(1: k1 AS DOUBLE) = -111.12");
+
+        sql = "select * from ptest where cast('  -111 2  ' as int) = k1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: k1 = CAST('  -111 2  ' AS INT)");
     }
 }
