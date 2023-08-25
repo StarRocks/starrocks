@@ -68,6 +68,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -87,7 +88,7 @@ public class AggregationNode extends PlanNode {
     private String streamingPreaggregationMode = "auto";
 
     private boolean useSortAgg = false;
-    
+
     private boolean withLocalShuffle = false;
 
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
@@ -311,8 +312,8 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
+        if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
         if (!(expr instanceof SlotRef)) {
@@ -337,12 +338,14 @@ public class AggregationNode extends PlanNode {
             return false;
         }
 
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound(probeExpr, description, descTbl)) {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+        Function<Expr, Boolean> couldBoundChecker = couldBound(description, descTbl);
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBoundChecker),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
     @Override
