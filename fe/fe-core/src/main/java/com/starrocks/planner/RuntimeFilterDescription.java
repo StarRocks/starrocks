@@ -123,9 +123,6 @@ public class RuntimeFilterDescription {
     }
 
     public boolean canProbeUse(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
-            return false;
-        }
         if (!canAcceptFilter(node)) {
             return false;
         }
