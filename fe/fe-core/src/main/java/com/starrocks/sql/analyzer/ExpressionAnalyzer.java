@@ -1239,14 +1239,18 @@ public class ExpressionAnalyzer {
                     if (node.getChildren().size() == 0) {
                         throw new SemanticException(fnName + " should have at least one input", node.getPos());
                     }
-                    int start = 1;
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
-                        start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                    int start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
+                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                node.getPos());
+                    } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
+                        throw new SemanticException(fnName + " should have exact one output expressions before" +
+                                " [ORDER BY]", node.getPos());
                     }
                     for (int i = start; i < argumentTypes.length; ++i) {
-                        if (argumentTypes[i].isComplexType() || argumentTypes[i].isJsonType()) {
-                            throw new SemanticException(fnName + " can't support order by nested types, " +
-                                    "but " + i + "-th input is " + argumentTypes[i].toSql());
+                        if (!argumentTypes[i].canOrderBy()) {
+                            throw new SemanticException(fnName + " can't support order by the " + i +
+                                    "-th input with type of " + argumentTypes[i].toSql(), node.getPos());
                         }
                     }
                     break;
