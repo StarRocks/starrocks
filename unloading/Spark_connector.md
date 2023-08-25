@@ -152,9 +152,9 @@ Spark Connector Jar 包的命名格式如下：
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
 | starrocks.fenodes                    | 无                | StarRocks 集群中 FE 的 HTTP 地址，格式为 `<fe_host>:<fe_http_port>`。支持输入多个地址，使用逗号 (,) 分隔。 |
 | starrocks.table.identifier           | 无                | StarRocks 表的名称，格式为 `<database_name>.<table_name>`。   |
-| starrocks.request.retries            | 3                 | 向 StarRocks 发送请求的重试次数。                            |
-| starrocks.request.connect.timeout.ms | 30000             | 向 StarRocks 发送请求的连接超时时间。                        |
-| starrocks.request.read.timeout.ms    | 30000             | 向 StarRocks 发送请求的读取超时时间。                        |
+| starrocks.request.retries            | 3                 | Spark Connector 向 StarRocks 发送一个读请求的重试次数。                            |
+| starrocks.request.connect.timeout.ms | 30000             | 一个读请求的连接建立超时时间。                       |
+| starrocks.request.read.timeout.ms    | 30000             | 一个读请求读取 StarRocks 数据超时时间。|
 | starrocks.request.query.timeout.s    | 3600              | 从 StarRocks 查询数据的超时时间。默认超时时间为 1 小时。|
 | starrocks.request.tablet.size        | Integer.MAX_VALUE | 一个 Spark RDD 分区对应的 StarRocks Tablet 的个数。参数设置越小，生成的分区越多，Spark 侧的并行度也就越大，但与此同时会给 StarRocks 侧造成更大的压力。 |
 | starrocks.batch.size                 | 4096              | 单次从 BE 读取的最大行数。调大参数取值可减少 Spark 与 StarRocks 之间建立连接的次数，从而减轻网络延迟所带来的的额外时间开销。对于StarRocks 2.2及以后版本最小支持的batch size为4096，如果配置小于该值，则按4096处理 |
