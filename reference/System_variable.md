@@ -514,7 +514,7 @@ SELECT /*+ SET_VAR
 
 * version (global)
 
-  用于兼容 MySQL 客户端。无实际作用。
+  MySQL 服务器的版本。
 
 * version_comment (global)
 
