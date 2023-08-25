@@ -39,6 +39,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
@@ -133,11 +134,11 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         if (!(expr instanceof SlotRef)) {
             return Optional.empty();
         }
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
         List<Expr> newExprs = Lists.newArrayList();
@@ -155,14 +156,14 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
-        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
             // NOTE: This is necessary, when expr is partition_by_epxr because
             // partition_by_exprs may exist in JoinNode below the ProjectNode.
             return Optional.of(ImmutableList.of(exprs));
         }
         List<List<Expr>> candidatesOfSlotExprs =
-                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
@@ -174,12 +175,12 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound(probeExpr, description, descTbl)) {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
     // This functions is used by query cache to compute digest of fragments. for examples:

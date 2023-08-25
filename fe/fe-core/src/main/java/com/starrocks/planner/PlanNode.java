@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -747,20 +748,20 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * @param expr: the slot expr that need to find its candidate slot exprs.
      * @return List<Expr>: all the slot expr's candidate slot exprs.
      */
-    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
         // NOTE: No need to check expr is slot or not here, each node should implement its `candidatesOfSlotExpr` itself.
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
         return Optional.of(Lists.newArrayList(expr));
     }
 
-    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
-        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
             return Optional.empty();
         }
         List<List<Expr>> candidatesOfSlotExprs =
-                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
@@ -784,7 +785,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
 
         // rf be crossed exchange when partitionByExprs are slot refs and bound by the plan node.
-        return candidatesOfSlotExprs(partitionByExprs);
+        return candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr());
     }
 
     /**
@@ -821,23 +822,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
         }
 
-        boolean isBound = false;
-        if (probeExpr instanceof SlotRef && description.runtimeFilterType().equals(
-                RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
-            SlotRef slotRef = (SlotRef) probeExpr;
-            found:
-            for (TupleId tupleId : getTupleIds()) {
-                for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
-                    // TopN Filter only works in no-nullable column
-                    if (slot.getId().equals(slotRef.getSlotId()) && !slotRef.isNullable()) {
-                        isBound = true;
-                        break found;
-                    }
-                }
-            }
-        } else {
-            isBound = probeExpr.isBoundByTupleIds(getTupleIds());
-        }
+        boolean isBound = couldBound(probeExpr, description, descTbl);
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }
@@ -851,6 +836,31 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return true;
         }
         return false;
+    }
+    protected Function<Expr, Boolean> couldBound(RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
+        return (Expr expr) -> couldBound(expr ,rfDesc, descTbl);
+    }
+
+    protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
+        return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
+    }
+
+    protected boolean couldBound(Expr probeExpr, RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
+        if (probeExpr instanceof SlotRef &&
+                rfDesc.runtimeFilterType().equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
+            SlotRef slotRef = (SlotRef) probeExpr;
+            for (TupleId tupleId : getTupleIds()) {
+                for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
+                    // TopN Filter only works in no-nullable column
+                    if (slot.getId().equals(slotRef.getSlotId()) && !slotRef.isNullable()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } else {
+            return probeExpr.isBoundByTupleIds(getTupleIds());
+        }
     }
 
     private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,
