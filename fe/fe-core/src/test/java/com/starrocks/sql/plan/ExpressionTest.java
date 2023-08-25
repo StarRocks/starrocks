@@ -456,11 +456,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan, plan.contains(
-                "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                        +
-                        "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
-                        + "is_nullable:true"));
+        Assert.assertTrue(plan, plan.contains("scalar_fn:TScalarFunction(symbol:), " +
+                "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), " +
+                "has_nullable_child:false, is_nullable:true"));
     }
 
     @Test

@@ -508,7 +508,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         msg.node_id = id.asInt();
         msg.num_children = children.size();
         msg.limit = limit;
-        msg.setUse_vectorized(true);
         for (TupleId tid : tupleIds) {
             msg.addToRow_tuples(tid.asInt());
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));

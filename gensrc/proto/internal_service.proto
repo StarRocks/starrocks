@@ -274,6 +274,8 @@ message PTabletWriterCancelResult {
 };
 
 message PExecPlanFragmentRequest {
+    // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
 };
 
 message PTabletReaderOpenRequest {
