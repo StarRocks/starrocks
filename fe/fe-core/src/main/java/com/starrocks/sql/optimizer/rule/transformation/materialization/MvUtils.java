@@ -92,7 +92,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -483,7 +482,7 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
-        if (!new HashSet<>(targetItems).containsAll(srcItems)) {
+        if (!Sets.newHashSet(targetItems).containsAll(srcItems)) {
             return null;
         }
         targetItems.removeAll(srcItems);
@@ -1051,5 +1050,13 @@ public class MvUtils {
                 .max(Long::compareTo)
                 .filter(Objects::nonNull)
                 .orElse(System.currentTimeMillis());
+    }
+
+    public static boolean isSupportViewDelta(OptExpression optExpression) {
+        return getAllJoinOperators(optExpression).stream().allMatch(x -> isSupportViewDelta(x));
+    }
+
+    public static boolean isSupportViewDelta(JoinOperator joinOperator) {
+        return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 }

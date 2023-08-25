@@ -145,6 +145,19 @@ public class MaterializedViewRewriter {
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
+            // Q  : A JOIN B JOIN C JOIN D
+            // MV : A JOIN B JOIN C
+            // To fast rewrite, only need to check `A JOIN B JOIN C` pattern rather than
+            // `A JOIN B JOIN C JOIN D`.
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode()) {
+                for (OptExpression child : queryExpression.getInputs()) {
+                    final List<Table> childTables = MvUtils.getAllTables(child);
+                    if (Sets.newHashSet(childTables).contains(mvTables)) {
+                        return false;
+                    }
+                }
+            }
+
             // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
             boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
             boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
@@ -169,15 +182,20 @@ public class MaterializedViewRewriter {
                 return false;
             }
             // only consider query with most common tables to optimize performance
-            if (!queryTables.containsAll(materializationContext.getIntersectingTables())) {
+            // To avoid join reorder producing plan bomb, record query's max tables to be only matched.
+            // But if query contains non inner/left outer joins which cannot be used to view delta join,
+            // not use `intersectingTables` anymore.
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() &&
+                    !queryTables.containsAll(materializationContext.getIntersectingTables())) {
                 return false;
             }
-            if (!MvUtils.getAllJoinOperators(queryExpression).stream().allMatch(joinOperator ->
-                    joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
+
+            if (!MvUtils.isSupportViewDelta(queryExpression)) {
                 logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
                         "only support inner/left outer join type for now");
                 return false;
             }
+
             List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
             List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
             // there should be at least one same join type in mv scan descs for every query scan desc.
@@ -243,7 +261,7 @@ public class MaterializedViewRewriter {
                 // for outer join, we should check some extra conditions
                 boolean ret = checkJoinMatch(queryJoinType, queryExpr, mvExpr);
                 if (!ret) {
-                    logMVRewrite(mvRewriteContext, "join match check failed, joinType: %s", queryJoinType);
+                    logMVRewrite(mvRewriteContext, "join match check failed, joinType: {}", queryJoinType);
                 }
                 return ret;
             }
@@ -337,7 +355,7 @@ public class MaterializedViewRewriter {
         if (!isEqual) {
             logMVRewrite(
                     mvRewriteContext,
-                    "join child predicate not matched, queryPredicates: %s, mvPredicates: %s, index: %s",
+                    "join child predicate not matched, queryPredicates: {}, mvPredicates: {}, index: {}",
                     queryPredicates, mvPredicates, index);
         }
         return isEqual;
@@ -1089,8 +1107,8 @@ public class MaterializedViewRewriter {
         final PredicateSplit compensationPredicates = getCompensationPredicatesQueryToView(columnRewriter,
                 rewriteContext, compensationJoinColumns);
         if (compensationPredicates == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite query failed: cannot get compensation predicates from MV, " +
-                    "Try to use union rewrite.");
+            logMVRewrite(mvRewriteContext, "Cannot compensate predicates from mv rewrite, " +
+                    "try to use union rewrite.");
             if (!optimizerContext.getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
                 return null;
             }
@@ -1899,12 +1917,11 @@ public class MaterializedViewRewriter {
 
     private MatchMode getMatchMode(List<Table> queryTables, List<Table> mvTables) {
         MatchMode matchMode = MatchMode.NOT_MATCH;
-        if (queryTables.size() == mvTables.size() && new HashSet<>(queryTables).containsAll(mvTables)) {
+        if (queryTables.size() == mvTables.size() && Sets.newHashSet(queryTables).containsAll(mvTables)) {
             matchMode = MatchMode.COMPLETE;
         } else if (queryTables.size() > mvTables.size() && queryTables.containsAll(mvTables)) {
-            // TODO: query delta
             matchMode = MatchMode.QUERY_DELTA;
-        } else if (queryTables.size() < mvTables.size() && mvTables.containsAll(queryTables)) {
+        } else if (queryTables.size() < mvTables.size() && Sets.newHashSet(mvTables).containsAll(queryTables)) {
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
@@ -2232,7 +2249,7 @@ public class MaterializedViewRewriter {
         final ScalarOperator compensationEqualPredicate =
                 getCompensationEqualPredicate(sourceEquivalenceClasses, targetEquivalenceClasses);
         if (compensationEqualPredicate == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite query failed: get equal compensation predicates failed");
+            logMVRewrite(mvRewriteContext, "Compensate equal predicates failed");
             return null;
         }
 
@@ -2242,7 +2259,7 @@ public class MaterializedViewRewriter {
         ScalarOperator compensationPr =
                 getCompensationPredicate(srcPr, targetPr, columnRewriter, true, isQueryToMV);
         if (compensationPr == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite query failed: get range compensation predicates failed," +
+            logMVRewrite(mvRewriteContext, "Compensate range predicates failed," +
                     "srcPr:{}, targetPr:{}", MvUtils.toString(srcPr), MvUtils.toString(targetPr));
             return null;
         }
@@ -2264,7 +2281,7 @@ public class MaterializedViewRewriter {
         ScalarOperator compensationPu =
                 getCompensationPredicate(srcPu, targetPu, columnRewriter, false, isQueryToMV);
         if (compensationPu == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite query failed: get residual compensation predicates failed," +
+            logMVRewrite(mvRewriteContext, "Compensate residual predicates failed," +
                     "srcPr:{}, targetPr:{}", MvUtils.toString(srcPu), MvUtils.toString(targetPu));
             return null;
         }
