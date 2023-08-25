@@ -1580,6 +1580,21 @@ public class CreateTableTest {
                                 "                DISTRIBUTED BY HASH(k1)\n" +
                                 "    PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
                 ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Only support partition is date type for storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.t_partition_table_only_support_date (\n" +
+                                "                        `k1` int, v1 int, v2 int\n" +
+                                "                    )\n" +
+                                "                    DUPLICATE KEY(k1)\n" +
+                                "                    PARTITION BY range (k1) (\n" +
+                                "                       PARTITION p1 VALUES less than (\"20200101\"),\n" +
+                                "                       PARTITION p2 VALUES less than (\"20210101\")\n" +
+                                "                    )\n" +
+                                "                    DISTRIBUTED BY HASH(k1)\n" +
+                                " PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
+                ));
     }
 
 

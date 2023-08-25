@@ -33,6 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
@@ -357,6 +358,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                     }
                     if (partitionInfo instanceof ListPartitionInfo) {
                         throw new DdlException("List partition table does not support storage medium cool down currently.");
+                    }
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                        if (partitionColumns.size() > 1) {
+                            throw new DdlException("Multi-column range partition table " +
+                                    "does not support storage medium cool down currently.");
+                        }
+                        Column column = partitionColumns.get(0);
+                        if (!column.getType().getPrimitiveType().isDateType()) {
+                            throw new DdlException("Only support partition is date type for" +
+                                    " storage medium cool down currently.");
+                        }
                     }
                 }
             }
