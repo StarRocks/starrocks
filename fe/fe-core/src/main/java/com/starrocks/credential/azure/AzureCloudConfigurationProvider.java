@@ -16,7 +16,7 @@ package com.starrocks.credential.azure;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudConfigurationProvider;
 import com.starrocks.credential.CredentialUtil;
 
 import java.util.Map;
@@ -38,19 +38,13 @@ import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SA
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
 
-public class AzureCloudConfigurationFactory extends CloudConfigurationFactory {
-
-    private final Map<String, String> properties;
+public class AzureCloudConfigurationProvider implements CloudConfigurationProvider {
 
     // Used to retrieve azure load path from configuration map
     public static final String AZURE_PATH_KEY = "azure_path_key";
 
-    public AzureCloudConfigurationFactory(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
     @Override
-    protected CloudConfiguration buildForStorage() {
+    public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
 
         AzureStoragePath azureStoragePath = tryGetAzureStoragePath(properties);
