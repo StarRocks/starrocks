@@ -195,7 +195,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
                         if (fieldData == null) {
                             appendData(i, null);
                         } else {
-                            ColumnValue fieldValue = new PaimonColumnValue(fieldData);
+                            ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
                             appendData(i, fieldValue);
                         }
                     }
