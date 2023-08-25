@@ -49,7 +49,7 @@ include "RuntimeFilter.thrift"
 
 // constants for function version
 enum TFunctionVersion {
-    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
 }
 
 enum TQueryType {
@@ -211,6 +211,7 @@ struct TQueryOptions {
   // used to identify which operators allow spill, only meaningful when enable_spill=true
   96: optional i64 spillable_operator_mask;
 
+  100: optional i64 group_concat_max_len = 1024;
   101: optional i64 runtime_profile_report_interval = 30;
 
   102: optional bool enable_collect_table_level_scan_stats;

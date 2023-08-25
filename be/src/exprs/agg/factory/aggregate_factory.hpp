@@ -114,6 +114,10 @@ public:
         return std::make_shared<ArrayAggAggregateFunctionV2>();
     }
 
+    static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() {
+        return std::make_shared<GroupConcatAggregateFunctionV2>();
+    }
+
     template <LogicalType LT>
     static auto MakeMaxAggregateFunction();
 

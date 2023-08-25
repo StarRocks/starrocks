@@ -121,30 +121,18 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
-            if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
+            if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
-                        "group_concat requires one or two parameters: " + functionCallExpr.toSql(),
+                        "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
                         functionCallExpr.getPos());
             }
 
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("group_concat does not support DISTINCT", functionCallExpr.getPos());
-            }
-
-            Expr arg0 = functionCallExpr.getChild(0);
-            if (!arg0.getType().isStringType() && !arg0.getType().isNull()) {
+            int sepPos = functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
+            Expr arg1 = functionCallExpr.getChild(sepPos);
+            if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
-                        "group_concat requires first parameter to be of getType() STRING: " + functionCallExpr.toSql(),
-                        arg0.getPos());
-            }
-
-            if (functionCallExpr.getChildren().size() == 2) {
-                Expr arg1 = functionCallExpr.getChild(1);
-                if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
-                    throw new SemanticException(
-                            "group_concat requires second parameter to be of getType() STRING: " +
-                                    functionCallExpr.toSql(), arg1.getPos());
-                }
+                        "group_concat requires separator to be of getType() STRING: " +
+                                functionCallExpr.toSql(), arg1.getPos());
             }
             return;
         }

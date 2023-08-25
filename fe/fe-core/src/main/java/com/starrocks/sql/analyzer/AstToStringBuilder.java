@@ -897,11 +897,24 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
-            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-                sb.append(visit(node.getChild(0)));
+            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                int end = 1;
+                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                    end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
+                }
+                for (int i = 0; i < end; ++i) {
+                    if (i != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(visit(node.getChild(i)));
+                }
                 List<OrderByElement> sortClause = fnParams.getOrderByElements();
                 if (sortClause != null) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
+                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
+                    sb.append(" SEPARATOR ");
+                    sb.append(visit(node.getChild(end)));
                 }
                 sb.append(")");
             } else {
