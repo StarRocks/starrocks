@@ -100,7 +100,7 @@ The desensitized data is returned in JSON format.
     },
     "table_row_count": {
       "db_mock_000.tbl_mock_001": {
-        "lineitem": 600000000
+        "tbl_mock_001": 600000000
       }
     },
     "column_statistics": {
