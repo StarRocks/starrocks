@@ -36,11 +36,11 @@ public class RecyclableClient {
     private final IMetaStoreClient hiveClient;
 
     // Maximum number of idle metastore connections in the connection pool at any point.
-    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
-    private static final String DLF_HIVE_METASTORE = "dlf";
-    private static final String GLUE_HIVE_METASTORE = "glue";
-
+    static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
+    static final String DLF_HIVE_METASTORE = "dlf";
+    static final String GLUE_HIVE_METASTORE = "glue";
+    static final String HADOOP_HIVE_METASTORE = "hadoop";
 
     private RecyclableClient(HiveConf conf) throws MetaException {
         if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
@@ -103,6 +103,18 @@ public class RecyclableClient {
     public static int size() {
         synchronized (CLIENT_POOL_LOCK) {
             return CLIENT_POOL.size();
+        }
+    }
+
+    public static void clear() {
+        synchronized (CLIENT_POOL_LOCK) {
+            for (; ; ) {
+                RecyclableClient client = CLIENT_POOL.poll();
+                if (client == null) {
+                    break;
+                }
+                client.close();
+            }
         }
     }
 }

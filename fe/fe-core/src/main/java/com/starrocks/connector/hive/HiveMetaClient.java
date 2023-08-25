@@ -86,6 +86,9 @@ public class HiveMetaClient {
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.getHiveClient().getClass().getDeclaredMethod(methodName, argClasses);
+            if (client == null || client.getHiveClient() == null) {
+                System.out.println("client is null or client is null");
+            }
             return (T) method.invoke(client.getHiveClient(), args);
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
