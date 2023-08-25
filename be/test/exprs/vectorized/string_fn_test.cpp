@@ -640,10 +640,10 @@ PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
             columns.push_back(src_const);
             columns.push_back(delim_const);
 
-            ctx->set_constant_columns(columns);
+            ctx->impl()->set_constant_columns(columns);
             ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                                 .ok());
-            ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+            ColumnPtr result = StringFunctions::split(ctx.get(), columns);
             ASSERT_TRUE(
                     StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
