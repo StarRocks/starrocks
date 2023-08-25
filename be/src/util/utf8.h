@@ -104,7 +104,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 // is to say, counting bytes which do not match 10xx_xxxx pattern.
 // All 0xxx_xxxx, 110x_xxxx, 1110_xxxx and 1111_0xxx are greater than 1011_1111 when use int8_t arithmetic,
 // so just count bytes greater than 1011_1111 in a byte string as the result of utf8_length.
-static int utf8_len(const char* begin, const char* end) {
+static inline int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
 #if defined(__AVX2__)
@@ -139,6 +139,53 @@ static int utf8_len(const char* begin, const char* end) {
         len += static_cast<int8_t>(*p) > static_cast<int8_t>(0xBF);
     }
     return len;
+}
+
+// Modify from https://github.com/lemire/fastvalidate-utf-8/blob/master/include/simdasciicheck.h
+static inline bool validate_ascii_fast(const char* src, size_t len) {
+#ifdef __AVX2__
+    size_t i = 0;
+    __m256i has_error = _mm256_setzero_si256();
+    if (len >= 32) {
+        for (; i <= len - 32; i += 32) {
+            __m256i current_bytes = _mm256_loadu_si256((const __m256i*)(src + i));
+            has_error = _mm256_or_si256(has_error, current_bytes);
+        }
+    }
+    int error_mask = _mm256_movemask_epi8(has_error);
+
+    char tail_has_error = 0;
+    for (; i < len; i++) {
+        tail_has_error |= src[i];
+    }
+    error_mask |= (tail_has_error & 0x80);
+
+    return !error_mask;
+#elif defined(__SSE2__)
+    size_t i = 0;
+    __m128i has_error = _mm_setzero_si128();
+    if (len >= 16) {
+        for (; i <= len - 16; i += 16) {
+            __m128i current_bytes = _mm_loadu_si128((const __m128i*)(src + i));
+            has_error = _mm_or_si128(has_error, current_bytes);
+        }
+    }
+    int error_mask = _mm_movemask_epi8(has_error);
+
+    char tail_has_error = 0;
+    for (; i < len; i++) {
+        tail_has_error |= src[i];
+    }
+    error_mask |= (tail_has_error & 0x80);
+
+    return !error_mask;
+#else
+    char tail_has_error = 0;
+    for (size_t i = 0; i < len; i++) {
+        tail_has_error |= src[i];
+    }
+    return !(tail_has_error & 0x80);
+#endif
 }
 
 } // namespace vectorized
