@@ -140,7 +140,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(result, Type.DATETIME);
     }
 
-    @Ignore
+    @Test
     public void testConvertArray() {
         ArrayType paimonType = new ArrayType(new SmallIntType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -149,7 +149,7 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.SMALLINT, srType.getItemType());
     }
 
-    @Ignore
+    @Test
     public void testConvertMap() {
         MapType paimonType = new MapType(new VarCharType(20), new TimestampType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
