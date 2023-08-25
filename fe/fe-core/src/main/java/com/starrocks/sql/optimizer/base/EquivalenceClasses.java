@@ -79,6 +79,10 @@ public class EquivalenceClasses implements Cloneable {
         }
     }
 
+    public boolean containsKey(ColumnRefOperator column) {
+        return columnToEquivalenceClass.containsKey(column);
+    }
+
     public Set<ColumnRefOperator> getEquivalenceClass(ColumnRefOperator column) {
         return columnToEquivalenceClass.get(column);
     }
