@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 
