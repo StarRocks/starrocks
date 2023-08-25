@@ -571,7 +571,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
         } else {
             for (int i = 0; i < size; i++) {
                 // overflow.
-                if (_type.len > 0 && data->length[i] > _type.len) {
+                if (type().len > 0 && data->length[i] > type().len) {
                     // can not accept null, so we have to discard it.
                     filter[i] = 0;
                     if (!reported) {
