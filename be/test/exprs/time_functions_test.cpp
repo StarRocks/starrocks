@@ -457,6 +457,110 @@ TEST_F(TimeFunctionsTest, dateAndDaysDiffTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, dateDiffTest) {
+    // constant type and non-constant lhs and rhs.
+    {
+        using CaseType = std::tuple<std::string, std::vector<TimestampValue>, std::vector<TimestampValue>, std::string>;
+        std::vector<CaseType> cases{
+                {"day",
+                 {TimestampValue::create(2012, 8, 30, 0, 0, 0), TimestampValue::create(2012, 8, 30, 0, 0, 1),
+                  TimestampValue::create(2012, 9, 1, 0, 0, 1), TimestampValue::create(2012, 8, 23, 0, 0, 5),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 25), TimestampValue::create(2020, 6, 20, 13, 48, 30)},
+                 {TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 30), TimestampValue::create(2020, 6, 20, 13, 48, 25)},
+                 "[5, 6, 8, 0, 0, 0]"},
+                {"month",
+                 {TimestampValue::create(2012, 8, 30, 0, 0, 0), TimestampValue::create(2012, 8, 30, 0, 0, 1),
+                  TimestampValue::create(2012, 9, 1, 0, 0, 1), TimestampValue::create(2012, 8, 23, 0, 0, 5),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 25), TimestampValue::create(2020, 6, 20, 13, 48, 30)},
+                 {TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 30), TimestampValue::create(2020, 6, 20, 13, 48, 25)},
+                 "[0, 0, 0, 0, 0, 0]"},
+        };
+
+        for (const auto& [type_value, lhs_values, rhs_values, expected_out] : cases) {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            Columns columns;
+
+            auto type_col = ConstColumn::create(BinaryColumn::create());
+            auto lhs_col = TimestampColumn::create();
+            auto rhs_col = TimestampColumn::create();
+
+            type_col->append_datum(Slice(type_value));
+            for (const auto& v : lhs_values) {
+                lhs_col->append_datum(v);
+            }
+            for (const auto& v : rhs_values) {
+                rhs_col->append_datum(v);
+            }
+
+            columns.clear();
+            columns.push_back(type_col);
+            columns.push_back(lhs_col);
+            columns.push_back(rhs_col);
+            ctx->set_constant_columns(columns);
+
+            ASSERT_TRUE(TimeFunctions::datediff_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            ColumnPtr result = TimeFunctions::datediff(ctx.get(), columns).value();
+            ASSERT_TRUE(
+                    TimeFunctions::datediff_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+            ASSERT_EQ(expected_out, result->debug_string());
+        }
+    }
+
+    // non-constant type, lhs and rhs.
+    {
+        using CaseType = std::tuple<std::vector<std::string>, std::vector<TimestampValue>, std::vector<TimestampValue>,
+                                    std::string>;
+        std::vector<CaseType> cases{
+                {{"day", "day", "month", "day", "month", "month"},
+                 {TimestampValue::create(2012, 8, 30, 0, 0, 0), TimestampValue::create(2012, 8, 30, 0, 0, 1),
+                  TimestampValue::create(2012, 9, 1, 0, 0, 1), TimestampValue::create(2012, 8, 23, 0, 0, 5),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 25), TimestampValue::create(2020, 6, 20, 13, 48, 30)},
+                 {TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2012, 8, 24, 0, 0, 1), TimestampValue::create(2012, 8, 24, 0, 0, 1),
+                  TimestampValue::create(2020, 6, 20, 13, 48, 30), TimestampValue::create(2020, 6, 20, 13, 48, 25)},
+                 "[5, 6, 0, 0, 0, 0]"}};
+
+        for (const auto& [type_values, lhs_values, rhs_values, expected_out] : cases) {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            Columns columns;
+
+            auto type_col = BinaryColumn::create();
+            auto lhs_col = TimestampColumn::create();
+            auto rhs_col = TimestampColumn::create();
+
+            for (const auto& v : type_values) {
+                type_col->append_datum(Slice(v));
+            }
+            for (const auto& v : lhs_values) {
+                lhs_col->append_datum(v);
+            }
+            for (const auto& v : rhs_values) {
+                rhs_col->append_datum(v);
+            }
+
+            columns.clear();
+            columns.push_back(type_col);
+            columns.push_back(lhs_col);
+            columns.push_back(rhs_col);
+            ctx->set_constant_columns(columns);
+
+            ASSERT_TRUE(TimeFunctions::datediff_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            ColumnPtr result = TimeFunctions::datediff(ctx.get(), columns).value();
+            ASSERT_TRUE(
+                    TimeFunctions::datediff_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+            ASSERT_EQ(expected_out, result->debug_string());
+        }
+    }
+}
+
 TEST_F(TimeFunctionsTest, timeDiffTest) {
     auto tc1 = TimestampColumn::create();
     auto tc2 = TimestampColumn::create();
