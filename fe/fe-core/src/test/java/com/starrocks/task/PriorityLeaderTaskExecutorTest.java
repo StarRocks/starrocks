@@ -97,10 +97,16 @@ public class PriorityLeaderTaskExecutorTest {
         Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
         Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
 
+        // set from 1 to 2
         int newThreadNum = THREAD_NUM + 1;
         executor.setPoolSize(newThreadNum);
         Assert.assertEquals(newThreadNum, executor.getCorePoolSize());
         Assert.assertEquals(newThreadNum, priorityExecutor.getMaximumPoolSize());
+
+        // set from 2 to 1
+        executor.setPoolSize(THREAD_NUM);
+        Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
+        Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
     }
 
     private class TestLeaderTask extends PriorityLeaderTask {
