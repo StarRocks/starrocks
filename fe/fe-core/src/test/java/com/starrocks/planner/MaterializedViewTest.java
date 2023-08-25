@@ -3999,6 +3999,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "GROUP BY fplat_form_itg2_name;";
                     testRewriteOK(mv, query);
         }
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
     }
 
     @Test
@@ -4279,5 +4281,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "GROUP BY fplat_form_itg2_name;";
             testRewriteOK(mv, query);
         }
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
     }
 }
