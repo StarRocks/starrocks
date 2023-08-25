@@ -55,6 +55,10 @@ public class PartitionExprAnalyzer {
                             subStrType, Function.CompareMode.IS_IDENTICAL);
                     targetColType = Type.VARCHAR;
                 }
+            } else if (functionName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                Type[] str2DateType = {targetColType, Type.VARCHAR};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        str2DateType, Function.CompareMode.IS_IDENTICAL);
             }
             if (builtinFunction == null) {
                 String msg = String.format("Unsupported partition type %s for function %s", targetColType,
