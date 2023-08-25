@@ -151,8 +151,8 @@ The following parameters apply to all three reading methods: Spark SQL, Spark Da
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
 | starrocks.fenodes                    | None              | The HTTP URL of the FE in your StarRocks cluster. Format `<fe_host>:<fe_http_port>`. You can specify multiple URLs, which must be separated by a comma (,). |
 | starrocks.table.identifier           | None              | The name of the StarRocks table. Format: `<database_name>.<table_name>`. |
-| starrocks.request.retries            | 3                 | The maximum number of times that the Spark connector can retry to send a read request o StarRocks. |
-| starrocks.request.connect.timeout.ms | 30000             | The maximum amount of time after which a read request connecting to StarRocks times out.|
+| starrocks.request.retries            | 3                 | The maximum number of times that the Spark connector can retry to send a read request to StarRocks. |
+| starrocks.request.connect.timeout.ms | 30000             | The maximum amount of time after which the request for establishing connections with StarRocks times out.|
 | starrocks.request.read.timeout.ms    | 30000             | The maximum amount of time after which a read request waiting for data from StarRocks times out.  |
 | starrocks.request.query.timeout.s    | 3600              | The maximum amount of time after which a data query request sent to StarRocks times out. The default timeout period is 1 hour.|
 | starrocks.request.tablet.size        | Integer.MAX_VALUE | The number of StarRocks tablets grouped into each Spark RDD partition. A smaller value of this parameter indicates that a larger number of Spark RDD partitions will be generated. A larger number of Spark RDD partitions means higher parallelism on Spark but greater pressure on StarRocks. |
