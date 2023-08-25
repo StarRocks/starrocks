@@ -179,27 +179,29 @@ public class ShowMetaInfoAction extends RestBaseAction {
             List<Table> tables = db.getTables();
             for (int j = 0; j < tables.size(); j++) {
                 Table table = tables.get(j);
-                if (table.getType() != TableType.OLAP) {
-                    continue;
+                if (table.isNativeTableOrMaterializedView()) {
+                    // in implementation, cloud native table is a subtype of olap table
+                    totalSize += calculateSizeForOlapTable((OlapTable) table);
                 }
-
-                OlapTable olapTable = (OlapTable) table;
-                long tableSize = 0;
-                for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                    long partitionSize = 0;
-                    for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        long indexSize = 0;
-                        for (Tablet tablet : mIndex.getTablets()) {
-                            indexSize += tablet.getDataSize(true);
-                        } // end for tablets
-                        partitionSize += indexSize;
-                    } // end for tables
-                    tableSize += partitionSize;
-                } // end for partitions
-                totalSize += tableSize;
-            } // end for tables
-            result.put(dbName, Long.valueOf(totalSize));
+            }
+            result.put(dbName, totalSize);
         } // end for dbs
         return result;
+    }
+
+    private long calculateSizeForOlapTable(OlapTable olapTable) {
+        long tableSize = 0;
+        for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
+            long partitionSize = 0;
+            for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                long indexSize = 0;
+                for (Tablet tablet : mIndex.getTablets()) {
+                    indexSize += tablet.getDataSize(true);
+                } // end for tablets
+                partitionSize += indexSize;
+            } // end for indexes
+            tableSize += partitionSize;
+        } // end for tables
+        return tableSize;
     }
 }
