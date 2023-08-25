@@ -170,22 +170,16 @@ private:
     // to reduce the number of swap operations when maintaing the ordering property
     size_t _min_index() {
         DCHECK_EQ(counter_num, unused_idx);
-        const auto min_count = counters[0].count;
-        size_t left = 0, right = unused_idx - 1;
-        while (left < right) {
-            size_t mid = left + ((right - left) >> 1);
-            if (counters[mid].count == min_count) {
-                left = mid + 1;
-            } else {
-                right = mid;
-            }
-        }
-        if (counters[left].count == min_count) {
-            return left;
-        }
-        DCHECK_GT(left, 0);
-        return left - 1;
+        const auto& min_counter = counters[0];
+
+        // Using std::upper_bound to find the first element greater than min_count
+        auto it = std::upper_bound(counters.begin(), counters.begin() + unused_idx, min_counter, cmp);
+
+        size_t boundary = std::distance(counters.begin(), it);
+        DCHECK_GT(boundary, 0);
+        return boundary - 1;
     }
+
     // Maintain the ordering of the counters, counters with smaller count are put in the front
     // This is used to speed up the lookup of the min counter
     void _maintain_ordering(const size_t idx) {
@@ -357,7 +351,7 @@ public:
             for (size_t i = 0; i < src_nullable_column->size(); ++i) {
                 state.reset(kv.first, kv.second);
                 if (src_nullable_column->is_null(i)) {
-                    state.template process_null(1);
+                    state.process_null(1);
                 } else {
                     state.template process<false>(ctx->mem_pool(), src_column->get_data()[i], 1, false);
                 }
