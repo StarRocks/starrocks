@@ -270,7 +270,7 @@ public class PartitionBasedMvRefreshProcessorTest {
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`jdbc_parttbl_mv`\n" +
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`jdbc_parttbl_mv0`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`d`)\n" +
                         "DISTRIBUTED BY HASH(`a`) BUCKETS 10\n" +
@@ -279,7 +279,15 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
+                        "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;")
+                .withMaterializedView("create materialized view jdbc_parttbl_mv1 " +
+                        "partition by ss " +
+                        "distributed by hash(a) buckets 10 " +
+                        "REFRESH DEFERRED MANUAL " +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ") " +
+                        "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
 
         new MockUp<StmtExecutor>() {
             @Mock
@@ -1170,7 +1178,38 @@ public class PartitionBasedMvRefreshProcessorTest {
     @Test
     public void testRangePartitionRefreshWithJDBCTable() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv"));
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv0"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(PARTITION_START, "20230801");
+        taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Collection<Partition> partitions = materializedView.getPartitions();
+        Assert.assertEquals(3, partitions.size());
+        Assert.assertNotNull(materializedView.getPartition("P20230801"));
+        Assert.assertNotNull(materializedView.getPartition("P20230802"));
+        Assert.assertNotNull(materializedView.getPartition("P20230803"));
+
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.addPartitions();
+        taskRun.executeTaskRun();
+        Collection<Partition> incrementalPartitions = materializedView.getPartitions();
+        Assert.assertEquals(4, incrementalPartitions.size());
+        Assert.assertNotNull(materializedView.getPartition("P20230802"));
+        Assert.assertNotNull(materializedView.getPartition("P20230803"));
+        Assert.assertNotNull(materializedView.getPartition("P20230804"));
+        Assert.assertNotNull(materializedView.getPartition("P20230805"));
+    }
+
+    @Test
+    public void testRangePartitionRefreshWithJDBCTableUseStr2Date() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv1"));
         HashMap<String, String> taskRunProperties = new HashMap<>();
         taskRunProperties.put(PARTITION_START, "20230801");
         taskRunProperties.put(TaskRun.PARTITION_END, "20230805");

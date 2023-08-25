@@ -50,6 +50,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
@@ -64,6 +65,8 @@ import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -581,7 +584,6 @@ public class PartitionUtil {
         return partition.get(position, (Class<T>) javaClass);
     }
 
-
     public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset) throws AnalysisException {
         if (expr instanceof DateLiteral) {
             DateLiteral lowerDate = (DateLiteral) expr;
@@ -591,6 +593,17 @@ public class PartitionUtil {
             return new IntLiteral(intLiteral.getLongValue() + offset);
         } else if (expr instanceof MaxLiteral) {
             return MaxLiteral.MAX_VALUE;
+        } else if (expr instanceof StringLiteral) {
+            StringLiteral lowerString = (StringLiteral) expr;
+            //如果可以转成时间，转成时间返回
+            try {
+                DateTimeFormatter formatter = DateUtils.probeFormat(lowerString.getStringValue());
+                LocalDateTime lowerDateTime = DateUtils.parseStringWithDefaultHSM(lowerString.getStringValue(), formatter);
+                return new StringLiteral(lowerDateTime.plusDays(offset).format(formatter));
+            } catch (Exception e) {
+                LOG.info("Problem converting string to time, returning string.");
+                return new StringLiteral(lowerString.getStringValue());
+            }
         } else {
             return null;
         }

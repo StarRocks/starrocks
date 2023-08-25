@@ -814,6 +814,28 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testPartitionWithFunctionInUseStr2Date() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(a) buckets 10 " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+        try {
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ExpressionPartitionDesc partitionExpDesc = createMaterializedViewStatement.getPartitionExpDesc();
+            Assert.assertFalse(partitionExpDesc.isFunction());
+            Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
+            Assert.assertEquals("ss", partitionExpDesc.getSlotRef().getColumnName());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
     public void testPartitionWithFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',ss) " +
