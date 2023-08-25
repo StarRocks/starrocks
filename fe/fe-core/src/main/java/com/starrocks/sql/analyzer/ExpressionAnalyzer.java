@@ -967,7 +967,7 @@ public class ExpressionAnalyzer {
                 fn = fn.copy();
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -984,6 +984,9 @@ public class ExpressionAnalyzer {
                 Type[] argsTypes = new Type[argumentTypes.length];
                 for (int i = 0; i < argumentTypes.length; ++i) {
                     argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
+                        argsTypes[i] = Type.VARCHAR;
+                    }
                 }
                 fn.setArgsType(argsTypes); // as accepting various types
                 ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
@@ -993,7 +996,20 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                    fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                } else {
+                    boolean outputConst = true;
+                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
+                        if (!node.getChild(i).isConstant()) {
+                            outputConst = false;
+                            break;
+                        }
+                    }
+                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                            (!isAscOrder.isEmpty() || outputConst));
+                    fn.setRetType(Type.VARCHAR);
+                }
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
@@ -1216,10 +1232,18 @@ public class ExpressionAnalyzer {
                                 node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
                     break;
+                case FunctionSet.GROUP_CONCAT:
                 case FunctionSet.ARRAY_AGG: {
-                    for (int i = 1; i < argumentTypes.length; ++i) {
-                        if (argumentTypes[i].isComplexType()) {
-                            throw new SemanticException("array_agg can't support order by nested types, " +
+                    if (node.getChildren().size() == 0) {
+                        throw new SemanticException(fnName + " should have at least one input", node.getPos());
+                    }
+                    int start = 1;
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                        start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                    }
+                    for (int i = start; i < argumentTypes.length; ++i) {
+                        if (argumentTypes[i].isComplexType() || argumentTypes[i].isJsonType()) {
+                            throw new SemanticException(fnName + " can't support order by nested types, " +
                                     "but " + i + "-th input is " + argumentTypes[i].toSql());
                         }
                     }

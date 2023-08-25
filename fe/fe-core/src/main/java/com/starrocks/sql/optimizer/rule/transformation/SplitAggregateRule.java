@@ -317,6 +317,8 @@ public class SplitAggregateRule extends TransformationRule {
                     fnCall.getFunction(), fnCall.getChild(0).getType());
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
+        } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+            return fnCall;
         }
         return null;
     }
@@ -599,8 +601,8 @@ public class SplitAggregateRule extends TransformationRule {
             ColumnRefOperator column = entry.getKey();
             CallOperator aggregation = entry.getValue();
             CallOperator callOperator;
+            Type intermediateType = getIntermediateType(aggregation);
             if (!aggregation.isDistinct()) {
-                Type intermediateType = getIntermediateType(aggregation);
                 List<ScalarOperator> arguments =
                         Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
                                 aggregation.isNullable()));
@@ -633,7 +635,8 @@ public class SplitAggregateRule extends TransformationRule {
                             Lists.newArrayList(newChildren), fn);
                 }
                 // Remove distinct
-                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(),
+                callOperator = new CallOperator(aggregation.getFnName(), aggType.isAnyGlobal() ?
+                        aggregation.getType() : intermediateType,
                         aggregation.getChildren(), aggregation.getFunction());
             }
             newAggregationMap.put(column, callOperator);
