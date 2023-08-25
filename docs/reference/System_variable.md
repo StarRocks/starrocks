@@ -588,7 +588,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * version (global)
 
-  Used for MySQL client compatibility. No practical usage.
+  The MySQL server version returned to the client.
 
 * version_comment (global)
 
