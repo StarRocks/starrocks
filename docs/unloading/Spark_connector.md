@@ -145,7 +145,6 @@ This section describes the parameters you need to configure when you use the Spa
 
 ### Common parameters
 
-
 The following parameters apply to all three reading methods: Spark SQL, Spark DataFrame, and Spark RDD.
 
 | Parameter                            | Default value     | Description                                                    |
