@@ -60,8 +60,6 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
-    public IcebergAwsClientFactory() {
-    }
 
     private AwsProperties awsProperties;
 

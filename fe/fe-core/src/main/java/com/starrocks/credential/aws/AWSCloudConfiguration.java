@@ -105,7 +105,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     @Override
     public String getCredentialString() {
         return "AWSCloudConfiguration{" +
-                "awsCloudCredential=" + awsCloudCredential +
+                "awsCloudCredential=" + awsCloudCredential.getCredentialString() +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +
                 ", enableSSL=" + enableSSL +
                 '}';

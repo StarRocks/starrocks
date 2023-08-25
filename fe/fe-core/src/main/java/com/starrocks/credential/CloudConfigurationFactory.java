@@ -14,53 +14,48 @@
 
 package com.starrocks.credential;
 
+import com.google.common.collect.ImmutableList;
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
-import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
-import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
-import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
-import com.starrocks.credential.hdfs.HDFSCloudConfigurationFactory;
+import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
+import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
+import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsProperties;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public abstract class CloudConfigurationFactory {
+public class CloudConfigurationFactory {
+
+    static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
+            new AWSCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider());
+
+
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
-        CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
-        CloudConfiguration cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new AzureCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new GCPCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new AliyunCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
-        }
-
-        factory = new HDFSCloudConfigurationFactory(properties);
-        cloudConfiguration = factory.buildForStorage();
-        if (cloudConfiguration != null) {
-            return cloudConfiguration;
+        for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+            CloudConfiguration cloudConfiguration = factory.build(properties);
+            if (cloudConfiguration != null) {
+                return cloudConfiguration;
+            }
         }
 
         return buildDefaultCloudConfiguration();
+    }
+
+    public static AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
+        AWSCloudConfigurationProvider awsCloudConfigurationProvider =
+                (AWSCloudConfigurationProvider) cloudConfigurationFactoryChain.get(0);
+        return awsCloudConfigurationProvider.buildGlueCloudCredential(hiveConf);
     }
 
     public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {
@@ -74,14 +69,8 @@ public abstract class CloudConfigurationFactory {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
-            CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(copiedProperties);
-            CloudConfiguration cloudConfiguration = factory.buildForStorage();
-            if (cloudConfiguration != null) {
-                return cloudConfiguration;
-            }
         }
-
-        return buildDefaultCloudConfiguration();
+        return buildCloudConfigurationForStorage(copiedProperties);
     }
 
     // If user didn't specific any credential, we create DefaultCloudConfiguration instead.
@@ -115,6 +104,4 @@ public abstract class CloudConfigurationFactory {
             }
         };
     }
-
-    protected abstract CloudConfiguration buildForStorage();
 }
