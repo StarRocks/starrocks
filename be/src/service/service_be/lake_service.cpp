@@ -72,21 +72,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
-<<<<<<< HEAD
-=======
             DeferOp defer([&] { latch.count_down(); });
-            Trace* sub_trace = nullptr;
-            if (enable_trace) {
-                scoped_refptr<Trace> child_trace(new Trace);
-                sub_trace = child_trace.get();
-                trace->AddChildTrace("PublishTablet", sub_trace);
-            }
-
-            ADOPT_TRACE(sub_trace);
-            TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
-
-            auto run_ts = butil::gettimeofday_us();
->>>>>>> 824a4c424b ([BugFix] BE crashed when get tablet stats in shared data mode (#29930))
             auto base_version = request->base_version();
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
@@ -105,12 +91,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
-<<<<<<< HEAD
-            latch.count_down();
-=======
-            TRACE("finished");
-            g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
->>>>>>> 824a4c424b ([BugFix] BE crashed when get tablet stats in shared data mode (#29930))
         };
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
@@ -213,19 +193,18 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         return;
     }
 
-<<<<<<< HEAD
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
+            DeferOp defer([&] { latch.count_down(); });
             auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
             if (!res.ok()) {
                 LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
-            latch.count_down();
         };
 
         auto st = thread_pool->submit_func(task);
@@ -235,27 +214,6 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
             response->add_failed_tablets(tablet_id);
             latch.count_down();
         }
-=======
-    auto tablet_mgr = _env->lake_tablet_manager();
-    if (UNLIKELY(tablet_mgr == nullptr)) {
-        cntl->SetFailed("tablet manager is null");
-        return;
-    }
-    auto thread_pool = _env->vacuum_thread_pool();
-    if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("no vacuum thread pool");
-        return;
-    }
-    auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::delete_tablets(tablet_mgr, *request, response);
-    });
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit delete tablet task: " << st;
-        st.to_protobuf(response->mutable_status());
-        latch.count_down();
->>>>>>> 824a4c424b ([BugFix] BE crashed when get tablet stats in shared data mode (#29930))
     }
 
     latch.wait();
@@ -610,55 +568,4 @@ void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* contro
     st.to_protobuf(response->mutable_status());
 }
 
-<<<<<<< HEAD
-=======
-void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller,
-                             const ::starrocks::lake::VacuumRequest* request,
-                             ::starrocks::lake::VacuumResponse* response, ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard guard(done);
-    auto cntl = static_cast<brpc::Controller*>(controller);
-    auto thread_pool = _env->vacuum_thread_pool();
-    if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("vacuum thread pool is null");
-        return;
-    }
-    auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::vacuum(_env->lake_tablet_manager(), *request, response);
-    });
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit vacuum task: " << st;
-        st.to_protobuf(response->mutable_status());
-        latch.count_down();
-    }
-
-    latch.wait();
-}
-
-void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::lake::VacuumFullRequest* request,
-                                  ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard guard(done);
-    auto cntl = static_cast<brpc::Controller*>(controller);
-    auto thread_pool = _env->vacuum_thread_pool();
-    if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("full vacuum thread pool is null");
-        return;
-    }
-    auto latch = BThreadCountDownLatch(1);
-    auto st = thread_pool->submit_func([&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        lake::vacuum_full(_env->lake_tablet_manager(), *request, response);
-    });
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit vacuum task: " << st;
-        st.to_protobuf(response->mutable_status());
-        latch.count_down();
-    }
-
-    latch.wait();
-}
-
->>>>>>> 824a4c424b ([BugFix] BE crashed when get tablet stats in shared data mode (#29930))
 } // namespace starrocks
