@@ -62,10 +62,10 @@ import javax.validation.constraints.NotNull;
 public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
-    private static final long LOOP_INTERVAL_MS = 500L;
+    private static final long LOOP_INTERVAL_MS = 200L;
     private static final long TXN_TIMEOUT_SECOND = 86400L;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = 3000L;
-    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = 6000L;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 2;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 10;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
     private final CompactionMgr compactionManager;
     private final SystemInfoService systemInfoService;
