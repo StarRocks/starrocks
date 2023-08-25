@@ -489,6 +489,58 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
+# LLVM
+# TODO(yueyang): Adjust libraries during the implementation of JIT.
+set (LLVM_LIBRARIES
+    LLVMRuntimeDyld
+    LLVMBitstreamReader
+    LLVMOption
+    LLVMAsmPrinter
+    LLVMProfileData
+    LLVMAsmParser
+    LLVMOrcTargetProcess
+    LLVMExecutionEngine
+    LLVMBinaryFormat
+    LLVMDebugInfoDWARF
+    LLVMObjCARCOpts
+    LLVMCodeGen
+    LLVMMCDisassembler
+    LLVMSupport
+    LLVMJITLink
+    LLVMCFGuard
+    LLVMInstrumentation
+    LLVMIRReader
+    LLVMCore
+    LLVMTarget
+    LLVMMC
+    LLVMAnalysis
+    LLVMGlobalISel
+    LLVMScalarOpts
+    LLVMTargetParser
+    LLVMDemangle
+    LLVMRemarks
+    LLVMDebugInfoCodeView
+    LLVMOrcShared
+    LLVMOrcJIT
+    LLVMTextAPI
+    LLVMBitWriter
+    LLVMBitReader
+    LLVMObject
+    LLVMTransformUtils
+    LLVMSelectionDAG
+    LLVMMCParser
+)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMX86CodeGen LLVMX86Desc LLVMX86Info)
+elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info)
+endif()
+
+foreach(lib IN ITEMS ${LLVM_LIBRARIES})
+    add_library(${lib} STATIC IMPORTED GLOBAL)
+    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
+endforeach()
+
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
 
@@ -676,6 +728,7 @@ include_directories(
     SYSTEM ${GPERFTOOLS_HOME}/include
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
 
@@ -796,6 +849,7 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
 
