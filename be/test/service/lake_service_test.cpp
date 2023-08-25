@@ -782,4 +782,18 @@ TEST_F(LakeServiceTest, test_publish_version_issue28244) {
     SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");
     SyncPoint::GetInstance()->DisableProcessing();
 }
+
+TEST_F(LakeServiceTest, test_get_tablet_stats) {
+    lake::TabletStatRequest request;
+    lake::TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    ASSERT_EQ(0, response.tablet_stats(0).num_rows());
+    ASSERT_EQ(0, response.tablet_stats(0).data_size());
+}
+
 } // namespace starrocks
