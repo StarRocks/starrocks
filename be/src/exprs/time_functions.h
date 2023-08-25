@@ -372,6 +372,10 @@ public:
 
     // function for datediff
     struct DateDiffCtx {
+        static constexpr size_t TYPE_INDEX = 0;
+        static constexpr size_t LHS_INDEX = 1;
+        static constexpr size_t RHS_INDEX = 2;
+
         ScalarFunction function;
     };
 

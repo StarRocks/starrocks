@@ -2740,15 +2740,15 @@ const static std::unordered_map<std::string, std::pair<ScalarFunction, DateDiffF
 
 StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    if (context->is_notnull_constant_column(0)) {
+    if (context->is_notnull_constant_column(DateDiffCtx::TYPE_INDEX)) {
         auto ctx = reinterpret_cast<DateDiffCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-        return ctx->function(context, {columns[1], columns[2]});
+        return ctx->function(context, {columns[DateDiffCtx::LHS_INDEX], columns[DateDiffCtx::RHS_INDEX]});
     }
 
-    ColumnViewer<TYPE_VARCHAR> type_column(columns[0]);
-    ColumnViewer<TYPE_DATETIME> lv_column(columns[1]);
-    ColumnViewer<TYPE_DATETIME> rv_column(columns[2]);
-    auto size = columns[0]->size();
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[DateDiffCtx::TYPE_INDEX]);
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[DateDiffCtx::LHS_INDEX]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[DateDiffCtx::RHS_INDEX]);
+    auto size = columns[DateDiffCtx::TYPE_INDEX]->size();
     ColumnBuilder<TYPE_BIGINT> result(size);
     for (int row = 0; row < size; ++row) {
         if (lv_column.is_null(row) || rv_column.is_null(row) || type_column.is_null(row)) {
@@ -2772,10 +2772,10 @@ StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Colu
 }
 
 Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(2)) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(DateDiffCtx::TYPE_INDEX)) {
         return Status::OK();
     }
-    ColumnPtr column = context->get_constant_column(0);
+    ColumnPtr column = context->get_constant_column(DateDiffCtx::TYPE_INDEX);
     auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
     transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
     auto iter = date_diff_func_map.find(type_str);
