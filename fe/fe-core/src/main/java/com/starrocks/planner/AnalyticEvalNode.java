@@ -57,6 +57,7 @@ import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 public class AnalyticEvalNode extends PlanNode {
     private List<Expr> analyticFnCalls;
@@ -282,8 +283,8 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
-    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr, Function<Expr, Boolean> couldBound) {
+        if (!couldBound.apply(expr)) {
             return Optional.empty();
         }
         if (!(expr instanceof SlotRef)) {
@@ -307,12 +308,13 @@ public class AnalyticEvalNode extends PlanNode {
             return false;
         }
 
-        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (!couldBound(probeExpr, description, descTbl)) {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 
     @Override

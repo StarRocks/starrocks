@@ -123,7 +123,7 @@ public class RuntimeFilterDescription {
     }
 
     public boolean canProbeUse(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+        if (!canAcceptFilter(node)) {
             return false;
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
@@ -144,6 +144,14 @@ public class RuntimeFilterDescription {
         long buildCard = Math.max(0, buildCardinality);
         float sel = (1.0f - buildCard * 1.0f / card);
         return !(sel < sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity());
+    }
+
+    // return true if Node could accept the Filter
+    public boolean canAcceptFilter(PlanNode node) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+            return false;
+        }
+        return true;
     }
 
     public void enterExchangeNode() {
