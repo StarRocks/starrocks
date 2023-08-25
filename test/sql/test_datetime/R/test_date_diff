@@ -138,12 +138,17 @@ select date_diff('hour', '2016-02-29', '2016-02-28');
 -- result:
 24
 -- !result
-select date_diff('hour', '2016-02-29', '2016-02-28 00:00:00.001')
-select date_diff('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001')
-
+select date_diff('hour', '2016-02-29', '2016-02-28 00:00:00.001');
+-- result:
+23
+-- !result
+select date_diff('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001');
+-- result:
+24
+-- !result
 select date_diff('minute', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
 -- result:
-E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+4319
 -- !result
 select date_diff('second', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
 -- result:
@@ -275,4 +280,462 @@ select date_diff('second', timestamp '2016-03-01 00:00:00.000', timestamp '2016-
 select date_diff('millisecond', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
 -- result:
 -259199999
+-- !result
+-- name: test_date_diff_mixed_const_and_non_const
+CREATE TABLE t1 (
+  t String NULL,
+  lhs String NULL,
+  rhs String NULL
+) ENGINE=OLAP
+DUPLICATE KEY(t)
+DISTRIBUTED BY HASH(t) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+select date_diff(t, lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('day', lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('month', lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('invalid-type', lhs, rhs) from t1;
+-- result:
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
+-- !result
+select date_diff(NULL, lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, '2017-02-28', rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, NULL, rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, lhs, '2016-02-28') from t1;
+-- result:
+-- !result
+select date_diff(t, lhs, NULL) from t1;
+-- result:
+-- !result
+INSERT INTO t1 
+VALUES 
+    ('year', '2017-02-28', '2016-02-28'),
+    ('year', '2017-02-28', '2016-02-28 00:00:00.01'),
+    ('year', '2017-02-28', '2016-02-29'),
+    ('year', '2017-02-28', '2016-02-29 00:00:00.01'),
+    ('year', '2017-02-28', '2016-03-01'),
+
+    ('year', '2016-02-29', '2015-02-28'),
+    ('year', '2016-02-29', '2015-02-28 00:00:00.01'),
+    ('year', '2016-02-28', '2015-02-28'),
+    ('year', '2016-02-28', '2015-02-28 00:00:00.01'),
+
+    ('year', '2017-06-30', '2016-05-30'),
+
+    ('quarter', '2016-05-29', '2016-02-28'),
+    ('quarter', '2016-05-29', '2016-02-29'),
+    ('quarter', '2016-05-29', '2016-03-01'),
+
+    ('month', '2016-05-29', '2016-02-28'),
+    ('month', '2016-05-29', '2016-02-28 00:00:00.001'),
+    ('month', '2016-05-29', '2016-02-29'),
+    ('month', '2016-05-29', '2016-02-29 00:00:00.001'),
+    ('month', '2016-05-29', '2016-03-01'),
+    ('month', '2016-02-29', '2015-02-28'),
+    ('month', '2016-02-29', '2015-02-28 00:00:00.01'),
+    ('month', '2016-02-28', '2015-02-28'),
+    ('month', '2016-02-28', '2015-02-28 00:00:00.01'),
+
+    ('month', '2016-06-30', '2016-04-30'),
+    ('month', '2016-06-30', '2016-04-30 00:00:00.01'),
+
+    ('month', '2017-02-28', '2016-02-28'),
+    ('month', '2017-02-28', '2016-02-28 00:00:00.001'),
+    ('month', '2017-02-28', '2016-02-29'),
+    ('month', '2017-02-28', '2016-02-29 00:00:00.001'),
+
+
+    ('day', '2016-02-29', '2016-02-28'),
+    ('day', '2016-02-29', '2016-02-28 00:00:00.01'),
+    ('day', '2016-02-29 00:00:00.01', '2016-02-28'),
+    ('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.01'),
+    ('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.02'),
+
+    ('hour', '2016-02-29', '2016-02-28'),
+    ('hour', '2016-02-29', '2016-02-28 00:00:00.001'),
+    ('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001'),
+
+    ('minute', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+    ('second', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+    ('millisecond', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+
+    (NULL, '2016-03-01', '2016-02-27'),
+    ('day', NULL, '2016-02-27'),
+    ('day', '2016-02-27', NULL);
+-- result:
+-- !result
+select date_diff(t, lhs, rhs) from t1;
+-- result:
+None
+1
+0
+1
+1
+1
+None
+None
+24
+23
+24
+259199999
+4319
+3
+3
+3
+2
+2
+12
+12
+12
+11
+2
+1
+12
+12
+12
+11
+1
+1
+0
+259199
+1
+1
+1
+0
+0
+1
+1
+1
+0
+1
+-- !result
+select date_diff('day', lhs, rhs) from t1;
+-- result:
+3
+1
+0
+1
+1
+1
+None
+None
+1
+0
+1
+2
+2
+91
+90
+90
+89
+89
+366
+365
+365
+364
+61
+60
+366
+365
+365
+364
+91
+90
+89
+2
+366
+365
+365
+364
+364
+366
+365
+365
+364
+396
+-- !result
+select date_diff('month', lhs, rhs) from t1;
+-- result:
+0
+0
+0
+0
+0
+0
+None
+None
+0
+0
+0
+0
+0
+3
+3
+3
+2
+2
+12
+12
+12
+11
+2
+1
+12
+12
+12
+11
+3
+3
+2
+0
+12
+12
+12
+11
+11
+12
+12
+12
+11
+13
+-- !result
+select date_diff(NULL, lhs, rhs) from t1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select date_diff(t, '2017-02-28', rhs) from t1;
+-- result:
+None
+366
+365
+366
+365
+365
+367
+None
+8784
+8783
+8783
+31708799999
+528479
+12
+12
+12
+11
+11
+24
+23
+24
+23
+10
+9
+12
+12
+12
+11
+4
+4
+3
+31708799
+1
+1
+1
+0
+0
+2
+1
+2
+1
+0
+-- !result
+select date_diff(t, NULL, rhs) from t1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-- !result
+select date_diff(t, lhs, '2016-02-28') from t1;
+-- result:
+None
+1
+1
+1
+1
+1
+None
+-1
+24
+24
+24
+172800000
+2880
+3
+3
+3
+3
+3
+0
+0
+0
+0
+4
+4
+12
+12
+12
+12
+1
+1
+1
+172800
+1
+1
+1
+1
+1
+0
+0
+0
+0
+1
+-- !result
+select date_diff(t, lhs, NULL) from t1;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
 -- !result
