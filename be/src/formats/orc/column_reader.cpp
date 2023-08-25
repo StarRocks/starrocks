@@ -547,7 +547,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
             if (strict_mode) {
                 for (int i = 0; i < size; i++) {
                     // overflow.
-                    if (nulls[i] == 0 && _type.len > 0 && data->length[i] > _type.len) {
+                    if (nulls[i] == 0 && type().len > 0 && data->length[i] > type().len) {
                         filter[i] = 0;
                         if (!reported) {
                             reported = true;
