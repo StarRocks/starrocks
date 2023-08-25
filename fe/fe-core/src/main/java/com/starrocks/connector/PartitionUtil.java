@@ -228,7 +228,7 @@ public class PartitionUtil {
                 // 2007-01-01 10:35:00.123000 => 2007-01-01 10:35:00.123
                 return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", dateLiteral.getYear(), dateLiteral.getMonth(),
                         dateLiteral.getDay(), dateLiteral.getHour(), dateLiteral.getMinute(), dateLiteral.getSecond(),
-                        dateLiteral.getMicrosecond()).replaceFirst("0+$", "");
+                        dateLiteral.getMicrosecond()).replaceFirst("0{1,6}$", "");
             }
         }
     }
