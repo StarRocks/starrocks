@@ -60,10 +60,7 @@ void FunctionContextImpl::set_error(const char* error_msg, bool is_udf) {
     if (_error_msg.empty()) {
         _error_msg = error_msg;
         std::stringstream ss;
-        if(is_udf) {
-            ss << "UDF ERROR: ";
-        }
-        ss << error_msg;
+        ss << (is_udf ? "UDF ERROR: " : "") << error_msg;
         if (_state != nullptr) {
             _state->set_process_status(ss.str());
         }

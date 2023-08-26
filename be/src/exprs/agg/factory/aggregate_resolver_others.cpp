@@ -65,10 +65,10 @@ void AggregateFuncResolver::register_others() {
                                                            AggregateFactory::MakeArrayAggAggregateFunctionV2());
 
     // TYPE_BIGINT hack for various arguments
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
-            "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_CHAR>(
-            "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>("group_concat2", false,
+                                                             AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_CHAR>("group_concat2", false,
+                                                          AggregateFactory::MakeGroupConcatAggregateFunctionV2());
 }
 
 } // namespace starrocks::vectorized
