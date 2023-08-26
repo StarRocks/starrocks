@@ -269,11 +269,11 @@ public:
             Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
             order_by_columns.assign(state_impl.data_columns->begin() + 1, state_impl.data_columns->end());
-            Status st = sort_and_tie_columns(ctx->state_cancel_ref(), order_by_columns, sort_desc, &perm);
+            Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
             state_impl.release_order_by_columns();
-            if (UNLIKELY(ctx->state_cancel_ref())) {
+            if (UNLIKELY(ctx->state()->cancelled_ref())) {
                 ctx->set_error("array_agg detects cancelled.", false);
                 return;
             }

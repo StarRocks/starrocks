@@ -77,6 +77,9 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
 void FunctionContext::set_runtime_state(starrocks::RuntimeState* state) {
     _impl->set_runtime_state(state);
 }
+starrocks::RuntimeState* FunctionContext::state() {
+    return _impl->state();
+}
 std::vector<bool> FunctionContext::get_is_asc_order() {
     return _impl->get_is_asc_order();
 }

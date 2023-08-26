@@ -36,7 +36,7 @@
 namespace starrocks {
 class FunctionContextImpl;
 class RuntimeState;
-}
+} // namespace starrocks
 
 namespace starrocks {
 namespace vectorized {
@@ -172,12 +172,13 @@ public:
 
     ~FunctionContext();
 
-    bool state_cancel_ref() const;
     std::vector<bool> get_is_asc_order();
     std::vector<bool> get_nulls_first();
     bool get_is_distinct();
     // for tests
     void set_runtime_state(starrocks::RuntimeState* state);
+    starrocks::RuntimeState* state();
+
     void set_is_asc_order(const std::vector<bool>& order);
     void set_nulls_first(const std::vector<bool>& nulls);
     void set_is_distinct(bool is_distinct);
