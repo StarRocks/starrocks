@@ -1669,20 +1669,18 @@ TEST_F(AggregateTest, test_array_agg) {
         type_struct_char_int.field_names.emplace_back("int");
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
-        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
-                         "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
-                  0);
+        ASSERT_EQ(res_struct_col->debug_string(),
+                  "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]");
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
-        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
-                         "[{vchar:[NULL],int:[NULL]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[NULL]}, "
-                         "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
-                  0);
+        ASSERT_EQ(res_struct_col->debug_string(),
+                  "[{vchar:[NULL],int:[NULL]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[NULL]}, "
+                  "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]");
 
         auto res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[[NULL,'cdrdfe','bcd',NULL,'esfg']]"), 0);
+        ASSERT_EQ(res_array_col->debug_string(), "[NULL,'cdrdfe','bcd',NULL,'esfg']");
     }
     // not nullable columns input
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
@@ -1789,18 +1787,16 @@ TEST_F(AggregateTest, test_array_agg) {
         type_struct_char_int.field_names.emplace_back("int");
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
-        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
-                         "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
-                  0);
+        ASSERT_EQ(res_struct_col->debug_string(),
+                  "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]");
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
-        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
-                  0);
+        ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]");
 
         auto res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']]"), 0);
+        ASSERT_EQ(res_array_col->debug_string(), "['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']");
     }
 
     // only column + const column
@@ -1916,7 +1912,7 @@ TEST_F(AggregateTest, test_array_agg) {
 
         auto res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]]"), 0);
+        ASSERT_EQ(res_array_col->debug_string(), "['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]");
     }
     // nullable columns input with cancelled
     {
