@@ -97,14 +97,6 @@ public class SplitAggregateRule extends TransformationRule {
             return true;
         }
 
-        // 4 Must do multi stage aggregate when aggregate distinct function is array_agg or group_concat
-        if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> (callOperator.getFnName().equals(FunctionSet.ARRAY_AGG)
-                || callOperator.getFnName().equals(FunctionSet.GROUP_CONCAT)) &&
-                callOperator.isDistinct())) {
-            return true;
-        }
-
         return false;
     }
 
@@ -254,10 +246,8 @@ public class SplitAggregateRule extends TransformationRule {
         // Count Distinct with multi columns not support two stage aggregate
         if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
                 operator.getAggregations().values().stream().
-                        anyMatch(callOperator -> callOperator.isDistinct() && (
-                                callOperator.getChildren().size() > 1) ||
-                                callOperator.getFnName().equals(FunctionSet.GROUP_CONCAT) ||
-                                callOperator.getFnName().equals(FunctionSet.ARRAY_AGG))) {
+                        anyMatch(callOperator -> callOperator.isDistinct() &&
+                                callOperator.getChildren().size() > 1)) {
             return false;
         }
         return true;

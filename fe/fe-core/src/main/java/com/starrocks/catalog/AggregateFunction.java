@@ -71,6 +71,10 @@ public class AggregateFunction extends Function {
     // empty input in BE).
     private boolean returnsNonNullOnEmpty;
 
+    // The name inside the binary at location_ that contains this particular
+    // function. e.g. org.example.MyUdf.class.
+    private String symbolName;
+
     public List<Boolean> getIsAscOrder() {
         return isAscOrder;
     }
@@ -180,11 +184,15 @@ public class AggregateFunction extends Function {
         isAnalyticFn = other.isAnalyticFn;
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
+        symbolName = other.symbolName;
         isAscOrder = other.isAscOrder;
         nullsFirst = other.nullsFirst;
         isDistinct = other.isDistinct;
     }
 
+    public String getSymbolName() {
+        return symbolName == null ? Strings.EMPTY : symbolName;
+    }
     public static class AggregateFunctionBuilder {
         TFunctionBinaryType binaryType;
         FunctionName name;
@@ -249,6 +257,7 @@ public class AggregateFunction extends Function {
                     new AggregateFunction(name, Lists.newArrayList(argTypes), retType, intermediateType, hasVarArgs,
                             isAnalyticFn);
             fn.setBinaryType(binaryType);
+            fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
             return fn;
         }
@@ -286,7 +295,8 @@ public class AggregateFunction extends Function {
         }
         sb.append(dbName() + "." + signatureString() + "\n")
                 .append(" RETURNS " + getReturnType() + "\n")
-                .append(" LOCATION '" + getLocation() + "'\n");
+                .append(" LOCATION '" + getLocation() + "'\n")
+                .append(" SYMBOL='" + getSymbolName() + "'\n");
 
         if (getIntermediateType() != null) {
             sb.append(" INTERMEDIATE " + getIntermediateType() + "\n");
@@ -304,6 +314,7 @@ public class AggregateFunction extends Function {
         } else {
             aggFn.setIntermediate_type(getReturnType().toThrift());
         }
+        aggFn.setSymbol(getSymbolName());
         if (isAscOrder != null && !isAscOrder.isEmpty()) {
             aggFn.setIs_asc_order(isAscOrder);
         }
@@ -328,6 +339,7 @@ public class AggregateFunction extends Function {
         if (hasInterType) {
             ColumnType.write(output, intermediateType);
         }
+        writeOptionString(output, symbolName);
         writeOptionString(output, Strings.EMPTY);
         writeOptionString(output, Strings.EMPTY);
         writeOptionString(output, Strings.EMPTY);
@@ -347,6 +359,7 @@ public class AggregateFunction extends Function {
         if (input.readBoolean()) {
             intermediateType = ColumnType.read(input);
         }
+        symbolName = readOptionStringOrNull(input);
         readOptionStringOrNull(input);
         readOptionStringOrNull(input);
         readOptionStringOrNull(input);
@@ -365,6 +378,7 @@ public class AggregateFunction extends Function {
         properties.put("fid", getFunctionId() + "");
         properties.put(CreateFunctionStmt.FILE_KEY, getLocation() == null ? "" : getLocation().toString());
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
+        properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
     }
