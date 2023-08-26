@@ -161,8 +161,6 @@ inline int Bits::FindLSBSetNonZero64(uint64 n) {
 }
 #elif defined(_MSC_VER)
 #include "gutil/bits-internal-windows.h"
-#else
-#include "gutil/bits-internal-unknown.h"
 #endif
 
 inline int Bits::CountOnesInByte(unsigned char n) {
