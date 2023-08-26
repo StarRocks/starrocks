@@ -87,6 +87,7 @@ public:
     void add_mem_usage(size_t size) { _mem_usage += size; }
 
     RuntimeState* state() { return _state; }
+    void set_runtime_state(RuntimeState* state) { _state = state; }
     void set_error(const char* error_msg, bool is_udf = true);
     bool has_error();
     const char* error_msg();

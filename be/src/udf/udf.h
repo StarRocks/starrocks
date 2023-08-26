@@ -35,6 +35,7 @@
 // object serves as the interface object between the UDF/UDA and the starrocks process.
 namespace starrocks {
 class FunctionContextImpl;
+class RuntimeState;
 }
 
 namespace starrocks {
@@ -176,6 +177,7 @@ public:
     std::vector<bool> get_nulls_first();
     bool get_is_distinct();
     // for tests
+    void set_runtime_state(starrocks::RuntimeState* state);
     void set_is_asc_order(const std::vector<bool>& order);
     void set_nulls_first(const std::vector<bool>& nulls);
     void set_is_distinct(bool is_distinct);

@@ -12,6 +12,8 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/array_agg.h"
+#include "exprs/agg/group_concat.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
@@ -20,6 +22,7 @@
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
@@ -1600,10 +1603,10 @@ TEST_F(AggregateTest, test_exchange_bytes) {
 
 TEST_F(AggregateTest, test_array_agg) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT))};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_ARRAY));
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     std::vector<bool> is_asc_order{0};
@@ -1625,7 +1628,7 @@ TEST_F(AggregateTest, test_array_agg) {
         char_column->append_datum(Datum());
         char_column->append_datum("esfg");
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
@@ -1651,15 +1654,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1692,7 +1695,7 @@ TEST_F(AggregateTest, test_array_agg) {
         char_column->append_datum("Datum()");
         char_column->append_datum("esfg");
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
@@ -1718,15 +1721,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1771,15 +1774,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1824,15 +1827,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1857,7 +1860,7 @@ TEST_F(AggregateTest, test_array_agg) {
         char_column->append_datum(Datum());
         char_column->append_datum("esfg");
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
@@ -1885,15 +1888,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1926,7 +1929,7 @@ TEST_F(AggregateTest, test_array_agg) {
         char_column->append_datum(Datum());
         char_column->append_datum("esfg");
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
@@ -1952,15 +1955,15 @@ TEST_F(AggregateTest, test_array_agg) {
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
@@ -1987,11 +1990,11 @@ TEST_F(AggregateTest, test_array_agg) {
 
 TEST_F(AggregateTest, test_group_concatV2) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT))};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR));
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     std::vector<bool> is_asc_order{0};
@@ -2015,7 +2018,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
@@ -2043,15 +2046,15 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ((*agg_state->data_columns)[2]->debug_string(), "[9, NULL, 6]");
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
@@ -2086,7 +2089,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
@@ -2113,15 +2116,15 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ((*agg_state->data_columns)[2]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
@@ -2169,15 +2172,15 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ(agg_state->data_columns->size(), 3);
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);
@@ -2192,7 +2195,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
-        auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
+        auto res_col = ColumnHelper::create_column(TypeDescriptor(PrimitiveType::TYPE_VARCHAR), true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "[NULL]");
     }
@@ -2212,7 +2215,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
         auto int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
@@ -2240,15 +2243,15 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ((*agg_state->data_columns)[2]->debug_string(), "[9, NULL, 6]");
 
         TypeDescriptor type_array_char;
-        type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.type = PrimitiveType::TYPE_ARRAY;
+        type_array_char.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
 
         TypeDescriptor type_array_int;
-        type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.type = PrimitiveType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
 
         TypeDescriptor type_struct_char_int;
-        type_struct_char_int.type = LogicalType::TYPE_STRUCT;
+        type_struct_char_int.type = PrimitiveType::TYPE_STRUCT;
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_char);
         type_struct_char_int.children.emplace_back(type_array_int);

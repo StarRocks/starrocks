@@ -222,7 +222,7 @@ const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) cons
     return &_impl->_arg_types[arg_idx];
 }
 
-bool FunctionContext::state_cancel_ref() const{
+bool FunctionContext::state_cancel_ref() const {
     return _impl->_state->cancelled_ref();
 }
 
