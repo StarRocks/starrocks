@@ -333,6 +333,7 @@ public class DatabaseTransactionMgr {
 
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
+                MetricRepo.COUNTER_LOAD_ADD.increase(1L);
             }
 
             return tid;
@@ -499,6 +500,9 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterCommittedSpan.end();
         }
         LOG.info("transaction:[{}] successfully committed", transactionState);
+        if (MetricRepo.isInit) {
+            MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+        }
         return waiter;
     }
 
