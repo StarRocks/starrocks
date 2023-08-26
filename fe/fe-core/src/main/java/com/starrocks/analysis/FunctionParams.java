@@ -22,13 +22,16 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Return value of the grammar production that parses function
@@ -39,11 +42,25 @@ public class FunctionParams implements Writable {
     private List<Expr> exprs;
     private boolean isDistinct;
 
+    private List<OrderByElement> orderByElements;
+
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
         isStar = false;
         this.isDistinct = isDistinct;
         this.exprs = exprs;
+        this.orderByElements = null;
+    }
+    public FunctionParams(boolean isDistinct, List<Expr> exprs, List<OrderByElement> orderByElements) {
+        isStar = false;
+        this.isDistinct = isDistinct;
+        this.exprs = exprs;
+        this.orderByElements = orderByElements;
+        // add order-by exprs in exprs, so that treating them as function's children
+        if(orderByElements != null && !orderByElements.isEmpty()) {
+            this.exprs.addAll(orderByElements.stream().map(OrderByElement::getExpr)
+                    .collect(Collectors.toList()));
+        }
     }
 
     // c'tor for non-star, non-distinct params
@@ -56,6 +73,7 @@ public class FunctionParams implements Writable {
         exprs = null;
         isStar = true;
         isDistinct = false;
+        orderByElements = null;
     }
 
     public static FunctionParams createStarParam() {
@@ -149,6 +167,25 @@ public class FunctionParams implements Writable {
                 result = 31 * result + Objects.hashCode(expr);
             }
         }
+        if(orderByElements != null) {
+            for(OrderByElement order : orderByElements) {
+                result = 31 * result + Objects.hashCode(order);
+            }
+        }
         return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof FunctionParams)) {
+            return false;
+        }
+
+        FunctionParams that = (FunctionParams) obj;
+        return isStar == that.isStar && isDistinct == that.isDistinct && Objects.equals(exprs, that.exprs)
+                && Objects.equals(orderByElements, that.orderByElements);
     }
 }

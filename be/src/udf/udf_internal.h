@@ -53,6 +53,11 @@ public:
             const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
             bool debug);
 
+    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
+                                           const FunctionContext::TypeDesc& return_type,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                           int varargs_buffer_size, bool debug, bool is_distinct,
+                                           const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first);
     ~FunctionContextImpl();
 
     FunctionContextImpl(starrocks_udf::FunctionContext* parent);
@@ -82,11 +87,23 @@ public:
     void add_mem_usage(size_t size) { _mem_usage += size; }
 
     RuntimeState* state() { return _state; }
-    void set_error(const char* error_msg);
+    void set_error(const char* error_msg, bool is_udf = true);
     bool has_error();
     const char* error_msg();
 
     vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
+
+    std::vector<bool> get_is_asc_order() { return _is_asc_order; }
+    std::vector<bool> get_nulls_first() { return _nulls_first; }
+    bool get_is_distinct() { return _is_distinct; }
+    // for tests
+    void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
+    void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
+    void set_is_distinct(bool is_distinct) { _is_distinct = is_distinct; }
+
+    ssize_t get_group_concat_max_len() const { return group_concat_max_len; }
+    // min value is 4, default is 1024
+    void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
 
 private:
     friend class starrocks_udf::FunctionContext;
@@ -137,6 +154,11 @@ private:
 
     // UDAF Context
     std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
+
+    std::vector<bool> _is_asc_order;
+    std::vector<bool> _nulls_first;
+    bool _is_distinct = false;
+    ssize_t group_concat_max_len = 1024;
 };
 
 } // namespace starrocks

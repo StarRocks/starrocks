@@ -60,8 +60,15 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 
-    add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
-    add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+    // TYPE_BIGINT hack for various arguments
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_ARRAY>("array_agg2", false,
+                                                           AggregateFactory::MakeArrayAggAggregateFunctionV2());
+
+    // TYPE_BIGINT hack for various arguments
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
+            "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_CHAR>(
+            "group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
 }
 
 } // namespace starrocks::vectorized

@@ -4619,17 +4619,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ErrorType.INTERNAL_ERROR);
         }
 
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.aggregationFunction().ORDER() != null) {
+            orderByElements = visit(context.aggregationFunction().sortItem(), OrderByElement.class);
+        }
+
         List<String> hints = Lists.newArrayList();
         if (context.aggregationFunction().bracketHint() != null) {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
-        boolean isDistinct = false;
-        if (context.aggregationFunction().setQuantifier() != null) {
-            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
-        }
+        boolean isDistinct = context.aggregationFunction().DISTINCT() != null;
 
-        if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
+        if (isDistinct && context.aggregationFunction().expression().isEmpty()) {
             throw new ParsingException(functionName + " should have at least one input");
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);

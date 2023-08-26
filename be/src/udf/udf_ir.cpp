@@ -74,4 +74,32 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
+std::vector<bool> FunctionContext::get_is_asc_order() {
+    return _impl->get_is_asc_order();
+}
+std::vector<bool> FunctionContext::get_nulls_first() {
+    return _impl->get_nulls_first();
+}
+bool FunctionContext::get_is_distinct() {
+    return _impl->_is_distinct;
+}
+// for tests
+void FunctionContext::set_is_asc_order(const std::vector<bool>& order) {
+    _impl->set_is_asc_order(order);
+}
+void FunctionContext::set_nulls_first(const std::vector<bool>& nulls) {
+    _impl->set_nulls_first(nulls);
+}
+void FunctionContext::set_is_distinct(bool is_distinct) {
+    _impl->set_is_distinct(is_distinct);
+}
+
+ssize_t FunctionContext::get_group_concat_max_len() const {
+    return _impl->get_group_concat_max_len();
+}
+// min value is 4, default is 1024
+void FunctionContext::set_group_concat_max_len(ssize_t len) {
+    _impl->set_group_concat_max_len(len);
+}
+
 } // namespace starrocks_udf

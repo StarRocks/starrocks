@@ -1671,6 +1671,24 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                } else if (functionName.equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.DISTINCT_GROUP_CONCAT, functionCallExpr.getParams());
+                    Function newFn = Expr.getBuiltinFunction(FunctionSet.DISTINCT_GROUP_CONCAT,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF).copy();
+                    ((AggregateFunction) newFn).setIsDistinct(false);
+                    replaceExpr.getParams().setIsDistinct(false);
+                    replaceExpr.setFn(newFn);
+                } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.DISTINCT_ARRAY_AGG, functionCallExpr.getParams());
+                    Function newFn = Expr.getBuiltinFunction(FunctionSet.DISTINCT_ARRAY_AGG,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF).copy();
+                    ((AggregateFunction) newFn).setIsDistinct(false);
+                    replaceExpr.getParams().setIsDistinct(false);
+                    replaceExpr.setFn(newFn);
+                } else {
+                    Preconditions.checkState(false, "not support rewrite distinct for " + functionName);
                 }
                 Preconditions.checkState(replaceExpr != null);
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());

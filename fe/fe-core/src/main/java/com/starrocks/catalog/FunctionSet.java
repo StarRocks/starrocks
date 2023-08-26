@@ -148,6 +148,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String DISTINCT_GROUP_CONCAT = "distinct_group_concat";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
     public static final String LEFT = "left";
@@ -273,6 +274,7 @@ public class FunctionSet {
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String DISTINCT_ARRAY_AGG = "distinct_array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -765,6 +767,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
                 false, false, false));
 
+        addBuiltin(AggregateFunction.createBuiltin(DISTINCT_GROUP_CONCAT,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
+                false, false, false));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -1061,6 +1067,62 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DATETIME), Type.DATETIME, Type.DATETIME,
                 false, true, false));
+
+        // array_agg
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.BOOLEAN), Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.TINYINT), Type.ARRAY_TINYINT, Type.ARRAY_TINYINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.SMALLINT), Type.ARRAY_SMALLINT, Type.ARRAY_SMALLINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.INT), Type.ARRAY_INT, Type.ARRAY_INT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.BIGINT), Type.ARRAY_BIGINT, Type.ARRAY_BIGINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.LARGEINT), Type.ARRAY_LARGEINT, Type.ARRAY_LARGEINT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.FLOAT), Type.ARRAY_FLOAT, Type.ARRAY_FLOAT,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.ARRAY_DOUBLE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.VARCHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.CHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.DATE), Type.ARRAY_DATE, Type.ARRAY_DATE,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.DATETIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.DECIMAL32), Type.ARRAY_DECIMALV2, Type.ARRAY_DECIMALV2,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.DISTINCT_ARRAY_AGG,
+                Lists.newArrayList(Type.JSON), Type.ARRAY_JSON, Type.ARRAY_JSON,
+                false, false, false));
+
+        // Group_concat(string)
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        // Group_concat(string, string)
+        addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
+                Lists.newArrayList(Type.VARCHAR, Type.VARCHAR), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
 
         // Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,

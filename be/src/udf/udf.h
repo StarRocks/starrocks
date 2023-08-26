@@ -93,13 +93,6 @@ public:
         /// thread-local.
         THREAD_LOCAL,
     };
-
-    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
-                                           const FunctionContext::TypeDesc& return_type,
-                                           const std::vector<FunctionContext::TypeDesc>& arg_types, bool is_distinct,
-                                           const std::vector<bool>& isAscOrder, const std::vector<bool>& nullsFirst);
-
-
     // Returns the version of StarRocks that's currently running.
     StarRocksVersion version() const;
 
@@ -114,7 +107,7 @@ public:
     // query to fail.
     // Note: when you set error for the UDFs used in Data Load, you should
     // ensure the function return value is null.
-    void set_error(const char* error_msg);
+    void set_error(const char* error_msg, bool is_udf = true);
 
     // when you reused this FunctionContext, you maybe need clear the error status and message.
     void clear_error_msg();
@@ -152,15 +145,6 @@ public:
     // argument).
     int get_num_args() const;
 
-    std::vector<bool> get_is_asc_order() { return _is_asc_order; }
-    std::vector<bool> get_nulls_first() { return _nulls_first; }
-    bool get_is_distinct() { return _is_distinct; }
-    // for tests
-    void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
-    void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
-    void set_runtime_state(RuntimeState* const state) { _state = state; }
-    void set_is_distinct(bool is_distinct) { _is_distinct = is_distinct; }
-
     // Returns _constant_columns size
     int get_num_constant_columns() const;
 
@@ -187,9 +171,17 @@ public:
 
     ~FunctionContext();
 
-    ssize_t get_group_concat_max_len() { return group_concat_max_len; }
+    bool state_cancel_ref() const;
+    std::vector<bool> get_is_asc_order();
+    std::vector<bool> get_nulls_first();
+    bool get_is_distinct();
+    // for tests
+    void set_is_asc_order(const std::vector<bool>& order);
+    void set_nulls_first(const std::vector<bool>& nulls);
+    void set_is_distinct(bool is_distinct);
+    ssize_t get_group_concat_max_len() const;
     // min value is 4, default is 1024
-    void set_group_concat_max_len(ssize_t len) { group_concat_max_len = len < 4 ? 4 : len; }
+    void set_group_concat_max_len(ssize_t len);
 
 private:
     friend class starrocks::FunctionContextImpl;
@@ -203,11 +195,6 @@ private:
 
     // Owned by this object.
     starrocks::FunctionContextImpl* _impl;
-
-    std::vector<bool> _is_asc_order;
-    std::vector<bool> _nulls_first;
-    bool _is_distinct = false;
-    ssize_t group_concat_max_len = 1024;
 };
 } // namespace starrocks_udf
 

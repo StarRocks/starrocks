@@ -10,6 +10,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"

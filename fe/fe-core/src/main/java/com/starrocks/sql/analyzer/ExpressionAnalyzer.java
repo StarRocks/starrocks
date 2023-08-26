@@ -74,6 +74,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -751,6 +752,22 @@ public class ExpressionAnalyzer {
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                if (node.getChildren().size() == 0) {
+                    throw new SemanticException(fnName + " should have at least one input");
+                }
+                int start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
+                    throw new SemanticException(fnName + " should have output expressions before [ORDER BY]");
+                } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
+                    throw new SemanticException(fnName + " should have exact one output expressions before" +
+                            " [ORDER BY]");
+                }
+                for (int i = start; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].canOrderBy()) {
+                        throw new SemanticException(fnName + " can't support order by the " + i +
+                                "-th input with type of " + argumentTypes[i].toSql());
+                    }
+                }
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -772,27 +789,29 @@ public class ExpressionAnalyzer {
                     }
                 }
                 fn.setArgsType(argsTypes); // as accepting various types
-                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
-                for (Type t : argsTypes) {
-                    structTypes.add(new ArrayType(t));
+                ArrayList<StructField> structTypes = new ArrayList<>(argsTypes.length);
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    structTypes.add(new StructField("col_" + i, new ArrayType(argsTypes[i])));
                 }
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                boolean outputConst = true;
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                     fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                    outputConst = node.getChild(0).isConstant();
                 } else {
-                    boolean outputConst = true;
+                    fn.setRetType(Type.VARCHAR);
                     for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
                         if (!node.getChild(i).isConstant()) {
                             outputConst = false;
                             break;
                         }
                     }
-                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
-                            (!isAscOrder.isEmpty() || outputConst));
-                    fn.setRetType(Type.VARCHAR);
                 }
+                // need to distinct output columns in finalize phase
+                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                        (!isAscOrder.isEmpty() || outputConst));
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);

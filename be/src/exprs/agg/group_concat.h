@@ -9,11 +9,13 @@
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
-#include "exec/sorting/sorting.h"
+#include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/agg/aggregate.h"
-#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "udf/udf.h"
+#include "util/defer_op.h"
 #include "util/utf8.h"
 
 namespace starrocks::vectorized {
@@ -356,7 +358,11 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            auto arg_type = ctx->get_arg_type(i);
+            state.data_columns->emplace_back(ColumnHelper::create_column(
+                    TypeDescriptor::from_primtive_type(arg_type->type, arg_type->len, arg_type->precision,
+                                                       arg_type->scale),
+                    true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }
@@ -608,11 +614,11 @@ public:
             Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
             order_by_columns.assign(state_impl.data_columns->begin() + output_col_num, state_impl.data_columns->end());
-            Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
+            Status st = sort_and_tie_columns(ctx->state_cancel_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
             state_impl.release_order_by_columns();
-            if (UNLIKELY(ctx->state()->cancelled_ref())) {
+            if (UNLIKELY(ctx->state_cancel_ref())) {
                 ctx->set_error("group_concat detects cancelled.", false);
                 return;
             }
@@ -633,7 +639,7 @@ public:
                 for (auto next_id = row_id + 1; next_id < elem_size; next_id++) {
                     bool tmp_duplicated = true;
                     for (auto col_id = 0; col_id < output_col_num - 1; col_id++) { // exclude sep
-                        if (!outputs[col_id]->equals(next_id, *outputs[col_id], row_id)) {
+                        if (outputs[col_id]->compare_at(next_id, row_id, *outputs[col_id], 1) != 0) {
                             tmp_duplicated = false;
                             break;
                         }

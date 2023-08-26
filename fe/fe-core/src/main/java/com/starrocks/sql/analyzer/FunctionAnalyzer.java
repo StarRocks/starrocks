@@ -100,8 +100,7 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
-                        "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
-                        functionCallExpr.getPos());
+                        "group_concat requires at least one parameter: " + functionCallExpr.toSql());
             }
 
             int sepPos = functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
@@ -109,7 +108,12 @@ public class FunctionAnalyzer {
             if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
                         "group_concat requires separator to be of getType() STRING: " +
-                                functionCallExpr.toSql(), arg1.getPos());
+                                functionCallExpr.toSql());
+            }
+            for (int i = 0; i < sepPos; i++) {
+                if (!Type.canCastTo(functionCallExpr.getChild(i).getType(), Type.VARCHAR)) {
+                    throw new SemanticException("group_concat " + i + "-th child can't cast to STRING");
+                }
             }
             return;
         }
@@ -143,11 +147,11 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("array_agg does not support DISTINCT");
-            }
             if (arg.getType().isDecimalV3()) {
                 throw new SemanticException("array_agg does not support DecimalV3");
+            }
+            if (arg.getType().isComplexType()) {
+                throw new SemanticException("array_agg does not support " + arg.getType().toSql());
             }
         }
 

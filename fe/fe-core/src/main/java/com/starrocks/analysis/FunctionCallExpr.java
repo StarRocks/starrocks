@@ -152,7 +152,7 @@ public class FunctionCallExpr extends Expr {
             Preconditions.checkState(children.isEmpty());
             fnParams = FunctionParams.createStarParam();
         } else {
-            fnParams = new FunctionParams(other.fnParams.isDistinct(), children);
+            fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
         }
         this.isMergeAggFn = other.isMergeAggFn;
         this.mergeAggFnHasNullableChild = other.mergeAggFnHasNullableChild;
@@ -200,7 +200,8 @@ public class FunctionCallExpr extends Expr {
         return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId);
+                && nondeterministicId.equals(o.nondeterministicId)
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     @Override
@@ -236,7 +237,14 @@ public class FunctionCallExpr extends Expr {
         if (fnParams.isDistinct()) {
             sb.append("distinct ");
         }
-        sb.append(Joiner.on(", ").join(childrenToExplain())).append(");");
+        if (fnParams.getOrderByElements() == null) {
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(children.size()))).append(");");
+        } else {
+            sb.append(Joiner.on(", ").join(firstNChildrenToExplain(
+                    children.size() - fnParams.getOrderByElements().size())));
+            sb.append(fnParams.getOrderByStringToExplain());
+            sb.append(')');
+        }
         if (fn != null) {
             sb.append(" args: ");
             for (int i = 0; i < fn.getArgs().length; ++i) {
@@ -254,10 +262,21 @@ public class FunctionCallExpr extends Expr {
         return sb.toString();
     }
 
-    public List<String> childrenToExplain() {
+    // explain the first N children
+    public List<String> firstNChildrenToExplain(int n) {
+        Preconditions.checkState(n <= children.size());
         List<String> result = Lists.newArrayList();
-        for (Expr child : children) {
-            result.add(child.explain());
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).explain());
+        }
+        return result;
+    }
+
+    public List<String> firstNChildrenToSql(int n) {
+        Preconditions.checkState(n <= children.size());
+        List<String> result = Lists.newArrayList();
+        for (int i = 0; i < n; i++) {
+            result.add(children.get(i).toSql());
         }
         return result;
     }
@@ -265,8 +284,9 @@ public class FunctionCallExpr extends Expr {
     @Override
     public String debugString() {
         return MoreObjects.toStringHelper(this)/*.add("op", aggOp)*/.add("name", fnName).add("isStar",
-                fnParams.isStar()).add("isDistinct", fnParams.isDistinct()).addValue(
-                super.debugString()).toString();
+                        fnParams.isStar()).add("isDistinct", fnParams.isDistinct()).
+                add(" hasOrderBy ", fnParams.getOrderByElements() != null).addValue(
+                        super.debugString()).toString();
     }
 
     public FunctionParams getParams() {

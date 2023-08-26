@@ -55,12 +55,15 @@ void FunctionContextImpl::close() {
     _closed = true;
 }
 
-void FunctionContextImpl::set_error(const char* error_msg) {
+void FunctionContextImpl::set_error(const char* error_msg, bool is_udf) {
     std::lock_guard<std::mutex> lock(_error_msg_mutex);
     if (_error_msg.empty()) {
         _error_msg = error_msg;
         std::stringstream ss;
-        ss << "UDF ERROR: " << error_msg;
+        if(is_udf) {
+            ss << "UDF ERROR: ";
+        }
+        ss << error_msg;
         if (_state != nullptr) {
             _state->set_process_status(ss.str());
         }
@@ -91,6 +94,23 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_arg_types = arg_types;
     ctx->_impl->_debug = debug;
     ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
+    return ctx;
+}
+
+starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
+        RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
+        const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug,
+        bool is_distinct, const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first) {
+    auto* ctx = new starrocks_udf::FunctionContext();
+    ctx->_impl->_state = state;
+    ctx->_impl->_mem_pool = pool;
+    ctx->_impl->_return_type = return_type;
+    ctx->_impl->_arg_types = arg_types;
+    ctx->_impl->_debug = debug;
+    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
+    ctx->_impl->_is_distinct = is_distinct;
+    ctx->_impl->_is_asc_order = is_asc_order;
+    ctx->_impl->_nulls_first = nulls_first;
     return ctx;
 }
 
@@ -174,8 +194,8 @@ void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     }
 }
 
-void FunctionContext::set_error(const char* error_msg) {
-    _impl->set_error(error_msg);
+void FunctionContext::set_error(const char* error_msg, bool is_udf) {
+    _impl->set_error(error_msg, is_udf);
 }
 
 void FunctionContext::set_constant_columns(std::vector<starrocks::vectorized::ColumnPtr> columns) {
@@ -203,6 +223,10 @@ const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) cons
         return nullptr;
     }
     return &_impl->_arg_types[arg_idx];
+}
+
+bool FunctionContext::state_cancel_ref() const{
+    return _impl->_state->cancelled_ref();
 }
 
 } // namespace starrocks_udf

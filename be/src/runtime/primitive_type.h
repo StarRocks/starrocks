@@ -86,6 +86,10 @@ constexpr bool is_object_type(PrimitiveType type) {
            type == PrimitiveType::TYPE_PERCENTILE;
 }
 
+constexpr bool is_string_type(PrimitiveType type) {
+    return type == TYPE_CHAR || type == TYPE_VARCHAR;
+}
+
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
     if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION) {
         return false;

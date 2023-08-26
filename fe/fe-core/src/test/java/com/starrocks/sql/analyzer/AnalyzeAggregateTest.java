@@ -133,8 +133,7 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1,v2 from t0 order by v3");
         analyzeSuccess("select distinct v1 from t0 order by sum(v2)");
 
-        analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
-                "No matching function with signature: multi_distinct_count(ARRAY)");
+        analyzeFail("select count(distinct v1), count(distinct v3) from tarray");
 
         analyzeFail("select abs(distinct v1) from t0");
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");

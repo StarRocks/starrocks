@@ -96,6 +96,15 @@ public class SplitAggregateRule extends TransformationRule {
         if (distinctAggCallOperator.size() > 0 && hasMultiColumns) {
             return true;
         }
+
+        // 4 Must do multi stage aggregate when aggregate distinct function is array_agg or group_concat
+        if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
+                -> (callOperator.getFnName().equals(FunctionSet.ARRAY_AGG)
+                || callOperator.getFnName().equals(FunctionSet.GROUP_CONCAT)) &&
+                callOperator.isDistinct())) {
+            return true;
+        }
+
         return false;
     }
 
@@ -245,8 +254,10 @@ public class SplitAggregateRule extends TransformationRule {
         // Count Distinct with multi columns not support two stage aggregate
         if (distinctColumns.stream().anyMatch(column -> column.getType().isArrayType()) ||
                 operator.getAggregations().values().stream().
-                        anyMatch(callOperator -> callOperator.isDistinct() &&
-                                callOperator.getChildren().size() > 1)) {
+                        anyMatch(callOperator -> callOperator.isDistinct() && (
+                                callOperator.getChildren().size() > 1) ||
+                                callOperator.getFnName().equals(FunctionSet.GROUP_CONCAT) ||
+                                callOperator.getFnName().equals(FunctionSet.ARRAY_AGG))) {
             return false;
         }
         return true;
@@ -264,7 +275,19 @@ public class SplitAggregateRule extends TransformationRule {
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
         } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
-            return fnCall;
+            Function newFn = Expr.getBuiltinFunction(FunctionSet.DISTINCT_GROUP_CONCAT,
+                    new Type[] {fnCall.getChild(0).getType()},
+                    IS_NONSTRICT_SUPERTYPE_OF).copy();
+            ((AggregateFunction) newFn).setIsDistinct(false);
+            return new CallOperator(FunctionSet.DISTINCT_GROUP_CONCAT, fnCall.getType(), fnCall.getChildren(), newFn, false);
+        } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+            Function newFn = Expr.getBuiltinFunction(FunctionSet.DISTINCT_ARRAY_AGG,
+                    new Type[] {fnCall.getChild(0).getType()},
+                    IS_NONSTRICT_SUPERTYPE_OF).copy();
+            ((AggregateFunction) newFn).setIsDistinct(false);
+            return new CallOperator(FunctionSet.DISTINCT_ARRAY_AGG, fnCall.getType(), fnCall.getChildren(), newFn, false);
+        } else {
+            Preconditions.checkState(false, "not support rewrite distinct for " + functionName);
         }
         return null;
     }
