@@ -81,12 +81,9 @@ public class IcebergTableSink extends DataSink {
                 String.format("connector of catalog %s should not be null", catalogName));
 
         // Try to set for tabular
-        if (icebergTable.getNativeTable().io().properties().containsKey(AwsProperties.S3FILEIO_ACCESS_KEY_ID)) {
-            CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                    buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-            // Tabular must using aws
-            Preconditions.checkArgument(tabularTempCloudConfiguration.getCloudType() == CloudType.AWS,
-                    "For tabular, we must using AWS S3's parameters");
+        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
+        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
             this.cloudConfiguration = connector.getCloudConfiguration();
