@@ -894,7 +894,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testMockQueryDump() throws Exception {
+    public void testMockQueryDump() {
         List<String> fileNames = mockCases();
         for (String fileName : fileNames) {
             try {
