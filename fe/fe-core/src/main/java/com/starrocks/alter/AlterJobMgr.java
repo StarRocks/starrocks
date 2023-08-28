@@ -140,6 +140,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
@@ -1105,7 +1106,9 @@ public class AlterJobMgr {
             if (!partitionInfo.isRangePartition()) {
                 throw new DdlException("Only support range partition table to modify storage_cooldown_ttl");
             }
-            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            if (Strings.isNotBlank(storageCoolDownTTL)) {
+                periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            }
         }
         DataProperty newDataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties, null, false);
