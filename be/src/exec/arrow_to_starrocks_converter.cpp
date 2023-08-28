@@ -563,26 +563,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
-    static int64_t time_unit_divisor(arrow::TimeUnit::type unit) {
-        // StarRocks only supports seconds
-        switch (unit) {
-        case arrow::TimeUnit::type::SECOND: {
-            return 1L;
-        }
-        case arrow::TimeUnit::type::MILLI: {
-            return 1000L;
-        }
-        case arrow::TimeUnit::type::MICRO: {
-            return 1000000L;
-        }
-        case arrow::TimeUnit::type::NANO: {
-            return 1000000000L;
-        }
-        default:
-            return 0L;
-        }
-    }
-
     static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, const cctz::time_zone& ctz) {
         static_assert(at_is_datetime<AT>, "Invalid arrow type");
 

@@ -36,4 +36,4 @@ df = pd.DataFrame(
 table = pa.Table.from_pandas(df)
 
 # Write the table to a parquet file
-pq.write_table(table, "datetime.parquet")
+pq.write_table(table, output)
