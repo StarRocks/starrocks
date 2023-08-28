@@ -4607,6 +4607,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().MAX() != null) {
             functionName = FunctionSet.MAX;
+        } else if (context.aggregationFunction().ARRAY_AGG() != null) {
+            functionName = FunctionSet.ARRAY_AGG;
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);

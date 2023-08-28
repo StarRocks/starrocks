@@ -161,4 +161,21 @@ public class AnalyzeExprTest {
         analyzeFail("select array_filter([],[],[])");
         analyzeFail("select array_filter([2],1)");
     }
+
+    @Test
+    public void testArrayAgg() {
+        analyzeSuccess("select array_agg(distinct v1), array_agg(v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1), count(distinct v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1) from t0 group by v3;");
+        analyzeSuccess("select array_agg(null) from t0;");
+        analyzeSuccess("select array_agg(distinct null) from t0;");
+        analyzeSuccess("select array_agg(1) from t0;");
+        analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
+
+        analyzeFail("select array_agg(null, 11);");
+        analyzeFail("select array_agg(distinct);");
+        analyzeFail("select array_agg();");
+        analyzeFail("select array_agg(1,1);");
+        analyzeFail("select array_agg(1 order by 1 nulls first desc)");
+    }
 }
