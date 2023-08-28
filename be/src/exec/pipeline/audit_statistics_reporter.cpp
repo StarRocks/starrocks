@@ -60,6 +60,7 @@ Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatis
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
                 rpc_status = Status::InternalError(msg.str());
+                return rpc_status;
             }
         }
 
@@ -69,6 +70,7 @@ Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatis
         msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
+        return rpc_status;
     }
     return rpc_status;
 }

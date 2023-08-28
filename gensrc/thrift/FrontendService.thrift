@@ -708,8 +708,8 @@ struct TReportExecStatusParams {
 }
 
 struct TReportAuditStatisticsParams {
-    1: required Types.TUniqueId query_id
-    2: required Types.TUniqueId fragment_instance_id
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
     5: optional i64 returned_rows
