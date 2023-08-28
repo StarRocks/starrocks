@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -31,6 +32,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,6 +41,10 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
     private static final Logger LOG = LogManager.getLogger(QueryDumpSerializer.class);
@@ -86,6 +93,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
                 return dumpJson;
             } catch (Exception e) {
                 LOG.info("failed to desensitize content, use the original content", e);
+                dumpInfo.addException(e.getMessage());
                 dumpJson = new JsonObject();
             }
         }
@@ -163,6 +171,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
+            dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
+        }
         return dumpJson;
     }
 
@@ -173,6 +184,14 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         String sql = DesensitizedSQLBuilder.desensitizeSQL(dumpInfo.getStatement(), dict);
         // statement
         dumpJson.addProperty("statement", sql);
+        // resource
+        if (!dumpInfo.getResourceSet().isEmpty()) {
+            JsonObject resourceMetaData = new JsonObject();
+            for (Resource resource : dumpInfo.getResourceSet()) {
+                resourceMetaData.addProperty(resource.getName(), resource.toString());
+            }
+            dumpJson.add("resources", resourceMetaData);
+        }
         // table meta
         JsonObject tableMetaData = new JsonObject();
         List<Pair<String, Table>> tableMetaPairs = Lists.newArrayList(dumpInfo.getTableMap().values());
@@ -184,12 +203,44 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         dumpJson.add("table_meta", tableMetaData);
 
+        // hive meta store table info
+        if (!dumpInfo.getHmsTableMap().isEmpty()) {
+            JsonObject externalTableInfoData = new JsonObject();
+            for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> resourceEntry :
+                    dumpInfo.getHmsTableMap().entrySet()) {
+                String resourceName = resourceEntry.getKey();
+                for (Map.Entry<String, Map<String, HiveMetaStoreTableDumpInfo>> dbEntry :
+                        resourceEntry.getValue().entrySet()) {
+                    String dbName = DesensitizedSQLBuilder.desensitizeDbName(dbEntry.getKey(), dict);
+                    for (Map.Entry<String, HiveMetaStoreTableDumpInfo> tableEntry : dbEntry.getValue().entrySet()) {
+                        String tableName = DesensitizedSQLBuilder.desensitizeTblName(tableEntry.getKey(), dict);
+                        String fullName = String.join("%", resourceName, dbName, tableName);
+                        JsonObject tableTypeObject = new JsonObject();
+                        tableTypeObject.addProperty("type", tableEntry.getValue().getType());
+                        JsonArray jsonArray = new JsonArray();
+                        jsonArray.add(tableTypeObject);
+                        HiveMetaStoreTableDumpInfo hiveMeta = tableEntry.getValue();
+                        HiveMetaStoreTableDumpInfo desensitizedMeta = desensitizeHiveMeta(hiveMeta, dict);
+                        jsonArray.add(GsonUtils.GSON.toJson(desensitizedMeta));
+                        externalTableInfoData.add(fullName, jsonArray);
+                    }
+                }
+            }
+            dumpJson.add("hms_table", externalTableInfoData);
+        }
+
         // table row count
         JsonObject tableRowCount = new JsonObject();
         for (Map.Entry<String, Map<String, Long>> entry : dumpInfo.getPartitionRowCountMap().entrySet()) {
             JsonObject partitionRowCount = new JsonObject();
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
-                partitionRowCount.addProperty(partitionEntry.getKey(), partitionEntry.getValue());
+                String partitionName = partitionEntry.getKey();
+                if (entry.getValue().size() == 1 && dict.containsKey(partitionEntry.getKey())) {
+                    // the partitionName of table without setting partition is the table name
+                    partitionName = DesensitizedSQLBuilder.desensitizeTblName(partitionName, dict);
+                }
+                partitionRowCount.addProperty(partitionName, partitionEntry.getValue());
+
             }
             String[] splits = entry.getKey().split("\\.");
             String tableName = DesensitizedSQLBuilder.desensitizeDbName(splits[0], dict) + "."
@@ -226,5 +277,62 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(tableName, columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        String explainInfo = desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict);
+        if (StringUtils.isNotEmpty(explainInfo)) {
+            dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
+        }
+
+    }
+
+    private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
+        HiveTableDumpInfo hiveTableDumpInfo = new HiveTableDumpInfo();
+        if (CollectionUtils.isNotEmpty(hiveMeta.getDataColumnNames())) {
+            hiveTableDumpInfo.setDataColumnNames(
+                    hiveMeta.getDataColumnNames().stream()
+                    .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                    .collect(Collectors.toList())
+            );
+        }
+
+        if (CollectionUtils.isNotEmpty(hiveMeta.getPartColumnNames())) {
+            hiveTableDumpInfo.setPartColumnNames(
+                    hiveMeta.getPartColumnNames().stream()
+                            .map(e -> DesensitizedSQLBuilder.desensitizeColName(e, dict))
+                            .collect(Collectors.toList())
+            );
+        }
+
+        if (CollectionUtils.isNotEmpty(hiveMeta.getPartitionNames())) {
+            hiveTableDumpInfo.setPartitionNames(hiveMeta.getPartitionNames());
+        }
+
+        return hiveTableDumpInfo;
+    }
+
+    private String desensitizeExplainInfo(String explainInfo, Map<String, String> dict) {
+        Set<String> keys = Sets.newHashSet();
+        Pattern pattern = Pattern.compile("[0-9a-zA-Z_$\\u0080-\\uffff]+");
+
+        for (String key : dict.keySet()) {
+            if (pattern.matcher(key).matches()) {
+                keys.add(key);
+            }
+        }
+        pattern = Pattern.compile("\\b(" + String.join("|", keys) + ")\\b",
+                Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(explainInfo);
+
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String matchStr = matcher.group();
+            String value = dict.get(matchStr) == null ? dict.get(StringUtils.lowerCase(matchStr)) : dict.get(matchStr);
+            if (value == null) {
+                // failed desensitize ExplainInfo just return empty str
+                return "";
+            }
+            matcher.appendReplacement(result, value);
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 }

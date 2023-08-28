@@ -24,20 +24,32 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Field;
@@ -55,12 +67,14 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,10 +109,24 @@ public class DesensitizedSQLBuilder {
     }
 
     public static String desensitizeTableDef(Pair<String, Table> pair, Map<String, String> desensitizedDict) {
-        Preconditions.checkState(pair.second instanceof OlapTable,
-                "unsupported table type %s", pair.second.getType());
-        return new DesensitizedSQLVisitor(true, true, desensitizedDict)
-                .desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);
+        Table table = pair.second;
+        DesensitizedSQLVisitor visitor = new DesensitizedSQLVisitor(true, true, desensitizedDict);
+        String tableDef = "";
+        if (table.isMaterializedView()) {
+            visitor = new DesensitizedSQLVisitor(true, false, desensitizedDict);
+            tableDef = visitor.desensitizeMvDef(table);
+        } else if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
+                || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
+                || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
+                || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.FILE) {
+            tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
+        } else if (table instanceof OlapTable) {
+            tableDef = visitor.desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);
+        } else {
+            throw new IllegalArgumentException("unsupported table type " + pair.second.getType());
+        }
+        return tableDef;
     }
 
     public static String desensitizeDbName(String dbName, Map<String, String> desensitizedDict) {
@@ -401,9 +429,201 @@ public class DesensitizedSQLBuilder {
             return sb.toString();
         }
 
+        public String desensitizeExternalTableDef(String dbName, Table table) {
+            StringBuilder sb = new StringBuilder();
+            String desensitizedDbName = "db_" + desensitizeValue(dbName, "db name");
+            String desensitizedTblName = "tbl_" + desensitizeValue(table.getName(), "table name");
+            sb.append("CREATE EXTERNAL TABLE ").append(desensitizedDbName).append(".");
+            sb.append(desensitizedTblName).append(" (\n");
+
+            List<String> colDefs = Lists.newArrayList();
+            for (Column col : table.getBaseSchema()) {
+                colDefs.add(desensitizeColumnDef(col, table));
+            }
+
+            sb.append(Joiner.on(",\n").join(colDefs));
+            sb.append("\n) ENGINE= ").append(table.getType().name()).append(" ");
+
+            if (table.getType() == Table.TableType.MYSQL) {
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"host\" = \"").append("localhost").append("\",\n");
+                sb.append("\"port\" = \"").append("3306").append("\",\n");
+                sb.append("\"user\" = \"").append("root").append("\",\n");
+                sb.append("\"password\" = \"").append("\",\n");
+                sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\"\n");
+                sb.append(")");
+            } else if (table.getType() == Table.TableType.ELASTICSEARCH) {
+                EsTable esTable = (EsTable) table;
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
+                sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
+                sb.append("\"password\" = \"").append("\",\n");
+                sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
+            } else if (table.getType() == Table.TableType.HIVE) {
+                HiveTable hiveTable = (HiveTable) table;
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\",\n");
+                sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+                if (!hiveTable.getHiveProperties().isEmpty()) {
+                    sb.append(",\n");
+                }
+                sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+                sb.append("\n)");
+            } else if (table.getType() == Table.TableType.FILE) {
+                FileTable fileTable = (FileTable) table;
+                Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+                CredentialUtil.maskCredential(clonedFileProperties);
+
+                sb.append("\nPROPERTIES (\n");
+                sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
+                sb.append("\n)");
+            } else if (table.getType() == Table.TableType.HUDI) {
+                HudiTable hudiTable = (HudiTable) table;
+
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\",\n");
+                sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
+                sb.append("\n)");
+            } else if (table.getType() == Table.TableType.ICEBERG) {
+                IcebergTable icebergTable = (IcebergTable) table;
+
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"database\" = \"").append(desensitizedDbName).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\",\n");
+                sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
+                sb.append("\n)");
+            } else if (table.getType() == Table.TableType.JDBC) {
+                JDBCTable jdbcTable = (JDBCTable) table;
+                // properties
+                sb.append("\nPROPERTIES (\n");
+                sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+                sb.append("\"table\" = \"").append(desensitizedTblName).append("\"");
+                sb.append("\n)");
+            }
+            sb.append(";");
+            return sb.toString();
+        }
+
+        public String desensitizeMvDef(Table table) {
+            MaterializedView materializedView = (MaterializedView) table;
+            String desensitizedTblName = "tbl_" + desensitizeValue(materializedView.getName(), "table name");
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE MATERIALIZED VIEW `").append(desensitizedTblName).append("` (");
+            List<String> colDef = Lists.newArrayList();
+            for (Column column : materializedView.getBaseSchema()) {
+                StringBuilder colSb = new StringBuilder();
+                // Since mv supports complex expressions as the output column, add `` to support to replay it.
+                colSb.append("`" + desensitizeValue(StringUtils.lowerCase(column.getName()), "column name") + "`");
+                colDef.add(colSb.toString());
+            }
+            sb.append(Joiner.on(", ").join(colDef));
+            sb.append(")");
+
+            // partition
+            PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+            if (!(partitionInfo instanceof SinglePartitionInfo)) {
+                sb.append("\n").append(desensitizePartitionInfo(materializedView, partitionInfo));
+            }
+
+            // distribution
+            DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+            sb.append("\n").append(desensitizeDistributionInfo(distributionInfo));
+
+            // refresh scheme
+            sb.append("\nREFRESH ").append("MANUAL");
+            // properties
+            sb.append("\nPROPERTIES (\n");
+
+            // replicationNum
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+            sb.append(1).append("\"");
+
+            Map<String, String> properties = materializedView.getProperties();
+
+            // excluded trigger tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
+            }
+
+            // force_external_table_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                        PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
+            }
+
+            // mv_rewrite_staleness
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
+            }
+
+            // unique constraints
+            // unique constraint
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                    && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        .append("\" = \"");
+                final List<String> cols = Lists.newArrayList();
+                materializedView.getTableProperty().getUniqueConstraints()
+                        .stream()
+                        .forEach(e -> cols.addAll(e.getUniqueColumns()));
+                List<String> desensitizedCols = Lists.newArrayList();
+                cols.stream().forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
+                sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
+            }
+
+            // TODO: foreign key constraint
+
+
+            // colocateTable
+            String colocateGroup = materializedView.getColocateGroup();
+            if (colocateGroup != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                        .append("\" = \"");
+                sb.append(colocateGroup).append("\"");
+            }
+
+            // session properties
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
+                            .append("\" = \"").append(entry.getValue()).append("\"");
+                }
+            }
+
+            sb.append("\n)");
+            String define = materializedView.getSimpleDefineSql();
+            if (StringUtils.isEmpty(define) || !simple) {
+                define = materializedView.getViewDefineSql();
+            }
+            StatementBase stmt = SqlParser.parse(define, SessionVariable.DEFAULT_SESSION_VARIABLE).get(0);
+            Analyzer.analyze(stmt, ConnectContext.get());
+            sb.append("\nAS ").append(visit(stmt));
+            sb.append(";");
+            return sb.toString();
+        }
+
         public String desensitizeOlapTableDef(String dbName, OlapTable olapTable) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE TABLE ").append("db_" + desensitizeValue(dbName, "db name")).append(".");
+            if (olapTable.getType() == Table.TableType.OLAP_EXTERNAL) {
+                sb.append("CREATE EXTERNAL TABLE ").append("db_" + desensitizeValue(dbName, "db name")).append(".");
+            } else {
+                sb.append("CREATE TABLE ").append("db_" + desensitizeValue(dbName, "db name")).append(".");
+            }
+
             sb.append("tbl_")
                     .append(desensitizeValue(olapTable.getName(), "table name"))
                     .append(" (\n");
@@ -421,7 +641,8 @@ public class DesensitizedSQLBuilder {
                 }
             }
 
-            sb.append("\n) ENGINE= OLAP");
+            sb.append("\n) ENGINE= ");
+            sb.append(olapTable.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : olapTable.getType().name()).append(" ");
 
             // keys
             sb.append("\n").append(olapTable.getKeysType().toSql()).append("(");
@@ -495,8 +716,6 @@ public class DesensitizedSQLBuilder {
             }
 
 
-
-            // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
             // unique constraint
@@ -519,15 +738,16 @@ public class DesensitizedSQLBuilder {
             return sb.toString();
         }
 
-        private String desensitizeColumnDef(Column column, OlapTable olapTable) {
+        private String desensitizeColumnDef(Column column, Table table) {
             StringBuilder sb = new StringBuilder();
             sb.append(desensitizeValue(StringUtils.lowerCase(column.getName()), COLUMN)).append(" ");
             String typeStr = column.getType().toSql();
             sb.append(typeStr).append(" ");
-            if (column.isAggregated() && !column.isAggregationTypeImplicit() &&
-                    olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+            if (table instanceof OlapTable && column.isAggregated() && !column.isAggregationTypeImplicit() &&
+                    ((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
                 sb.append(column.getAggregationType().name()).append(" ");
             }
+
             if (!column.isAllowNull()) {
                 sb.append("NOT NULL ");
             }
