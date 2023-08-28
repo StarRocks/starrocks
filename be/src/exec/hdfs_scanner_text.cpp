@@ -279,15 +279,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
         // Fill materialize columns first, then fill partition column
         for (int j = 0; j < num_materialize_columns; j++) {
-            const auto& slot = _scanner_params.materialize_slots[j];
-            DCHECK(slot != nullptr);
-
-//            const std::string formatted_slot_name =
-//                    _scanner_params.case_sensitive ? slot->col_name() : boost::to_lower_copy(slot->col_name());
-
             size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
-            // size_t csv_index = _formatted_hive_column_name_2_index[formatted_slot_name];
-            size_t csv_index = j;
+            size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
             Column* column = _column_raw_ptrs[chunk_index];
             if (csv_index < fields.size()) {
                 const Slice& field = fields[csv_index];
@@ -304,7 +297,6 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 column->append_default();
             }
         }
-
     }
 
     // Start to append partition column
@@ -390,21 +382,27 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     const bool case_sensitive = _scanner_params.case_sensitive;
 
+    // The map's value is the position of column name in hive's table(Not in StarRocks' table)
+    std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
+
     for (size_t i = 0; i < _scanner_params.hive_column_names->size(); i++) {
         const std::string formatted_column_name =
                 case_sensitive ? (*_scanner_params.hive_column_names)[i]
                                : boost::algorithm::to_lower_copy((*_scanner_params.hive_column_names)[i]);
-        _formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
+        formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
     }
 
-    // Check materialize_slots's SlotDescirptor is existed in hive table
-    for (const auto slot : _scanner_params.materialize_slots) {
+    // Assign csv column index
+    _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
+    for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
+        const auto& slot = _scanner_params.materialize_slots[i];
         const std::string& formatted_slot_name =
                 case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
-        if (_formatted_hive_column_name_2_index.find(formatted_slot_name) ==
-            _formatted_hive_column_name_2_index.end()) {
+        auto it = formatted_hive_column_name_2_index.find(formatted_slot_name);
+        if (it == formatted_hive_column_name_2_index.end()) {
             return Status::InternalError("Can not get index of column name: " + formatted_slot_name);
         }
+        _materialize_slots_index_2_csv_column_index[i] = it->second;
     }
     return Status::OK();
 }
