@@ -962,12 +962,15 @@ public class PropertyAnalyzer {
         return foreignKeyConstraints;
     }
 
-    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
+                                                           boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
         if (text == null) {
             return null;
         }
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (removeProperties) {
+            properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        }
         PeriodDuration periodDuration;
         try {
             periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);
