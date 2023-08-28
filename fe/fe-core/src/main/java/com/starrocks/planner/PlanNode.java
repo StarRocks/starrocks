@@ -968,6 +968,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     // disable optimize depends on physical order
     // eg: sortedStreamingAGG/ PerBucketCompute
-    public void disablePhysicalDistributionOptimize() {
+    public void disablePhysicalPropertyOptimize() {
     }
 }

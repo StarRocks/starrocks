@@ -168,7 +168,7 @@ public class AggregationNode extends PlanNode {
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
-    public void disablePhysicalDistributionOptimize() {
+    public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
     }

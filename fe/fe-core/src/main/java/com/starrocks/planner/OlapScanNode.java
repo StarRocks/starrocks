@@ -194,7 +194,7 @@ public class OlapScanNode extends ScanNode {
         this.isOutputChunkByBucket = isOutputChunkByBucket;
     }
 
-    public void disablePhysicalDistributionOptimize() {
+    public void disablePhysicalPropertyOptimize() {
         setIsSortedByKeyPerTablet(false);
         setIsOutputChunkByBucket(false);
     }
