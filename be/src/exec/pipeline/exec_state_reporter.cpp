@@ -152,6 +152,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
                 rpc_status = Status::InternalError(msg.str());
+                return rpc_status;
             }
         }
 
@@ -161,6 +162,7 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
         msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
+        return rpc_status;
     }
     return rpc_status;
 }
