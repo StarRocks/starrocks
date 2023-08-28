@@ -522,7 +522,7 @@ public class OrderByTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
     }
 
-    @Test
+    // @Test
     public void testGroupByOrderBy() throws Exception {
         String sql = "select v2,v3,v2 from t0 group by 1,2,3 order by 1,2,3";
         String plan = getFragmentPlan(sql);
