@@ -219,8 +219,6 @@ public class MaterializedViewHandler extends AlterHandler {
 
         olapTable.setState(OlapTableState.ROLLUP);
 
-
-
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
