@@ -986,10 +986,10 @@ public class PropertyAnalyzer {
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        if (text == null) {
+        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (Strings.isNullOrEmpty(text)) {
             return null;
         }
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
         PeriodDuration periodDuration;
         try {
             periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);
