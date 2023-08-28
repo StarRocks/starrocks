@@ -379,7 +379,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
         return Status::InternalError("parent and root shouldn't both be null");
     }
     if (parent != nullptr) {
-        parent->_children.push_back(node);
+        parent->_children.push_back(std::move(node));
     } else {
         *root = node;
     }

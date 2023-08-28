@@ -58,10 +58,10 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     auto& raw_chunks = _raw_chunks.chunks;
     size_t chunk_number = raw_chunks.size();
     if (chunk_number <= 0) {
-        raw_chunks.push_back(chunk);
+        raw_chunks.push_back(std::move(chunk));
         chunk_number++;
     } else if (raw_chunks[chunk_number - 1]->num_rows() + chunk->num_rows() > _state->chunk_size()) {
-        raw_chunks.push_back(chunk);
+        raw_chunks.push_back(std::move(chunk));
         chunk_number++;
     } else {
         // Old planner will not remove duplicated sort column.
@@ -338,7 +338,7 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
 
     std::vector<Columns> vertical_chunks;
     for (auto& segment : segments) {
-        vertical_chunks.push_back(segment.order_by_columns);
+        vertical_chunks.push_back(std::move(segment.order_by_columns));
     }
     auto do_sort = [&](Permutation& perm, size_t limit) {
         return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_desc, perm, limit,
@@ -390,7 +390,7 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
-        right_chunks.push_back(segment.chunk);
+        right_chunks.push_back(std::move(segment.chunk));
     }
     ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
     materialize_by_permutation(right_chunk.get(), right_chunks, permutation_second);
@@ -402,7 +402,7 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
         for (auto expr : *_sort_exprs) {
             auto maybe_column = expr->evaluate(right_chunk.get());
             RETURN_IF_ERROR(maybe_column);
-            right_columns.push_back(maybe_column.value());
+            right_columns.push_back(std::move(maybe_column.value()));
         }
     }
 
@@ -445,7 +445,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
     ChunkPtr big_chunk;
     std::vector<ChunkPtr> chunks;
     for (auto& segment : segments) {
-        chunks.push_back(segment.chunk);
+        chunks.push_back(std::move(segment.chunk));
     }
 
     // There are three parts of data
@@ -511,7 +511,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     // Initial this big chunk.
     std::vector<ChunkPtr> chunks;
     for (auto& segment : segments) {
-        chunks.push_back(segment.chunk);
+        chunks.push_back(std::move(segment.chunk));
     }
     new_permutation.resize(rows_to_keep);
     materialize_by_permutation(big_chunk.get(), chunks, new_permutation);
