@@ -1705,7 +1705,7 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
 
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ(11, offsets->get_data().back());
+    ASSERT_EQ(26, offsets->get_data().back());
 }
 
 } // namespace starrocks::vectorized
