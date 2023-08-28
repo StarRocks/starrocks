@@ -200,7 +200,7 @@ public class StorageVolumeTest {
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
-        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
 
         Map<String, String> storageParams1 = new HashMap<>();
         storageParams1.put("hadoop.security.authentication", "simple");
@@ -212,7 +212,7 @@ public class StorageVolumeTest {
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
-        Assert.assertEquals(0, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
+        Assert.assertEquals(0, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
     }
 
     @Test
@@ -234,7 +234,7 @@ public class StorageVolumeTest {
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("kerberos", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
-        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
     }
 
     @Test

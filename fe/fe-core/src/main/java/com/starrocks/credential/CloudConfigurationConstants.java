@@ -46,7 +46,6 @@ public class CloudConfigurationConstants {
      */
     public static final String AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
-
     public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
     public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
     public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
@@ -56,7 +55,6 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
-
 
     // Credential for Azure storage
     // For Azure Blob Storage
@@ -83,7 +81,8 @@ public class CloudConfigurationConstants {
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)
-    public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT = "gcp.gcs.use_compute_engine_service_account";
+    public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT =
+            "gcp.gcs.use_compute_engine_service_account";
     public static final String GCP_GCS_SERVICE_ACCOUNT_EMAIL = "gcp.gcs.service_account_email";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY = "gcp.gcs.service_account_private_key";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
@@ -94,10 +93,16 @@ public class CloudConfigurationConstants {
     // TODO: Refactor the name of parameters
     public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
     public static final String HDFS_USER_NAME = "username";
+    public static final String HDFS_USER_NAME2 = "hadoop.security.username";
     public static final String HDFS_PASSWORD = "password";
+    public static final String HDFS_PASSWORD2 = "hadoop.security.password";
     public static final String HDFS_KERBEROS_PRINCIPAL = "kerberos_principal";
+    public static final String HDFS_KERBEROS_PRINCIPAL2 = "hadoop.security.kerberos.principal";
     public static final String HDFS_KERBEROS_KEYTAB = "kerberos_keytab";
+    public static final String HDFS_KERBEROS_KEYTAB_FILE = "hadoop.security.kerberos.keytab_file";
+
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
+    public static final String HDFS_KERBEROS_KEYTAB_DATA = "hadoop.security.kerberos.keytab_data";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
