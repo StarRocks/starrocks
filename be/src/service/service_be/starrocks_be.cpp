@@ -231,7 +231,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     thrift_server->stop();
 
     http_server->join();
-    LOG(INFO) <<process_name << " exit step " << exit_step++ << ": http server exit successfully";
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
 
     brpc_server->Join();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
