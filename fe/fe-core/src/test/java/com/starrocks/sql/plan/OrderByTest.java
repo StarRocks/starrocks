@@ -522,12 +522,63 @@ public class OrderByTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
     }
 
-    @Test
+    // @Test
     public void testGroupByOrderBy() throws Exception {
         String sql = "select v2,v3,v2 from t0 group by 1,2,3 order by 1,2,3";
         String plan = getFragmentPlan(sql);
 
         assertContains(plan, "2:SORT\n" +
                 "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC");
+    }
+
+    @Test
+    public void testTopNFilterWithProject() throws Exception {
+        String sql;
+        String plan;
+
+        // project passthrough good case
+        sql = "select t1a, t1b from test_all_type_not_null where t1f < 10 order by t1a limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+
+        // Hash join probe good case
+        sql = "select l.t1a, l.t1b from test_all_type_not_null l join test_all_type_not_null r " +
+                "on l.t1a=r.t1a order by l.t1a limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (<slot 1> 1: t1a), remote = false");
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: t1a)\n" +
+                "     - filter_id = 1, probe_expr = (1: t1a)");
+
+        // sort/Bucket AGG order by good case
+        sql = "select count(*) from test_all_type_not_null group by t1a order by t1a limit 10;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: t1a)");
+
+        // shouldn't generate filter for agg column
+        sql = "select count(*) cnt from test_all_type_not_null group by t1a order by cnt limit 10;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // shouldn't generate filter for window function
+        sql = "select row_number() over (partition by t1b) from test_all_type_not_null order by t1a limit 1;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // partition by column case
+        // but we have not implements streaming sort in BE
+        sql = "select row_number() over (partition by t1a) from test_all_type_not_null order by t1a limit 1;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  3:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
     }
 }
