@@ -49,4 +49,10 @@ __attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exc
 #endif
 }
 
+#define DEBUG_FOR_NEGATIVE_AUDIT(num)                                        \
+    if (num < 0) {                                                           \
+        LOG(WARNING) << "negative audit, name=" << #num << ", value=" << num \
+                     << ", stack trace: " << get_stack_trace();              \
+    }
+
 } // namespace starrocks

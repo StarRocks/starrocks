@@ -63,6 +63,8 @@ void QueryStatistics::clear() {
 }
 
 void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes) {
+    DEBUG_FOR_NEGATIVE_AUDIT(scan_rows);
+    DEBUG_FOR_NEGATIVE_AUDIT(scan_bytes);
     if (table_id > 0 && (scan_rows > 0 || scan_bytes > 0)) {
         auto iter = _stats_items.find(table_id);
         if (iter == _stats_items.end()) {
@@ -79,11 +81,15 @@ void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
         std::lock_guard l(_lock);
         update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
     }
+    DEBUG_FOR_NEGATIVE_AUDIT(stats_item.scan_rows());
+    DEBUG_FOR_NEGATIVE_AUDIT(stats_item.scan_bytes());
     this->scan_rows += stats_item.scan_rows();
     this->scan_bytes += stats_item.scan_bytes();
 }
 
 void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
+    DEBUG_FOR_NEGATIVE_AUDIT(scan_rows);
+    DEBUG_FOR_NEGATIVE_AUDIT(scan_bytes);
     this->scan_rows += scan_rows;
     this->scan_bytes += scan_bytes;
 }
@@ -92,16 +98,19 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     // Make the exchange action atomic
     int64_t scan_rows = other.scan_rows.load();
     if (other.scan_rows.compare_exchange_strong(scan_rows, 0)) {
+        DEBUG_FOR_NEGATIVE_AUDIT(scan_rows);
         this->scan_rows += scan_rows;
     }
 
     int64_t scan_bytes = other.scan_bytes.load();
     if (other.scan_bytes.compare_exchange_strong(scan_bytes, 0)) {
+        DEBUG_FOR_NEGATIVE_AUDIT(scan_bytes);
         this->scan_bytes += scan_bytes;
     }
 
     int64_t cpu_ns = other.cpu_ns.load();
     if (other.cpu_ns.compare_exchange_strong(cpu_ns, 0)) {
+        DEBUG_FOR_NEGATIVE_AUDIT(cpu_ns);
         this->cpu_ns += cpu_ns;
     }
 
@@ -122,6 +131,10 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
+    DEBUG_FOR_NEGATIVE_AUDIT(statistics.scan_rows());
+    DEBUG_FOR_NEGATIVE_AUDIT(statistics.scan_bytes());
+    DEBUG_FOR_NEGATIVE_AUDIT(statistics.cpu_cost_ns());
+    DEBUG_FOR_NEGATIVE_AUDIT(statistics.mem_cost_bytes());
     scan_rows += statistics.scan_rows();
     scan_bytes += statistics.scan_bytes();
     cpu_ns += statistics.cpu_cost_ns();

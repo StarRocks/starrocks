@@ -38,6 +38,7 @@
 
 #include "gen_cpp/data.pb.h"
 #include "util/spinlock.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -50,12 +51,21 @@ class QueryStatistics {
 public:
     QueryStatistics() = default;
 
-    void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
+    void set_returned_rows(int64_t num_rows) {
+        DEBUG_FOR_NEGATIVE_AUDIT(num_rows);
+        this->returned_rows = num_rows;
+    }
 
     void add_stats_item(QueryStatisticsItemPB& stats_item);
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
-    void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
-    void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
+    void add_cpu_costs(int64_t cpu_ns) {
+        DEBUG_FOR_NEGATIVE_AUDIT(cpu_ns);
+        this->cpu_ns += cpu_ns;
+    }
+    void add_mem_costs(int64_t bytes) {
+        DEBUG_FOR_NEGATIVE_AUDIT(bytes);
+        mem_cost_bytes += bytes;
+    }
 
     void to_pb(PQueryStatistics* statistics);
 
@@ -79,7 +89,10 @@ private:
     // only set once by result sink when closing.
     int64_t returned_rows{0};
     struct ScanStats {
-        ScanStats(int64_t rows, int64_t bytes) : scan_rows(rows), scan_bytes(bytes) {}
+        ScanStats(int64_t rows, int64_t bytes) : scan_rows(rows), scan_bytes(bytes) {
+            DEBUG_FOR_NEGATIVE_AUDIT(rows);
+            DEBUG_FOR_NEGATIVE_AUDIT(bytes);
+        }
         int64_t scan_rows = 0;
         int64_t scan_bytes = 0;
     };
