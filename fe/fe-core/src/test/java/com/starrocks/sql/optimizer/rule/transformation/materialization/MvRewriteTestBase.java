@@ -69,7 +69,7 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -77,6 +77,30 @@ public class MvRewriteTestBase {
 
         Config.enable_experimental_mv = true;
 
+<<<<<<< HEAD
+=======
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    public static void prepareDefaultDatas() throws Exception {
+>>>>>>> 2673c1a480 ([Refactor] Add more tests for join nullable derive (#29978))
         starRocksAssert.withTable("create table emps (\n" +
                         "    empid int not null,\n" +
                         "    deptno int not null,\n" +
@@ -288,7 +312,7 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
-    protected void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
+    protected static void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
         starRocksAssert.withMaterializedView(sql);
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
