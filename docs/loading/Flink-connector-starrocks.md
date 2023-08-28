@@ -216,23 +216,28 @@ Note you must define the primary key in the Flink DDL if you want to load data i
 
 ### Run with Flink DataStream
 
-There are several ways to implement a Flink DataStream job according to the type of the input records, such as a csv Java `String`, a json Java `String` or a custom Java object.
+There are several ways to implement a Flink DataStream job according to the type of the input records, such as a CSV Java `String`, a JSON Java `String` or a custom Java object.
 
 - The input records are csv-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java) for a complete example.
 
     ```java
-    // Generate csv-format records. Each record has three fields separated by "\t". These
-    // fields correspond to the columns `id`, `name`, and `score` in StarRocks table.
+    /**
+     * Generate CSV-format records. Each record has three values separated by "\t". 
+     * These values will be loaded to the columns `id`, `name`, and `score` in the StarRocks table.
+     */
     String[] records = new String[]{
             "1\tstarrocks-csv\t100",
             "2\tflink-csv\t100"
     };
     DataStream<String> source = env.fromElements(records);
 
-    // Configure the connector with the required properties, and you also need to add properties
-    // "sink.properties.format" and "sink.properties.column_separator" to tell the connector the
-    // input records are csv-format, and the separator is "\t". You can also use other separators
-    // in the records, but remember to modify the "sink.properties.column_separator" correspondingly
+    /**
+     * Configure the connector with the required properties.
+     * You also need to add properties "sink.properties.format" and "sink.properties.column_separator"
+     * to tell the connector the input records are CSV-format, and the column separator is "\t".
+     * You can also use other column separators in the CSV-format records,
+     * but remember to modify the "sink.properties.column_separator" correspondingly.
+     */
     StarRocksSinkOptions options = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", jdbcUrl)
             .withProperty("load-url", loadUrl)
@@ -243,25 +248,29 @@ There are several ways to implement a Flink DataStream job according to the type
             .withProperty("sink.properties.format", "csv")
             .withProperty("sink.properties.column_separator", "\t")
             .build();
-    // Create the sink with the options
+    // Create the sink with the options.
     SinkFunction<String> starRockSink = StarRocksSink.sink(options);
     source.addSink(starRockSink);
     ```
 
-- The input records are json-format `String`. See [LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java) for a complete example.
+- The input records are JSON-format `String`. See [LoadJsonRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadJsonRecords.java) for a complete example.
 
     ```java
-    // Generate json-format records. Each record has three fields correspond to
-    // the columns `id`, `name`, and `score` in StarRocks table.
+    /**
+     * Generate JSON-format records. 
+     * Each record has three key-value pairs corresponding to the columns `id`, `name`, and `score` in the StarRocks table.
+     */
     String[] records = new String[]{
             "{\"id\":1, \"name\":\"starrocks-json\", \"score\":100}",
             "{\"id\":2, \"name\":\"flink-json\", \"score\":100}",
     };
     DataStream<String> source = env.fromElements(records);
 
-    // Configure the connector with the required properties, and you also need to add properties
-    // "sink.properties.format" and "sink.properties.strip_outer_array" to tell the connector the
-    // input records are json-format.
+    /** 
+     * Configure the connector with the required properties.
+     * You also need to add properties "sink.properties.format" and "sink.properties.strip_outer_array"
+     * to tell the connector the input records are JSON-format.
+     */
     StarRocksSinkOptions options = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", jdbcUrl)
             .withProperty("load-url", loadUrl)
@@ -272,7 +281,7 @@ There are several ways to implement a Flink DataStream job according to the type
             .withProperty("sink.properties.format", "json")
             .withProperty("sink.properties.strip_outer_array", "true")
             .build();
-    // Create the sink with the options
+    // Create the sink with the options.
     SinkFunction<String> starRockSink = StarRocksSink.sink(options);
     source.addSink(starRockSink);
     ```
@@ -297,7 +306,7 @@ There are several ways to implement a Flink DataStream job according to the type
           }
       ```
 
-  - The main program is
+  - The main program is as follows:
 
     ```java
     // Generate records which use RowData as the container.
@@ -307,7 +316,7 @@ There are several ways to implement a Flink DataStream job according to the type
         };
     DataStream<RowData> source = env.fromElements(records);
 
-    // Configure the connector with the required properties
+    // Configure the connector with the required properties.
     StarRocksSinkOptions options = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", jdbcUrl)
             .withProperty("load-url", loadUrl)
@@ -317,25 +326,26 @@ There are several ways to implement a Flink DataStream job according to the type
             .withProperty("password", "")
             .build();
 
-    // connector will use a Java object array (Object[]) to represent a row of
-    // StarRocks table, and each element is the value for a column. Need to
-    // define the schema of the Object[] which matches that of StarRocks table
+    /** The connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
+     * and each element is the value for a column.
+     * You need to define the schema of the Object[] which matches that of the StarRocks table.
+     */
     TableSchema schema = TableSchema.builder()
             .field("id", DataTypes.INT().notNull())
             .field("name", DataTypes.STRING())
             .field("score", DataTypes.INT())
-            // Must specify the primary key for StarRocks primary key table,
-            // and DataTypes.INT().notNull() for `id` must specify notNull()
+            // Must specify the primary key for the StarRocks primary key table,
+            // and must specify notNull(), for example, DataTypes.INT().notNull(), for the primary key `id`.
             .primaryKey("id")
             .build();
-    // Transforms the RowData to the Object[] according to the schema
+    // Transforms the RowData to the Object[] according to the schema.
     RowDataTransformer transformer = new RowDataTransformer();
-    // Create the sink with schema, options, and transformer
+    // Create the sink with the schema, options, and transformer.
     SinkFunction<RowData> starRockSink = StarRocksSink.sink(schema, options, transformer);
     source.addSink(starRockSink);
     ```
 
-  - The `RowDataTransformer` in the main program is defined as
+  - The `RowDataTransformer` in the main program is defined as follows:
 
     ```java
     private static class RowDataTransformer implements StarRocksSinkRowBuilder<RowData> {
@@ -349,18 +359,18 @@ There are several ways to implement a Flink DataStream job according to the type
             internalRow[0] = rowData.id;
             internalRow[1] = rowData.name;
             internalRow[2] = rowData.score;
-            // Only need for StarRocks primary key table. Set the last
-            // element to tell whether the record is a UPSERT or DELETE.
+            // Only need for StarRocks primary key table.
+            // Set the last element to indicate whether the data loading is an UPSERT or DELETE operation.
             internalRow[internalRow.length - 1] = StarRocksSinkOP.UPSERT.ordinal();
         }
     }  
     ```
 
-## Best Practices
+## Best practices
 
-### Load data to primary key table
+### Load data to a Primary Key table
 
-This section will show how to load data to StarRocks primary key table to achieve partial update, and conditional update.
+This section will show how to load data to a StarRocks Primary Key table to achieve partial updates and conditional updates.
 You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the introduction of those features.
 These examples use Flink SQL.
 
@@ -387,7 +397,7 @@ DISTRIBUTED BY HASH(`id`);
 
 This example will show how to load data only to columns `id` and `name`.
 
-1. Insert initial data to StarRocks table in MySQL client
+1. Insert data into the StarRocks table `score_board` in MySQL client.
 
     ```SQL
     mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
@@ -402,11 +412,11 @@ This example will show how to load data only to columns `id` and `name`.
     2 rows in set (0.02 sec)
     ```
 
-2. Create a Flink table `score_board` in Flink SQL client
+2. Create a Flink table `score_board` in Flink SQL client.
 
-   - Define the DDL which only includes columns `id` and `name`
-   - Set the option `sink.properties.partial_update` to `true` which tells the connector to do partial update.
-   - If the connector version <= 1.2.7, also need to set the option `sink.properties.columns` to `id,name,__op` which tells the connector the columns to update. Note you need append `__op` at the end, and this field is used to specify UPSERT/DELETE operation, but its value is set by the connector automatically.
+   - Define the DDL which only includes the columns `id` and `name`.
+   - Set the option `sink.properties.partial_update` to `true` which tells the Flink connector to perform partial updates.
+   - If the Flink connector version <= 1.2.7, you also need to set the option `sink.properties.columns` to `id,name,__op` to tells the Flink connector which columns need to be updated. Note that you need to append the field `__op` at the end. The field `__op` indicates that the data loading is an UPSERT or DELETE operation, and its values are set by the connector automatically.
 
     ```SQL
     CREATE TABLE `score_board` (
@@ -422,19 +432,20 @@ This example will show how to load data only to columns `id` and `name`.
         'username' = 'root',
         'password' = '',
         'sink.properties.partial_update' = 'true',
-        -- only need for connector version <= 1.2.7
+        -- only for Flink connector version <= 1.2.7
         'sink.properties.columns' = 'id,name,__op'
     ); 
     ```
 
-3. Insert data to the table in Flink SQL client, and only update the column `name`
+3. Insert data into the table in Flink SQL client, and only update the column `name`.
 
     ```SQL
     INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
     ```
 
-4. Query the StarRocks table in mysql client
-  You can see that only values for `name` changes, and the values for `score` does not change.
+4. Query the StarRocks table in MySQL client.
+
+    You can see that only values for `name` change, and the values for `score` do not change.
   
     ```SQL
     mysql> select * from score_board;
@@ -452,7 +463,7 @@ This example will show how to load data only to columns `id` and `name`.
 This example will show how to do conditional update according to the value of column `score`. The update for an `id`
 takes effect only when the new value for `score` is has a greater or equal to the old value.
 
-1. Insert initial data to StarRocks table in MySQL client
+1. Insert two data rows into the StarRocks table in MySQL client.
 
     ```SQL
     mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
@@ -467,11 +478,11 @@ takes effect only when the new value for `score` is has a greater or equal to th
     2 rows in set (0.02 sec)
     ```
 
-2. Create a Flink table `score_board` in the following ways
+2. Create a Flink table `score_board` in the following ways:
   
-    - Define the DDL including all of columns
-    - Set the option `sink.properties.merge_condition` to `score` which tells the connector to use the column `score`
-    as the condition
+    - Define the DDL including all of columns.
+    - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
+    as the condition.
 
     ```SQL
     CREATE TABLE `score_board` (
@@ -491,33 +502,33 @@ takes effect only when the new value for `score` is has a greater or equal to th
     );
     ```
 
-3. Insert data to the table in Flink SQL client, and update id 1 with a smaller score, and id 2 with a larger score.
+3. Insert two data rows into the Flink table. The primary keys of the data rows are as same as these of rows in the StarRocks table. The first data row has a smaller value in the column `score`, and the second data row has a larger  value in the column `score`.
 
     ```SQL
     INSERT INTO `score_board` VALUES (1, 'starrocks', 99), (2, 'flink', 101);
     ```
 
-4. Query the StarRocks table in mysql client.
+4. Query the StarRocks table in MySQL client.
 
     ```SQL
     mysql> select * from score_board;
     +------+-----------+-------+
     | id   | name      | score |
     +------+-----------+-------+
-    |    1 | starrocks |    99 |
+    |    1 | starrocks |   100 |
     |    2 | flink     |   101 |
     +------+-----------+-------+
     2 rows in set (0.02 sec)
     ```
 
-  You can see that only the score for id 2 changes, and the score for id 1 does not change.
+  You can see that only the value of `score` in the second data row changes, and the value of `score` in the first data row does not change.
 
 ### Load data into columns of BITMAP type
 
 [`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
 
-1. Create a StarRocks Aggregate table
+1. Create a StarRocks Aggregate table in MySQL client.
 
    In the database `test`, create an Aggregate table `page_uv` where the column `visit_users` is defined as the `BITMAP` type and configured with the aggregate function `BITMAP_UNION`.
 
@@ -531,13 +542,12 @@ Here we take the counting of UV as an example to show how to load data into colu
     DISTRIBUTED BY HASH(`page_id`);
     ```
 
-2. Create a Flink table in Flink SQL client
+2. Create a Flink table in Flink SQL client.
 
-    `visit_user_id` is `BIGINT` in Flink, and we want to load it to the column `visit_users` of StarRocks table. Note that for the Flink DDL.
-    - define the `visit_user_id` instead of `visit_users` because Flink does not support `BITMAP`
-    - set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)` which tells the connector the column mapping
-    between Flink table and StarRocks table. It uses the [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
-   function to convert the data of `BIGINT` type into `BITMAP` type.
+    The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `BITMAP` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
+    - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `BITMAP` type in the StarRocks table.
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`, which tells the connector the column mapping beween the Flink table and StarRocks table. Also you need to use [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
+   function to tell the connector to convert the data of `BIGINT` type into `BITMAP` type.
 
     ```SQL
     CREATE TABLE `page_uv` (
@@ -556,7 +566,7 @@ Here we take the counting of UV as an example to show how to load data into colu
     );
     ```
 
-3. Load data into Flink table in Flink SQL client
+3. Load data into Flink table in Flink SQL client.
 
     ```SQL
     INSERT INTO `page_uv` VALUES
@@ -600,13 +610,11 @@ Here we take the counting of UV as an example to show how to load data into colu
     DISTRIBUTED BY HASH(`page_id`);
     ```
 
-2. Create a Flink table in Flink SQL client
+2. Create a Flink table in Flink SQL client.
 
-   `visit_user_id` is `BIGINT` in Flink, and we want to load it to the column `visit_users` of StarRocks table. Note that for the Flink DDL
-    - define the `visit_user_id` instead of `visit_users` because Flink does not support `BITMAP`
-    - set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping
-      between Flink table and StarRocks table. It uses the [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash)
-      function to convert the data of `BIGINT` type into `HLL` type.
+   The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `HLL` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
+    - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `HLL` type in the StarRocks table.
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping between Flink table and StarRocks table.  Also you need to use [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash) function to tell the connector to convert the data of `BIGINT` type into `HLL` type.
 
     ```SQL
     CREATE TABLE `hll_uv` (
@@ -625,7 +633,7 @@ Here we take the counting of UV as an example to show how to load data into colu
     );
     ```
 
-3. Load data into Flink table in Flink SQL client
+3. Load data into Flink table in Flink SQL client.
 
     ```SQL
     INSERT INTO `hll_uv` VALUES
