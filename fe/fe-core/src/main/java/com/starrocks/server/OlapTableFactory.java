@@ -377,7 +377,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             if (properties != null) {
                 try {
-                    PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                    PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, false);
                     if (duration != null) {
                         table.setStorageCoolDownTTL(duration);
                     }
