@@ -1155,7 +1155,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
                 {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                 {""},
         };
-        slot_descs[1].type.len = 12;
+        slot_descs[1].type.len = 6;
         slot_descs[2].type.len = 6;
         static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
         std::vector<SlotDescriptor*> src_slot_descriptors;
@@ -1191,7 +1191,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
                 {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                 {""},
         };
-        slot_descs[1].type.len = 6;
+        slot_descs[1].type.len = 12;
         slot_descs[2].type.len = 6;
         static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
         std::vector<SlotDescriptor*> src_slot_descriptors;
