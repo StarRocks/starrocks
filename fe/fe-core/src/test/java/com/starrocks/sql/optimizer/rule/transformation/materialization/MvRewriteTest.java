@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -44,6 +45,13 @@ import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJo
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 public class MvRewriteTest extends MvRewriteTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testViewBasedMv() throws Exception {
         {

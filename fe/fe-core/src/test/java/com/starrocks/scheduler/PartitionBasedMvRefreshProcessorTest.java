@@ -2172,7 +2172,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW partition_prune_mv1 \n" +
                 "PARTITION BY k3\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH DEFERRED MANUAL \n" +
                 "PROPERTIES('replication_num' = '1') \n" +
                 "AS " +
                 " SELECT test_partition_prune_tbl2.k1 as k1, test_partition_prune_tbl2.k2 as k2, " +
