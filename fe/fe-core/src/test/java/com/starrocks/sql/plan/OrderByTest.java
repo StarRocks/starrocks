@@ -531,6 +531,7 @@ public class OrderByTest extends PlanTestBase {
                 "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC");
     }
 
+    @Test
     public void testTopNFilterWithProject() throws Exception {
         String sql;
         String plan;
