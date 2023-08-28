@@ -158,7 +158,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
             try {
-                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }

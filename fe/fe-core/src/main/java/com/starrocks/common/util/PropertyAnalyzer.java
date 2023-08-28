@@ -984,9 +984,12 @@ public class PropertyAnalyzer {
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
     }
 
-    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
+                                                           boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (removeProperties) {
+            properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        }
         if (Strings.isNullOrEmpty(text)) {
             return null;
         }
