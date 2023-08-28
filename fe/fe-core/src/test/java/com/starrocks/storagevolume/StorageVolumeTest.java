@@ -31,7 +31,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
-import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -245,8 +244,7 @@ public class StorageVolumeTest {
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
-        Assert.assertEquals(HDFSCloudCredential.EMPTY,
-                hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication(), "");
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasHdfsFsInfo());
@@ -325,10 +323,12 @@ public class StorageVolumeTest {
     public void testFromFileStoreInfo() {
         AwsSimpleCredentialInfo simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder()
                 .setAccessKey("ak").setAccessKeySecret("sk").build();
-        AwsCredentialInfo credentialInfo = AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
+        AwsCredentialInfo credentialInfo =
+                AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
         S3FileStoreInfo s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
                 .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
-        FileStoreInfo fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        FileStoreInfo fs =
+                FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
         StorageVolume sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
 
@@ -349,7 +349,8 @@ public class StorageVolumeTest {
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
 
-        AwsInstanceProfileCredentialInfo instanceProfileCredentialInfo = AwsInstanceProfileCredentialInfo.newBuilder().build();
+        AwsInstanceProfileCredentialInfo instanceProfileCredentialInfo =
+                AwsInstanceProfileCredentialInfo.newBuilder().build();
         credentialInfo = AwsCredentialInfo.newBuilder().setProfileCredential(instanceProfileCredentialInfo).build();
         s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
                 .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
