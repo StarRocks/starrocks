@@ -29,6 +29,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDateTime;
@@ -130,17 +131,19 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         if (tableProperties != null && partitionKeyDesc != null
                 && tableProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
-            PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
-            if (partitionKeyDesc.isMax()) {
-                partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
-            } else {
-                String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
-                DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
-                LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
-                LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
-                long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
-                partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+            if (Strings.isNotBlank(storageCoolDownTTL)) {
+                PeriodDuration periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+                if (partitionKeyDesc.isMax()) {
+                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, DataProperty.MAX_COOLDOWN_TIME_MS);
+                } else {
+                    String stringUpperValue = partitionKeyDesc.getUpperValues().get(0).getStringValue();
+                    DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
+                    LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                    LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
+                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                    long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
+                    partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
+                }
             }
         }
 
