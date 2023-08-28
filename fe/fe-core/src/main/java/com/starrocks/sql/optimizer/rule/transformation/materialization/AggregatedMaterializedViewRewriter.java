@@ -288,8 +288,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
                 if (operator.getChild(0).isColumnRef() && operator.getChild(1).isConstantRef()) {
                     equalsPredicateColumns.add(operator.getChild(0));
-                } else if (operator.getChild(1).isColumnRef() && operator.getChild(0).isConstantRef()) {
-                    equalsPredicateColumns.add(operator.getChild(1));
                 }
             }
         }
