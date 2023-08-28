@@ -50,8 +50,9 @@ private:
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
     size_t _current_range_index = 0;
-    // The map's value is the position of column name in hive's table(Not in StarRocks' table)
-    std::unordered_map<std::string, int> _formatted_hive_column_name_2_index;
+    // _materialize_slots_index_2_csv_column_index[0] = 5 means materialize_slots[0]->column index 5 in csv
+    // materialize_slots is StarRocks' table definition, column index is the actual position in csv
+    std::vector<size_t> _materialize_slots_index_2_csv_column_index;
     bool _no_data = false;
 };
 } // namespace starrocks
