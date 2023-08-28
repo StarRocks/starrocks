@@ -30,6 +30,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
@@ -53,6 +54,14 @@ public class StatisticSQLBuilder {
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
+
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string)"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate"
+                    + " GROUP BY table_uuid, column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
@@ -118,6 +127,23 @@ public class StatisticSQLBuilder {
             }
             context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getName() + "\"");
             querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
+        }
+
+        return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<Column> columns) {
+        List<String> querySQL = new ArrayList<>();
+        for (Column column : columns) {
+            VelocityContext context = new VelocityContext();
+
+            if (column.getType().canStatistic()) {
+                context.put("type", column.getType().toSql());
+            } else {
+                context.put("type", "string");
+            }
+            context.put("predicate", "table_uuid = \"" + tableUUID + "\"" + " and column_name = \"" + column.getName() + "\"");
+            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE));
         }
 
         return Joiner.on(" UNION ALL ").join(querySQL);
