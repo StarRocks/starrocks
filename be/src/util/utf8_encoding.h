@@ -35,7 +35,8 @@ struct EncodedUtf8Char {
     EncodedUtf8Char() { u.value = ABSENT_ENCODED; }
     explicit EncodedUtf8Char(const char* p, size_t size) {
         u.value = ABSENT_ENCODED;
-        strings::memcpy_inlined(u.bytes, p, std::min(sizeof(u.bytes), size));
+        size_t copy_size = size < sizeof(u.bytes) ? size : sizeof(u.bytes);
+        strings::memcpy_inlined(u.bytes, p, copy_size);
     }
     EncodedUtf8Char(const EncodedUtf8Char& x) { u.value = x.u.value; }
     EncodedUtf8Char(EncodedUtf8Char&& x) noexcept { u.value = x.u.value; }
