@@ -60,12 +60,12 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         }
 
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
-                getOrDefault(prop, HDFS_AUTHENTICATION),
-                getOrDefault(prop, HDFS_USER_NAME2, HDFS_USER_NAME),
-                getOrDefault(prop, HDFS_PASSWORD2, HDFS_PASSWORD2),
-                getOrDefault(prop, HDFS_KERBEROS_PRINCIPAL2, HDFS_KERBEROS_PRINCIPAL),
-                getOrDefault(prop, HDFS_KERBEROS_KEYTAB_FILE, HDFS_KERBEROS_KEYTAB),
-                getOrDefault(prop, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT),
+                getOrDefault(properties, HDFS_AUTHENTICATION),
+                getOrDefault(properties, HDFS_USER_NAME2, HDFS_USER_NAME),
+                getOrDefault(properties, HDFS_PASSWORD2, HDFS_PASSWORD2),
+                getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL2, HDFS_KERBEROS_PRINCIPAL),
+                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_FILE, HDFS_KERBEROS_KEYTAB),
+                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT),
                 prop
         );
         if (!hdfsCloudCredential.validate()) {
