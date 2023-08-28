@@ -279,6 +279,9 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
         // Fill materialize columns first, then fill partition column
         for (int j = 0; j < num_materialize_columns; j++) {
+            const auto& slot = _scanner_params.materialize_slots[j];
+            DCHECK(slot != nullptr);
+
             size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
             Column* column = _column_raw_ptrs[chunk_index];
@@ -288,7 +291,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     return Status::InternalError(
                             strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
-                                                field.to_string(), "formatted_slot_name"));
+                                                field.to_string(), slot->col_name()));
                 }
             } else {
                 // The size of hive_column_names may be larger than fields when new columns are added.
@@ -299,6 +302,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
+    // TODO Try to reuse HdfsScannerContext::append_partition_column_to_chunk() function
     // Start to append partition column
     for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
         size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
@@ -320,7 +324,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     // Check chunk's row number for each column
     chunk->get()->check_or_die();
 
-    return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+    return rows_read > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
@@ -398,7 +402,7 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
         const auto& slot = _scanner_params.materialize_slots[i];
         const std::string& formatted_slot_name =
                 case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
-        auto it = formatted_hive_column_name_2_index.find(formatted_slot_name);
+        const auto& it = formatted_hive_column_name_2_index.find(formatted_slot_name);
         if (it == formatted_hive_column_name_2_index.end()) {
             return Status::InternalError("Can not get index of column name: " + formatted_slot_name);
         }
