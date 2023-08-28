@@ -836,6 +836,23 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testPartitionWithFunctionInUseStr2DateForError() {
+        String sql = "create materialized view mv_error " +
+                "partition by ss " +
+                "distributed by hash(a) buckets 10 " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl0;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view partition function str2date check failed"));
+        }
+    }
+
+    @Test
     public void testPartitionWithFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',ss) " +

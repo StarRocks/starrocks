@@ -35,6 +35,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME0 = "tbl0";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
     private Map<String, String> properties;
 
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
@@ -59,8 +60,11 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
                 return new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
                         getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
-            } else {
-                return new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+                return new JDBCTable(100001, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
+                        getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
+            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                return new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
                         getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
             }
         } catch (DdlException e) {
@@ -124,7 +128,11 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tableName) {
         readLock();
         try {
-            return partitionNames;
+            if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                return Arrays.asList("1234567", "1234568", "1234569");
+            } else {
+                return partitionNames;
+            }
         } finally {
             readUnlock();
         }
@@ -154,7 +162,13 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(com.starrocks.catalog.Table table, List<String> partitionNames) {
         readLock();
         try {
-            return partitions;
+            if (table.getName().equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                return Arrays.asList(new Partition("d", 1690819200L),
+                        new Partition("d", 1690819200L),
+                        new Partition("d", 1690819200L));
+            } else {
+                return partitions;
+            }
         } finally {
             readUnlock();
         }
