@@ -288,29 +288,29 @@ Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
 #### Prepare a dataset
 
-**Avro schema**
+- **Avro schema**
 
-1. Create the following  Avro schema file `avro_schema.avsc`:
+  1. Create the following  Avro schema file `avro_schema.avsc`:
 
-      ```JSON
-      {
-          "type": "record",
-          "name": "sensor_log",
-          "fields" : [
-              {"name": "id", "type": "long"},
-              {"name": "name", "type": "string"},
-              {"name": "checked", "type" : "boolean"},
-              {"name": "data", "type": "double"},
-              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
-          ]
-      }
-      ```
+        ```JSON
+        {
+            "type": "record",
+            "name": "sensor_log",
+            "fields" : [
+                {"name": "id", "type": "long"},
+                {"name": "name", "type": "string"},
+                {"name": "checked", "type" : "boolean"},
+                {"name": "data", "type": "double"},
+                {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+            ]
+        }
+        ```
 
-2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
+  2. Register the Avro schema in the [Schema Registry](https://docs.confluent.io/cloud/current/get-started/schema-registry.html#create-a-schema).
 
-**Avro data**
+- **Avro data**
 
-Prepare the Avro data and send it to the Kafka topic `topic_0`.
+  Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
 #### Create a table
 
@@ -381,29 +381,29 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
 
-**Primitive types**
+- **Primitive types**
 
-| Avro    | StarRocks |
-| ------- | --------- |
-| nul     | NULL      |
-| boolean | BOOLEAN   |
-| int     | INT       |
-| long    | BIGINT    |
-| float   | FLOAT     |
-| double  | DOUBLE    |
-| bytes   | STRING    |
-| string  | STRING    |
+  | Avro    | StarRocks |
+  | ------- | --------- |
+  | nul     | NULL      |
+  | boolean | BOOLEAN   |
+  | int     | INT       |
+  | long    | BIGINT    |
+  | float   | FLOAT     |
+  | double  | DOUBLE    |
+  | bytes   | STRING    |
+  | string  | STRING    |
 
-**Complex types**
+- **Complex types**
 
-| Avro           | StarRocks                                                    |
-| -------------- | ------------------------------------------------------------ |
-| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
-| enums          | STRING                                                       |
-| arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
-| union(T, null) | NULLABLE(T)                                                  |
-| fixed          | STRING                                                       |
+  | Avro           | StarRocks                                                    |
+  | -------------- | ------------------------------------------------------------ |
+  | record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+  | enums          | STRING                                                       |
+  | arrays         | ARRAY                                                        |
+  | maps           | JSON                                                         |
+  | union(T, null) | NULLABLE(T)                                                  |
+  | fixed          | STRING                                                       |
 
 #### Limits
 
