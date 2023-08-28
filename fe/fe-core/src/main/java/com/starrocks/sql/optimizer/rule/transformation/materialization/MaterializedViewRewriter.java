@@ -1261,7 +1261,7 @@ public class MaterializedViewRewriter {
                 if (!derivedPredicate.equals(ConstantOperator.TRUE)) {
                     derivedPredicates.add(derivedPredicate);
                 }
-                // add lfet table's not null constrains
+                // add left table's not null constraints
                 derivedPredicateOpt = getDerivedPredicate(rewriteContext,
                         rewriter, mvColumnRefToScalarOp, leftJoinColumns, predicates, true, false, true);
             }
