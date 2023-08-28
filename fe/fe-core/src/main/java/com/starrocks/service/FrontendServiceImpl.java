@@ -78,7 +78,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -332,8 +331,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
-                        for (TableName tableName : allTables.keySet()) {
+                        List<TableName> allTables = view.getTableRefs();
+                        for (TableName tableName : allTables) {
                             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                                     currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
                                 ddlSql = "";
