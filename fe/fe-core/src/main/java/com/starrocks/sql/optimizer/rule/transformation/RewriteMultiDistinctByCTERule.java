@@ -264,11 +264,14 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         for (ColumnRefOperator distinctAggRef : distinctAggList) {
             CallOperator aggCallOperator = aggregate.getAggregations().get(distinctAggRef);
             if (aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
+                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM) ||
+                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
                 allCteConsumes.offer(buildCountSumDistinctCTEConsume(distinctAggRef, aggCallOperator,
                         aggregate, cteProduce, factory));
                 consumeAggCallMap.put(aggCallOperator, distinctAggRef);
                 projectionMap.put(distinctAggRef, distinctAggRef);
+            } else if (!aggCallOperator.getFnName().equals(FunctionSet.AVG)) {
+                throw new UnsupportedOperationException(aggCallOperator.getFnName() + " does not support distinct.");
             }
         }
 

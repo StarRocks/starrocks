@@ -1792,6 +1792,7 @@ aggregationFunction
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
+    | ARRAY_AGG '(' DISTINCT? expression ')'
     ;
 
 userVariable
@@ -2157,7 +2158,7 @@ authOption
     ;
 
 nonReserved
-    : ACTIVE | AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    : ACTIVE | AFTER | AGGREGATE | ARRAY_AGG | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
