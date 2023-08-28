@@ -62,7 +62,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
     public void applyToConfiguration(Configuration configuration) {
         hdfsCloudCredential.applyToConfiguration(configuration);
         configuration.set(HDFS_CONFIG_RESOURCES, configResources);
-        configuration.set(HDFS_RUNTIME_JARS, configResources);
+        configuration.set(HDFS_RUNTIME_JARS, runtimeJars);
     }
 
     // NOTE(yanz): hdfs credential is quite special. In most cases, people write auth/username/password etc.

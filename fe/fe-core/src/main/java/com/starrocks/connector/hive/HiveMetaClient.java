@@ -16,6 +16,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
@@ -68,8 +69,9 @@ public class HiveMetaClient {
         this.conf = conf;
     }
 
-    public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
+    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
         HiveConf conf = new HiveConf();
+        conf.addResource(env.getConfiguration());
         properties.forEach(conf::set);
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
