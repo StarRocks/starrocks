@@ -75,7 +75,7 @@ public class WarehouseManager implements Writable {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
                     DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
-                    "An internal warehouse contains all compute nodes in this system");
+                    "An internal warehouse init after FE is ready");
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
         }

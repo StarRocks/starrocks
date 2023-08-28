@@ -28,9 +28,17 @@ import java.util.List;
 public class WarehouseProcDir implements ProcDirInterface {
     public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Id")
-            .add("Warehouse")
+            .add("Name")
             .add("State")
-            .add("ClusterCount")
+            .add("Size")
+            .add("CurrentClusterCount")
+            .add("MaxClusterCount")
+            .add("StartedClusters")
+            .add("RunningSql")
+            .add("QueuedSql")
+            .add("CreatedOn")
+            .add("ResumedOn")
+            .add("UpdatedOn")
             .add("Comment")
             .build();
 

@@ -46,7 +46,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
         Assert.assertNotNull(response.body());
         String body = response.body().string();
         Assert.assertEquals(200, response.code());
-        Assert.assertEquals(expectedBody, body);
+        Assert.assertTrue(body.contains(expectedBody));
     }
 
     @Override
@@ -66,9 +66,9 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "[{\"Id\":\"0\",\"Warehouse\":\"default_warehouse\"," +
-                        "\"State\":\"AVAILABLE\",\"ClusterCount\":\"1\"," +
-                        "\"Comment\":\"An internal warehouse contains all compute nodes in this system\"}]"
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"1\"," +
+                        "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\"," +
+                        "\"StartedClusters\":\"1\",\"RunningSql\":\"-1\",\"QueuedSql\":\"-1\""
         );
         // list cluster in warehouse:0
         sendHttpAndValidateResponse("/warehouses/0",
@@ -105,9 +105,9 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "[{\"Id\":\"0\",\"Warehouse\":\"default_warehouse\"," +
-                        "\"State\":\"AVAILABLE\",\"ClusterCount\":\"1\"," +
-                        "\"Comment\":\"An internal warehouse contains all compute nodes in this system\"}]"
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"1\"," +
+                        "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\",\"StartedClusters\":\"1\"," +
+                        "\"RunningSql\":\"-1\",\"QueuedSql\":\"-1\""
         );
         // list cluster in warehouse:0
         sendHttpAndValidateResponse("/warehouses/0",

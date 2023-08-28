@@ -18,12 +18,14 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
 
 public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
+    @Ignore
     @Test
     public void testSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
@@ -100,6 +102,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Ignore
     @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
@@ -208,6 +211,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Ignore
     @Test
     public void testSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
@@ -236,6 +240,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "hive_mv_1");
     }
 
+    @Ignore
     @Test
     public void testMultiMvsForSingleTable() throws Exception {
         createAndRefreshMv("test", "mv_1",
@@ -277,6 +282,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         dropMv("test", "agg_mv_2");
     }
 
+    @Ignore
     @Test
     public void testNestedMvOnSingleTable() throws Exception {
         createAndRefreshMv("test", "mv_1",

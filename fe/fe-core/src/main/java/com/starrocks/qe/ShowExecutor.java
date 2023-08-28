@@ -2827,7 +2827,15 @@ public class ShowExecutor {
         ShowWarehousesStmt showStmt = (ShowWarehousesStmt) stmt;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+
+        PatternMatcher matcher = null;
+        if (!showStmt.getPattern().isEmpty()) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.WAREHOUSE.getCaseSensibility());
+        }
+        PatternMatcher finalMatcher = matcher;
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
+                .filter(row -> finalMatcher == null || finalMatcher.match(row.get(0)))
                 .filter(row -> {
                     try {
                         AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),

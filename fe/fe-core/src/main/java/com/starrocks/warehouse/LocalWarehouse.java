@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -59,10 +60,19 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
-        result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
+        result.addRow(Lists.newArrayList(
+                String.valueOf(this.getId()),
                 this.getName(),
                 this.getState().toString(),
                 String.valueOf(1L),
+                String.valueOf(1L),
+                String.valueOf(1L),
+                String.valueOf(1L),
+                String.valueOf(-1L),   //TODO: need to be filled after
+                String.valueOf(-1L),   //TODO: need to be filled after
+                TimeUtils.longToTimeString(this.getCreatedTime()),
+                TimeUtils.longToTimeString(this.getResumedTime()),
+                TimeUtils.longToTimeString(this.getUpdatedTime()),
                 this.getComment()));
     }
 
@@ -98,11 +108,16 @@ public class LocalWarehouse extends Warehouse {
     @Override
     public void suspendSelf() {
         this.state = WarehouseState.SUSPENDED;
+        long currentTime = System.currentTimeMillis();
+        setResumedTime(currentTime);
+        setUpdatedTime(currentTime);
     }
 
     @Override
     public void resumeSelf() {
         this.state = WarehouseState.AVAILABLE;
+        long currentTime = System.currentTimeMillis();
+        setUpdatedTime(currentTime);
     }
 
     private void deleteWorkerFromStarMgr() throws DdlException {

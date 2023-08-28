@@ -46,10 +46,22 @@ public abstract class Warehouse implements Writable {
     @SerializedName(value = "comment")
     private String comment;
 
+    @SerializedName(value = "ctime")
+    private volatile long createdTime;
+
+    @SerializedName(value = "rtime")
+    private volatile long resumedTime;
+
+    @SerializedName(value = "mtime")
+    private volatile long updatedTime;
+
     public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
         this.comment = comment;
+        this.createdTime = System.currentTimeMillis();
+        this.resumedTime = -1L;
+        this.updatedTime = createdTime;
     }
 
     public abstract void initCluster() throws DdlException;
@@ -93,6 +105,26 @@ public abstract class Warehouse implements Writable {
     public abstract void suspendSelf();
 
     public abstract void resumeSelf();
+
+    public long getCreatedTime() {
+        return createdTime;
+    }
+
+    public long getResumedTime() {
+        return resumedTime;
+    }
+
+    public long getUpdatedTime() {
+        return updatedTime;
+    }
+
+    public void setResumedTime(long time) {
+        this.resumedTime = time;
+    }
+
+    public void setUpdatedTime(long time) {
+        this.updatedTime = time;
+    }
 
     @Override
     public void write(DataOutput out) throws IOException {

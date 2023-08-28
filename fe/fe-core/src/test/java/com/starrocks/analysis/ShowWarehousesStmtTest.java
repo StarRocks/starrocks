@@ -67,9 +67,18 @@ public class ShowWarehousesStmtTest {
         ShowResultSet resultSet = executor.execute();
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
-        Assert.assertEquals("Warehouse", metaData.getColumn(1).getName());
+        Assert.assertEquals("Name", metaData.getColumn(1).getName());
         Assert.assertEquals("State", metaData.getColumn(2).getName());
-        Assert.assertEquals("ClusterCount", metaData.getColumn(3).getName());
+        Assert.assertEquals("Size", metaData.getColumn(3).getName());
+        Assert.assertEquals("CurrentClusterCount", metaData.getColumn(4).getName());
+        Assert.assertEquals("MaxClusterCount", metaData.getColumn(5).getName());
+        Assert.assertEquals("StartedClusters", metaData.getColumn(6).getName());
+        Assert.assertEquals("RunningSql", metaData.getColumn(7).getName());
+        Assert.assertEquals("QueuedSql", metaData.getColumn(8).getName());
+        Assert.assertEquals("CreatedOn", metaData.getColumn(9).getName());
+        Assert.assertEquals("ResumedOn", metaData.getColumn(10).getName());
+        Assert.assertEquals("UpdatedOn", metaData.getColumn(11).getName());
+        Assert.assertEquals("Comment", metaData.getColumn(12).getName());
         Assert.assertEquals("AVAILABLE", resultSet.getResultRows().get(0).get(2).toString());
     }
 }
