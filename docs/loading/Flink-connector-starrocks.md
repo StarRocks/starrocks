@@ -218,7 +218,7 @@ Note you must define the primary key in the Flink DDL if you want to load data i
 
 There are several ways to implement a Flink DataStream job according to the type of the input records, such as a CSV Java `String`, a JSON Java `String` or a custom Java object.
 
-- The input records are csv-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java) for a complete example.
+- The input records are CSV-format `String`. See [LoadCsvRecords](https://github.com/StarRocks/starrocks-connector-for-apache-flink/tree/main/examples/src/main/java/com/starrocks/connector/flink/examples/datastream/LoadCsvRecords.java) for a complete example.
 
     ```java
     /**
@@ -269,7 +269,7 @@ There are several ways to implement a Flink DataStream job according to the type
     /** 
      * Configure the connector with the required properties.
      * You also need to add properties "sink.properties.format" and "sink.properties.strip_outer_array"
-     * to tell the connector the input records are JSON-format.
+     * to tell the connector the input records are JSON-format and to strip the outermost array structure. 
      */
     StarRocksSinkOptions options = StarRocksSinkOptions.builder()
             .withProperty("jdbc-url", jdbcUrl)
@@ -326,7 +326,8 @@ There are several ways to implement a Flink DataStream job according to the type
             .withProperty("password", "")
             .build();
 
-    /** The connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
+    /**
+     * The connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
      * and each element is the value for a column.
      * You need to define the schema of the Object[] which matches that of the StarRocks table.
      */
@@ -334,11 +335,10 @@ There are several ways to implement a Flink DataStream job according to the type
             .field("id", DataTypes.INT().notNull())
             .field("name", DataTypes.STRING())
             .field("score", DataTypes.INT())
-            // Must specify the primary key for the StarRocks primary key table,
-            // and must specify notNull(), for example, DataTypes.INT().notNull(), for the primary key `id`.
+            // When the StarRocks table is a Primary Key table, you must specify notNull(), for example, DataTypes.INT().notNull(), for the primary key `id`.
             .primaryKey("id")
             .build();
-    // Transforms the RowData to the Object[] according to the schema.
+    // Transform the RowData to the Object[] according to the schema.
     RowDataTransformer transformer = new RowDataTransformer();
     // Create the sink with the schema, options, and transformer.
     SinkFunction<RowData> starRockSink = StarRocksSink.sink(schema, options, transformer);
@@ -352,15 +352,14 @@ There are several ways to implement a Flink DataStream job according to the type
     
         /**
          * Set each element of the object array according to the input RowData.
-         * The schema of the array matches that of StarRocks table.
+         * The schema of the array matches that of the StarRocks table.
          */
         @Override
         public void accept(Object[] internalRow, RowData rowData) {
             internalRow[0] = rowData.id;
             internalRow[1] = rowData.name;
             internalRow[2] = rowData.score;
-            // Only need for StarRocks primary key table.
-            // Set the last element to indicate whether the data loading is an UPSERT or DELETE operation.
+            // When the StarRocks table is a Primary Key table, you need to set the last element to indicate whether the data loading is an UPSERT or DELETE operation.
             internalRow[internalRow.length - 1] = StarRocksSinkOP.UPSERT.ordinal();
         }
     }  
@@ -397,7 +396,7 @@ DISTRIBUTED BY HASH(`id`);
 
 This example will show how to load data only to columns `id` and `name`.
 
-1. Insert data into the StarRocks table `score_board` in MySQL client.
+1. Insert two data rows into the StarRocks table `score_board` in MySQL client.
 
     ```SQL
     mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
@@ -437,15 +436,13 @@ This example will show how to load data only to columns `id` and `name`.
     ); 
     ```
 
-3. Insert data into the table in Flink SQL client, and only update the column `name`.
+3. Insert two data rows into the Flink table. The primary keys of the data rows are as same as these of rows in the StarRocks table. but the values in the column `name` are modified.
 
     ```SQL
     INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
     ```
 
 4. Query the StarRocks table in MySQL client.
-
-    You can see that only values for `name` change, and the values for `score` do not change.
   
     ```SQL
     mysql> select * from score_board;
@@ -457,6 +454,8 @@ This example will show how to load data only to columns `id` and `name`.
     +------+------------------+-------+
     2 rows in set (0.02 sec)
     ```
+
+    You can see that only values for `name` change, and the values for `score` do not change.
 
 #### Conditional update
 
