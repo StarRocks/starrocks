@@ -26,23 +26,17 @@ struct ArrayAggAggregateState {
             if constexpr (pt_is_string<PT>) {
                 for (int i = 0; i < count; i++) {
                     auto raw_key = column.get_slice(offset + i);
-                    if (set.find(raw_key) == set.end()) {
-                        data_column.append(column, offset + i, 1);
-                        KeyType key(raw_key);
-                        set.template lazy_emplace(key, [&](const auto& ctor) {
-                            uint8_t* pos = mem_pool->allocate(key.size);
-                            assert(pos != nullptr);
-                            memcpy(pos, key.data, key.size);
-                            ctor(pos, key.size, key.hash);
-                        });
-                    }
+                    KeyType key(raw_key);
+                    set.template lazy_emplace(key, [&](const auto& ctor) {
+                        uint8_t* pos = mem_pool->allocate(key.size);
+                        assert(pos != nullptr);
+                        memcpy(pos, key.data, key.size);
+                        ctor(pos, key.size, key.hash);
+                    });
                 }
             } else {
                 for (int i = 0; i < count; i++) {
-                    if (set.find(column.get_data()[offset + i]) == set.end()) {
-                        data_column.append(column, offset + i, 1);
-                        set.emplace(data_column.get_data()[data_column.size() - 1]);
-                    }
+                    set.emplace(column.get_data()[offset + i]);
                 }
             }
         } else {
@@ -65,6 +59,26 @@ struct ArrayAggAggregateState {
         } else {
             null_count += count;
         }
+    }
+
+    ColumnType* get_data_column() {
+        auto size = set.size();
+        if (data_column.size() > 0 || size == 0) {
+            return &data_column;
+        }
+        data_column.get_data().reserve(size);
+        if constexpr (is_distinct) {
+            if constexpr (pt_is_string<PT>) {
+                for (auto& key : set) {
+                    data_column.append(Slice(key.data, key.size));
+                }
+            } else {
+                for (auto& key : set) {
+                    data_column.append(key);
+                }
+            }
+        }
+        return &data_column;
     }
 
     ColumnType data_column; // Aggregated elements for array_agg
@@ -105,9 +119,9 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto& state_impl = this->data(state);
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
         auto* column = down_cast<ArrayColumn*>(to);
-        column->append_array_element(state_impl.data_column, state_impl.null_count);
+        column->append_array_element(*(state_impl.get_data_column()), state_impl.null_count);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
