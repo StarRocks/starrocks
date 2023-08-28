@@ -100,6 +100,13 @@ public class LocalWarehouse extends Warehouse {
     }
 
     @Override
+    public List<List<String>> getNodesInfo() {
+        BaseProcResult result = new BaseProcResult();
+        cluster.getProcNodesDataV2(result);
+        return result.getRows();
+    }
+
+    @Override
     public void dropSelf() throws DdlException {
         deleteWorkerFromStarMgr();
         dropNodeFromSystem();

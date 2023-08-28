@@ -21,11 +21,15 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +39,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
@@ -89,6 +94,49 @@ public class Cluster implements Writable {
                 String.valueOf(this.getComputeNodeIds()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
+    }
+
+    public void getProcNodesDataV2(BaseProcResult result) {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream().
+                filter(cn -> cn.getWorkerGroupId() == this.getWorkerGroupId()).collect(Collectors.toList());
+        for (ComputeNode node : nodes) {
+            List<String> computeNodeInfo = Lists.newArrayList();
+
+            long warehouseId = node.getWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            computeNodeInfo.add(warehouse.getName());
+
+            computeNodeInfo.add(String.valueOf(this.id));
+            computeNodeInfo.add(String.valueOf(this.workerGroupId));
+            long nodeId = node.getId();
+            long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(nodeId);
+            computeNodeInfo.add(String.valueOf(nodeId));
+            computeNodeInfo.add(String.valueOf(workerId));
+
+            computeNodeInfo.add(node.getHost());
+
+            computeNodeInfo.add(String.valueOf(node.getHeartbeatPort()));
+            computeNodeInfo.add(String.valueOf(node.getBePort()));
+            computeNodeInfo.add(String.valueOf(node.getHttpPort()));
+            computeNodeInfo.add(String.valueOf(node.getBrpcPort()));
+            computeNodeInfo.add(String.valueOf(node.getStarletPort()));
+
+            computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastStartTime()));
+            computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastUpdateMs()));
+            computeNodeInfo.add(String.valueOf(node.isAlive()));
+
+            computeNodeInfo.add(node.getHeartbeatErrMsg());
+            computeNodeInfo.add(String.valueOf(node.getVersion()));
+
+            computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
+            computeNodeInfo.add(String.valueOf(BackendCoreStat.getCoresOfBe(nodeId)));
+            double memUsedPct = node.getMemUsedPct();
+            computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+            computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
+
+            result.addRow(computeNodeInfo);
+        }
     }
 
     public List<Long> getComputeNodeIds() {

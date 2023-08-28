@@ -113,9 +113,9 @@ import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
@@ -304,8 +304,11 @@ public class ShowExecutor {
             handleHelp();
         } else if (stmt instanceof ShowWarehousesStmt) {
             handleShowWarehouses();
-        } else if (stmt instanceof ShowClustersStmt) {
-            handleShowClusters();
+        } else if (stmt instanceof ShowNodesStmt) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                throw new DdlException("unsupported statement in shared_nothing mode");
+            }
+            handleShowNodes();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -2848,14 +2851,34 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
-    // show cluster statement
-    private void handleShowClusters() {
-        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
+    // show nodes from warehouse
+    private void handleShowNodes() {
+        ShowNodesStmt showStmt = (ShowNodesStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
-        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
-        List<List<String>> rowSet = warehouse.getClusterInfo().stream()
-                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+
+        // filter by pattern or warehouseName
+        String warehouseName = null;
+        PatternMatcher matcher = null;
+        if (showStmt.getWarehouseName() != null) {
+            warehouseName = showStmt.getWarehouseName();
+        } else if (showStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.WAREHOUSE.getCaseSensibility());
+        }
+
+        for (Warehouse wh : warehouseMgr.getAllWarehouses()) {
+            if (warehouseName != null && !wh.getName().equalsIgnoreCase(warehouseName)) {
+                continue;
+            }
+
+            if (matcher != null && !matcher.match(wh.getName())) {
+                continue;
+            }
+
+            rows.addAll(wh.getNodesInfo());
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     private List<List<String>> doPredicate(ShowStmt showStmt,

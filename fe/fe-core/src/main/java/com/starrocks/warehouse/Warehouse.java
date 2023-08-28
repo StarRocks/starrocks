@@ -100,6 +100,8 @@ public abstract class Warehouse implements Writable {
 
     public abstract ProcResult getClusterProcData();
 
+    public abstract List<List<String>> getNodesInfo();
+
     public abstract void dropSelf() throws DdlException;
 
     public abstract void suspendSelf();

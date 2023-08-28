@@ -38,6 +38,7 @@ statement
     | setWarehouseStatement
     | showWarehousesStatement
     | showClustersStatement
+    | showNodesStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -746,6 +747,11 @@ suspendWarehouseStatement
 
 resumeWarehouseStatement
     : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+showNodesStatement
+    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
+    | SHOW NODES FROM WAREHOUSE identifier
     ;
 
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------

@@ -1,8 +1,4 @@
--- name: test_show_warehouse_clusters
-SHOW CLUSTERS FROM WAREHOUSE default_warehouse;
--- result:
-0	0	[]	-1	-1
--- !result
+-- name: test_show_warehouse_proc
 SHOW PROC '/warehouses/0';
 -- result:
 [REGEX]0	0	\[.*\]	-1	-1

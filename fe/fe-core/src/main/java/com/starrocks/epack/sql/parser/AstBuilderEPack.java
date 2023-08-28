@@ -33,6 +33,7 @@ import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
@@ -570,6 +571,21 @@ public class AstBuilderEPack extends AstBuilder {
     public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
         String whName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowClustersStmt(whName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowNodesStatement(StarRocksParser.ShowNodesStatementContext context) {
+        String pattern = null;
+        String warehouseName = null;
+        if (context.WAREHOUSE() != null) {
+            warehouseName = ((Identifier) visit(context.identifier())).getValue();
+        } else if (context.WAREHOUSES() != null) {
+            if (context.pattern != null) {
+                StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+                pattern = stringLiteral.getValue();
+            }
+        }
+        return new ShowNodesStmt(warehouseName, pattern, createPos(context));
     }
 
     // ---------------------------------------- Failover Group Statement ---------------------------------------------------

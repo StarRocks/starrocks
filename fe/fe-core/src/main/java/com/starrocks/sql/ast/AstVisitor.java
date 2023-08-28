@@ -67,6 +67,7 @@ import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
@@ -137,7 +138,9 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-
+    public R visitShowNodesStatement(ShowNodesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
