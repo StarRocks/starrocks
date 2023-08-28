@@ -3493,7 +3493,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             try {
-                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }

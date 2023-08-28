@@ -1595,7 +1595,21 @@ public class CreateTableTest {
                                 "                    DISTRIBUTED BY HASH(k1)\n" +
                                 " PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
                 ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid data property. storage medium property is not found",
+                () -> createTable(
+                        "CREATE TABLE `cooldown_ttl_month1_table_with_null`\n" +
+                                "        ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "        unique KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "        PARTITION BY time_slice(k2, interval 1 month)\n" +
+                                "        DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "        PROPERTIES (\"storage_cooldown_ttl\" = \"1 month\");"
+                ));
     }
+
 
 
 }
