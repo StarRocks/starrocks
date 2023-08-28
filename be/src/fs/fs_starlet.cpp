@@ -508,14 +508,19 @@ public:
         std::vector<std::string> parsed_paths;
         parsed_paths.resize(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
+        int64_t shard_id = -1;
         for (size_t i = 0; i < paths.size(); ++i) {
             ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(paths[i]));
-            if (i == 0) {
-                auto fs_st = get_shard_filesystem(pair.second);
-                if (!fs_st.ok()) {
-                    return to_status(fs_st.status());
-                }
+            auto fs_st = get_shard_filesystem(pair.second);
+            if (!fs_st.ok()) {
+                return to_status(fs_st.status());
+            }
+            if (fs == nullptr) {
+                shard_id = pair.second;
                 fs = *fs_st;
+            }
+            if (shard_id != pair.second) {
+                return Status::InternalError("Not all paths have the same scheme");
             }
             parsed_paths[i] = std::string(pair.first);
         }
