@@ -338,6 +338,36 @@ TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 
+TEST_P(StarletFileSystemTest, test_delete_files) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+
+    auto uri1 = StarletPath("/f1");
+    ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
+    EXPECT_OK(wf1->append("hello"));
+    EXPECT_OK(wf1->append(" world!"));
+    EXPECT_OK(wf1->sync());
+    EXPECT_OK(wf1->close());
+    EXPECT_EQ(sizeof("hello world!"), wf1->size() + 1);
+    EXPECT_OK(fs->path_exists(uri1));
+
+    auto uri2 = StarletPath("/f2");
+    ASSIGN_OR_ABORT(auto wf2, fs->new_writable_file(uri2));
+    EXPECT_OK(wf2->append("hello"));
+    EXPECT_OK(wf2->append(" world!"));
+    EXPECT_OK(wf2->sync());
+    EXPECT_OK(wf2->close());
+    EXPECT_EQ(sizeof("hello world!"), wf2->size() + 1);
+    EXPECT_OK(fs->path_exists(uri2));
+
+    EXPECT_OK(fs->path_exists(uri1));
+    EXPECT_OK(fs->path_exists(uri2));
+    std::vector<std::string_view> paths{uri1, uri2};
+
+    EXPECT_OK(fs->delete_files(paths));
+    EXPECT_TRUE(fs->path_exists(uri1).is_not_found());
+    EXPECT_TRUE(fs->path_exists(uri2).is_not_found());
+}
+
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
                         ::testing::Values(std::string("s3"), std::string("cachefs")));
 
