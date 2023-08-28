@@ -1022,7 +1022,7 @@ public class PropertyAnalyzer {
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        // do not remove this will remove in analyzeDataProperty
         if (Strings.isNullOrEmpty(text)) {
             return null;
         }
