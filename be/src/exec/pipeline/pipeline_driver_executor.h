@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
@@ -39,6 +40,8 @@ public:
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done) = 0;
 
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
 protected:
@@ -53,8 +56,15 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
+<<<<<<< HEAD
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
+=======
+    void close() override;
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
+                           bool attach_profile) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+>>>>>>> 728573e241 ([Enhancement] Support audic statistics for insert statement (#29901))
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
