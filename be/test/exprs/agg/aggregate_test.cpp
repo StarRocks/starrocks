@@ -1621,7 +1621,11 @@ TEST_F(AggregateTest, test_array_agg) {
     auto result_column = ArrayColumn::create(elem, offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ("starrocks0,starrocks1,starrocks2,starrocks3,starrocks4,starrocks5", elem->get_slice(0).to_string());
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        ASSERT_EQ(val, elem->get_slice(i).to_string());
+    }
 }
 
 TEST_F(AggregateTest, test_array_agg_distinct) {
@@ -1648,7 +1652,11 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     auto result_column = ArrayColumn::create(elem, offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ("starrocks0,starrocks1,starrocks2,starrocks3,starrocks4,starrocks5", elem->get_slice(0).to_string());
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        ASSERT_EQ(val, elem->get_slice(i).to_string());
+    }
 }
 
 TEST_F(AggregateTest, test_array_agg_nullable) {
@@ -1659,7 +1667,7 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     auto null_column = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
-        data_column->append(i % 2);
+        data_column->append(i % 2 ? 0 : i);
         null_column->append(i % 2 ? 1 : 0);
     }
 
@@ -1672,7 +1680,7 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     auto result_column = ArrayColumn::create(elem, offsets);
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ(1024, elem->size());
+    ASSERT_EQ(1024, offsets->get_data().back());
 }
 
 TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
@@ -1683,20 +1691,21 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     auto null_column = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
-        data_column->append(i % 2);
-        null_column->append(i % 2 ? 1 : 0);
+        data_column->append(i % 100);
+        null_column->append(i % 4 ? 1 : 0);
     }
 
     auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
-
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
+
     auto elem = Int32Column::create();
     auto offsets = UInt32Column::create(0);
     auto result_column = ArrayColumn::create(elem, offsets);
+
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ(513, elem->size());
+    ASSERT_EQ(11, offsets->get_data().back());
 }
 
 } // namespace starrocks::vectorized
