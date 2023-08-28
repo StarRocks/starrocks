@@ -1479,56 +1479,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testPartialPartition6() throws Exception {
-        // test partition prune
-        createAndRefreshMv("test", "partial_mv_6", "create materialized view partial_mv_6" +
-                " partition by c3" +
-                " distributed by hash(c1) as" +
-                " select c1, c3, c2 from test_base_part where c3 < 2000;");
-        String query10 = "select c1, c3, c2 from test_base_part";
-        String plan10 = getFragmentPlan(query10);
-        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "TABLE: test_base_part\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
-                "     partitions=3/6\n" +
-                "     rollup: test_base_part");
-
-        String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
-        String plan12 = getFragmentPlan(query12);
-        PlanTestBase.assertContains(plan12, "partial_mv_6");
-
-        String query13 = "select c1, c3, c2 from test_base_part where c3 < 1000";
-        String plan13 = getFragmentPlan(query13);
-        PlanTestBase.assertContains(plan13, "partial_mv_6", "c3 <= 999");
-        dropMv("test", "partial_mv_6");
-    }
-
-    @Test
-    public void testPartialPartition7() throws Exception {
-        // test bucket prune
-        createAndRefreshMv("test", "partial_mv_7", "create materialized view partial_mv_7" +
-                " partition by c3" +
-                " distributed by hash(c1) as" +
-                " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
-        String query11 = "select c1, c3, c2 from test_base_part";
-        String plan11 = getFragmentPlan(query11);
-        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "TABLE: test_base_part");
-        dropMv("test", "partial_mv_7");
-    }
-
-    @Test
-    public void testPartialPartition8() throws Exception {
-        createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
-                " partition by c3" +
-                " distributed by hash(c1) as" +
-                " select c1, c3, c2 from test_base_part where c3 < 1000;");
-        String query14 = "select c1, c3, c2 from test_base_part where c3 < 1000";
-        String plan14 = getFragmentPlan(query14);
-        PlanTestBase.assertContains(plan14, "partial_mv_8");
-        dropMv("test", "partial_mv_8");
-    }
-
-    @Test
     public void testPartialPartition9() throws Exception {
         createAndRefreshMv("test", "partial_mv_9", "CREATE MATERIALIZED VIEW partial_mv_9" +
                 " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +

@@ -14,6 +14,8 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -117,8 +119,12 @@ public class WarehouseMetricMgr {
         if (!metricMap.containsKey(warehouseId)) {
             synchronized (WarehouseMetricMgr.class) {
                 if (!metricMap.containsKey(warehouseId)) {
+                    Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    String whName = wh == null ? "unknown" : wh.getName();
+
                     T metric = metricSupplier.get();
-                    metric.addLabel(new MetricLabel("warehouse", warehouseId.toString()));
+                    metric.addLabel(new MetricLabel("warehouse_id", warehouseId.toString()));
+                    metric.addLabel(new MetricLabel("warehouse_name", whName));
 
                     metricMap.put(warehouseId, metric);
                     MetricRepo.addMetric(metric);
