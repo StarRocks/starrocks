@@ -53,6 +53,9 @@ public class SecurityPolicyRewriteRule {
         boolean hasPolicy = false;
         List<SelectListItem> selectListItemList = new ArrayList<>();
         for (Column column : columns) {
+            if (column.getType().isUnknown()) {
+                continue;
+            }
             Expr maskingExpr = Authorizer.getColumnMaskingPolicy(
                     context, tableName, column.getName(), column.getType());
 
