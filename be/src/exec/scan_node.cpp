@@ -141,8 +141,8 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         }
 
         if (output_chunk_by_bucket()) {
-            return std::make_unique<pipeline::HashPartitionSequenceMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                                       /*could_local_shuffle*/ false);
+            return std::make_unique<pipeline::BucketSequenceMorselQueueFactory>(std::move(queue_per_driver_seq),
+                                                                                /*could_local_shuffle*/ false);
         } else {
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
                                                                             /*could_local_shuffle*/ false);

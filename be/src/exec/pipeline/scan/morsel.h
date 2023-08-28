@@ -218,11 +218,10 @@ private:
     const bool _could_local_shuffle;
 };
 
-class HashPartitionSequenceMorselQueueFactory final : public MorselQueueFactory {
+class BucketSequenceMorselQueueFactory final : public MorselQueueFactory {
 public:
-    HashPartitionSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                            bool could_local_shuffle);
-    ~HashPartitionSequenceMorselQueueFactory() override = default;
+    BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
+    ~BucketSequenceMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
         DCHECK_LT(driver_sequence, _queue_per_driver_seq.size());
@@ -295,9 +294,9 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
-class PartitionSequenceMorselQueue : public MorselQueue {
+class BucketSequenceMorselQueue : public MorselQueue {
 public:
-    PartitionSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
+    BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
     void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {

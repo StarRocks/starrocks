@@ -76,8 +76,8 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
-HashPartitionSequenceMorselQueueFactory::HashPartitionSequenceMorselQueueFactory(
-        std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle)
+BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
+                                                                   bool could_local_shuffle)
         : _could_local_shuffle(could_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
@@ -91,12 +91,12 @@ HashPartitionSequenceMorselQueueFactory::HashPartitionSequenceMorselQueueFactory
         if (it == queue_per_driver_seq.end()) {
             _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
         } else {
-            _queue_per_driver_seq.emplace_back(std::make_unique<PartitionSequenceMorselQueue>(std::move(it->second)));
+            _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
         }
     }
 }
 
-size_t HashPartitionSequenceMorselQueueFactory::num_original_morsels() const {
+size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
     size_t total = 0;
     for (const auto& queue : _queue_per_driver_seq) {
         total += queue->num_original_morsels();
@@ -144,18 +144,18 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
 }
 
-PartitionSequenceMorselQueue::PartitionSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
+BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
         : _morsel_queue(std::move(morsel_queue)) {}
 
-std::vector<TInternalScanRange*> PartitionSequenceMorselQueue::olap_scan_ranges() const {
+std::vector<TInternalScanRange*> BucketSequenceMorselQueue::olap_scan_ranges() const {
     return _morsel_queue->olap_scan_ranges();
 }
 
-bool PartitionSequenceMorselQueue::empty() const {
+bool BucketSequenceMorselQueue::empty() const {
     return _unget_morsel == nullptr && _morsel_queue->empty();
 }
 
-StatusOr<MorselPtr> PartitionSequenceMorselQueue::try_get() {
+StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
     if (_unget_morsel != nullptr) {
         return std::move(_unget_morsel);
     }
@@ -171,11 +171,11 @@ StatusOr<MorselPtr> PartitionSequenceMorselQueue::try_get() {
     return morsel;
 }
 
-std::string PartitionSequenceMorselQueue::name() const {
+std::string BucketSequenceMorselQueue::name() const {
     return fmt::format("partition_morsel_queue({})", _morsel_queue->name());
 }
 
-StatusOr<bool> PartitionSequenceMorselQueue::ready_for_next() const {
+StatusOr<bool> BucketSequenceMorselQueue::ready_for_next() const {
     if (_current_sequence < 0) {
         return true;
     }
@@ -192,7 +192,7 @@ StatusOr<bool> PartitionSequenceMorselQueue::ready_for_next() const {
     return false;
 }
 
-StatusOr<int64_t> PartitionSequenceMorselQueue::_peek_sequence_id() const {
+StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
     int64_t next_owner_id = -1;
     if (!_morsel_queue->empty()) {
         ASSIGN_OR_RETURN(auto next_morsel, _morsel_queue->try_get());

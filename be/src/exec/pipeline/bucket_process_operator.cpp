@@ -57,10 +57,6 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
     return Status::OK();
 }
 
-void BucketProcessSinkOperator::setup_child_profile(RuntimeProfile* parent_profile) {
-    parent_profile->add_child(_ctx->sink->runtime_profile(), true, nullptr);
-}
-
 Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     return _ctx->source->prepare(state);
@@ -102,10 +98,6 @@ StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) 
     }
 
     return chunk;
-}
-
-void BucketProcessSourceOperator::setup_child_profile(RuntimeProfile* parent_profile) {
-    parent_profile->add_child(_ctx->source->runtime_profile(), true, nullptr);
 }
 
 BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(

@@ -50,7 +50,7 @@ public:
     }
 
     bool is_combinatorial_operator() const override { return true; }
-    void setup_child_profile(RuntimeProfile* parent) override;
+    void for_each_child_operator(const std::function<void(Operator*)>& apply) override { apply(_ctx->sink.get()); }
 
 private:
     BucketProcessContextPtr _ctx;
@@ -71,7 +71,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     bool is_combinatorial_operator() const override { return true; }
-    void setup_child_profile(RuntimeProfile* parent) override;
+    void for_each_child_operator(const std::function<void(Operator*)>& apply) override { apply(_ctx->source.get()); }
 
 private:
     BucketProcessContextPtr _ctx;
