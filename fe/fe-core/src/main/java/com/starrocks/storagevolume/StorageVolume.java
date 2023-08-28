@@ -29,7 +29,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     public enum StorageVolumeType {
@@ -270,9 +268,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
-        if (svt == StorageVolumeType.HDFS) {
-            params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
-        } else if (svt == StorageVolumeType.AZBLOB) {
+        if (svt == StorageVolumeType.AZBLOB) {
             String container = locations.get(0).split("/")[0];
             params.put(AZURE_BLOB_CONTAINER, container);
         }

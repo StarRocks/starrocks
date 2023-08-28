@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -61,6 +60,11 @@ public class HiveMetastore implements IHiveMetastore {
     public HiveMetastore(HiveMetaClient client, String catalogName) {
         this.client = client;
         this.catalogName = catalogName;
+    }
+
+    @Override
+    public String getCacheKeyPrefix() {
+        return client.getCacheKeyPrefix();
     }
 
     @Override
@@ -123,7 +127,8 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+    public List<String> getPartitionKeysByValue(String dbName, String tableName,
+                                                List<Optional<String>> partitionValues) {
         if (partitionValues.isEmpty()) {
             return client.getPartitionKeys(dbName, tableName);
         } else {
@@ -173,7 +178,8 @@ public class HiveMetastore implements IHiveMetastore {
         Map<List<String>, Partition> partitionValuesToPartition = partitions.stream()
                 .collect(Collectors.toMap(
                         org.apache.hadoop.hive.metastore.api.Partition::getValues,
-                        partition -> HiveMetastoreApiConverter.toPartition(partition.getSd(), partition.getParameters())));
+                        partition -> HiveMetastoreApiConverter.toPartition(partition.getSd(),
+                                partition.getParameters())));
 
         ImmutableMap.Builder<String, Partition> resultBuilder = ImmutableMap.builder();
         for (Map.Entry<String, List<String>> entry : partitionNameToPartitionValues.entrySet()) {
@@ -222,7 +228,8 @@ public class HiveMetastore implements IHiveMetastore {
         return new HivePartitionStats(commonStats, columnStatistics);
     }
 
-    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+    public void updateTableStatistics(String dbName, String tableName,
+                                      Function<HivePartitionStats, HivePartitionStats> update) {
         org.apache.hadoop.hive.metastore.api.Table originTable = client.getTable(dbName, tableName);
         if (originTable == null) {
             throw new StarRocksConnectorException("Table '%s.%s' not found", dbName, tableName);
@@ -270,10 +277,12 @@ public class HiveMetastore implements IHiveMetastore {
         String dbName = hmsTbl.getDbName();
         String tblName = hmsTbl.getTableName();
         List<String> dataColumns = hmsTbl.getDataColumnNames();
-        Map<String, Partition> partitions = getPartitionsByNames(hmsTbl.getDbName(), hmsTbl.getTableName(), partitionNames);
+        Map<String, Partition> partitions =
+                getPartitionsByNames(hmsTbl.getDbName(), hmsTbl.getTableName(), partitionNames);
 
         Map<String, HiveCommonStats> partitionCommonStats = partitions.entrySet().stream()
-                .collect(toImmutableMap(Map.Entry::getKey, entry -> toHiveCommonStats(entry.getValue().getParameters())));
+                .collect(toImmutableMap(Map.Entry::getKey,
+                        entry -> toHiveCommonStats(entry.getValue().getParameters())));
 
         Map<String, Long> partitionRowNums = partitionCommonStats.entrySet().stream()
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().getRowNums()));

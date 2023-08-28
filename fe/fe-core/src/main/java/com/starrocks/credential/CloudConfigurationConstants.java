@@ -18,6 +18,8 @@ package com.starrocks.credential;
  * Mapping used config key in StarRocks
  */
 public class CloudConfigurationConstants {
+    // General Key
+    public static final String STARROCKS_CLOUD_CACHE_KEY = "starrocks.cloud.cache.key";
 
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
@@ -103,6 +105,8 @@ public class CloudConfigurationConstants {
 
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
     public static final String HDFS_KERBEROS_KEYTAB_DATA = "hadoop.security.kerberos.keytab_data";
+    public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
+    public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";

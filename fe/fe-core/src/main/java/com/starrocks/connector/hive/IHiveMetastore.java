@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
@@ -26,6 +25,7 @@ import java.util.Optional;
 import java.util.function.Function;
 
 public interface IHiveMetastore {
+    String getCacheKeyPrefix();
 
     List<String> getAllDatabaseNames();
 
@@ -69,7 +69,8 @@ public interface IHiveMetastore {
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
-    void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update);
+    void updateTableStatistics(String dbName, String tableName,
+                               Function<HivePartitionStats, HivePartitionStats> update);
 
     void updatePartitionStatistics(String dbName, String tableName, String partitionName,
                                    Function<HivePartitionStats, HivePartitionStats> update);
@@ -79,7 +80,8 @@ public interface IHiveMetastore {
         return Lists.newArrayList();
     }
 
-    default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+    default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName,
+                                                           boolean onlyCachedPartitions) {
         return Lists.newArrayList();
     }
 

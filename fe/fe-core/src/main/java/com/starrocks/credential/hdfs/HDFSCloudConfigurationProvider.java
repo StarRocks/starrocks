@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DATA;
@@ -30,6 +31,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL2;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD2;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME2;
 
@@ -59,6 +61,7 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
             prop.remove(k);
         }
 
+        // TODO(yan): if we don't get username from properties, we can get username from query context.
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
                 getOrDefault(properties, HDFS_USER_NAME2, HDFS_USER_NAME),
@@ -71,6 +74,9 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         if (!hdfsCloudCredential.validate()) {
             return null;
         }
-        return new HDFSCloudConfiguration(hdfsCloudCredential);
+        HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
+        conf.setConfigResources(getOrDefault(properties, HDFS_CONFIG_RESOURCES));
+        conf.setRuntimeJars(getOrDefault(prop, HDFS_RUNTIME_JARS));
+        return conf;
     }
 }

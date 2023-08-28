@@ -15,16 +15,12 @@
 package com.starrocks.credential;
 
 import com.google.common.collect.ImmutableList;
-import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
-import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudType;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.aws.AwsProperties;
 
@@ -40,7 +36,6 @@ public class CloudConfigurationFactory {
             new AliyunCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider());
 
-
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
             CloudConfiguration cloudConfiguration = factory.build(properties);
@@ -48,8 +43,7 @@ public class CloudConfigurationFactory {
                 return cloudConfiguration;
             }
         }
-
-        return buildDefaultCloudConfiguration();
+        return null;
     }
 
     public static AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
@@ -71,37 +65,5 @@ public class CloudConfigurationFactory {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
         }
         return buildCloudConfigurationForStorage(copiedProperties);
-    }
-
-    // If user didn't specific any credential, we create DefaultCloudConfiguration instead.
-    // It will use Hadoop default constructor instead, user can put core-site.xml into java CLASSPATH to control
-    // authentication manually
-    public static CloudConfiguration buildDefaultCloudConfiguration() {
-        return new CloudConfiguration() {
-            @Override
-            public void toThrift(TCloudConfiguration tCloudConfiguration) {
-                tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
-            }
-
-            @Override
-            public void applyToConfiguration(Configuration configuration) {
-
-            }
-
-            @Override
-            public CloudType getCloudType() {
-                return CloudType.DEFAULT;
-            }
-
-            @Override
-            public FileStoreInfo toFileStoreInfo() {
-                return null;
-            }
-
-            @Override
-            public String getCredentialString() {
-                return "default";
-            }
-        };
     }
 }

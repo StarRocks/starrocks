@@ -24,8 +24,6 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
-    public static final String EMPTY = "empty";
-
     private String authentication;
     private String userName;
     private String password;
@@ -62,32 +60,15 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        // TODO
     }
 
     @Override
     public boolean validate() {
-        if (authentication.equals(EMPTY)) {
-            return true;
-        }
-
-        if (authentication.equals("simple")) {
-            return true;
-        }
-
-        if (authentication.equals("kerberos")) {
-            if (krbPrincipal.isEmpty()) {
-                return false;
-            }
-            return !(krbKeyTabData.isEmpty() && krbKeyTabFile.isEmpty());
-        }
-
-        return false;
+        return true;
     }
 
     @Override
     public void toThrift(Map<String, String> properties) {
-        // TODO
     }
 
     @Override

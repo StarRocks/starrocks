@@ -21,12 +21,28 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
+
 public class HDFSCloudConfiguration implements CloudConfiguration {
     private final HDFSCloudCredential hdfsCloudCredential;
+    private String configResources;
+    private String runtimeJars;
 
     public HDFSCloudConfiguration(HDFSCloudCredential hdfsCloudCredential) {
         Preconditions.checkNotNull(hdfsCloudCredential);
         this.hdfsCloudCredential = hdfsCloudCredential;
+    }
+
+    public void setConfigResources(String configResources) {
+        this.configResources = configResources;
+    }
+
+    public void setRuntimeJars(String runtimeJars) {
+        this.runtimeJars = runtimeJars;
     }
 
     public HDFSCloudCredential getHdfsCloudCredential() {
@@ -35,17 +51,29 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        // TODO
+        Map<String, String> properties = new HashMap<>();
+        hdfsCloudCredential.toThrift(properties);
+        if (!properties.isEmpty()) {
+            tCloudConfiguration.setCloud_properties_v2(properties);
+        }
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        // TODO
+        hdfsCloudCredential.applyToConfiguration(configuration);
+        configuration.set(HDFS_CONFIG_RESOURCES, configResources);
+        configuration.set(HDFS_RUNTIME_JARS, configResources);
     }
 
+    // NOTE(yanz): hdfs credential is quite special. In most cases, people write auth/username/password etc.
+    // in XML file instead of in string literals. So here we use `configResources` and `runtimeJars` as cred string.
+    // And `hdfsCloudCredential` this field is only for broker load, has nothing to do with catalog connector.
     @Override
     public String getCredentialString() {
-        return hdfsCloudCredential.getCredentialString();
+        return "HDFSCloudConfiguration{" +
+                "configResources=" + configResources +
+                ", runtimeJars=" + runtimeJars +
+                '}';
     }
 
     @Override

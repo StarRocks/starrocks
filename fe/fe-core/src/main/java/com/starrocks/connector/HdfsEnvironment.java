@@ -20,6 +20,8 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.STARROCKS_CLOUD_CACHE_KEY;
+
 public class HdfsEnvironment {
     private final HdfsConfiguration hdfsConfiguration;
 
@@ -58,6 +60,7 @@ public class HdfsEnvironment {
 
         public void applyToCloudConfiguration(CloudConfiguration cloudConfiguration) {
             cloudConfiguration.applyToConfiguration(configuration);
+            configuration.set(STARROCKS_CLOUD_CACHE_KEY, cloudConfiguration.getCredentialString());
         }
 
         public Configuration getConfiguration() {
