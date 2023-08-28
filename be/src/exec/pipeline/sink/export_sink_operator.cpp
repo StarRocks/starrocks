@@ -17,6 +17,7 @@
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
@@ -191,6 +192,7 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
+    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     return _export_sink_buffer->set_finishing();
 }
 
