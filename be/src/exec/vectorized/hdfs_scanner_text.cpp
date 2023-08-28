@@ -240,8 +240,16 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
     options.invalid_field_as_null = true;
 
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_text.cpp
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
+=======
+    size_t rows_read = 0;
+
+    for (; rows_read < chunk_size; rows_read++) {
+        CSVReader::Record record{};
+        Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
+>>>>>>> e8c4a39571 ([Enhancement] Improve data lake csv reader performance (#30028)):be/src/exec/hdfs_scanner_text.cpp
         if (status.is_end_of_file()) {
             if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
                 break;
@@ -277,6 +285,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             const auto slot = _scanner_params.materialize_slots[j];
             DCHECK(slot != nullptr);
 
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_text.cpp
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];
@@ -291,6 +300,18 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
                     break;
+=======
+            size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
+            size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
+            Column* column = _column_raw_ptrs[chunk_index];
+            if (csv_index < fields.size()) {
+                const Slice& field = fields[csv_index];
+                options.type_desc = &(_scanner_params.materialize_slots[j]->type());
+                if (!_converters[j]->read_string(column, field, options)) {
+                    return Status::InternalError(
+                            strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
+                                                field.to_string(), slot->col_name()));
+>>>>>>> e8c4a39571 ([Enhancement] Improve data lake csv reader performance (#30028)):be/src/exec/hdfs_scanner_text.cpp
                 }
             } else {
                 // The size of hive_column_names may be larger than fields when new columns are added.
@@ -301,6 +322,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 column->append_nulls(1);
             }
         }
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_text.cpp
         num_rows += !has_error;
         if (!has_error) {
             // Partition column not stored in text file, we should append these columns
@@ -321,9 +343,37 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             }
         } else {
             return Status::InternalError(error_msg);
-        }
+=======
     }
+
+    // TODO Try to reuse HdfsScannerContext::append_partition_column_to_chunk() function
+    // Start to append partition column
+    for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
+        size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
+        Column* column = _column_raw_ptrs[chunk_index];
+        ColumnPtr partition_value = _scanner_ctx.partition_values[p];
+        DCHECK(partition_value->is_constant());
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
+        const ColumnPtr& data_column = const_column->data_column();
+
+        if (data_column->is_nullable()) {
+            column->append_default(1);
+        } else {
+            column->append(*data_column, 0, 1);
+>>>>>>> e8c4a39571 ([Enhancement] Improve data lake csv reader performance (#30028)):be/src/exec/hdfs_scanner_text.cpp
+        }
+
+        column->assign(rows_read, 0);
+    }
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_text.cpp
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+=======
+
+    // Check chunk's row number for each column
+    chunk->get()->check_or_die();
+
+    return rows_read > 0 ? Status::OK() : Status::EndOfFile("");
+>>>>>>> e8c4a39571 ([Enhancement] Improve data lake csv reader performance (#30028)):be/src/exec/hdfs_scanner_text.cpp
 }
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
@@ -367,13 +417,39 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_text.cpp
 Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
     for (int i = 0; i < _scanner_params.hive_column_names->size(); i++) {
         const std::string& name = _scanner_params.hive_column_names->at(i);
         if (name == column_name) {
             _columns_index[name] = i;
             return Status::OK();
+=======
+Status HdfsTextScanner::_build_hive_column_name_2_index() {
+    const bool case_sensitive = _scanner_params.case_sensitive;
+
+    // The map's value is the position of column name in hive's table(Not in StarRocks' table)
+    std::unordered_map<std::string, size_t> formatted_hive_column_name_2_index;
+
+    for (size_t i = 0; i < _scanner_params.hive_column_names->size(); i++) {
+        const std::string formatted_column_name =
+                case_sensitive ? (*_scanner_params.hive_column_names)[i]
+                               : boost::algorithm::to_lower_copy((*_scanner_params.hive_column_names)[i]);
+        formatted_hive_column_name_2_index.emplace(formatted_column_name, i);
+    }
+
+    // Assign csv column index
+    _materialize_slots_index_2_csv_column_index.resize(_scanner_params.materialize_slots.size());
+    for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
+        const auto& slot = _scanner_params.materialize_slots[i];
+        const std::string& formatted_slot_name =
+                case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
+        const auto& it = formatted_hive_column_name_2_index.find(formatted_slot_name);
+        if (it == formatted_hive_column_name_2_index.end()) {
+            return Status::InternalError("Can not get index of column name: " + formatted_slot_name);
+>>>>>>> e8c4a39571 ([Enhancement] Improve data lake csv reader performance (#30028)):be/src/exec/hdfs_scanner_text.cpp
         }
+        _materialize_slots_index_2_csv_column_index[i] = it->second;
     }
     return Status::InvalidArgument("Can not get index of column name " + column_name);
 }
