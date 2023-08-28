@@ -1324,4 +1324,73 @@ public class CreateTableTest {
         // colocate groups in different db should have same `GroupId.grpId`
         Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
     }
+
+    @Test
+    public void testPrimaryKeyNotSupportCoolDown() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.`primary_table_not_support_cool_down`\n" +
+                                "             ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "             primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "             PARTITION BY range(k1)\n" +
+                                "             (\n" +
+                                "                 PARTITION p1 VALUES LESS THAN (\"2021-01-02\"),\n" +
+                                "                 PARTITION p2 VALUES LESS THAN (\"2021-08-18\"),\n" +
+                                "                 PARTITION p3 VALUES LESS THAN (\"2022-08-17\"),\n" +
+                                "                 PARTITION p4 VALUES LESS THAN (\"2022-08-18\"),\n" +
+                                "                 PARTITION p5 VALUES LESS THAN (\"2022-08-19\"),\n" +
+                                "                 PARTITION p6 VALUES LESS THAN (\"2023-08-18\"),\n" +
+                                "                 PARTITION p7 VALUES LESS THAN (\"2024-08-18\")\n" +
+                                "             ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "  PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 year\");"
+                ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "List partition table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.list_partition_table_not_support_cool_down (\n" +
+                                "                    `k1`  date not null, `k2`  datetime,`k3`  char(20), " +
+                                "`k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, " +
+                                "`k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)\n" +
+                                "                )\n" +
+                                "                DUPLICATE KEY(k1)\n" +
+                                "                PARTITION BY LIST (k1) (\n" +
+                                "                   PARTITION p1 VALUES IN (\"2020-01-01\",\"2020-01-02\"),\n" +
+                                "                   PARTITION p2 VALUES IN (\"2021-01-01\")\n" +
+                                "                )\n" +
+                                "                DISTRIBUTED BY HASH(k1)\n" +
+                                "    PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
+                ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Only support partition is date type for storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.t_partition_table_only_support_date (\n" +
+                                "                        `k1` int, v1 int, v2 int\n" +
+                                "                    )\n" +
+                                "                    DUPLICATE KEY(k1)\n" +
+                                "                    PARTITION BY range (k1) (\n" +
+                                "                       PARTITION p1 VALUES less than (\"20200101\"),\n" +
+                                "                       PARTITION p2 VALUES less than (\"20210101\")\n" +
+                                "                    )\n" +
+                                "                    DISTRIBUTED BY HASH(k1)\n" +
+                                " PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
+                ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid data property. storage medium property is not found",
+                () -> createTable(
+                        "CREATE TABLE `cooldown_ttl_month1_table_with_null`\n" +
+                                "        ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "        unique KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "        PARTITION BY time_slice(k2, interval 1 month)\n" +
+                                "        DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "        PROPERTIES (\"storage_cooldown_ttl\" = \"1 month\");"
+                ));
+    }
+
 }

@@ -239,6 +239,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -2328,6 +2329,39 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
 
+        if (properties != null) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    throw new DdlException("Primary key table does not support storage medium cool down currently.");
+                }
+                if (partitionInfo instanceof ListPartitionInfo) {
+                    throw new DdlException("List partition table does not support storage medium cool down currently.");
+                }
+                if (partitionInfo instanceof RangePartitionInfo) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    if (partitionColumns.size() > 1) {
+                        throw new DdlException("Multi-column range partition table " +
+                                "does not support storage medium cool down currently.");
+                    }
+                    Column column = partitionColumns.get(0);
+                    if (!column.getType().getPrimitiveType().isDateType()) {
+                        throw new DdlException("Only support partition is date type for" +
+                                " storage medium cool down currently.");
+                    }
+                }
+            }
+            try {
+                PeriodDuration duration = PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, false);
+                if (duration != null) {
+                    table.setStorageCoolDownTTL(duration);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // if this is an unpartitioned table, we should analyze data property and replication num here.
             // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
@@ -4180,7 +4214,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             try {
-                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties);
+                PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
