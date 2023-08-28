@@ -686,6 +686,10 @@ public class MaterializedViewRewriter {
         final PredicateSplit queryPredicateSplit = mvRewriteContext.getQueryPredicateSplit();
         final EquivalenceClasses queryEc = createEquivalenceClasses(
                 queryPredicateSplit.getEqualPredicates(), queryExpression, null);
+        if (queryEc == null) {
+            logMVRewrite(mvRewriteContext, "Cannot construct query equivalence classes");
+            return null;
+        }
 
         final RewriteContext rewriteContext = new RewriteContext(
                 queryExpression, queryPredicateSplit, queryEc,
@@ -710,7 +714,7 @@ public class MaterializedViewRewriter {
                 // convert mv-based compensation join columns into query based after we get relationId mapping
                 if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter, newQueryEc,
                         compensationJoinColumns)) {
-                    logMVRewrite(mvRewriteContext, "Rewrite view delta failed: cannot add compensation join columns into " +
+                    logMVRewrite(mvRewriteContext, "Cannot add compensation join columns into " +
                             "equivalence classes");
                     return null;
                 }
@@ -721,7 +725,7 @@ public class MaterializedViewRewriter {
             final EquivalenceClasses queryBasedViewEqualPredicate =
                     createEquivalenceClasses(mvEqualPredicate, mvExpression, columnRewriter);
             if (queryBasedViewEqualPredicate == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite complete failed: cannot construct query based equivalence classes");
+                logMVRewrite(mvRewriteContext, "Cannot construct query based mv equivalence classes");
                 return null;
             }
             for (JoinDeriveContext deriveContext : mvRewriteContext.getJoinDeriveContexts()) {
