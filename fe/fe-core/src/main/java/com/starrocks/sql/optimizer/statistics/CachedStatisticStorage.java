@@ -25,6 +25,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorColumnStatsCacheLoader;
+import com.starrocks.connector.ConnectorTableColumnKey;
+import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -59,6 +62,13 @@ public class CachedStatisticStorage implements StatisticStorage {
             .maximumSize(Config.statistic_cache_columns)
             .executor(statsCacheRefresherExecutor)
             .buildAsync(new ColumnBasicStatsCacheLoader());
+
+    AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics =
+            Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .executor(statsCacheRefresherExecutor)
+            .buildAsync(new ConnectorColumnStatsCacheLoader());
 
     AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
@@ -123,6 +133,50 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
 
         tableStatsCache.synchronous().getAll(statsCacheKeyList);
+    }
+
+    @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> result =
+                    connectorTableCachedStatistics.getAll(cacheKeys);
+            if (result.isDone()) {
+                List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
+                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
+                realResult = result.get();
+                for (String column : columns) {
+                    Optional<ConnectorTableColumnStats> columnStatistic =
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
+                    if (columnStatistic.isPresent()) {
+                        columnStatistics.add(columnStatistic.get());
+                    } else {
+                        columnStatistics.add(ConnectorTableColumnStats.unknown());
+                    }
+                }
+                return columnStatistics;
+            } else {
+                return getDefaultConnectorTableStatistics(columns);
+            }
+        } catch (Exception e) {
+            LOG.warn(e);
+            return getDefaultConnectorTableStatistics(columns);
+        }
     }
 
     @Override
@@ -320,4 +374,13 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
         return columnStatisticList;
     }
+
+    private List<ConnectorTableColumnStats> getDefaultConnectorTableStatistics(List<String> columns) {
+        List<ConnectorTableColumnStats> connectorTableColumnStatsList = new ArrayList<>();
+        for (int i = 0; i < columns.size(); ++i) {
+            connectorTableColumnStatsList.add(ConnectorTableColumnStats.unknown());
+        }
+        return connectorTableColumnStatsList;
+    }
+
 }
