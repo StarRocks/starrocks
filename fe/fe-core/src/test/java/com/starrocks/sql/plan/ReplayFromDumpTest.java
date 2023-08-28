@@ -733,7 +733,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
 
     @Test
-    public void testMockQueryDump() throws Exception {
+    public void testMockQueryDump() {
         List<String> fileNames = mockCases();
         for (String fileName : fileNames) {
             try {

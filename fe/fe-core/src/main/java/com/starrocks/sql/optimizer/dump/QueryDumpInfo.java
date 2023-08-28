@@ -68,6 +68,8 @@ public class QueryDumpInfo implements DumpInfo {
     private SessionVariable sessionVariable;
     private final ConnectContext connectContext;
 
+    private String explainInfo = "";
+
     private boolean desensitizedInfo;
 
     public QueryDumpInfo(ConnectContext context) {
@@ -290,7 +292,18 @@ public class QueryDumpInfo implements DumpInfo {
     public boolean isDesensitizedInfo() {
         return desensitizedInfo;
     }
+
+    @Override
     public void setDesensitizedInfo(boolean desensitizedInfo) {
         this.desensitizedInfo = desensitizedInfo;
+    }
+
+    public String getExplainInfo() {
+        return explainInfo;
+    }
+
+    @Override
+    public void setExplainInfo(String explainInfo) {
+        this.explainInfo = explainInfo;
     }
 }
