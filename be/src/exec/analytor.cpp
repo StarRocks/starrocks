@@ -520,7 +520,10 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
 }
 
 Status Analytor::_evaluate_const_columns(int i) {
-    // used for const columns.
+    if (i >= _agg_fn_ctxs.size()) {
+        // Only agg fn has this context
+        return Status::OK();
+    }
     std::vector<ColumnPtr> const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
