@@ -635,7 +635,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 
     static Status convert_datetime_from_milisecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
-                                               const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+                                                   const cctz::time_zone& ctz,
+                                                   [[maybe_unused]] const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -651,7 +652,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 
     static Status convert_datetime_from_microsecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
-                                               const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+                                                    const cctz::time_zone& ctz,
+                                                    [[maybe_unused]] const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -667,7 +669,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 
     static Status convert_datetime_from_nanosecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
-                                               const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+                                                   const cctz::time_zone& ctz,
+                                                   [[maybe_unused]] const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -892,14 +895,14 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
-            // offset
-            auto* col_map = down_cast<MapColumn*>(column);
-            UInt32Column* col_offsets = col_map->offsets_column().get();
-            list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
-            // keys, values
-            size_t kv_size[] = {col_map->keys().size(), col_map->values().size()};
-            ColumnPtr kv_columns[] = {col_map->keys_column(), col_map->values_column()};
-            for (auto i = 0; i < 2; ++i) {
+        // offset
+        auto* col_map = down_cast<MapColumn*>(column);
+        UInt32Column* col_offsets = col_map->offsets_column().get();
+        list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
+        // keys, values
+        size_t kv_size[] = {col_map->keys().size(), col_map->values().size()};
+        ColumnPtr kv_columns[] = {col_map->keys_column(), col_map->values_column()};
+        for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;
             const auto* child_array = get_list_map_array_child<arrow::MapType>(
@@ -913,8 +916,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(
                     conv_func->children[i].get(), child_array_num_elements, child_array, kv_columns[i],
                     child_array_start_idx, kv_size[i], &child_chunk_filter, ctx));
-            }
-            return Status::OK();
+        }
+        return Status::OK();
     }
 };
 
@@ -923,11 +926,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, ConvertFuncTree* conv_func) {
-            auto* struct_col = down_cast<StructColumn*>(column);
-            auto* struct_array = down_cast<const arrow::StructArray*>(array);
+        auto* struct_col = down_cast<StructColumn*>(column);
+        auto* struct_array = down_cast<const arrow::StructArray*>(array);
 
-            DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
-            for (size_t i = 0; i < conv_func->field_names.size(); i++) {
+        DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
+        for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
 
             auto child_col = struct_col->field_column(child_name);
@@ -943,7 +946,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
                                                                     child_array.get(), child_col, array_start_idx,
                                                                     chunk_start_idx, chunk_filter, ctx));
-            }
+        }
 
         return Status::OK();
     }
