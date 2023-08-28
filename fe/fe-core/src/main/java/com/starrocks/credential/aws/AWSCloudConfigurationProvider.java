@@ -16,8 +16,7 @@ package com.starrocks.credential.aws;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.CloudCredential;
+import com.starrocks.credential.CloudConfigurationProvider;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 import java.util.Map;
@@ -42,24 +41,9 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
-public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
-    private final Map<String, String> properties;
-    private final HiveConf hiveConf;
+public class AWSCloudConfigurationProvider implements CloudConfigurationProvider {
 
-    public AWSCloudConfigurationFactory(Map<String, String> properties) {
-        this(properties, null);
-    }
-
-    public AWSCloudConfigurationFactory(HiveConf hiveConf) {
-        this(null, hiveConf);
-    }
-
-    public AWSCloudConfigurationFactory(Map<String, String> properties, HiveConf hiveConf) {
-        this.properties = properties;
-        this.hiveConf = hiveConf;
-    }
-
-    public CloudCredential buildGlueCloudCredential() {
+    public AWSCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         Preconditions.checkNotNull(hiveConf);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
                 hiveConf.getBoolean(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
@@ -79,7 +63,7 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
     }
 
     @Override
-    protected CloudConfiguration buildForStorage() {
+    public CloudConfiguration build(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
                 Boolean.parseBoolean(properties.getOrDefault(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),

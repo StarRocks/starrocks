@@ -26,7 +26,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
+import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -615,7 +615,7 @@ public class HdfsFsManager {
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        loadProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
+        loadProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
