@@ -1131,12 +1131,7 @@ under the License.
                 </executions>
                 <configuration>
                     <obfuscate>true</obfuscate>
-                    <proguardInclude>${project.basedir}/proguard.cfg</proguardInclude>
-                    <libs>
-                        <lib>${java.home}/lib/rt.jar</lib>
-                        <lib>${java.home}/lib/jce.jar</lib>
-                        <lib>${java.home}/lib/jsse.jar</lib>
-                    </libs>
+                    <proguardInclude>${proguard-cfg}</proguardInclude>
                     <outputDirectory>${project.build.directory}</outputDirectory>
                 </configuration>
             </plugin>

@@ -370,6 +370,13 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
     fi
 fi
 
+PROGUARD=
+  if [[ $JAVA_VER -gt 18 ]]; then
+    PROGUARD=${STARROCKS_HOME}/build-support/proguard-java11.cfg
+  else
+    PROGUARD=${STARROCKS_HOME}/build-support/proguard-java8.cfg
+  fi
+
 # Clean and build Frontend
 if [ ${FE_MODULES}x != ""x ]; then
     echo "Build Frontend Modules: $FE_MODULES"
@@ -377,7 +384,7 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests -Dproguard-cfg=${PROGUARD}
     cd ${STARROCKS_HOME}
 fi
 
