@@ -134,3 +134,6 @@ shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"load_profile_co
 -- name: test_memory_metrics_query_coordinator_count
 shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_coordinator_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
 
+-- name: test_memory_metrics_agent_task_count
+shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"agent_task_count\" | awk '{if ($NF >= 0) print "true"; else print "false";}'
+

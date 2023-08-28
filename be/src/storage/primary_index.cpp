@@ -1017,12 +1017,12 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
-    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta

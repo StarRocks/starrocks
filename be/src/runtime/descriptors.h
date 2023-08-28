@@ -107,6 +107,8 @@ public:
 
     std::string debug_string() const;
 
+    int32_t col_unique_id() const { return _col_unique_id; }
+
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
@@ -119,6 +121,7 @@ private:
     const TupleId _parent;
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
+    const int32_t _col_unique_id;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -129,6 +132,9 @@ private:
 
     const bool _is_materialized;
     const bool _is_output_column;
+
+    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
+    const bool _is_nullable;
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);

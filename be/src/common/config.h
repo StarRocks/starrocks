@@ -908,6 +908,10 @@ CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
+// The maximum size of a single spill directory, for some case the spill directory may
+// be the same with storage path. Spill will return with error when used size has exceeded
+// the limit.
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -972,6 +976,14 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

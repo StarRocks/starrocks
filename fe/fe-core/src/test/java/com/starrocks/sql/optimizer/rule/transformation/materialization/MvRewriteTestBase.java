@@ -16,15 +16,24 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterJobV2;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -38,19 +47,23 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.hadoop.util.ThreadUtil;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 
 public class MvRewriteTestBase {
+    private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
@@ -79,6 +92,25 @@ public class MvRewriteTestBase {
         starRocksAssert.withDatabase("test").useDatabase("test");
 
         Config.enable_experimental_mv = true;
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
 
         starRocksAssert.withTable("create table emps (\n" +
                         "    empid int not null,\n" +
@@ -207,12 +239,9 @@ public class MvRewriteTestBase {
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
 
-        cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts values(3, \"dept_name3\")");
+        cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100), (2, 1, \"emp_name1\", 120), (3, 1, " +
+                "\"emp_name1\", 150);");
+        cluster.runSql("test", "insert into depts values(1, \"dept_name1\"), (2, \"dept_name2\"), (3, \"dept_name3\")");
         cluster.runSql("test", "insert into dependents values(1, \"dependent_name1\")");
         cluster.runSql("test", "insert into locations values(1, \"location1\")");
         cluster.runSql("test", "insert into t0 values(1, 2, 3)");
@@ -233,12 +262,12 @@ public class MvRewriteTestBase {
                 "PARTITION p4 VALUES [(\"4\"), (\"5\")),\n" +
                 "PARTITION p5 VALUES [(\"5\"), (\"6\")),\n" +
                 "PARTITION p6 VALUES [(\"6\"), (\"7\")))\n" +
-                "DISTRIBUTED BY HASH(`k1`) BUCKETS 6\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
-        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)," +
-                " (1,3,1),(1,3,2),(1,3,3)\n" +
+        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)" +
+                " ,(1,3,1),(1,3,2),(1,3,3)\n" +
                 " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
                 " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
@@ -264,6 +293,18 @@ public class MvRewriteTestBase {
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
+    }
+
+    private static void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
     }
 
     public String getFragmentPlan(String sql) throws Exception {
@@ -343,23 +384,6 @@ public class MvRewriteTestBase {
         }
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
-        }
-    }
-
-    protected void waitingRollupJobV2Finish() throws Exception {
-        // waiting alterJobV2 finish
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        //Assert.assertEquals(1, alterJobs.size());
-
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
-                continue;
-            }
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
-            }
         }
     }
 }

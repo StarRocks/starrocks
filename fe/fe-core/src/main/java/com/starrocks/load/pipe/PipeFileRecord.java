@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
@@ -28,8 +27,8 @@ import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.fs.EtagSource;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.s3a.S3AFileStatus;
 import org.apache.logging.log4j.util.Strings;
 
 import java.nio.ByteBuffer;
@@ -91,8 +90,8 @@ public class PipeFileRecord {
         PipeFileRecord record = new PipeFileRecord();
         record.fileName = file.getPath().toString();
         record.fileSize = file.getLen();
-        if (file instanceof S3AFileStatus) {
-            S3AFileStatus s3File = (S3AFileStatus) file;
+        if (file instanceof EtagSource) {
+            EtagSource s3File = (EtagSource) file;
             record.fileVersion = s3File.getEtag();
         } else {
             record.fileVersion = String.valueOf(file.getModificationTime());

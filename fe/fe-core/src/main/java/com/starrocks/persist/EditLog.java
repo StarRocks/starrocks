@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
@@ -1053,6 +1054,11 @@ public class EditLog {
                     MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
+                    final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
+                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                    break;
+                }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                     SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
@@ -1107,6 +1113,8 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -2028,6 +2036,10 @@ public class EditLog {
 
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
+    }
+
+    public void logModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) {
+        logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
     public void logAlterTask(Task changedTask) {

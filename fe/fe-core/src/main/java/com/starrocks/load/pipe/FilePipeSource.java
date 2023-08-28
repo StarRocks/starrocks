@@ -1,17 +1,16 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//   http://www.apache.org/licenses/LICENSE-2.0
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.load.pipe;
 
@@ -22,6 +21,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
+import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
@@ -60,6 +60,8 @@ public class FilePipeSource implements GsonPostProcessable {
     private boolean autoIngest = true;
     @SerializedName(value = "batch_size")
     private long batchSize = Pipe.DEFAULT_BATCH_SIZE;
+    @SerializedName(value = "batch_files")
+    private long batchFiles = Pipe.DEFAULT_BATCH_FILES;
     @SerializedName(value = "eos")
     private boolean eos = false;
 
@@ -81,7 +83,7 @@ public class FilePipeSource implements GsonPostProcessable {
         if (eos) {
             return;
         }
-        if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED))) {
+        if (CollectionUtils.isEmpty(fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 1))) {
             BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
             try {
                 List<FileStatus> files = HdfsUtil.listFileMeta(path, brokerDesc);
@@ -89,7 +91,7 @@ public class FilePipeSource implements GsonPostProcessable {
                         ListUtils.emptyIfNull(files).stream()
                                 .map(PipeFileRecord::fromHdfsFile)
                                 .collect(Collectors.toList());
-                fileListRepo.addFiles(records);
+                fileListRepo.stageFiles(records);
 
                 if (!autoIngest) {
                     // TODO: persist state
@@ -114,18 +116,22 @@ public class FilePipeSource implements GsonPostProcessable {
     }
 
     public boolean allLoaded() {
-        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR, 1);
         if (CollectionUtils.isNotEmpty(errorFiles)) {
             return false;
         }
-        List<PipeFileRecord> unloadedFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+        List<PipeFileRecord> unloadedFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 1);
         return CollectionUtils.isEmpty(unloadedFiles);
     }
 
+    /**
+     * Build a piece with size limitation and files limitation
+     */
     public FilePipePiece pullPiece() {
         Preconditions.checkArgument(batchSize > 0, "not support batch_size=0");
 
-        List<PipeFileRecord> unloadFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED);
+        List<PipeFileRecord> unloadFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.UNLOADED,
+                batchFiles);
         if (CollectionUtils.isEmpty(unloadFiles)) {
             return null;
         }
@@ -154,10 +160,12 @@ public class FilePipeSource implements GsonPostProcessable {
     }
 
     public void retryErrorFiles() {
-        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR);
+        List<PipeFileRecord> errorFiles = fileListRepo.listFilesByState(FileListRepo.PipeFileState.ERROR, 0);
         if (CollectionUtils.isNotEmpty(errorFiles)) {
-            fileListRepo.updateFileState(errorFiles, FileListRepo.PipeFileState.UNLOADED, null);
-            LOG.info("pipe {} retry error files: {}", pipeId, errorFiles);
+            for (List<PipeFileRecord> batch : ListUtils.partition(errorFiles, FileListTableRepo.SELECT_BATCH_SIZE)) {
+                fileListRepo.updateFileState(batch, FileListRepo.PipeFileState.UNLOADED, null);
+                LOG.info("pipe {} retry error files: {}", pipeId, errorFiles);
+            }
         }
     }
 
@@ -171,6 +179,10 @@ public class FilePipeSource implements GsonPostProcessable {
 
     public void setBatchSize(long batchSize) {
         this.batchSize = batchSize;
+    }
+
+    public void setBatchFiles(long batchFiles) {
+        this.batchFiles = batchFiles;
     }
 
     public void setPath(String path) {

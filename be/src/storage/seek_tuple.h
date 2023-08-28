@@ -86,7 +86,8 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, uint8_t pa
 inline std::string SeekTuple::short_key_encode(size_t num_short_keys, std::vector<uint32_t> sort_key_idxes,
                                                uint8_t padding) const {
     std::string output;
-    DCHECK(num_short_keys <= sort_key_idxes.size());
+    DCHECK(num_short_keys <= sort_key_idxes.size())
+            << "num short key: " << num_short_keys << " vs " << sort_key_idxes.size();
     size_t n = std::min(num_short_keys, _values.size());
     size_t val_num = _values.size();
     for (auto i = 0; i < n; i++) {

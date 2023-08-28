@@ -35,11 +35,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -50,6 +53,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
@@ -61,6 +65,11 @@ import java.util.List;
  */
 public class View extends Table {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
+
+    enum ViewStatus {
+        NORMAL,
+        INVALID,
+    }
 
     // The original SQL-string given as view definition. Set during analysis.
     // Corresponds to Hive's viewOriginalText.
@@ -85,6 +94,15 @@ public class View extends Table {
     // for persist
     @SerializedName(value = "m")
     private long sqlMode = 0L;
+
+    @SerializedName(value = "status")
+    private ViewStatus status = ViewStatus.NORMAL;
+
+    @SerializedName(value = "reason")
+    private String reason = "";
+
+    // cache used table names
+    private List<TableName> tableRefsCache = Lists.newArrayList();
 
     // Used for read from image
     public View() {
@@ -119,6 +137,8 @@ public class View extends Table {
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
+        this.status = ViewStatus.NORMAL;
+        this.reason = "";
     }
 
     public String getInlineViewDef() {
@@ -153,6 +173,29 @@ public class View extends Table {
                     "is not a query statement", name));
         }
         return (QueryStatement) node;
+    }
+
+    public synchronized List<TableName> getTableRefs() {
+        if (this.tableRefsCache.isEmpty() || this.status != ViewStatus.NORMAL) {
+            QueryStatement qs = getQueryStatement();
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
+            this.tableRefsCache = Lists.newArrayList(allTables.keySet());
+        }
+
+        return Lists.newArrayList(this.tableRefsCache);
+    }
+
+    public void setInvalid(String reason) {
+        this.status = ViewStatus.INVALID;
+        this.reason = reason;
+    }
+
+    public boolean isInvalid() {
+        return status == ViewStatus.INVALID;
+    }
+
+    public String getReason() {
+        return reason;
     }
 
     @Override

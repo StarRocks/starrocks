@@ -183,10 +183,11 @@ set(EXEC_FILES
     pipeline/scan/meta_scan_prepare_operator.cpp
     pipeline/scan/olap_meta_scan_prepare_operator.cpp
     pipeline/scan/lake_meta_scan_prepare_operator.cpp
-    pipeline/scan/olap_schema_chunk_source.cpp
-    pipeline/scan/olap_schema_scan_operator.cpp
-    pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/scan/schema_chunk_source.cpp
+    pipeline/scan/schema_scan_operator.cpp
+    pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/hive_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp

@@ -93,6 +93,7 @@ set(RUNTIME_FILES
     schema_table_sink.cpp
     command_executor.cpp
     iceberg_table_sink.cpp
+    hive_table_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

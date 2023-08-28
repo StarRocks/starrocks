@@ -144,37 +144,37 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     return f;
 }
 
-starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
-    return starrocks::Schema(schema.schema());
+starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema) {
+    return starrocks::Schema(schema->schema());
 }
 
-starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema,
+starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchemaCSPtr& schema,
                                               const std::vector<ColumnId>& cids) {
-    return starrocks::Schema(schema.schema(), cids);
+    return starrocks::Schema(schema->schema(), cids);
 }
 
-starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchema& schema) {
+starrocks::Schema ChunkHelper::get_short_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
     std::vector<ColumnId> short_key_cids;
-    const auto& sort_key_idxes = schema.sort_key_idxes();
-    short_key_cids.reserve(schema.num_short_key_columns());
-    for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
+    const auto& sort_key_idxes = schema->sort_key_idxes();
+    short_key_cids.reserve(schema->num_short_key_columns());
+    for (auto i = 0; i < schema->num_short_key_columns(); ++i) {
         short_key_cids.push_back(sort_key_idxes[i]);
     }
-    return starrocks::Schema(schema.schema(), short_key_cids);
+    return starrocks::Schema(schema->schema(), short_key_cids);
 }
 
-starrocks::Schema ChunkHelper::get_sort_key_schema(const starrocks::TabletSchema& schema) {
-    std::vector<ColumnId> sort_key_iota_idxes(schema.sort_key_idxes().size());
+starrocks::Schema ChunkHelper::get_sort_key_schema(const starrocks::TabletSchemaCSPtr& schema) {
+    std::vector<ColumnId> sort_key_iota_idxes(schema->sort_key_idxes().size());
     std::iota(sort_key_iota_idxes.begin(), sort_key_iota_idxes.end(), 0);
-    return starrocks::Schema(schema.schema(), schema.sort_key_idxes(), sort_key_iota_idxes);
+    return starrocks::Schema(schema->schema(), schema->sort_key_idxes(), sort_key_iota_idxes);
 }
 
-starrocks::Schema ChunkHelper::get_sort_key_schema_by_primary_key(const starrocks::TabletSchema& tablet_schema) {
-    std::vector<ColumnId> primary_key_iota_idxes(tablet_schema.num_key_columns());
+starrocks::Schema ChunkHelper::get_sort_key_schema_by_primary_key(const starrocks::TabletSchemaCSPtr& tablet_schema) {
+    std::vector<ColumnId> primary_key_iota_idxes(tablet_schema->num_key_columns());
     std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
-    std::vector<ColumnId> all_keys_iota_idxes(tablet_schema.num_columns());
+    std::vector<ColumnId> all_keys_iota_idxes(tablet_schema->num_columns());
     std::iota(all_keys_iota_idxes.begin(), all_keys_iota_idxes.end(), 0);
-    return starrocks::Schema(tablet_schema.schema(), all_keys_iota_idxes, primary_key_iota_idxes);
+    return starrocks::Schema(tablet_schema->schema(), all_keys_iota_idxes, primary_key_iota_idxes);
 }
 
 ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {
@@ -293,7 +293,7 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const Schema& schema) {
 }
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
-                                       const starrocks::TabletSchema& tschema, Chunk* chunk) {
+                                       const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto field_index : char_column_indexes) {
         Column* column = chunk->get_column_by_index(field_index).get();
@@ -310,7 +310,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         Bytes& new_bytes = new_binary->get_bytes();
 
         // |schema| maybe partial columns in vertical compaction, so get char column length by name.
-        uint32_t len = tschema.column(tschema.field_index(schema.field(field_index)->name())).length();
+        uint32_t len = tschema->column(tschema->field_index(schema.field(field_index)->name())).length();
 
         new_offset.resize(num_rows + 1);
         new_bytes.assign(num_rows * len, 0); // padding 0

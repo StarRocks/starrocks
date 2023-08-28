@@ -70,7 +70,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     // 2. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    auto tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
@@ -79,7 +79,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // 3. rewrite segment file if it is partial update
-    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet));
+    std::vector<std::string> orphan_files;
+    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &orphan_files));
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -92,7 +93,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (condition_column < 0) {
                 RETURN_IF_ERROR(_do_update(rowset_id, i, upserts, index, tablet->id(), &new_deletes));
             } else {
-                RETURN_IF_ERROR(_do_update_with_condition(tablet, metadata, op_write, *tablet_schema, rowset_id, i,
+                RETURN_IF_ERROR(_do_update_with_condition(tablet, metadata, op_write, tablet_schema, rowset_id, i,
                                                           condition_column, upserts, index, tablet->id(),
                                                           &new_deletes));
             }
@@ -152,7 +153,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opwrite(op_write);
+    builder->apply_opwrite(op_write, orphan_files);
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("#upserts", upserts.size());
@@ -170,12 +171,13 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const s
 }
 
 Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata,
-                                                const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
-                                                uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column,
+                                                const TxnLogPB_OpWrite& op_write,
+                                                const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id,
+                                                int32_t upsert_idx, int32_t condition_column,
                                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                                 int64_t tablet_id, DeletesMap* new_deletes) {
     CHECK(condition_column >= 0);
-    const auto& tablet_column = tablet_schema.column(condition_column);
+    const auto& tablet_column = tablet_schema->column(condition_column);
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
@@ -288,7 +290,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 }
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
-                                        const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
+                                        const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
                                         std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns,
@@ -299,7 +301,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     if (with_default && auto_increment_state == nullptr) {
         for (auto i = 0; i < column_ids.size(); ++i) {
-            const TabletColumn& tablet_column = tablet_schema.column(column_ids[i]);
+            const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
             if (tablet_column.has_default_value()) {
                 const TypeInfoPtr& type_info = get_type_info(tablet_column);
                 std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
@@ -324,7 +326,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
 
     std::shared_ptr<FileSystem> fs;
     auto fetch_values_from_segment = [&](const std::string& segment_name, uint32_t segment_id,
-                                         const TabletSchema* tablet_schema,
+                                         const TabletSchemaCSPtr& tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
         std::string path = tablet->segment_location(segment_name);
         auto segment = Segment::open(fs, path, segment_id, tablet_schema);
@@ -356,7 +358,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
 
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
-        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_path[rssid], 0, &tablet_schema, rowids));
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_path[rssid], 0, tablet_schema, rowids));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -367,7 +369,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
 
         RETURN_IF_ERROR(fetch_values_from_segment(op_write.rowset().segments(segment_id), segment_id,
-                                                  auto_increment_state->schema.get(), rowids));
+                                                  auto_increment_state->schema, rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     VLOG(2) << "UpdateManager get_column_values " << cost_str.str();
@@ -464,7 +466,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     // 2. iterate output rowset, update primary index and generate delvec
-    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
             std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()));
     auto compaction_state = std::make_unique<CompactionState>(output_rowset.get());
@@ -482,7 +484,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
 
     for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
-        RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), *tablet_schema, i));
+        RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), tablet_schema, i));
         auto& pk_col = compaction_state->pk_cols[i];
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;

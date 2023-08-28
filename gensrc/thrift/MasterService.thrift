@@ -62,6 +62,7 @@ struct TTabletInfo {
     17: optional i64 binlog_config_version
     18: optional bool is_error_state
     19: optional Types.TVersion max_readable_version
+    20: optional i64 max_rowset_creation_time
 }
 
 struct TTabletVersionPair {

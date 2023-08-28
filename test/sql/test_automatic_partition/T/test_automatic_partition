@@ -117,7 +117,7 @@ show partitions from ss_year;
 -- show partitions from ss_hour;
 -- insert into ss_hour values('2023-02-14 14:31:08', 2);
 -- show partitions from ss_hour;
--- name: test_automatic_partition_in_new_node
+-- name: test_automatic_partition_in_new_node @sequential
 CREATE TABLE dt_month( event_day DATETIME, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
@@ -128,7 +128,7 @@ create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partit
 insert into p values(1,'2021-01-01');
 show partitions from p;
 select * from p;
--- name: test_multi_fragment_open_new_node_channel
+-- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
 insert into ss select date(add_months(event_day, 1)),pv from ss;

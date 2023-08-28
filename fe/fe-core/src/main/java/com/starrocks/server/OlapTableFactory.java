@@ -28,10 +28,12 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
@@ -40,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
@@ -74,6 +77,7 @@ import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class OlapTableFactory implements AbstractTableFactory {
+
     private static final Logger LOG = LogManager.getLogger(OlapTableFactory.class);
     public static final OlapTableFactory INSTANCE = new OlapTableFactory();
 
@@ -223,6 +227,25 @@ public class OlapTableFactory implements AbstractTableFactory {
             long baseIndexId = metastore.getNextId();
             table.setBaseIndexId(baseIndexId);
 
+            // get use light schema change
+            Boolean useLightSchemaChange;
+            try {
+                useLightSchemaChange = PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            // only support olap table use light schema change optimization
+            table.setUseLightSchemaChange(useLightSchemaChange);
+            if (useLightSchemaChange) {
+                for (Column column : baseSchema) {
+                    column.setUniqueId(table.incAndGetMaxColUniqueId());
+                    LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
+                            column.getUniqueId());
+                }
+            } else {
+                LOG.debug("table: {} doesn't use light schema change", table.getName());
+            }
+            
             // analyze bloom filter columns
             Set<String> bfColumns = null;
             double bfFpp = 0;
@@ -268,9 +291,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            boolean enablePersistentIndex =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                            false);
+            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties, 
+                    table.getKeysType() == KeysType.PRIMARY_KEYS);
+            boolean enablePersistentIndex = analyzeRet.first;
+            boolean enablePersistentIndexByUser = analyzeRet.second;
             if (enablePersistentIndex && table.isCloudNativeTable()) {
                 // Judge there are whether compute nodes without storagePath or not.
                 // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
@@ -278,8 +302,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                         stream().filter(id -> !GlobalStateMgr.getCurrentSystemInfo().getComputeNode(id).
                                 isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0) {
-                    throw new DdlException("Cannot create cloud native table with persistent_index = true " +
+                    if (enablePersistentIndexByUser) {
+                        throw new DdlException("Cannot create cloud native table with persistent_index = true " +
                             "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
+                    } else {
+                        // if user has not requested persistent index, switch it to false
+                        table.setEnablePersistentIndex(false);
+                    }
                 } else {
                     table.setPersistentIndexType(TPersistentIndexType.LOCAL);
                 }
@@ -344,6 +373,31 @@ public class OlapTableFactory implements AbstractTableFactory {
                         }
                     } catch (AnalysisException e) {
                         throw new DdlException(e.getMessage());
+                    }
+                }
+            }
+
+            if (properties != null) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                        throw new DdlException("Primary key table does not support storage medium cool down currently.");
+                    }
+                    if (partitionInfo instanceof ListPartitionInfo) {
+                        throw new DdlException("List partition table does not support storage medium cool down currently.");
+                    }
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                        if (partitionColumns.size() > 1) {
+                            throw new DdlException("Multi-column range partition table " +
+                                    "does not support storage medium cool down currently.");
+                        }
+                        Column column = partitionColumns.get(0);
+                        if (!column.getType().getPrimitiveType().isDateType()) {
+                            throw new DdlException("Only support partition is date type for" +
+                                    " storage medium cool down currently.");
+                        }
                     }
                 }
             }

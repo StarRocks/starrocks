@@ -451,6 +451,8 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
+
+  101: optional string catalog_name;
 }
 
 enum TAccessPathType {
@@ -489,7 +491,9 @@ struct TOlapScanNode {
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
   29: optional list<TColumnAccessPath> column_access_paths
+
   30: optional bool use_pk_index
+  31: required list<Descriptors.TColumn> columns_desc
 }
 
 struct TJDBCScanNode {

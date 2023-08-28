@@ -19,9 +19,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -56,7 +56,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -64,13 +63,11 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -99,7 +96,6 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -272,6 +268,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
+                checkWindowFunctions(statement, columnExprMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -779,6 +776,28 @@ public class MaterializedViewAnalyzer {
             checkPartitionColumnWithBaseTable(slotRef, table.getPartitionColumns(), table.isUnPartitioned());
         }
 
+        // if mv is partitioned, mv will be refreshed by partition.
+        // if mv has window functions, it should also be partitioned by and the partition by columns
+        // should contain the partition column of mv
+        private void checkWindowFunctions(
+                CreateMaterializedViewStatement statement,
+                Map<Column, Expr> columnExprMap) {
+            SlotRef partitionSlotRef = getSlotRef(statement.getPartitionRefTableExpr());
+            // should analyze the partition expr to get type info
+            PartitionExprAnalyzer.analyzePartitionExpr(statement.getPartitionRefTableExpr(), partitionSlotRef);
+            for (Expr columnExpr : columnExprMap.values()) {
+                if (columnExpr instanceof AnalyticExpr) {
+                    AnalyticExpr analyticExpr = columnExpr.cast();
+                    if (analyticExpr.getPartitionExprs() == null
+                            || !analyticExpr.getPartitionExprs().contains(statement.getPartitionRefTableExpr())) {
+                        throw new SemanticException("window function %s ’s partition expressions" +
+                                " should contain the partition column %s of materialized view",
+                                analyticExpr.getFnCall().getFnName().getFunction(), statement.getPartitionColumn().getName());
+                    }
+                }
+            }
+        }
+
         private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
             org.apache.iceberg.Table icebergTable = table.getNativeTable();
             PartitionSpec partitionSpec = icebergTable.spec();
@@ -909,63 +928,17 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
-                                                        ConnectContext context) {
-            statement.getMvName().normalization(context);
-            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
-            final String newMvName = statement.getNewMvName();
-            if (newMvName != null) {
-                if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name " + newMvName,
-                            statement.getMvName().getPos());
-                }
-            } else if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
-                    throw new SemanticException("Unsupported change to SYNC refresh type", refreshSchemeDesc.getPos());
-                }
-                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-                    final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
-                    if (intervalLiteral != null) {
-                        long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
-                        if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value: " + step,
-                                    async.getPos());
-                        }
-                        final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
-                        try {
-                            RefreshTimeUnit.valueOf(unit);
-                        } catch (IllegalArgumentException e) {
-                            String msg =
-                                    String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
-                                            Arrays.asList(RefreshTimeUnit.values()));
-                            throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
-                        }
-                    }
-                }
-            } else if (statement.getModifyTablePropertiesClause() != null) {
-                TableName mvName = statement.getMvName();
-                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
-                if (db == null) {
-                    throw new SemanticException("Can not find database:" + mvName.getDb(), mvName.getPos());
-                }
-                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
-                if (table == null) {
-                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl(), mvName.getPos());
-                }
-                if (!(table instanceof MaterializedView)) {
-                    throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
-                }
-            } else if (statement.getStatus() != null) {
-                String status = statement.getStatus();
-                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
-                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
-                }
-            } else if (statement.getSwapTable() != null) {
-                // skip
-            } else {
-                throw new SemanticException("Unsupported modification for materialized view");
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
+            TableName mvName = statement.getMvName();
+            MetaUtils.normalizationTableName(context, mvName);
+            Table table = MetaUtils.getTable(statement.getMvName());
+            if (!(table instanceof MaterializedView)) {
+                throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
             }
+
+            AlterMVClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterMVClauseAnalyzerVisitor();
+            alterTableClauseAnalyzerVisitor.setTable(table);
+            alterTableClauseAnalyzerVisitor.analyze(statement.getAlterTableClause(), context);
             return null;
         }
 

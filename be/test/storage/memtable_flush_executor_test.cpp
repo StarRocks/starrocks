@@ -215,12 +215,12 @@ public:
         writer_context.partition_id = 10;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = _schema.get();
+        writer_context.tablet_schema = _schema;
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
-        _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
+        _vectorized_schema = MemTable::convert_schema(_schema, _slots);
     }
 
     void TearDown() override {

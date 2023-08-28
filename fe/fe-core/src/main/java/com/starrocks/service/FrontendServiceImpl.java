@@ -131,12 +131,11 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -312,7 +311,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get db request: {}", params);
         TGetDbsResult result = new TGetDbsResult();
 
-        List<String> dbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (params.isSetPattern()) {
@@ -323,8 +321,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        String catalogName = null;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
         UserIdentity currentUser;
@@ -333,6 +336,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
+        List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
                 Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -370,24 +375,40 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         // database privs should be checked in analysis phase
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
-        UserIdentity currentUser;
+        String catalogName = null;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, params.db);
+
+        UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+
         if (db != null) {
-            for (String tableName : db.getTableNamesViewWithLock()) {
+            for (String tableName : metadataMgr.listTableNames(catalogName, params.db)) {
                 LOG.debug("get table: {}, wait to check", tableName);
-                Table tbl = db.getTable(tableName);
-                if (tbl != null) {
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, params.db, tbl);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
+                Table tbl = null;
+                try {
+                    tbl = metadataMgr.getTable(catalogName, params.db, tableName);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage());
+                }
+
+                if (tbl == null) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
+                            null, params.db, tbl);
+                } catch (AccessDeniedException e) {
+                    continue;
                 }
 
                 if (!PatternMatcher.matchPattern(params.getPattern(), tableName, matcher, caseSensitive)) {
@@ -452,7 +473,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        QueryStatement queryStatement = view.getQueryStatement();
 
                         ConnectContext connectContext = new ConnectContext();
                         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -460,9 +480,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
                         try {
-                            Analyzer.analyze(queryStatement, connectContext);
-                            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
-                            for (TableName tableName : allTables.keySet()) {
+                            List<TableName> allTables = view.getTableRefs();
+                            for (TableName tableName : allTables) {
                                 Table tbl = db.getTable(tableName.getTbl());
                                 if (tbl != null) {
                                     try {
@@ -984,11 +1003,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+        String catalogName = null;
+        if (params.isSetCatalog_name()) {
+            catalogName = params.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, params.db);
+
         if (db != null) {
             try {
                 db.readLock();
-                Table table = db.getTable(params.getTable_name());
+                Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
                 }
@@ -998,7 +1024,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 } catch (AccessDeniedException e) {
                     return result;
                 }
-                setColumnDesc(columns, table, limit, false, params.db, params.getTable_name());
+                setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
                 db.readUnlock();
             }

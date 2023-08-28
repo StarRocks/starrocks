@@ -141,7 +141,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -785,7 +785,7 @@ public class GlobalStateMgr {
         getConfigRefreshDaemon().registerListener(() -> {
             try {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
-                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                    loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
@@ -2728,6 +2728,12 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
+                // show lightSchemaChange only when it is set true
+                if (olapTable.getUseLightSchemaChange()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
+                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                }
+
                 // storage media
                 Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
@@ -2882,7 +2888,7 @@ public class GlobalStateMgr {
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
-            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+            CredentialUtil.maskCredential(clonedFileProperties);
             addTableComment(sb, table);
 
             sb.append("\nPROPERTIES (\n");

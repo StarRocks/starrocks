@@ -143,6 +143,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField
+    public static String custom_config_dir = "/conf";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -1335,6 +1338,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
 
+    @ConfField(mutable = true)
+    public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
@@ -1558,6 +1564,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, guava cache is used to cache the privilege collection
+     * for a specified user.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_priv_collection_cache = true;
 
     /**
      * In some cases, some tablets may have all replicas damaged or lost.
@@ -2434,12 +2447,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_download_task_per_be = 0;
 
+    /*
+     * Using persistent index in primary key table by default when creating table.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_persistent_index_by_default = true;
+
     /**
      * timeout for external table commit
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
+    @ConfField(mutable = true)
+    public static boolean allow_default_light_schema_change = false;
+  
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2451,4 +2473,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+
+    /**
+     * Loading or compaction must be stopped for primary_key_disk_schedule_time
+     * seconds before it can be scheduled
+     */
+    @ConfField(mutable = true)
+    public static int primary_key_disk_schedule_time = 3600; // 1h
+
+    @ConfField(mutable = true)
+    public static String access_control = "native";
 }

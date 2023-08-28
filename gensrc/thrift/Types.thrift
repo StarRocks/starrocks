@@ -309,6 +309,7 @@ struct TAggregateFunction {
   // Indicates, for each expr, if nulls should be listed first or last. This is
   // independent of is_asc_order.
   13: optional list<bool> nulls_first
+  14: optional bool is_distinct = false
 }
 
 struct TTableFunction {
@@ -336,7 +337,7 @@ struct TFunction {
   // Optional comment to attach to the function
   6: optional string comment
 
-  7: optional string signature
+  7: optional string signature // Deprecated
 
   // HDFS path for the function binary. This binary must exist at the time the
   // function is created.
@@ -544,9 +545,18 @@ struct TIcebergDataFile {
     7: optional TIcebergColumnStats column_stats;
 }
 
+struct THiveFileInfo {
+    1: optional string file_name
+    2: optional string partition_path
+    4: optional i64 record_count
+    5: optional i64 file_size_in_bytes
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
+    2: optional THiveFileInfo hive_file_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
+    101: optional string staging_dir
 }

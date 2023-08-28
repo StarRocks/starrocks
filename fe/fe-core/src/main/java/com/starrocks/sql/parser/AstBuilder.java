@@ -120,6 +120,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -129,6 +130,7 @@ import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -269,7 +271,7 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ReorderColumnsClause;
@@ -398,6 +400,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -433,6 +436,7 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
@@ -956,18 +960,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         new FunctionCallExpr(functionName, new ArrayList<>()));
             }
         }
-        final StarRocksParser.MaterializedColumnDescContext materializedColumnDescContext =
-                context.materializedColumnDesc();
+        final StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
+                context.generatedColumnDesc();
         Expr expr = null;
-        if (materializedColumnDescContext != null) {
+        if (generatedColumnDescContext != null) {
             if (isAllowNull != null && isAllowNull == false) {
-                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Materialized Column"));
+                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Generated Column"));
             }
             if (isKey) {
-                throw new ParsingException(PARSER_ERROR_MSG.isKey("Materialized Column"));
+                throw new ParsingException(PARSER_ERROR_MSG.isKey("Generated Column"));
             }
 
-            expr = (Expr) visit(materializedColumnDescContext.expression());
+            expr = (Expr) visit(generatedColumnDescContext.expression());
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
@@ -1529,7 +1533,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
 
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
         ExpressionPartitionDesc expressionPartitionDesc = null;
         DistributionDesc distributionDesc = null;
@@ -1552,7 +1556,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (refreshSchemeDesc != null) {
                     throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("REFRESH"), clausePos);
                 }
-                refreshSchemeDesc = ((RefreshSchemeDesc) visit(desc.refreshSchemeDesc()));
+                refreshSchemeDesc = ((RefreshSchemeClause) visit(desc.refreshSchemeDesc()));
             }
 
             // process partition by
@@ -1652,35 +1656,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.AlterMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
-        String newMvName = null;
+        AlterTableClause alterTableClause = null;
+
         if (context.tableRenameClause() != null) {
-            newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
+            alterTableClause = (TableRenameClause) visit(context.tableRenameClause());
         }
+
         // process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() != null) {
-            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+            alterTableClause = ((RefreshSchemeClause) visit(context.refreshSchemeDesc()));
+            if (alterTableClause instanceof AsyncRefreshSchemeDesc) {
+                AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) alterTableClause;
+                checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
+            }
         }
-        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
-        }
-        ModifyTablePropertiesClause modifyTablePropertiesClause = null;
+
         if (context.modifyTablePropertiesClause() != null) {
-            modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
+            alterTableClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
         }
-        String status = null;
+
         if (context.statusDesc() != null) {
-            status = context.statusDesc().getText();
+            String status = context.statusDesc().getText();
+            alterTableClause = new AlterMaterializedViewStatusClause(status, createPos(context));
         }
         // swap table
-        SwapTableClause swapTableClause = null;
         if (context.swapTableClause() != null) {
-            swapTableClause = (SwapTableClause) visit(context.swapTableClause());
+            alterTableClause = (SwapTableClause) visit(context.swapTableClause());
         }
-        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
-                swapTableClause,
-                createPos(context));
+        return new AlterMaterializedViewStmt(mvName, alterTableClause, createPos(context));
     }
 
     @Override
@@ -3608,22 +3611,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         ;
         properties = getProperties(context.properties());
 
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (rollupName != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("rollupName", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 
             if (columnPosition != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("columnPosition", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("columnPosition", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 
             if (properties.size() != 0) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("properties", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
         }
@@ -3645,16 +3648,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.autoIncrementForbid(columnDef.getName(), "ADD"),
                         columnDef.getPos());
             }
-            if (columnDef.isMaterializedColumn()) {
+            if (columnDef.isGeneratedColumn()) {
                 if (rollupName != null) {
                     throw new ParsingException(
-                            PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                            PARSER_ERROR_MSG.generatedColumnLimit("rollupName", "ADD GENERATED COLUMN"),
                             columnDef.getPos());
                 }
 
                 if (properties.size() != 0) {
                     throw new ParsingException(
-                            PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                            PARSER_ERROR_MSG.generatedColumnLimit("properties", "ADD GENERATED COLUMN"),
                             columnDef.getPos());
                 }
             }
@@ -3691,15 +3694,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        if (columnDef.isMaterializedColumn()) {
+        if (columnDef.isGeneratedColumn()) {
             if (rollupName != null) {
-                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName",
-                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                throw new ParsingException(PARSER_ERROR_MSG.generatedColumnLimit("rollupName",
+                        "MODIFY GENERATED COLUMN"), columnDef.getPos());
             }
 
             if (columnPosition != null) {
-                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition",
-                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                throw new ParsingException(PARSER_ERROR_MSG.generatedColumnLimit("columnPosition",
+                        "MODIFY GENERATED COLUMN"), columnDef.getPos());
             }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
@@ -3933,6 +3936,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 String fileName = ((StringLiteral) visitString(context.fileName)).getStringValue();
                 return new AlterPipeClauseRetry(createPos(context), false, fileName);
             }
+        } else if (context.SET() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            if (MapUtils.isEmpty(properties)) {
+                throw new ParsingException("empty property");
+            }
+            return new AlterPipeSetProperty(createPos(context), properties);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo(context.toString()));
         }
@@ -5674,6 +5683,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAggregationFunctionCall(StarRocksParser.AggregationFunctionCallContext context) {
         NodePosition pos = createPos(context);
         String functionName;
+        boolean isGroupConcat = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5684,6 +5694,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().ARRAY_AGG() != null) {
             functionName = FunctionSet.ARRAY_AGG;
+        } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
+            functionName = FunctionSet.GROUP_CONCAT;
+            isGroupConcat = true;
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -5705,11 +5718,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (isDistinct && CollectionUtils.isEmpty(context.aggregationFunction().expression())) {
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
-
+        List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
+        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
+            Expr sepExpr;
+            String sep = ",";
+            sepExpr = new StringLiteral(sep, pos);
+            exprs.add(sepExpr);
+        }
+        if (!orderByElements.isEmpty()) {
+            int exprSize = exprs.size();
+            if (isGroupConcat) { // the last expr of group_concat is the separator
+                exprSize--;
+            }
+            for (OrderByElement orderByElement : orderByElements) {
+                Expr by = orderByElement.getExpr();
+                if (by instanceof IntLiteral) {
+                    long ordinal = ((IntLiteral) by).getLongValue();
+                    if (ordinal < 1 || ordinal > exprSize) {
+                        throw new ParsingException(format("ORDER BY position %s is not in %s output list", ordinal,
+                                functionName), pos);
+                    }
+                    by = exprs.get((int) ordinal - 1);
+                    orderByElement.setExpr(by);
+                }
+            }
+            // remove const order-by items
+            orderByElements = orderByElements.stream().filter(x -> !x.getExpr().isConstant()).collect(toList());
+        }
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
-                        new FunctionParams(isDistinct,
-                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
+                        new FunctionParams(isDistinct, exprs, orderByElements) :
                         FunctionParams.createStarParam(), pos);
 
         functionCallExpr = SyntaxSugars.parse(functionCallExpr);
@@ -6805,7 +6843,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Map<String, String> getPropertyList(StarRocksParser.PropertyListContext context) {
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);
             for (Property property : propertyList) {

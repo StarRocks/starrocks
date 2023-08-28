@@ -35,6 +35,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -74,6 +75,8 @@ public class JobSpec {
     private final TQueryOptions queryOptions;
     private final TWorkGroup resourceGroup;
 
+    private final String planProtocol;
+
     public static class Factory {
         private Factory() {
         }
@@ -103,6 +106,7 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
 
@@ -336,6 +340,7 @@ public class JobSpec {
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
         this.resourceGroup = builder.resourceGroup;
+        this.planProtocol = builder.planProtocol;
     }
 
     @Override
@@ -438,6 +443,10 @@ public class JobSpec {
         return queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD;
     }
 
+    public String getPlanProtocol() {
+        return planProtocol;
+    }
+
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }
@@ -459,6 +468,7 @@ public class JobSpec {
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
         private TWorkGroup resourceGroup;
+        private String planProtocol;
 
         public JobSpec build() {
             return new JobSpec(this);
@@ -535,6 +545,11 @@ public class JobSpec {
 
         private Builder needReport(boolean needReport) {
             this.needReport = needReport;
+            return this;
+        }
+
+        private Builder setPlanProtocol(String planProtocol) {
+            this.planProtocol = StringUtils.lowerCase(planProtocol);
             return this;
         }
 

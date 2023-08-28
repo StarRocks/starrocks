@@ -122,7 +122,8 @@ public class PartitionUtil {
             if (rawValue == null) {
                 rawValue = "null";
             }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
+            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                partitionKey.setNullPartitionValue(rawValue);
                 exprValue = NullLiteral.create(type);
             } else {
                 exprValue = LiteralExpr.create(rawValue, type);
@@ -191,7 +192,7 @@ public class PartitionUtil {
         List<String> values = new ArrayList<>(literalValues.size());
         for (LiteralExpr value : literalValues) {
             if (value instanceof NullLiteral) {
-                values.add(((NullablePartitionKey) key).nullPartitionValue());
+                values.add(key.getNullPartitionValue());
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
@@ -626,5 +627,24 @@ public class PartitionUtil {
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
         }
+    }
+
+    public static String getPartitionName(String basePath, String partitionPath) {
+        String basePathWithSlash = getPathWithSlash(basePath);
+        String partitionPathWithSlash = getPathWithSlash(partitionPath);
+
+        if (basePathWithSlash.equals(partitionPathWithSlash)) {
+            return "";
+        }
+
+        Preconditions.checkState(partitionPath.startsWith(basePathWithSlash),
+                "Can't infer partition name. base path: %s, partition path: %s", basePath, partitionPath);
+
+        partitionPath = partitionPath.endsWith("/") ? partitionPath.substring(0, partitionPath.length() - 1) : partitionPath;
+        return partitionPath.substring(basePathWithSlash.length());
+    }
+
+    public static String getPathWithSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
     }
 }

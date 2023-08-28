@@ -71,6 +71,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected final IHiveMetastore metastore;
 
     private final Map<HiveTableName, Long> lastAccessTimeMap;
+    // Used to synchronize the refreshTable process
+    protected final Map<HiveTableName, String> tableNameLockMap;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
@@ -107,6 +109,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        this.tableNameLockMap = Maps.newConcurrentMap();
 
         databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -268,6 +271,11 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return get(partitionKeysCache, hivePartitionValue);
     }
 
+    @Override
+    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
+        return metastore.partitionExists(dbName, tableName, partitionValues);
+    }
+
     private List<String> loadPartitionKeys(HivePartitionValue hivePartitionValue) {
         return metastore.getPartitionKeysByValue(hivePartitionValue.getHiveTableName().getDatabaseName(),
                 hivePartitionValue.getHiveTableName().getTableName(), hivePartitionValue.getPartitionValues());
@@ -295,6 +303,30 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     public Partition loadPartition(HivePartitionName key) {
         return metastore.getPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
+    }
+
+    public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+        try {
+            metastore.addPartitions(dbName, tableName, partitions);
+        } finally {
+            refreshTable(dbName, tableName, true);
+        }
+    }
+
+    @Override
+    public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        List<String> partitionColNames = getTable(dbName, tableName).getPartitionColumnNames();
+        try {
+            metastore.dropPartition(dbName, tableName, partValues, deleteData);
+        } finally {
+            String partitionName = PartitionUtil.toHivePartitionName(partitionColNames, partValues);
+            HivePartitionName hivePartitionName = HivePartitionName.of(dbName, tableName, partitionName);
+            refreshPartition(Lists.newArrayList(hivePartitionName));
+        }
+    }
+
+    public void alterPartition(HivePartitionWithStats partition) {
+        metastore.alterPartition(partition);
     }
 
     public Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
@@ -337,6 +369,23 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     private HivePartitionStats loadTableStatistics(HiveTableName hiveTableName) {
         return metastore.getTableStatistics(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
+    }
+
+    public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
+        try {
+            metastore.updateTableStatistics(dbName, tableName, update);
+        } finally {
+            refreshTable(dbName, tableName, true);
+        }
+    }
+
+    public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                          Function<HivePartitionStats, HivePartitionStats> update) {
+        try {
+            metastore.updatePartitionStatistics(dbName, tableName, partitionName, update);
+        } finally {
+            refreshPartition(Lists.newArrayList(HivePartitionName.of(dbName, tableName, partitionName)));
+        }
     }
 
     @Override
@@ -391,9 +440,19 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+    public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
                                                              boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
+        tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
+        String lockStr = tableNameLockMap.get(hiveTableName);
+        synchronized (lockStr) {
+            return refreshTableWithoutSync(hiveDbName, hiveTblName, hiveTableName, onlyCachedPartitions);
+        }
+    }
+
+    public List<HivePartitionName> refreshTableWithoutSync(String hiveDbName, String hiveTblName,
+                                                           HiveTableName hiveTableName,
+                                                           boolean onlyCachedPartitions) {
         Table updatedTable;
         try {
             updatedTable = loadTable(hiveTableName);

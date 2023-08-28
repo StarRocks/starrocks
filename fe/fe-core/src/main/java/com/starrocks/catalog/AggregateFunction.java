@@ -117,6 +117,12 @@ public class AggregateFunction extends Function {
     // True if "NULLS FIRST", false if "NULLS LAST", null if not specified.
     private List<Boolean> nullsFirst;
 
+    private boolean isDistinct = false;
+
+    public void setIsDistinct(boolean isDistinct) {
+        this.isDistinct = isDistinct;
+    }
+
     // only used for serialization
     protected AggregateFunction() {
     }
@@ -200,6 +206,9 @@ public class AggregateFunction extends Function {
         isAggregateFn = other.isAggregateFn;
         returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
         symbolName = other.symbolName;
+        isAscOrder = other.isAscOrder;
+        nullsFirst = other.nullsFirst;
+        isDistinct = other.isDistinct;
     }
 
     public String getSymbolName() {
@@ -337,6 +346,8 @@ public class AggregateFunction extends Function {
         if (nullsFirst != null && !nullsFirst.isEmpty()) {
             aggFn.setNulls_first(nullsFirst);
         }
+        aggFn.setIs_distinct(isDistinct);
+
         aggFn.setSymbol(getSymbolName());
         fn.setAggregate_fn(aggFn);
         return fn;

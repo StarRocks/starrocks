@@ -218,8 +218,8 @@ public class AuthorizationMgr {
 
     // called by initBuiltinRolesAndUsers()
     protected void initPrivilegeCollections(PrivilegeCollectionV2 collection, ObjectType objectType,
-                                          List<PrivilegeType> actionList,
-                                          List<String> tokens, boolean isGrant) throws PrivilegeException {
+                                            List<PrivilegeType> actionList,
+                                            List<String> tokens, boolean isGrant) throws PrivilegeException {
         List<PEntryObject> object;
         if (tokens != null) {
             object = Collections.singletonList(provider.generateObject(objectType, tokens, globalStateMgr));
@@ -724,7 +724,9 @@ public class AuthorizationMgr {
             short pluginVersion) throws PrivilegeException {
         userWriteLock();
         try {
-            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            if (!user.equals(UserIdentity.ROOT)) {
+                provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            }
             userToPrivilegeCollection.put(user, privilegeCollection);
             invalidateUserInCache(user);
             LOG.info("replayed update user {}", user);
@@ -788,7 +790,11 @@ public class AuthorizationMgr {
     protected PrivilegeCollectionV2 mergePrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
             throws PrivilegeException {
         try {
-            return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));
+            if (Config.authorization_enable_priv_collection_cache) {
+                return ctxToMergedPrivilegeCollections.get(new Pair<>(userIdentity, roleIds));
+            } else {
+                return loadPrivilegeCollection(userIdentity, roleIds);
+            }
         } catch (ExecutionException e) {
             String errMsg = String.format("failed merge privilege collection on %s with roles %s", userIdentity, roleIds);
             PrivilegeException exception = new PrivilegeException(errMsg);
@@ -1188,7 +1194,9 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-                provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                }
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
                     roleNameToId.put(privilegeCollection.getName(), roleId);
@@ -1248,7 +1256,9 @@ public class AuthorizationMgr {
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
                 // Actually privilege collection is useless here, but we still record it for further usage
-                provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
+                }
                 roleIdToPrivilegeCollection.remove(roleId);
                 roleNameToId.remove(privilegeCollection.getName());
                 LOG.info("replayed drop role {}", roleId);
@@ -1729,7 +1739,9 @@ public class AuthorizationMgr {
                     }
 
                     // upgrade meta to current version
-                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
+                    if (!userIdentity.equals(UserIdentity.ROOT)) {
+                        ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
+                    }
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
                 // 1 json for num roles
@@ -1777,7 +1789,6 @@ public class AuthorizationMgr {
                         rolePrivilegeCollection.typeToPrivilegeEntryList
                                 = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
                     } else {
-
                         Map<ObjectTypeDeprecate, List<PrivilegeEntry>> m = collectionDeprecate.getTypeToPrivilegeEntryList();
                         for (Map.Entry<ObjectTypeDeprecate, List<PrivilegeEntry>> e : m.entrySet()) {
                             rolePrivilegeCollection.getTypeToPrivilegeEntryList().put(e.getKey().toObjectType(), e.getValue());
@@ -1785,7 +1796,9 @@ public class AuthorizationMgr {
                     }
 
                     // upgrade meta to current version
-                    ret.provider.upgradePrivilegeCollection(rolePrivilegeCollection, ret.pluginId, ret.pluginVersion);
+                    if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                        ret.provider.upgradePrivilegeCollection(rolePrivilegeCollection, ret.pluginId, ret.pluginVersion);
+                    }
                     ret.roleIdToPrivilegeCollection.put(roleId, rolePrivilegeCollection);
                 }
             } catch (SRMetaBlockEOFException eofException) {

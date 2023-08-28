@@ -194,7 +194,7 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
-    timeout-minutes: 90
+    timeout-minutes: 180
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -209,14 +209,14 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 90
+        timeout-minutes: 180
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --with-gcov
 
       - name: clean ECI
         if: always()
@@ -735,7 +735,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, admit ]
+    needs: [ deploy, SQL-Tester, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -743,14 +743,23 @@ jobs:
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: Backup SR Info
+        id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
 
       - name: Clean ECS
+        if: steps.backup.outcome == 'success'
+        env:
+          SQL_TESTER_RESULT: ${{ needs.SQL-Tester.result }}
+          ADMIT_RESULT: ${{ needs.admit.result }}
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --delete
+          if [[ "${SQL_TESTER_RESULT}" == 'success' && "${ADMIT_RESULT}" == 'success' ]]; then
+              ./bin/elastic-cluster.sh --delete
+          else
+              ./bin/elastic-cluster.sh --renew 0.25
+          fi
 
       - name: Clean
         run: |

@@ -214,6 +214,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    @SerializedName(value = "maxColUniqueId")
+    protected int maxColUniqueId = -1;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -368,6 +371,20 @@ public class OlapTable extends Table {
         return this.tableProperty;
     }
 
+    public int incAndGetMaxColUniqueId() {
+        this.maxColUniqueId++;
+        return this.maxColUniqueId;
+    }
+
+    public int getMaxColUniqueId() {
+        return this.maxColUniqueId;
+    }
+
+    public void setMaxColUniqueId(int maxColUniqueId) {
+        this.maxColUniqueId = maxColUniqueId;
+    }
+
+
     public boolean dynamicPartitionExists() {
         return tableProperty != null
                 && tableProperty.getDynamicPartitionProperty() != null
@@ -447,9 +464,9 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
-    public boolean hasMaterializedColumn() {
+    public boolean hasGeneratedColumn() {
         for (Column column : getFullSchema()) {
-            if (column.isMaterializedColumn()) {
+            if (column.isGeneratedColumn()) {
                 return true;
             }
         }
@@ -1217,6 +1234,15 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
+    /**
+     * Return all visible partition names which exclude all shadow partitions.
+     */
+    public Set<String> getVisiblePartitionNames() {
+        return nameToPartition.keySet().stream()
+                .filter(n -> !n.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .collect(Collectors.toSet());
+    }
+
     public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
         Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set
@@ -1640,6 +1666,7 @@ public class OlapTable extends Table {
             tableProperty.write(out);
         }
         tempPartitions.write(out);
+        out.writeInt(maxColUniqueId);
     }
 
     @Override
@@ -1740,6 +1767,7 @@ public class OlapTable extends Table {
         }
         tempPartitions.unsetPartitionInfo();
 
+        maxColUniqueId = in.readInt();
         // In the present, the fullSchema could be rebuilt by schema change while the
         // properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as
@@ -2002,8 +2030,8 @@ public class OlapTable extends Table {
         return getSchemaByIndexId(baseIndexId);
     }
 
-    public List<Column> getBaseSchemaWithoutMaterializedColumn() {
-        if (!hasMaterializedColumn()) {
+    public List<Column> getBaseSchemaWithoutGeneratedColumn() {
+        if (!hasGeneratedColumn()) {
             return getSchemaByIndexId(baseIndexId);
         }
 
@@ -2011,7 +2039,7 @@ public class OlapTable extends Table {
 
         while (schema.size() > 0) {
             // check last column is whether materiazlied column or not
-            if (schema.get(schema.size() - 1).isMaterializedColumn()) {
+            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
                 schema.remove(schema.size() - 1);
             } else {
                 break;
@@ -2539,6 +2567,24 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
+    public Boolean getUseLightSchemaChange() {
+        if (tableProperty != null) {
+            return tableProperty.getUseSchemaLightChange();
+        }
+        // property is set false by default
+        return false;
+    }
+
+    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE,
+                Boolean.valueOf(useLightSchemaChange).toString());
+        tableProperty.buildUseLightSchemaChange();
+    }
+
+
     @Override
     public void onReload() {
         analyzePartitionInfo();
@@ -2586,14 +2632,13 @@ public class OlapTable extends Table {
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         Preconditions.checkState(slotRefs.size() == 1);
-        if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
-            for (int i = 0; i < fullSchema.size(); i++) {
-                Column column = fullSchema.get(i);
-                if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
-                    SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
-                            column.getType(), column.isAllowNull());
-                    slotRefs.get(0).setDesc(slotDescriptor);
-                }
+        // schema change should update slot id
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Column column = fullSchema.get(i);
+            if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(i), column.getName(),
+                        column.getType(), column.isAllowNull());
+                slotRefs.get(0).setDesc(slotDescriptor);
             }
         }
     }

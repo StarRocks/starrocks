@@ -136,4 +136,19 @@ public class PartitionPruneTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "partitions=3/4");
     }
+
+    @Test
+    public void testCastStringWithWhitSpace() throws Exception {
+        String sql = "select * from ptest where cast('  111  ' as bigint) = k1";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "tabletRatio=4/40", "PREDICATES: 1: k1 = 111");
+
+        sql = "select * from ptest where cast('  -111.12  ' as double) = k1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: CAST(1: k1 AS DOUBLE) = -111.12");
+
+        sql = "select * from ptest where cast('  -111 2  ' as int) = k1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: k1 = CAST('  -111 2  ' AS INT)");
+    }
 }

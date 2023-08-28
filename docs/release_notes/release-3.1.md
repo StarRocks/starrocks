@@ -1,5 +1,28 @@
 # StarRocks version 3.1
 
+## 3.1.1
+
+Release date: August 18, 2023
+
+## New Features
+
+- Supports Azure Blob Storage for [shared-data clusters](../deployment/deploy_shared_data.md).
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+## Improvements
+
+Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When data is loaded into tables that have multiple replicas, a large number of invalid log records are written if some partitions of the tables are empty.  [#28824](https://github.com/StarRocks/starrocks/issues/28824)
+- Inaccurate estimation of average row size causes partial updates in column mode on Primary Key tables to occupy excessively large memory.  [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- If clone operations are triggered on tablets in an ERROR state, disk usage increases. [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- Compaction causes cold data to be written to the local cache. [#28831](https://github.com/StarRocks/starrocks/pull/28831)
+
 ## 3.1.0
 
 Release date: August 7, 2023
@@ -17,7 +40,7 @@ Release date: August 7, 2023
 
 - Supports accessing views created on tables within [Hive catalogs](../data_source/catalog/hive_catalog.md).
 - Supports accessing Parquet-formatted Iceberg v2 tables.
-- [Preview] Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+- Supports [sinking data to Parquet-formatted Iceberg tables](../data_source/catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
 - [Preview] Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](../data_source/catalog/elasticsearch_catalog.md). This simplifies the creation of Elasticsearch external tables.
 - [Preview] Supports performing analytics on streaming data stored in Apache Paimon by using [Paimon catalogs](../data_source/catalog/paimon_catalog.md).
 
@@ -47,9 +70,10 @@ Release date: August 7, 2023
   - Array functions: [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports `ORDER BY`, [array_generate](../sql-reference/sql-functions/array-functions/array_generate.md), [element_at](../sql-reference/sql-functions/array-functions/element_at.md), [cardinality](../sql-reference/sql-functions/array-functions/cardinality.md)
   - Higher-order Array functions: [all_match](../sql-reference/sql-functions/array-functions/all_match.md), [any_match](../sql-reference/sql-functions/array-functions/any_match.md)
   - Aggregate functions: [min_by](../sql-reference/sql-functions/aggregate-functions/min_by.md), [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
-  - Table functions: [generate_series](../sql-reference/sql-functions/table-functions/generate_series.md), [FILES](../sql-reference/sql-functions/table-functions/files.md)
+  - Table functions: [FILES](../sql-reference/sql-functions/table-functions/files.md), [generate_series](../sql-reference/sql-functions/table-functions/generate_series.md)
   - Date functions: [next_day](../sql-reference/sql-functions/date-time-functions/next_day.md), [previous_day](../sql-reference/sql-functions/date-time-functions/previous_day.md), [last_day](../sql-reference/sql-functions/date-time-functions/last_day.md), [makedate](../sql-reference/sql-functions/date-time-functions/makedate.md), [date_diff](../sql-reference/sql-functions/date-time-functions/date_diff.md)
   - Bitmap functions：[bitmap_subset_limit](../sql-reference/sql-functions/bitmap-functions/bitmap_subset_limit.md), [bitmap_subset_in_range](../sql-reference/sql-functions/bitmap-functions/bitmap_subset_in_range.md)
+  - Math functions: [cosine_similarity](../sql-reference/sql-functions/math-functions/cos_similarity.md), [cosine_similarity_norm](../sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
 
 #### Privileges and security
 
@@ -145,4 +169,5 @@ Fixed the following issues:
 - The FE configuration items `max_broker_concurrency` and `load_parallel_instance_num` are deprecated.
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - Two new Routine Load job properties, `task_consume_second` and `task_timeout_second`, are added to control the maximum amount of time to consume data and the timeout duration for individual load tasks within a Routine Load job, making job adjustment more flexible. If users do not specify these two properties in their Routine Load job, the FE configuration items `routine_load_task_consume_second` and `routine_load_task_timeout_second` prevail.
+- The session variable `enable_resource_group` is deprecated because the [Resource Group](../administration/resource_group.md) feature is enabled by default since v3.1.0.
 - Two new reserved keywords, COMPACTION and TEXT, are added.

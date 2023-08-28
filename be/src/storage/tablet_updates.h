@@ -135,6 +135,9 @@ public:
     // get total number of committed and pending rowsets
     size_t version_count() const;
 
+    // if need do apply
+    bool need_apply() const;
+
     // get num of pending rowsets
     size_t num_pending() const;
 
@@ -320,6 +323,9 @@ public:
     double get_pk_index_write_amp_score();
 
     Status pk_index_major_compaction();
+
+    // get the max rowset creation time for largest major version
+    int64_t max_rowset_creation_time();
 
 private:
     friend class Tablet;

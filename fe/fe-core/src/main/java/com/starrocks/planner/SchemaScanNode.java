@@ -38,6 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
@@ -54,10 +55,13 @@ import com.starrocks.thrift.TUserIdentity;
 
 import java.util.List;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
 /**
  * Full scan of an SCHEMA table.
  */
 public class SchemaScanNode extends ScanNode {
+    private String catalogName;
     private final String tableName;
     private String schemaDb;
     private String schemaTable;
@@ -155,6 +159,13 @@ public class SchemaScanNode extends ScanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SCHEMA_SCAN_NODE;
         msg.schema_scan_node = new TSchemaScanNode(desc.getId().asInt(), tableName);
+
+        if (catalogName != null) {
+            msg.schema_scan_node.setCatalog_name(catalogName);
+        } else {
+            msg.schema_scan_node.setCatalog_name(DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+
         if (schemaDb != null) {
             msg.schema_scan_node.setDb(schemaDb);
         } else {
@@ -328,4 +339,11 @@ public class SchemaScanNode extends ScanNode {
         return true;
     }
 
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
 }

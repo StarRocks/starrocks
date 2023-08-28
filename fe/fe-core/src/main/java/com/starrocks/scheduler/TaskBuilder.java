@@ -27,7 +27,7 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
-import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 
@@ -45,7 +45,6 @@ public class TaskBuilder {
         task.setDbName(desc.getDbName());
         task.setDefinition(desc.getSqlTask());
         task.setProperties(desc.getProperties());
-        task.setType(Constants.TaskType.EVENT_TRIGGERED);
         return task;
     }
 
@@ -124,7 +123,7 @@ public class TaskBuilder {
         return task;
     }
 
-    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
+    public static void updateTaskInfo(Task task, RefreshSchemeClause refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {

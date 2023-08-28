@@ -20,10 +20,10 @@ StarRocks provides two precautionary instruments for dealing with big queries - 
 
 Resource groups can automatically identify and terminate big queries. When creating a resource group, you can specify the upper limit of CPU time, memory usage, or scan row count that a query is entitled to. Among all queries that hit the resource group, any queries that require more resources are rejected and returned with an error. For more information, see [Resource Isolation](../administration/resource_group.md).
 
-Before creating resource groups, you must execute the following statement to enable the resource group feature:
+Before creating resource groups, you must execute the following statement to enable Pipeline Engine, on which the Resource Group feature depends:
 
 ```SQL
-SET GLOBAL enable_resource_group = true;
+SET GLOBAL enable_pipeline_engine = true;
 ```
 
 The following example creates a resource group `bigQuery` that limits the CPU time upper limit to `100` seconds, scan row count upper limit to `100000`, and memory usage upper limit to `1073741824` bytes (1 GB):

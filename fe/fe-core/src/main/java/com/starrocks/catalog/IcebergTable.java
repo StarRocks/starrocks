@@ -277,7 +277,6 @@ public class IcebergTable extends Table {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(remoteDbName, otherTable.remoteDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
-
     }
 
     public static Builder builder() {

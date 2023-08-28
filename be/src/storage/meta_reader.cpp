@@ -159,7 +159,8 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
-                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
+                ASSIGN_OR_RETURN(_column_iterators[cid],
+                                 _segment->new_column_iterator(cid, nullptr, _params->tablet_schema));
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
