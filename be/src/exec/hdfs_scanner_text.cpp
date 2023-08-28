@@ -242,7 +242,9 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
     options.invalid_field_as_null = _invalid_field_as_null;
 
-    for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; num_rows++) {
+    size_t rows_read = 0;
+
+    for (; rows_read < chunk_size; rows_read++) {
         CSVReader::Record record{};
         Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
@@ -280,11 +282,12 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             const auto& slot = _scanner_params.materialize_slots[j];
             DCHECK(slot != nullptr);
 
-            const std::string formatted_slot_name =
-                    _scanner_params.case_sensitive ? slot->col_name() : boost::to_lower_copy(slot->col_name());
+//            const std::string formatted_slot_name =
+//                    _scanner_params.case_sensitive ? slot->col_name() : boost::to_lower_copy(slot->col_name());
 
             size_t chunk_index = _scanner_params.materialize_index_in_chunk[j];
-            size_t csv_index = _formatted_hive_column_name_2_index[formatted_slot_name];
+            // size_t csv_index = _formatted_hive_column_name_2_index[formatted_slot_name];
+            size_t csv_index = j;
             Column* column = _column_raw_ptrs[chunk_index];
             if (csv_index < fields.size()) {
                 const Slice& field = fields[csv_index];
@@ -292,7 +295,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     return Status::InternalError(
                             strings::Substitute("CSV converter encountered an error for field: $0, column name is: $1",
-                                                field.to_string(), formatted_slot_name));
+                                                field.to_string(), "formatted_slot_name"));
                 }
             } else {
                 // The size of hive_column_names may be larger than fields when new columns are added.
@@ -302,20 +305,24 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             }
         }
 
-        // Start to append partition column
-        for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
-            size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
-            Column* column = _column_raw_ptrs[chunk_index];
-            ColumnPtr partition_value = _scanner_ctx.partition_values[p];
-            DCHECK(partition_value->is_constant());
-            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
-            const ColumnPtr& data_column = const_column->data_column();
-            if (data_column->is_nullable()) {
-                column->append_default();
-            } else {
-                column->append(*data_column, 0, 1);
-            }
+    }
+
+    // Start to append partition column
+    for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
+        size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
+        Column* column = _column_raw_ptrs[chunk_index];
+        ColumnPtr partition_value = _scanner_ctx.partition_values[p];
+        DCHECK(partition_value->is_constant());
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
+        const ColumnPtr& data_column = const_column->data_column();
+
+        if (data_column->is_nullable()) {
+            column->append_default(1);
+        } else {
+            column->append(*data_column, 0, 1);
         }
+
+        column->assign(rows_read, 0);
     }
 
     // Check chunk's row number for each column
