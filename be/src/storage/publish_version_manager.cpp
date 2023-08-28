@@ -61,7 +61,10 @@ bool PublishVersionManager::_all_task_applied(const TFinishTaskRequest& finish_t
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
         if (tablet != nullptr) {
-            if (tablet->keys_type() != KeysType::PRIMARY_KEYS) {
+            // if tablet doing alter job, the rowset can not apply until alter job finish, so we skip
+            // these tablets, otherwise the loading task can not finish publish.
+            if (tablet->keys_type() != KeysType::PRIMARY_KEYS ||
+                tablet->tablet_state() != TabletState::TABLET_RUNNING) {
                 return true;
             }
             if (tablet->max_readable_version() < request_version) {
@@ -93,6 +96,9 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
         if (tablet != nullptr) {
             DCHECK(tablet->keys_type() == KeysType::PRIMARY_KEYS);
+            if (tablet->tablet_state() != TabletState::TABLET_RUNNING) {
+                continue;
+            }
             if (tablet->max_readable_version() < request_version) {
                 applied = false;
                 unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
