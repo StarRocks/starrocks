@@ -273,7 +273,10 @@ public:
     // possibly stop at the first error if is simulating batch deletes.
     virtual Status delete_files(const std::vector<std::string_view>& paths) {
         for (auto path : paths) {
-            RETURN_IF_ERROR(delete_file(std::string(path)));
+            auto st = delete_file(std::string(path));
+            if (!st.ok() && !st.is_not_found()) {
+                return st;
+            }
         }
         return Status::OK();
     }

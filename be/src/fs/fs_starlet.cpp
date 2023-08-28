@@ -508,7 +508,7 @@ public:
         std::vector<std::string> parsed_paths;
         parsed_paths.resize(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
-        int64_t shard_id = -1;
+        int64_t shard_id;
         for (size_t i = 0; i < paths.size(); ++i) {
             ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(paths[i]));
             auto fs_st = get_shard_filesystem(pair.second);
