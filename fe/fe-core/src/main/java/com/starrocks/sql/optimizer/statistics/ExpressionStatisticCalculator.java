@@ -444,13 +444,17 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.TRUNCATE:
                     // Just use the input's statistics as output's statistics
                     break;
+                case FunctionSet.TO_BITMAP:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    break;
                 default:
                     return ColumnStatistic.unknown();
             }
 
             final double averageRowSize;
             if (callOperator.getType().isIntegerType() || callOperator.getType().isFloatingPointType()
-                    || callOperator.getType().isDateType()) {
+                    || callOperator.getType().isDateType() || callOperator.getType().isBitmapType()) {
                 averageRowSize = callOperator.getType().getTypeSize();
             } else {
                 averageRowSize = columnStatistic.getAverageRowSize();
