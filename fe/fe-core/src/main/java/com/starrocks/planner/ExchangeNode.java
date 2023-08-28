@@ -266,7 +266,7 @@ public class ExchangeNode extends PlanNode {
         // we enable this only when:
         // - session variable enabled &
         // - this rf has been accepted by children nodes(global rf).
-        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (probeExpr.isBoundByTupleIds(getTupleIds()) && description.canAcceptFilter(this)) {
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
