@@ -34,14 +34,14 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: head_sha
           path: ./head_sha.txt
