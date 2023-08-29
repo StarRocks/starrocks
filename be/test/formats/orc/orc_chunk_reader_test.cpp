@@ -1191,7 +1191,7 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
                 {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                 {""},
         };
-        slot_descs[1].type.len = 6;
+        slot_descs[1].type.len = 12;
         slot_descs[2].type.len = 6;
         static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
         std::vector<SlotDescriptor*> src_slot_descriptors;
@@ -1217,6 +1217,38 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
 
         EXPECT_EQ("[1, '123456789012', '123456']", result->debug_row(0));
         EXPECT_EQ("[2, '12345678901', '12345']", result->debug_row(1));
+    }
+
+    {
+        SlotDesc slot_descs[] = {
+                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {""},
+        };
+        slot_descs[1].type.len = 6;
+        slot_descs[2].type.len = 6;
+        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_broker_load_mode(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 0);
+        EXPECT_EQ(result->num_columns(), 3);
     }
 }
 
