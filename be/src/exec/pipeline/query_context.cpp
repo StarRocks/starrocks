@@ -175,7 +175,7 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
 
 std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
-    // Not transmit delta if it's the result sink node
+    // Not transmit delta if it's the final sink
     if (_is_final_sink) {
         return query_statistic;
     }
