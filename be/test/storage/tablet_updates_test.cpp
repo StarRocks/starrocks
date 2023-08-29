@@ -1567,12 +1567,12 @@ void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index
         std::vector<int32_t> merge_col(N);
         for (int i = 0; i < N / 2; i++) {
             keys[i] = i;
-            merge_col[i] = i + 1;
+            merge_col[i] = i - 1;
         }
 
         for (int i = N / 2; i < N; i++) {
             keys[i] = i;
-            merge_col[i] = i - 1;
+            merge_col[i] = i + 1;
         }
         auto rowset = build_rowset(keys, merge_col);
         auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
@@ -1589,13 +1589,13 @@ void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index
     std::vector<int64_t> keys(N);
     std::vector<int32_t> merge_col(N);
     for (int i = 0; i < N / 2; i++) {
-        keys[i] = i + N / 2;
-        merge_col[i] = i + N / 2;
+        keys[i] = i;
+        merge_col[i] = i;
     }
 
     for (int i = N / 2; i < N; i++) {
-        keys[i] = i - N / 2;
-        merge_col[i] = i + 1 - N / 2;
+        keys[i] = i;
+        merge_col[i] = i + 1;
     }
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     TabletReader reader(_tablet, Version(0, version), schema);
