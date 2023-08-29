@@ -1262,19 +1262,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String plan8 = getFragmentPlan(query8);
             PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
             PlanTestBase.assertContains(plan8, "4:HASH JOIN\n" +
-                    "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 20: v1 = 24: t1d\n" +
-                    "  |  \n" +
-                    "  |----3:EXCHANGE");
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)");
             PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
                     "     TABLE: test_all_type2\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
+                    "     PREDICATES: 24: t1d < 120, 24: t1d >= 100");
             PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
                     "     TABLE: t02\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
+                    "     PREDICATES: 20: v1 < 120, 20: v1 >= 100");
             dropMv("test", "join_agg_union_mv_2");
         }
 
@@ -1730,25 +1726,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testPartitionPrune1() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE test_partition_tbl1 (\n" +
-                "                            k1 date,\n" +
-                "                            v1 INT,\n" +
-                "                            v2 INT)\n" +
-                "                        DUPLICATE KEY(k1)\n" +
-                "                        PARTITION BY RANGE(k1)\n" +
-                "                        (\n" +
-                "                        PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
-                "                        PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
-                "                        PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
-                "                        PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
-                "                        PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
-                "                        PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
-                "                        )\n" +
-                "                        DISTRIBUTED BY HASH(k1);");
-        cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
-                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
-                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
-                "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
         createAndRefreshMv("test", "test_partition_tbl_mv1",
                 "CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                         "               PARTITION BY k1\n" +
@@ -2066,8 +2043,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "group by a.k1, b.k1, a.v1,b.v1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = 9: b_k1, " +
-                    "8: a_k1 = '2020-01-01'\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 9: b_k1 = '2020-01-01', 8: a_k1 = '2020-01-01'\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv3");
         }
@@ -2081,8 +2057,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "group by a.k1, a.v1 ;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = 9: b_k1, " +
-                    "8: a_k1 = '2020-01-01'\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 9: b_k1 = '2020-01-01', 8: a_k1 = '2020-01-01'\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv3");
         }
@@ -2111,8 +2086,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     "group by a.k1, a.v1 ;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = 9: b_k1, " +
-                    "8: a_k1 = '2020-01-01'\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 9: b_k1 = '2020-01-01', 8: a_k1 = '2020-01-01'\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv3");
         }
