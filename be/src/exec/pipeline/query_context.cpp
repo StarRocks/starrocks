@@ -197,7 +197,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
-    DCHECK(_is_final_sink) << "must be the result sink";
+    DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
