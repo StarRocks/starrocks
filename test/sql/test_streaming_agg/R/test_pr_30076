@@ -1,4 +1,4 @@
--- name: test_pr_30076
+-- name: test_pr_30076 @sequential
 create table t0(
     c0 INT,
     c1 BIGINT
