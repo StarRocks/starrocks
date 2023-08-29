@@ -28,6 +28,14 @@ None
 1
 1
 -- !result
+select min(v1) v1, round(count(v2) / min(v1)) round_col from t0 group by v3 order by abs(min(v1)) + abs(v1) asc;
+-- result:
+None	None
+1	2
+1	2
+2	1
+4	0
+-- !result
 select min(v1) v1 from t0 group by v3 order by round(count(v2) / min(v1)), abs(v1);
 -- result:
 None
