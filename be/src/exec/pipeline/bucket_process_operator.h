@@ -29,7 +29,11 @@ class BucketProcessSinkOperator : public Operator {
 public:
     BucketProcessSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               BucketProcessContextPtr& ctx)
+<<<<<<< HEAD
             : Operator(factory, id, "bucket_process_sink", plan_node_id, false, driver_sequence), _ctx(ctx) {}
+=======
+            : Operator(factory, id, "bucket_process_sink", plan_node_id, driver_sequence), _ctx(ctx) {}
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))
     ~BucketProcessSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
@@ -60,7 +64,11 @@ class BucketProcessSourceOperator : public SourceOperator {
 public:
     BucketProcessSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 BucketProcessContextPtr& ctx)
+<<<<<<< HEAD
             : SourceOperator(factory, id, "bucket_process_source", plan_node_id, false, driver_sequence), _ctx(ctx) {}
+=======
+            : SourceOperator(factory, id, "bucket_process_source", plan_node_id, driver_sequence), _ctx(ctx) {}
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))
     ~BucketProcessSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
@@ -119,4 +127,8 @@ private:
     BucketProcessContextFactoryPtr _ctx_factory;
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+} // namespace starrocks::pipeline
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))

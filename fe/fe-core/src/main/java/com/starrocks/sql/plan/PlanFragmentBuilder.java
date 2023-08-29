@@ -775,7 +775,15 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
+<<<<<<< HEAD
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            scanNode.setCanUseAnyColumn(node.getCanUseAnyColumn());
+            scanNode.setCanUseMinMaxCountOpt(node.getCanUseMinMaxCountOpt());
+            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
@@ -872,7 +880,6 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -1915,6 +1922,7 @@ public class PlanFragmentBuilder {
             }
 
             aggregationNode.setUseSortAgg(node.isUseSortAgg());
+            aggregationNode.setUsePerBucketOptimize(node.isUsePerBucketOptmize());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());

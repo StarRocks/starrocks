@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -724,4 +725,21 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return node;
     }
 
+<<<<<<< HEAD
+=======
+    public void reset() {
+        // Do nothing.
+    }
+
+    public void disablePhysicalDistributionOptimize() {
+        forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
+    }
+
+    private void forEachNode(PlanNode root, Consumer<PlanNode> consumer) {
+        consumer.accept(root);
+        for (PlanNode child : root.getChildren()) {
+            forEachNode(child, consumer);
+        }
+    }
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))
 }

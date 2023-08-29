@@ -33,6 +33,6 @@ public:
 private:
     template <class AggFactory, class SourceFactory, class SinkFactory>
     pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                 pipeline::PipelineBuilderContext* context);
+                                                 pipeline::PipelineBuilderContext* context, bool per_bucket_optimize);
 };
 } // namespace starrocks

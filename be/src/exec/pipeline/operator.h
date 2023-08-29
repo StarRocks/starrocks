@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -91,6 +93,9 @@ public:
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
+
+    // return true if operator should ignore eos chunk
+    virtual bool ignore_empty_eos() const { return true; }
 
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
@@ -251,7 +256,11 @@ public:
 
     // if return true it means the operator has child operators
     virtual bool is_combinatorial_operator() const { return false; }
+<<<<<<< HEAD
     // apply operation for each child operator
+=======
+    //
+>>>>>>> 37b2b0c2e8 ([Enhancement] support per bucket optimize for colocate aggregate (#29252))
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
 protected:

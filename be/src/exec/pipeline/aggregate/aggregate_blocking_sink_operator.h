@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <utility>
 
 #include "exec/aggregator.h"
@@ -54,7 +55,7 @@ protected:
 
 private:
     // Whether prev operator has no output
-    bool _is_finished = false;
+    std::atomic_bool _is_finished = false;
     // whether enable aggregate group by limit optimize
     bool _agg_group_by_with_limit = false;
 };

@@ -535,7 +535,6 @@ public class CoordinatorPreprocessor {
             dataSizePerGroup[minIndex] += scanRangeParam.getScan_range().getInternal_scan_range().getRow_count();
             result.get(minIndex).add(scanRangeParam);
         }
-
         if (LOG.isDebugEnabled()) {
             LOG.debug("dataSizePerGroup: {}", dataSizePerGroup);
         }
