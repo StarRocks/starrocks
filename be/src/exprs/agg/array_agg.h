@@ -307,14 +307,21 @@ public:
             materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
             res = ColumnPtr(std::move(tmp));
         }
-        // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
-        // TODO(fzh) optimize it later
+        // further remove duplicated values
+        // TODO(fzh) optimize N*N
         if (ctx->get_is_distinct()) {
             bool is_duplicated = false;
             Filter filter(elem_size, 1);
+            phmap::flat_hash_set<uint32_t> sets;
+            std::vector<uint32_t> hash(elem_size, 0);
+            res->fnv_hash(hash.data(), 0, elem_size);
             for (auto row_id = 0; row_id < elem_size; row_id++) {
-                for (auto next_id = row_id + 1; next_id < elem_size; next_id++) {
-                    if (res->equals(next_id, *res, row_id)) {
+                if (!sets.contains(hash[row_id])) {
+                    sets.emplace(hash[row_id]);
+                    continue;
+                }
+                for (auto next_id = 0; next_id < row_id; next_id++) {
+                    if (hash[row_id] == hash[next_id] && res->equals(next_id, *res, row_id)) {
                         is_duplicated = true;
                         filter[row_id] = 0;
                         break;
