@@ -592,7 +592,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
-        // @TODO
+        // @TODO(silverbullet233): remove this config and always return true
         return Config.enable_pipeline_load && enablePipelineLoad;
     }
 
