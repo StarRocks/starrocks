@@ -1902,11 +1902,14 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
-                } else if (functionName.equalsIgnoreCase(FunctionSet.GROUP_CONCAT) ||
-                        functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-                    replaceExpr = functionCallExpr;
+                } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF));
+                    replaceExpr.getParams().setIsDistinct(false);
                 }
-                Preconditions.checkState(replaceExpr != null);
+                Preconditions.checkState(replaceExpr != null, functionName + " does not support distinct");
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);

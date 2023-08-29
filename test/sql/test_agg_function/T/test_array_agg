@@ -32,6 +32,26 @@ insert into ss values (12,"李四大闹天空","英语外语美誉",NULL,[89], m
 insert into ss values (2,"王武程咬金","语文北京上海",22,[23],map{8:''});
 insert into ss values (3,"欧阳诸葛方程","数学大不列颠",NULL,[],null);
 
+select max(id), array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2  order by 1;
+select max(id), array_agg(distinct name) from ss where id < 2  order by 1;
+select max(id), array_agg(distinct name), array_agg(distinct score order by 1) from ss where id < 2 order by 1;
+select max(id),array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2  order by 1;
+select max(id),array_agg(distinct name) from ss where id < 2  order by 1;
+select max(id),array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2  order by 1;
+select max(id),array_agg(name), array_agg(distinct name) from ss where id < 2 order by 1;
+select max(id),array_agg(distinct name), array_agg(distinct score order by 1) from ss where id < 2 order by 1;
+
+select id, array_agg(distinct name), count(distinct score), array_agg(name) from ss where id < 2 group by id order by 1;
+select id, array_agg(distinct name) from ss where id < 2 group by id order by id;
+select id, array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2 group by id order by 1;
+select id, array_agg(name), array_agg(distinct name) from ss where id < 2 group by id order by 1;
+select id, array_agg(distinct name), array_agg(distinct score order by 1) from ss where id < 2 group by id order by 1;
+select score, array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2 group by score order by 1;
+select score, array_agg(distinct name) from ss where id < 2 group by score order by score;
+select score, array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2 group by score order by 1;
+select score, array_agg(name), array_agg(distinct name) from ss where id < 2 group by score order by 1;
+select score, array_agg(distinct name), array_agg(distinct score order by 1) from ss where id < 2 group by score order by 1;
+
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
 select array_agg(distinct name order by 1), array_agg(distinct arr order by score) from ss group by id order by 1;

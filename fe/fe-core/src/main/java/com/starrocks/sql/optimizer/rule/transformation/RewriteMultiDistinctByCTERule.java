@@ -287,7 +287,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                 consumeAggCallMap.put(aggCallOperator, distinctAggRef);
                 projectionMap.put(distinctAggRef, distinctAggRef);
             } else if (!aggCallOperator.getFnName().equals(FunctionSet.AVG)) {
-                throw new UnsupportedOperationException(aggCallOperator.getFnName() + " does not distinct.");
+                throw new UnsupportedOperationException(aggCallOperator.getFnName() + " does not support distinct.");
             }
         }
 

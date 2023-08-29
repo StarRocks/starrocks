@@ -330,7 +330,18 @@ public class AnalyzeExprTest {
                 "from (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeSuccess("select array_agg(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeSuccess("select array_agg(jv) from ttypes group by v1;");
 
+        analyzeSuccess("select array_agg(distinct v1), array_agg(v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1), count(distinct v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1) from t0 group by v3;");
+        analyzeSuccess("select array_agg(distinct v3) from t0 group by v1;");
+        analyzeSuccess("select array_agg(distinct null) from t0;");
+        analyzeSuccess("select array_agg(1) from t0;");
+        analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
+        analyzeSuccess("select array_agg(distinct vm) from ttypes group by v1;");
+
+        analyzeFail("select array_agg(distinct jv) from ttypes group by v1;");
         analyzeFail("select array_agg(null order by 11);");
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
