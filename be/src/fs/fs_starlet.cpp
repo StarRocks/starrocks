@@ -509,7 +509,7 @@ public:
         parsed_paths.reserve(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
         int64_t shard_id;
-        for (auto& path : paths) {
+        for (auto&& path : paths) {
             ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
             auto fs_st = get_shard_filesystem(pair.second);
             if (!fs_st.ok()) {
