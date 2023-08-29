@@ -62,6 +62,13 @@ StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
 >
 > StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
 
+
+- For Aliyun OSS:
+  - "fs.oss.accessKeyId": The Access Key ID that you can use to access the Aliyun OSS bucket. 
+  - "fs.oss.accessKeySecret": The Secret Access Key that you can use to access the Aliyun OSS bucket.
+  - "fs.oss.endpoint": The endpoint that you can use to access the Aliyun OSS bucket.
+
+
 ## Examples
 
 Example 1: Create a repository named `hdfs_repo` in an Apache™ Hadoop® cluster.
@@ -99,5 +106,18 @@ PROPERTIES(
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "storage.googleapis.com"
+);
+```
+Example 4: Create a repository named `oss_repo` in the Aliyun OSS bucket `bucket_oss`.
+
+```SQL
+CREATE REPOSITORY `oss_repo`
+WITH BROKER
+ON LOCATION "oss://bucket_oss/backup"
+PROPERTIES
+(
+"fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxx",
+"fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
+"fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
 );
 ```
