@@ -1132,6 +1132,12 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
     shard.tablets_under_clone.erase(tablet_id);
 }
 
+bool TabletManager::check_clone_tablet(int64_t tablet_id) {
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
+    std::unique_lock wlock(shard.lock);
+    return shard.tablets_under_clone.count(tablet_id) > 0;
+}
+
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const std::string& tablet_id_path) {
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks

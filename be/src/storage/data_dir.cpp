@@ -470,7 +470,9 @@ bool DataDir::_need_gc_delta_column_files(
         std::unordered_map<int64_t, std::unordered_set<std::string>>& delta_column_files) {
     TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
     if (tablet == nullptr || tablet->keys_type() != KeysType::PRIMARY_KEYS ||
-        tablet->tablet_state() != TABLET_RUNNING) {
+        tablet->tablet_state() != TABLET_RUNNING || _tablet_manager->check_clone_tablet(tablet_id) ||
+        tablet->is_migrating()) {
+        // skip gc when tablet is doing schema change, clone or migration.
         return false;
     }
     if (delta_column_files.count(tablet_id) == 0) {
