@@ -172,6 +172,7 @@ public:
 
     void register_clone_tablet(int64_t tablet_id);
     void unregister_clone_tablet(int64_t tablet_id);
+    bool check_clone_tablet(int64_t tablet_id);
 
     size_t shutdown_tablets() const {
         std::shared_lock l(_shutdown_tablets_lock);
