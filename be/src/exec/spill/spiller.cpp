@@ -112,6 +112,13 @@ void Spiller::update_spilled_task_status(Status&& st) {
     }
 }
 
+Status Spiller::reset_state(RuntimeState* state) {
+    _spilled_append_rows = 0;
+    _restore_read_rows = 0;
+    _block_group->clear();
+    return Status::OK();
+}
+
 std::vector<std::shared_ptr<SpillerReader> > Spiller::get_partition_spill_readers(
         const std::vector<const SpillPartitionInfo*>& partitions) {
     std::vector<std::shared_ptr<SpillerReader> > res;

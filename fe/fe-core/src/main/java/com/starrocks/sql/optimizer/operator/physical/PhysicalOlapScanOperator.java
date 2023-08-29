@@ -47,6 +47,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
     protected boolean needSortedByKeyPerTablet = false;
+    protected boolean needOutputChunkByBucket = false;
 
     private boolean usePkIndex = false;
 
@@ -150,8 +151,16 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return needSortedByKeyPerTablet;
     }
 
+    public boolean needOutputChunkByBucket() {
+        return needOutputChunkByBucket;
+    }
+
     public void setNeedSortedByKeyPerTablet(boolean needSortedByKeyPerTablet) {
         this.needSortedByKeyPerTablet = needSortedByKeyPerTablet;
+    }
+
+    public void setNeedOutputChunkByBucket(boolean needOutputChunkByBucket) {
+        this.needOutputChunkByBucket = needOutputChunkByBucket;
     }
 
     public boolean isUsePkIndex() {

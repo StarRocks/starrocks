@@ -965,4 +965,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // 3. HashJoinNode: slotIds of both sides of Join equal conditions in semi join and inner join.
     public void collectEquivRelation(FragmentNormalizer normalizer) {
     }
+
+    // disable optimize depends on physical order
+    // eg: sortedStreamingAGG/ PerBucketCompute
+    public void disablePhysicalPropertyOptimize() {
+    }
 }

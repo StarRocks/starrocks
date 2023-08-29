@@ -129,6 +129,8 @@ struct TInternalScanRange {
   // Allow this query to cache remote data on local disks or not.
   // Only the cloud native tablet will respect this field.
   12: optional bool fill_data_cache = true;
+  // used for per-bucket compute optimize
+  13: optional i32 bucket_sequence
 }
 
 enum TFileFormatType {
@@ -494,6 +496,7 @@ struct TOlapScanNode {
 
   30: optional bool use_pk_index
   31: required list<Descriptors.TColumn> columns_desc
+  32: optional bool output_chunk_by_bucket
 }
 
 struct TJDBCScanNode {
@@ -714,6 +717,8 @@ struct TAggregationNode {
   26: optional bool interpolate_passthrough = false
   
   27: optional bool use_sort_agg
+
+  28: optional bool use_per_bucket_optimize
 }
 
 struct TRepeatNode {

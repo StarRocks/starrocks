@@ -76,6 +76,7 @@ public:
     pipeline::OperatorPtr get_internal_op(size_t i);
 
     void set_precondition_ready(starrocks::RuntimeState* state) override;
+    bool ignore_empty_eos() const override { return false; }
 
 private:
     StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);

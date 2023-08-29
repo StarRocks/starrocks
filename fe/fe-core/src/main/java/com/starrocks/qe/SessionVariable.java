@@ -347,6 +347,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+    public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optmize";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
@@ -1014,6 +1015,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    @VarAttr(name = ENABLE_PER_BUCKET_OPTIMIZE)
+    private boolean enablePerBucketComputeOptimize = true;
+
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
@@ -1055,6 +1059,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
+    }
+
+    public boolean isEnablePerBucketComputeOptimize() {
+        return enablePerBucketComputeOptimize;
     }
 
     public int getWindowPartitionMode() {
