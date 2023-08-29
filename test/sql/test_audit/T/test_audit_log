@@ -15,4 +15,4 @@ INSERT INTO `t_audit_log` (v1, v2, v3) values
     (1, 1, 2),
     (1, 1, 3);
 
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" url=${url} db=${db[0]} bash ${root_path}/sql/test_audit/T/test_audit_log.sh
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" url="${url}" db="${db[0]}" bash ${root_path}/sql/test_audit/T/test_audit_log.sh
