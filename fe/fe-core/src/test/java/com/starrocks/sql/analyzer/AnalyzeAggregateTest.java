@@ -40,13 +40,15 @@ public class AnalyzeAggregateTest {
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2) over ()))",
                 "Unsupported nest window function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
         analyzeFail("select sum(1 + max(v2)) from t0",
-                "Unsupported nest window function inside aggregation.");
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select min(v1) col from t0 order by min(col) + 1,  min(col)",
+                "Column 'col' cannot be resolved");
 
         analyzeFail("select v1 from t0 group by v1,cast(v2 as int) having cast(v2 as boolean)",
                 "must be an aggregate expression or appear in GROUP BY clause");
