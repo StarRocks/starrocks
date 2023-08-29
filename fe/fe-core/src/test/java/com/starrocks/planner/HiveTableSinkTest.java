@@ -27,7 +27,6 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.thrift.TCloudType;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -111,6 +110,6 @@ public class HiveTableSinkTest {
         Assert.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
         Assert.assertEquals(TCompressionType.GZIP, tHiveTableSink.getCompression_type());
         Assert.assertTrue(tHiveTableSink.is_static_partition_sink);
-        Assert.assertEquals(TCloudType.HDFS, tHiveTableSink.getCloud_configuration().cloud_type);
+        Assert.assertEquals(null, tHiveTableSink.getCloud_configuration().cloud_type);
     }
 }

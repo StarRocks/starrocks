@@ -251,16 +251,6 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSInvalidCredential() {
-        Map<String, String> storageParams = new HashMap<>();
-        storageParams.put("hadoop.security.authentication", "kerberos");
-        storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
-
-        Assert.assertThrows(SemanticException.class, () ->
-                new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"), storageParams, true, ""));
-    }
-
-    @Test
     public void testAzureSharedKeyCredential() {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
