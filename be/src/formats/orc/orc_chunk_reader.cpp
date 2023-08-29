@@ -400,7 +400,7 @@ void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescript
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }
-    } else if (_broker_load_mode && !_strict_mode && is_string_type(t1) && is_string_type(t2)) {
+    } else if (_broker_load_mode && is_string_type(t1) && is_string_type(t2)) {
         // For broker load, the orc field length is larger than the maximum length of the starrocks field
         // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
         // the same as the maximum length of the starrocks field.
