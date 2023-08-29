@@ -2428,13 +2428,15 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testOrderByWithAgg() throws Exception {
         String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
-                "min(t1f) as t1f from test_all_type_not_null " +
+                "min(t1f) as t1f, min(t1f) as t1f from test_all_type_not_null " +
                 "group by t1a, t1b " +
-                "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f)";
+                "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
 
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: count(5: t1e), min(6: t1f)\n" +
-                "  |  group by: 1: t1a, 2: t1b");
+                "  |  group by: 1: t1a, 2: t1b",
+                "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
     }
 }

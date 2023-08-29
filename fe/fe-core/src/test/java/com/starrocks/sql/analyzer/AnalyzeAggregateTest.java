@@ -192,6 +192,8 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature: multi_distinct_count(json");
         analyzeFail("select count(distinct va),count(distinct vm) from ttypes group by v1",
                 "No matching function with signature: multi_distinct_count(array");
+        analyzeFail("select count(distinct va) vj from ttypes group by v1 order by count(distinct vj)",
+                "No matching function with signature: multi_distinct_count(array");
 
         // group by complex types
         analyzeSuccess("select count(*) from ttypes group by vm");

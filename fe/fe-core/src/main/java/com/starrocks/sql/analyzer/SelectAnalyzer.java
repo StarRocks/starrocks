@@ -100,7 +100,7 @@ public class SelectAnalyzer {
             sourceExpressions.add(analyzeState.getHaving());
         }
 
-        List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
+        List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
         if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
             if (!groupByExpressions.isEmpty() &&
@@ -336,6 +336,11 @@ public class SelectAnalyzer {
                 // but should be parsed in sourceScope
                 analyzeExpression(expression, analyzeState, orderByScope.getParent());
             } else {
+                ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+                expressionAnalyzer.analyzeWithoutUpdateState(expression, analyzeState, orderByScope);
+                List<Expr> aggregations = Lists.newArrayList();
+                expression.collectAll(e -> e.isAggregate(), aggregations);
+                aggregations.forEach(e -> analyzeExpression(e, analyzeState, orderByScope.getParent()));
                 analyzeExpression(expression, analyzeState, orderByScope);
             }
 
@@ -416,11 +421,10 @@ public class SelectAnalyzer {
         analyzeState.setGroupingFunctionCallExprs(groupingFunctionCallExprs);
     }
 
-    private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
-                                                       List<Expr> outputAndOrderByExpressions) {
-        final List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        outputAndOrderByExpressions.stream().forEach(e -> e.collectAll(Expr.isAggregatePredicate(), aggregations));
-        aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
+    private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState,
+                                                          List<Expr> outputAndOrderByExpressions) {
+        List<FunctionCallExpr> aggregations = Lists.newArrayList();
+        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
 
         long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
         for (FunctionCallExpr agg : aggregations) {
@@ -437,7 +441,7 @@ public class SelectAnalyzer {
             }
         }
 
-        analyzeState.setAggregate(aggregations.stream().distinct().collect(Collectors.toList()));
+        analyzeState.setAggregate(aggregations);
 
         return aggregations;
     }
