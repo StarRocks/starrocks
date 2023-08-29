@@ -52,18 +52,34 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
         return scalarOperator;
     }
 
+    public ScalarOperator preprocess(ScalarOperator scalarOperator) {
+        return null;
+    }
+
     @Override
     public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+        ScalarOperator preprocessed = preprocess(literal);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         return literal;
     }
 
     @Override
     public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+        ScalarOperator preprocessed = preprocess(variable);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         return variable;
     }
 
     @Override
     public ScalarOperator visitArray(ArrayOperator array, Void context) {
+        ScalarOperator preprocessed = preprocess(array);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(array.getChildren(), update);
         if (update[0]) {
@@ -75,6 +91,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+        ScalarOperator preprocessed = preprocess(collectionElementOp);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(collectionElementOp.getChildren(), update);
         if (update[0]) {
@@ -86,6 +106,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
+        ScalarOperator preprocessed = preprocess(array);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(array.getChildren(), update);
         if (update[0]) {
@@ -97,6 +121,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCall(CallOperator call, Void context) {
+        ScalarOperator preprocessed = preprocess(call);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(call.getChildren(), update);
         if (update[0]) {
@@ -109,11 +137,19 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitPredicate(PredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         return predicate;
     }
 
     @Override
     public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -125,6 +161,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -136,6 +176,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -147,6 +191,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitExistsPredicate(ExistsPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -158,6 +206,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -169,6 +221,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -180,6 +236,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
+        ScalarOperator preprocessed = preprocess(predicate);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(predicate.getChildren(), update);
         if (update[0]) {
@@ -191,6 +251,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -202,6 +266,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -226,6 +294,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitSubfield(SubfieldOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> child = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -237,6 +309,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitMap(MapOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> children = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -248,6 +324,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitMultiInPredicate(MultiInPredicateOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> children = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -259,6 +339,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> children = visitList(operator.getChildren(), update);
         if (update[0]) {
@@ -270,6 +354,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
+        ScalarOperator preprocessed = preprocess(operator);
+        if (preprocessed != null) {
+            return preprocessed;
+        }
         boolean[] update = {false};
         List<ScalarOperator> children = visitList(operator.getChildren(), update);
         if (update[0]) {

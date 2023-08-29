@@ -24,18 +24,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -79,6 +71,12 @@ public class EquationRewriter {
             @Override
             public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
                 return null;
+            }
+
+            @Override
+            public ScalarOperator preprocess(ScalarOperator scalarOperator) {
+                ScalarOperator tmp = replace(scalarOperator);
+                return tmp != null ? tmp : null;
             }
 
             @Override
@@ -137,60 +135,6 @@ public class EquationRewriter {
                 }
 
                 return super.visitCall(call, context);
-            }
-
-            @Override
-            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
-                ScalarOperator tmp = replace(cast);
-                return tmp != null ? tmp : super.visitCastOperator(cast, context);
-            }
-
-            @Override
-            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                ScalarOperator tmp = replace(variable);
-                return tmp != null ? tmp : super.visitVariableReference(variable, context);
-            }
-
-            @Override
-            public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-                ScalarOperator tmp = replace(operator);
-                return tmp != null ? tmp : super.visitCaseWhenOperator(operator, context);
-            }
-
-            @Override
-            public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
-                ScalarOperator tmp = replace(operator);
-                return tmp != null ? tmp : super.visitIsNullPredicate(operator, context);
-            }
-
-            @Override
-            public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitCompoundPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitInPredicate(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitLikePredicateOperator(predicate, context);
-            }
-
-            @Override
-            public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
-                ScalarOperator tmp = replace(array);
-                return tmp != null ? tmp : super.visitArraySlice(array, context);
-            }
-
-            @Override
-            public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
-                ScalarOperator tmp = replace(collectionElementOp);
-                return tmp != null ? tmp : super.visitCollectionElement(collectionElementOp, context);
             }
 
             ScalarOperator replace(ScalarOperator scalarOperator) {
