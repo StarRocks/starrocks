@@ -1,5 +1,32 @@
 # StarRocks version 2.5
 
+## 2.5.11
+
+发布日期：2023 年 8 月 28 日
+
+### 功能优化
+
+- 对所有复合谓词以及 WHERE 子句中的表达式支持隐式转换，可通过[会话变量](https://docs.starrocks.io/zh-cn/latest/reference/System_variable) `enable_strict_type` 控制是否打开隐式转换（默认取值为 `false`）。 [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- 优化了创建 Iceberg Catalog 时如果没有指定 `hive.metastore.uri` 时返回的报错，报错信息中的描述更准确。 [#16543](https://github.com/StarRocks/starrocks/issues/16543)
+- 在报错信息 `xxx too many versions xxx` 中增加了如何处理的建议说明。 [#28397](https://github.com/StarRocks/starrocks/pull/28397)
+- 动态分区新增支持分区粒度为年。 [#28386](https://github.com/StarRocks/starrocks/pull/28386)
+
+### 问题修复
+
+修复了如下问题：
+
+- 向多副本的表中导入数据时，如果某些分区没有数据，则会写入很多无用日志。 [#28824](https://github.com/StarRocks/starrocks/pull/28824)
+- DELETE 时如果 WHERE 条件中字段类型是 BITMAP 或 HLL 会失败。 [#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- 当异步物化视图的刷新策略为手动刷新且同步调用刷新任务（SYNC MODE）时，手动刷新后`information_schema.task_run` 表中有多条 INSERT OVERWRITE 的记录。 [#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- 某个 Tablet 出现某种 ERROR 状态之后触发 Clone 操作，会导致磁盘使用率上升。 [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- 开启 Join Reorder 时，查询列如果是常量，查询结果不正确。 [#29239](https://github.com/StarRocks/starrocks/pull/29239)
+- 冷热数据迁移时下发任务过多，导致 BE OOM。 [#29055](https://github.com/StarRocks/starrocks/pull/29055)
+- `/apache_hdfs_broker/lib/log4j-1.2.17.jar` 存在安全漏洞。 [#28866](https://github.com/StarRocks/starrocks/pull/28866)
+- Hive Catalog 查询时，如果 WHERE 子句中使用分区列且包含 OR 条件，查询结果不正确。 [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- 查询时偶尔会报错 "java.util.ConcurrentModificationException: null"。 [#29296](https://github.com/StarRocks/starrocks/pull/29296)
+- 异步物化视图的基表被删除，FE 重启时会报错。 [#29318](https://github.com/StarRocks/starrocks/pull/29318)
+- 跨库异步物化视图的基表在数据写入时，偶尔会出现 FE leader 死锁的情况。 [#29432](https://github.com/StarRocks/starrocks/pull/29432)
+
 ## 2.5.10
 
 发布日期：2023 年 8 月 7 日
