@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 #include "gutil/macros.h"
@@ -61,6 +62,9 @@ public:
     bool leave(TicketIdType id);
     // test if all_ready_bit is on, returning true means that morsel splitting is done.
     bool are_all_ready(TicketIdType id);
+
+    // if all id in check are ready. return true
+    bool are_all_left(TicketIdType id);
 
 private:
     DISALLOW_COPY_AND_MOVE(TicketChecker);
