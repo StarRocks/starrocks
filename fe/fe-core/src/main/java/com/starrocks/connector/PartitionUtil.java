@@ -117,7 +117,8 @@ public class PartitionUtil {
             if (rawValue == null) {
                 rawValue = "null";
             }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
+            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                partitionKey.setNullPartitionValue(rawValue);
                 exprValue = NullLiteral.create(type);
             } else {
                 exprValue = LiteralExpr.create(rawValue, type);
@@ -186,7 +187,7 @@ public class PartitionUtil {
         List<String> values = new ArrayList<>(literalValues.size());
         for (LiteralExpr value : literalValues) {
             if (value instanceof NullLiteral) {
-                values.add(((NullablePartitionKey) key).nullPartitionValue());
+                values.add(key.getNullPartitionValue());
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
