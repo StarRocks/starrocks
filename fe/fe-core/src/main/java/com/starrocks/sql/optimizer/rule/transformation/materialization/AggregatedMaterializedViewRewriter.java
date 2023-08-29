@@ -219,7 +219,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
             Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
             builder.withOperator(scanOperator);
-            builder.setPredicate(rewrittenPred);
+            // take care original scan predicates and new having exprs
+            builder.setPredicate(Utils.compoundAnd(rewrittenPred, scanOperator.getPredicate()));
             mvOptExpr = OptExpression.create(builder.build());
         }
 
@@ -279,10 +280,15 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         Set<ScalarOperator> equalsPredicateColumns = new HashSet<>();
         for (ScalarOperator operator : Utils.extractConjuncts(queryRangePredicate)) {
-            if (operator instanceof BinaryPredicateOperator &&
-                    ((BinaryPredicateOperator) operator).getBinaryType().isEqual() &&
-                    operator.getChild(0).isColumnRef() && operator.getChild(1).isConstantRef()) {
-                equalsPredicateColumns.add(operator.getChild(0));
+            if (operator instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binaryPredicateOperator = ((BinaryPredicateOperator) operator);
+                if (!binaryPredicateOperator.getBinaryType().isEqual()) {
+                    continue;
+                }
+
+                if (operator.getChild(0).isColumnRef() && operator.getChild(1).isConstantRef()) {
+                    equalsPredicateColumns.add(operator.getChild(0));
+                }
             }
         }
 
