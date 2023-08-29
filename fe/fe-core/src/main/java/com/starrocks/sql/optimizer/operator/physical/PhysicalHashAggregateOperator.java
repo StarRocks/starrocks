@@ -73,6 +73,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean useSortAgg = false;
 
+    private boolean usePerBucketOptmize = false;
+
     private DataSkewInfo distinctColumnDataSkew = null;
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
@@ -166,6 +168,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setUseSortAgg(boolean useSortAgg) {
         this.useSortAgg = useSortAgg;
+    }
+
+    public boolean isUsePerBucketOptmize() {
+        return usePerBucketOptmize;
+    }
+
+    public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
+        this.usePerBucketOptmize = usePerBucketOptmize;
     }
 
     public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {

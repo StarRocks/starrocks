@@ -219,7 +219,6 @@ public class CoordinatorPreprocessor {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
-
         if (LOG.isDebugEnabled()) {
             executionDAG.getFragmentsInPreorder().forEach(
                     execFragment -> LOG.debug("fragment {} has instances {}", execFragment.getPlanFragment().getFragmentId(),
