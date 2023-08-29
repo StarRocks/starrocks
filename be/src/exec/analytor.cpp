@@ -520,7 +520,7 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
 }
 
 Status Analytor::_evaluate_const_columns(int i) {
-    if (i >= _agg_fn_ctxs.size()) {
+    if (i >= _agg_fn_ctxs.size() || _agg_fn_ctxs[i] == nullptr) {
         // Only agg fn has this context
         return Status::OK();
     }

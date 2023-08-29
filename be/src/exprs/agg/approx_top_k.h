@@ -245,10 +245,11 @@ public:
     using CppType = RunTimeCppType<LT>;
     using InputColumnType = RunTimeColumnType<LT>;
 
+    static constexpr int32_t DEFAULT_K = 5;
     static constexpr int32_t MAX_COUNTER_NUM = 100000;
 
     std::pair<int32_t, int32_t> get_k_and_counter_num(FunctionContext* ctx) const {
-        int32_t k = 5;
+        int32_t k = DEFAULT_K;
         if (ctx->get_num_args() > 1) {
             k = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         }
