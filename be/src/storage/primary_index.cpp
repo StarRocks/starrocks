@@ -1191,18 +1191,14 @@ const Slice* PrimaryIndex::_build_persistent_keys(std::vector<const Column*>& ke
     DCHECK(key_cols.size() == idx_ranges.size());
     for (auto i = 0; i < key_cols.size(); i++) {
         if (key_cols[i]->is_binary()) {
-            LOG(INFO) << "key col is binary";
             const Slice* vkeys = reinterpret_cast<const Slice*>(key_cols[i]->raw_data());
-            LOG(INFO) << "cast success";
             for (size_t j = idx_ranges[i].first; j < idx_ranges[i].second; j++) {
-                LOG(INFO) << "push back slice:" << j;
                 key_slices->emplace_back(vkeys[j]);
             }
         } else {
-            LOG(INFO) << "key col is non-binary";
-            const uint8_t* keys = key_cols[i]->raw_data();
+            uint32_t idx_begin = idx_ranges[i].first;
+            const uint8_t* keys = key_cols[i]->raw_data() + idx_begin * _key_size;
             for (size_t j = idx_ranges[i].first; j < idx_ranges[i].second; j++) {
-                LOG(INFO) << "push back slice:" << j;
                 key_slices->emplace_back(keys, _key_size);
                 keys += _key_size;
             }
