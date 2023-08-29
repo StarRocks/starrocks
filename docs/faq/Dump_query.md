@@ -17,11 +17,12 @@ The query_dump interface returns the information that FE relies on when executin
 * Session variables
 * Number of BEs
 * Statistics information (Min, Max values in a column)
-* Exception
+* Exception information (abnormal stack)
 * Explain costs info
 
-To ensure data privacy, we desensitize the meta information such as database names, table names, column names, etc. We also utilize the desensitized metadata to rewrite the query statements.
-Meta information desensitization is enabled by default. If an exception occurs during the desensitization process, use the original info directly. If desensitization needs to be bypassed, you can add the "mock=false" parameter in the HTTP URI.
+To ensure data privacy, we desensitize the meta information such as database names, table names, and column names. We also use the desensitized metadata to rewrite the query statements.
+
+Meta information desensitization is enabled by default. If an exception occurs during the desensitization process, the original information is used. If desensitization needs to be bypassed, you can add "mock=false" in the HTTP URI.
 
 ## Syntax
 
@@ -40,11 +41,13 @@ Parameter description:
 * query_file: the file containing the query
 * dump_file: the output file
 * db: the database where the SQL query is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
-* mock: turn on/off the desensitization process.
+* mock: whether to enable or disable desensitization
 
-## Example
+## Examples
 
-command:
+### Disable desensitization
+
+Command:
 
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch&mock=false" -O dump_file
@@ -89,7 +92,9 @@ Data is returned in JSON format.
 }
 ```
 
-command:
+### Enable desensitization (default)
+
+Command:
 
 ```shell
 wget --user=root --password=123 --post-file query_file "http://127.0.0.1:8030/api/query_dump?db=tpch -O dump_file
