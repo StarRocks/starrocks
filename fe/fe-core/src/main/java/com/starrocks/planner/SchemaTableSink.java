@@ -60,6 +60,7 @@ public class SchemaTableSink extends DataSink {
 
     @Override
     public boolean canUsePipeLine() {
+        // @TODO what??
         return false;
     }
 }

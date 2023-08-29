@@ -592,6 +592,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
+        // @TODO
         return Config.enable_pipeline_load && enablePipelineLoad;
     }
 
