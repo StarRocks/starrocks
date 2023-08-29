@@ -37,14 +37,14 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: head_sha
           path: ./head_sha.txt
@@ -225,7 +225,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         if: always()
         with:
           name: BE UT LOG
@@ -492,7 +492,7 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -547,7 +547,7 @@ jobs:
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: base_version
           path: ./base_version.txt
@@ -671,7 +671,7 @@ jobs:
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v3.1.2
         if: always()
         with:
           name: SQL-Tester Log
