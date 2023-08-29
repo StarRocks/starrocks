@@ -60,7 +60,6 @@ public class TimeWatcher {
             this.firstTimePoints = time;
             this.name = name;
             this.scopeLevel = levels;
-            levels++;
         }
 
         @Override
@@ -73,22 +72,27 @@ public class TimeWatcher {
                 stopWatch.start();
             }
             reentrantCount++;
+            levels++;
             count++;
         }
 
         public void close() {
             reentrantCount--;
-            if (reentrantCount != 0) {
-                return;
+            if (reentrantCount == 0) {
+                levels--;
+                stopWatch.stop();
             }
-            levels--;
-            stopWatch.stop();
+        }
+
+        @Override
+        public long getFirstTimePoint() {
+            return firstTimePoints;
         }
 
         @Override
         public String toString() {
             return StringUtils.repeat("    ", scopeLevel) + "-- " + name + "[" + count + "] " +
-                    DebugUtil.getPrettyStringMs(getTotalTime()) + "\n";
+                    DebugUtil.getPrettyStringMs(getTotalTime());
         }
 
         @Override

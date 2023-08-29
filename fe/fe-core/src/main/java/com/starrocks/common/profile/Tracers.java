@@ -17,6 +17,7 @@ package com.starrocks.common.profile;
 import com.google.common.base.Stopwatch;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.function.Function;
@@ -27,7 +28,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, MEMO, GROUP, TREE, EXTERNAL,
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL,
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -44,47 +45,52 @@ public class Tracers {
     private boolean isCommandLog = false;
 
     private Tracer tracer(Module module, Mode mode) {
-        return allTracer[(modeMask >> mode.ordinal()) & (moduleMask >> module.ordinal())];
+        return allTracer[(modeMask >> mode.ordinal()) & (moduleMask >> module.ordinal() & 1)];
     }
 
     public static void register(ConnectContext context) {
         Tracers tracers = THREAD_LOCAL.get();
-        // tracers.isCommandLog = StringUtils.equalsIgnoreCase("command", context.getSessionVariable().getTraceLogMode());
+        tracers.isCommandLog = StringUtils.equalsIgnoreCase("command", context.getSessionVariable().getTraceLogMode());
         LogTracer logTracer = tracers.isCommandLog ? new CommandLogTracer() : new FileLogTracer();
         tracers.allTracer[0] = EMPTY_TRACER;
         tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
     }
 
     public static void init(ConnectContext context, Mode mode, String moduleStr) {
-        Tracers tracers = new Tracers();
+        Tracers tracers = THREAD_LOCAL.get();
         boolean enableProfile = context.getSessionVariable().isEnableProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
 
         Module module = getTraceModule(moduleStr);
-        if (Module.ALL == module) {
-            tracers.moduleMask = Integer.MAX_VALUE;
-        } else if (enableProfile) {
+        if (Module.NONE == module || null == module) {
+            tracers.moduleMask = 0;
+        }
+        if (Mode.NONE == mode || null == mode) {
+            tracers.modeMask = 0;
+        }
+        if (enableProfile) {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
-            tracers.moduleMask |= 1 << Module.OPTIMIZER.ordinal();
             tracers.moduleMask |= 1 << Module.EXTERNAL.ordinal();
             tracers.moduleMask |= 1 << Module.SCHEDULER.ordinal();
-        } else if (checkMV) {
+
+            tracers.modeMask |= 1 << Mode.TIMER.ordinal();
+            tracers.modeMask |= 1 << Mode.VARS.ordinal();
+        }
+        if (checkMV) {
             tracers.moduleMask |= 1 << Module.MV.ordinal();
-        } else if (Module.NONE == module) {
-            tracers.moduleMask = 0;
-        } else {
+
+            tracers.modeMask |= 1 << Mode.VARS.ordinal();
+        }
+        if (Module.ALL == module) {
+            tracers.moduleMask = Integer.MAX_VALUE;
+        } else if (Module.NONE != module && null != module) {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
             tracers.moduleMask |= 1 << module.ordinal();
         }
 
-        if (enableProfile) {
-            tracers.modeMask |= 1 << Mode.TIMER.ordinal();
-            tracers.modeMask |= 1 << Mode.VARS.ordinal();
-        } else if (checkMV) {
-            tracers.modeMask |= 1 << Mode.VARS.ordinal();
-        } else if (Mode.NONE == mode) {
-            tracers.modeMask = 0;
-        } else {
+        if (Mode.TIMING == mode) {
+            tracers.modeMask = Integer.MAX_VALUE;
+        } else if (Mode.NONE != mode && null != mode) {
             tracers.modeMask |= 1 << mode.ordinal();
         }
     }
@@ -106,7 +112,7 @@ public class Tracers {
 
     public static Timer watchScope(String name) {
         Tracers tracers = THREAD_LOCAL.get();
-        return tracers.allTracer[1].watchScope(name);
+        return tracers.tracer(Module.BASE, Mode.TIMER).watchScope(name);
     }
 
     public static Timer watchScope(Module module, String name) {
@@ -124,6 +130,7 @@ public class Tracers {
         tracers.tracer(module, Mode.LOGS).log(log, args);
     }
 
+    // lazy log, use it if you want to avoid construct log string when log is disabled
     public static void log(Module module, Function<Object[], String> func, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.LOGS).log(func, args);
@@ -131,7 +138,7 @@ public class Tracers {
 
     public static void log(String log, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
-        tracers.allTracer[1].log(log, args);
+        tracers.tracer(Module.BASE, Mode.TIMER).log(log, args);
     }
 
     public static void record(Module module, String name, String value) {
@@ -166,7 +173,7 @@ public class Tracers {
 
     public static String printLogs() {
         Tracers tracers = THREAD_LOCAL.get();
-        return tracers.allTracer[1].printVars();
+        return tracers.allTracer[1].printLogs();
     }
 
     public static void toRuntimeProfile(RuntimeProfile profile) {

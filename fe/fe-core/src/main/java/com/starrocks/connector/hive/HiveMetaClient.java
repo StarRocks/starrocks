@@ -17,10 +17,11 @@ package com.starrocks.connector.hive;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
-import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveMetaClient {
@@ -174,7 +176,7 @@ public class HiveMetaClient {
     }
 
     public List<String> getAllDatabaseNames() {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getAllDatabases")) {
             return callRPC("getAllDatabases", "Failed to getAllDatabases", new Object[0]);
         }
     }
@@ -182,33 +184,33 @@ public class HiveMetaClient {
     public void createDatabase(Database database) {
         Class<?>[] argClasses = {Database.class};
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createDatabase")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.createDatabase")) {
             callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
         }
     }
 
     public void dropDatabase(String dbName, boolean deleteData) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropDatabase")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropDatabase")) {
             callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
         }
     }
 
     public List<String> getAllTableNames(String dbName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getAllTables")) {
             return callRPC("getAllTables", "Failed to get all table names on database: " + dbName, dbName);
         }
     }
 
     public void createTable(Table table) {
         Class<?>[] argClasses = {Table.class};
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createTable")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.createTable")) {
             callRPC("createTable", "Failed to create table " + table.getDbName() + "." + table.getTableName(),
                     argClasses, table);
         }
     }
 
     public void dropTable(String dbName, String tableName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropTable")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropTable")) {
             callRPC("dropTable", "Failed to drop table " + dbName + "." + tableName,
                     dbName, tableName, true, false);
         }
@@ -216,7 +218,7 @@ public class HiveMetaClient {
 
     public void alterTable(String dbName, String tableName, Table newTable) {
         Class<?>[] argClasses = {String.class, String.class, Table.class};
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.alterTable")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.alterTable")) {
             callRPC("alter_table", "Failed to alter table " + dbName + "." + tableName,
                     argClasses, dbName, tableName, newTable);
         }
@@ -224,55 +226,55 @@ public class HiveMetaClient {
 
     public void alterPartition(String dbName, String tableName, Partition newPartition) {
         Class<?>[] argClasses = {String.class, String.class, Partition.class};
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.alterPartition")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.alterPartition")) {
             callRPC("alter_partition", "Failed to alter partition " + dbName + "." + tableName + newPartition.getValues(),
                     argClasses, dbName, tableName, newPartition);
         }
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.listPartitionNames")) {
             return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, (short) -1);
         }
     }
 
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNamesByValue")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.listPartitionNamesByValue")) {
             return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, partitionValues, (short) -1);
         }
     }
 
     public Database getDb(String dbName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getDatabase")) {
             return callRPC("getDatabase", String.format("Failed to get database %s", dbName), dbName);
         }
     }
 
     public Table getTable(String dbName, String tableName) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTable")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getTable")) {
             return callRPC("getTable", String.format("Failed to get table [%s.%s]", dbName, tableName),
                     dbName, tableName);
         }
     }
 
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartition")) {
             return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),
                     dbName, tableName, partitionValues);
         }
     }
 
     public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.addPartitions")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.addPartitions")) {
             callRPC("add_partitions", String.format("Failed to add partitions on %s.%s",
                     dbName, tableName), partitions);
         }
     }
 
     public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropPartition")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.dropPartition")) {
             callRPC("dropPartition", String.format("Failed to drop partition on %s.%s.%s",
                     dbName, tableName, partValues), dbName, tableName, partValues, deleteData);
         }
@@ -288,10 +290,8 @@ public class HiveMetaClient {
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
-                String.format("%s partitions", size));
-
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionsByNames." + tblName, size + " partitions");
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
             try {
@@ -324,7 +324,7 @@ public class HiveMetaClient {
     }
 
     public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTableColumnStatistics")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getTableColumnStatistics")) {
             return callRPC("getTableColumnStatistics",
                     String.format("Failed to get table column statistics on [%s.%s]", dbName, tableName),
                     dbName, tableName, columns);
@@ -336,10 +336,9 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
-                String.format("%s partitions", size));
+        Tracers.record(EXTERNAL, "HMS.PARTITIONS.getPartitionColumnStatistics." + tableName, size + " partitions");
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",
                     String.format("Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
                             dbName, tableName, partitionNames.size(), columnNames.size()),

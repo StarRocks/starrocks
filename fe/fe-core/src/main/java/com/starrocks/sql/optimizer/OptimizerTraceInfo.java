@@ -12,39 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Stopwatch;
-import com.starrocks.sql.ast.StatementBase;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 // OptimizerTraceInfo is used to record some important info during query optimization
 public class OptimizerTraceInfo {
     private final UUID queryId;
-    private final Map<String, Integer> rulesAppliedTimes = new HashMap<>();
     private final Stopwatch stopwatch;
 
-    private boolean traceOptimizer;
-
-    public OptimizerTraceInfo(UUID queryId, StatementBase stmt) {
+    public OptimizerTraceInfo(UUID queryId) {
         this.queryId = queryId;
         this.stopwatch = Stopwatch.createStarted();
-        if (stmt != null && stmt.getExplainLevel() == StatementBase.ExplainLevel.OPTIMIZER) {
-            traceOptimizer = true;
-        }
-
-    }
-
-    public void recordAppliedRule(String rule) {
-        rulesAppliedTimes.merge(rule, 1, Integer::sum);
-    }
-
-    public Map<String, Integer> getRulesAppliedTimes() {
-        return rulesAppliedTimes;
     }
 
     public UUID getQueryId() {
@@ -57,12 +38,6 @@ public class OptimizerTraceInfo {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("OptimizerTraceInfo");
-        sb.append("\nRules' applied times\n").append(rulesAppliedTimes);
-        return sb.toString();
-    }
-
-    public boolean isTraceOptimizer() {
-        return traceOptimizer;
+        return "OptimizerTraceInfo";
     }
 }

@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
@@ -33,7 +34,6 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -263,11 +263,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // Ignored
             }
 
-            IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter -> {
-                PlannerProfile.addCustomProperties("Iceberg.Metadata.ScanMetrics." +
-                                scanReportWithCounter.getScanReport().tableName() + " / No_" + scanReportWithCounter.getCount(),
-                        scanReportWithCounter.getScanReport().scanMetrics().toString());
-            });
+            IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter ->
+                    Tracers.record(Tracers.Module.EXTERNAL, "Iceberg.Metadata.ScanMetrics." +
+                                    scanReportWithCounter.getScanReport().tableName() + " / No_" +
+                                    scanReportWithCounter.getCount(),
+                            scanReportWithCounter.getScanReport().scanMetrics().toString()));
             tasks.put(key, builder.build());
         }
 

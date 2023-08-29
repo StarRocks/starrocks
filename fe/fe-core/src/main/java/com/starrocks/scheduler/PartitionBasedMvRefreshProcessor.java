@@ -16,7 +16,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -57,6 +56,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -243,17 +243,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);
 
                 // add trace info if needed
-                if (mvContext.getCtx().getSessionVariable().isEnableOptimizerTraceLog()) {
-                    StringBuffer sb = new StringBuffer();
-                    sb.append(String.format("[TRACE QUERY] MV: %s\n", materializedView.getName()));
-                    sb.append(String.format("MV PartitionsToRefresh: %s \n", Joiner.on(",").join(mvToRefreshedPartitions)));
-                    if (refTablePartitionNames != null) {
-                        sb.append(String.format("Base PartitionsToScan:%s\n", refTablePartitionNames));
-                    }
-                    sb.append("Insert Plan:\n");
-                    sb.append(execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE));
-                    LOG.info(sb.toString());
-                }
+                Tracers.log(Tracers.Module.MV,
+                        args -> "[TRACE QUERY] MV: " + materializedView.getName() +
+                                "\nMV PartitionsToRefresh: " + String.join(",", (Set<String>) args[0]) +
+                                "\nBase PartitionsToScan:" + refTablePartitionNames +
+                                "\nInsert Plan:\n" +
+                                ((ExecPlan) args[1]).getExplainString(StatementBase.ExplainLevel.VERBOSE),
+                        mvToRefreshedPartitions, execPlan);
                 mvContext.setExecPlan(execPlan);
             } catch (Exception e) {
                 LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
@@ -987,7 +983,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
-        ctx.getPlannerProfile().reset();
+        Tracers.register(ctx);
         ctx.setThreadLocalInfo();
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
@@ -1044,6 +1040,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
             }
         }
+        Tracers.close();
         return insertStmt;
     }
 

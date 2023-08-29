@@ -15,27 +15,22 @@
 package com.starrocks.common.profile;
 
 import com.google.common.collect.Lists;
+import org.slf4j.helpers.FormattingTuple;
+import org.slf4j.helpers.MessageFormatter;
 
 import java.util.List;
 import java.util.function.Function;
 
 public class CommandLogTracer extends LogTracer {
-    // To avoid logs too large, restrict the logs' size for each tracer.
-    private static final int MAX_LOG_SIZE = 128;
-
-    // Container to store the trace logs.
     private final List<LogEvent> logs = Lists.newLinkedList();
 
     public void log(long time, String content) {
-        if (logs.size() >= MAX_LOG_SIZE) {
-            return;
-        }
         this.logs.add(new LogEvent(time, content));
     }
 
     public void log(long time, String format, Object... objects) {
-        String log = String.format(format, objects);
-        this.logs.add(new LogEvent(time, log));
+        FormattingTuple ft = MessageFormatter.arrayFormat(format, objects);
+        this.logs.add(new LogEvent(time, ft.getMessage()));
     }
 
     @Override

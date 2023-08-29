@@ -169,7 +169,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             missedCols.except(inputCols);
             if (!missedCols.isEmpty()) {
                 String message = String.format("Invalid plan:%s%s%s The required cols %s cannot obtain from input cols %s.",
-                        System.lineSeparator(), optExpr.explain(), PREFIX, missedCols, inputCols);
+                        System.lineSeparator(), optExpr.debugString(), PREFIX, missedCols, inputCols);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -178,7 +178,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             if (!outputCol.getType().isFullyCompatible(inputCol.getType())) {
                 String message = String.format("Invalid plan:%s%s%s Type of output col %s is not fully compatible with " +
                                 "type of input col %s.",
-                        System.lineSeparator(), optExpression.explain(), PREFIX, outputCol, inputCol);
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, outputCol, inputCol);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }
@@ -186,7 +186,7 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
         private void checkChildNumberOfSet(int inputSize, int requiredSize, OptExpression optExpression) {
             if (inputSize != requiredSize) {
                 String message = String.format("Invalid plan:%s%s%s. The required number of children is %d but found %d.",
-                        System.lineSeparator(), optExpression.explain(), PREFIX, requiredSize, inputSize);
+                        System.lineSeparator(), optExpression.debugString(), PREFIX, requiredSize, inputSize);
                 throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
             }
         }

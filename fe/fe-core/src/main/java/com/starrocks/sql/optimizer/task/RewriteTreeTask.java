@@ -16,6 +16,8 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -71,11 +73,14 @@ public class RewriteTreeTask extends OptimizerTask {
                 continue;
             }
 
-            List<OptExpression> result = rule.transform(root, context.getOptimizerContext());
+            List<OptExpression> result;
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
+                result = rule.transform(root, context.getOptimizerContext());
+            }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
             OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, root, result);
+            OptimizerTraceUtil.logApplyRule(traceInfo, rule, root, result);
 
             if (result.isEmpty()) {
                 continue;

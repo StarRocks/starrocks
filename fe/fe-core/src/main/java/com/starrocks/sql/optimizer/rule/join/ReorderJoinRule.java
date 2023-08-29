@@ -20,7 +20,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.PlannerProfile;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -90,8 +91,7 @@ public class ReorderJoinRule extends Rule {
 
     Optional<OptExpression> enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
                                       MultiJoinNode multiJoinNode, boolean copyIntoMemo) {
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
-                reorderAlgorithm.getClass().getSimpleName())) {
+        try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, reorderAlgorithm.getClass().getSimpleName())) {
             reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
                     multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
         }

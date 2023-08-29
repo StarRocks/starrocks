@@ -20,6 +20,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -42,7 +43,10 @@ class TracerImpl extends Tracer {
     }
 
     public Timer watchScope(String name) {
-        return watcher.scope(timePoint(), name);
+        tracerCost.start();
+        Timer t = watcher.scope(timePoint(), name);
+        tracerCost.stop();
+        return t;
     }
 
     public void log(String event) {
@@ -58,6 +62,7 @@ class TracerImpl extends Tracer {
     }
 
     @Override
+    // lazy log, use it if you want to avoid construct log string when log is disabled
     public void log(Function<Object[], String> func, Object... args) {
         tracerCost.start();
         logTracer.log(timePoint(), func, args);
@@ -82,46 +87,76 @@ class TracerImpl extends Tracer {
 
     public String printScopeTimer() {
         StringBuilder sb = new StringBuilder();
+        long fixed = String.valueOf(timePoint()).length();
+        String fixedString = "%" + fixed + "dms|";
         for (Timer timer : watcher.getAllTimerWithOrder()) {
-            sb.append(String.format("%8dms|", timer.getFirstTimePoint()));
+            sb.append(String.format(fixedString, timer.getFirstTimePoint()));
             sb.append(timer);
             sb.append("\n");
         }
 
-        sb.append("Trace Timer Cost:");
-        sb.append(tracerCost.elapsed(TimeUnit.MILLISECONDS));
+        printCosts(sb);
         return sb.toString();
     }
 
+    private void printCosts(StringBuilder sb) {
+        sb.append("Tracer Cost: ");
+        sb.append(tracerCost.elapsed(TimeUnit.MICROSECONDS));
+        sb.append("us");
+    }
+
     public String printTiming() {
-        StringBuilder sb = new StringBuilder();
-        for (LogTracer.LogEvent log : logTracer.getLogs()) {
-            // sb.append(String.format("%8dms|", timing.getFirstTimePoint(log.getLog())));
-            sb.append("    ");
-            sb.append(log);
-            sb.append("\n");
+        Map<Long, String> timings = new TreeMap<>();
+        for (Timer timer : watcher.getAllTimerWithOrder()) {
+            timings.put(timer.getFirstTimePoint(), "watchScope: " + timer.name());
         }
+        for (LogTracer.LogEvent log : logTracer.getLogs()) {
+            timings.put(log.getTimePoint(), "log: " + log.getLog());
+        }
+        for (Var<?> var : varTracer.getAllVars()) {
+            timings.put(var.getTimePoint(), "record: " + var.getName());
+        }
+        long fixed = String.valueOf(timePoint()).length();
+        String fixedString = "%" + fixed + "dms|";
+        StringBuilder sb = new StringBuilder();
+        timings.forEach((k, v) -> {
+            sb.append(String.format(fixedString, k));
+            sb.append(" ");
+            sb.append(v);
+            sb.append("\n");
+        });
+
+        printCosts(sb);
         return sb.toString();
     }
 
     public String printVars() {
         StringBuilder sb = new StringBuilder();
+        long fixed = String.valueOf(timePoint()).length();
+        String fixedString = "%" + fixed + "dms|";
         for (Var<?> var : varTracer.getAllVarsWithOrder()) {
-            sb.append(String.format("%8dms|", var.getTimePoint()));
-            sb.append("    ");
+            sb.append(String.format(fixedString, var.getTimePoint()));
+            sb.append(" ");
             sb.append(var);
+            sb.append("\n");
         }
+
+        printCosts(sb);
         return sb.toString();
     }
 
     public String printLogs() {
         StringBuilder sb = new StringBuilder();
+        long fixed = String.valueOf(timePoint()).length();
+        String fixedString = "%" + fixed + "dms|";
         for (LogTracer.LogEvent log : logTracer.getLogs()) {
-            sb.append(String.format("%8dms|", log.getTimePoint()));
+            sb.append(String.format(fixedString, log.getTimePoint()));
             sb.append("    ");
-            sb.append(log);
+            sb.append(log.getLog());
             sb.append("\n");
         }
+
+        printCosts(sb);
         return sb.toString();
     }
 
