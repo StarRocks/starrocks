@@ -418,8 +418,8 @@ public class SelectAnalyzer {
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
                                                        List<Expr> outputAndOrderByExpressions) {
-        List<FunctionCallExpr> aggregations = Lists.newArrayList();
-        TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
+        final List<FunctionCallExpr> aggregations = Lists.newArrayList();
+        outputAndOrderByExpressions.stream().forEach(e -> e.collectAll(Expr.isAggregatePredicate(), aggregations));
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
         long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
@@ -437,7 +437,7 @@ public class SelectAnalyzer {
             }
         }
 
-        analyzeState.setAggregate(aggregations);
+        analyzeState.setAggregate(aggregations.stream().distinct().collect(Collectors.toList()));
 
         return aggregations;
     }
