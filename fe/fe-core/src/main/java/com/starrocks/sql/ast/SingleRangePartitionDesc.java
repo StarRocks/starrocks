@@ -126,6 +126,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (otherProperties != null) {
             if (properties == null) {
                 this.properties = otherProperties;
+                partitionProperties.putAll(otherProperties);
             } else {
                 for (String key : otherProperties.keySet()) {
                     partitionProperties.put(key, otherProperties.get(key));
