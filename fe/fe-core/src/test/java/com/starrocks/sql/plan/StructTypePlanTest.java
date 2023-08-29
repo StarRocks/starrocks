@@ -201,4 +201,14 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
         assertPlanContains(sql, "ARRAY<boolean>[], ARRAY<boolean>[]");
     }
+
+    @Test
+    public void testCastArrayIndex() throws Exception {
+        String sql = "select c1.b[cast('  111   ' as bigint)] from test";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> 2: c1.b[111]",
+                "Pruned type: 2 <-> [STRUCT<b ARRAY<STRUCT<a int(11), b int(11)>>>]");
+    }
 }

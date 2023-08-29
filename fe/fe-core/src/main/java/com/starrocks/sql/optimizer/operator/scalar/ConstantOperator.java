@@ -452,15 +452,15 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 return ConstantOperator.createBoolean(true);
             }
         } else if (desc.isTinyint()) {
-            return ConstantOperator.createTinyInt(Byte.parseByte(childString));
+            return ConstantOperator.createTinyInt(Byte.parseByte(childString.trim()));
         } else if (desc.isSmallint()) {
-            return ConstantOperator.createSmallInt(Short.parseShort(childString));
+            return ConstantOperator.createSmallInt(Short.parseShort(childString.trim()));
         } else if (desc.isInt()) {
-            return ConstantOperator.createInt(Integer.parseInt(childString));
+            return ConstantOperator.createInt(Integer.parseInt(childString.trim()));
         } else if (desc.isBigint()) {
-            return ConstantOperator.createBigint(Long.parseLong(childString));
+            return ConstantOperator.createBigint(Long.parseLong(childString.trim()));
         } else if (desc.isLargeint()) {
-            return ConstantOperator.createLargeInt(new BigInteger(childString));
+            return ConstantOperator.createLargeInt(new BigInteger(childString.trim()));
         } else if (desc.isFloat()) {
             return ConstantOperator.createFloat(Double.parseDouble(childString));
         } else if (desc.isDouble()) {
