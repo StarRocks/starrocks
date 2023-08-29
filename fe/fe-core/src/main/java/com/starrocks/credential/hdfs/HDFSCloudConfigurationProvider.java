@@ -23,17 +23,17 @@ import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DATA;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_FILE;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL2;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD2;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USER_NAME2;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
 public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
 
@@ -53,9 +53,10 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         Map<String, String> prop = new HashMap<>(properties);
 
         String[] keys = {
-                HDFS_AUTHENTICATION, HDFS_USER_NAME, HDFS_USER_NAME2, HDFS_PASSWORD, HDFS_PASSWORD2,
-                HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_PRINCIPAL2, HDFS_KERBEROS_KEYTAB, HDFS_KERBEROS_KEYTAB_FILE,
-                HDFS_KERBEROS_KEYTAB_CONTENT, HDFS_KERBEROS_KEYTAB_DATA
+                HDFS_AUTHENTICATION, HDFS_USERNAME_DEPRECATED, HDFS_USERNAME, HDFS_PASSWORD_DEPRECATED, HDFS_PASSWORD,
+                HDFS_KERBEROS_PRINCIPAL_DEPRECATED, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_KEYTAB_DEPRECATED,
+                HDFS_KERBEROS_KEYTAB_FILE,
+                HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, HDFS_KERBEROS_KEYTAB_DATA
         };
         for (String k : keys) {
             prop.remove(k);
@@ -64,11 +65,11 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         // TODO(yan): if we don't get username from properties, we can get username from query context.
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
-                getOrDefault(properties, HDFS_USER_NAME2, HDFS_USER_NAME),
-                getOrDefault(properties, HDFS_PASSWORD2, HDFS_PASSWORD2),
-                getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL2, HDFS_KERBEROS_PRINCIPAL),
-                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_FILE, HDFS_KERBEROS_KEYTAB),
-                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT),
+                getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
+                getOrDefault(properties, HDFS_PASSWORD, HDFS_PASSWORD_DEPRECATED),
+                getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_PRINCIPAL_DEPRECATED),
+                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_FILE, HDFS_KERBEROS_KEYTAB_DEPRECATED),
+                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
                 prop
         );
         if (!hdfsCloudCredential.validate()) {

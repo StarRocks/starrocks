@@ -91,20 +91,25 @@ public class CloudConfigurationConstants {
     // Credential for HDFS
     // TODO: Refactor the name of parameters
     public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
-    public static final String HDFS_USER_NAME = "username";
-    public static final String HDFS_USER_NAME2 = "hadoop.security.username";
-    public static final String HDFS_PASSWORD = "password";
-    public static final String HDFS_PASSWORD2 = "hadoop.security.password";
-    public static final String HDFS_KERBEROS_PRINCIPAL = "kerberos_principal";
-    public static final String HDFS_KERBEROS_PRINCIPAL2 = "hadoop.security.kerberos.principal";
-    public static final String HDFS_KERBEROS_KEYTAB = "kerberos_keytab";
+    @Deprecated
+    public static final String HDFS_USERNAME_DEPRECATED = "username";
+    public static final String HDFS_USERNAME = "hadoop.security.username";
+    @Deprecated
+    public static final String HDFS_PASSWORD_DEPRECATED = "password";
+    public static final String HDFS_PASSWORD = "hadoop.security.password";
+    public static final String HDFS_KERBEROS_PRINCIPAL_DEPRECATED = "kerberos_principal";
+    public static final String HDFS_KERBEROS_PRINCIPAL = "hadoop.security.kerberos.principal";
+    @Deprecated
+    public static final String HDFS_KERBEROS_KEYTAB_DEPRECATED = "kerberos_keytab";
     public static final String HDFS_KERBEROS_KEYTAB_FILE = "hadoop.security.kerberos.keytab_file";
 
-    public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
+    @Deprecated
+    public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
     public static final String HDFS_KERBEROS_KEYTAB_DATA = "hadoop.security.kerberos.keytab_data";
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
     public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
+    public static final String HDFS_FS_CACHE_USER = "hadoop.fs.cache.user";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
