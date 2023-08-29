@@ -187,11 +187,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public String getCacheKeyPrefix() {
-        return metastore.getCacheKeyPrefix();
-    }
-
-    @Override
     public void createDb(String dbName, Map<String, String> properties) {
         try {
             metastore.createDb(dbName, properties);

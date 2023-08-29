@@ -63,11 +63,6 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public String getCacheKeyPrefix() {
-        return client.getCacheKeyPrefix();
-    }
-
-    @Override
     public List<String> getAllDatabaseNames() {
         return client.getAllDatabaseNames();
     }

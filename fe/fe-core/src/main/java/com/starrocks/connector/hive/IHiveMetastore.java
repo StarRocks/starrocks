@@ -25,7 +25,6 @@ import java.util.Optional;
 import java.util.function.Function;
 
 public interface IHiveMetastore {
-    String getCacheKeyPrefix();
 
     List<String> getAllDatabaseNames();
 
