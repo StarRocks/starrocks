@@ -248,7 +248,7 @@ TEST_F(PosixFileSystemTest, test_delete_files) {
     EXPECT_EQ(sizeof("hello world!"), wf2->size() + 1);
     EXPECT_OK(fs->path_exists(path2));
 
-    std::vector<std::string_view> paths{path1, path2};
+    std::vector<std::string> paths{path1, path2};
     EXPECT_OK(fs->delete_files(paths));
     EXPECT_TRUE(fs->path_exists(path1).is_not_found());
     EXPECT_TRUE(fs->path_exists(path2).is_not_found());
