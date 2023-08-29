@@ -195,6 +195,8 @@ public:
     BlockManager* block_manager() { return _block_manager; }
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
+    Status reset_state(RuntimeState* state);
+
 private:
     Status _acquire_input_stream(RuntimeState* state);
 

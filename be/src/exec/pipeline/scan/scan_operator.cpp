@@ -17,6 +17,8 @@
 #include <util/time.h>
 
 #include "column/chunk.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -38,6 +40,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _dop(dop),
+          _output_chunk_by_bucket(scan_node->output_chunk_by_bucket()),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
@@ -230,21 +233,21 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (res != nullptr) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        auto [owner_id, is_eos] = _should_emit_eos(res);
         eval_runtime_bloom_filters(res.get());
-        res->owner_info().set_owner_id(tablet_id, is_eos);
+        res->owner_info().set_owner_id(owner_id, is_eos);
     }
 
     return res;
 }
 
 std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) {
-    auto tablet_id = chunk->owner_info().owner_id();
+    auto owner_id = chunk->owner_info().owner_id();
     auto is_last_chunk = chunk->owner_info().is_last_chunk();
     if (is_last_chunk && _ticket_checker != nullptr) {
-        is_last_chunk = _ticket_checker->leave(tablet_id);
+        is_last_chunk = _ticket_checker->leave(owner_id);
     }
-    return {tablet_id, is_last_chunk};
+    return {owner_id, is_last_chunk};
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
@@ -294,22 +297,16 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     size = std::min(size, total_cnt);
     // pick up new chunk source.
-    for (int i = 0; i < size; i++) {
-        int idx = to_sched[i];
-        RETURN_IF_ERROR(_pickup_morsel(state, idx));
+    ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
+    if (size > 0 && morsel_ready) {
+        for (int i = 0; i < size; i++) {
+            int idx = to_sched[i];
+            RETURN_IF_ERROR(_pickup_morsel(state, idx));
+        }
     }
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);
     return Status::OK();
-}
-
-// this is a more efficient way to check if a weak_ptr has been initialized
-// ref: https://stackoverflow.com/a/45507610
-// after compiler optimization, it generates far fewer instructions than std::weak_ptr::expired() and std::weak_ptr::lock()
-// see: https://godbolt.org/z/16bWqqM5n
-inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
-    using wp = std::weak_ptr<QueryContext>;
-    return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
 void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
@@ -442,6 +439,10 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             detach_chunk_source(chunk_source_index);
         }
     });
+
+    // if current morsel not ready for get next. we should wait current bucket finish. just return directly
+    ASSIGN_OR_RETURN(auto ready, _morsel_queue->ready_for_next());
+    RETURN_IF(!ready, Status::OK());
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
 

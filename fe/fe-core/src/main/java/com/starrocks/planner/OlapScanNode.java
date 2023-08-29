@@ -155,6 +155,8 @@ public class OlapScanNode extends ScanNode {
     private List<Long> hintsReplicaIds = Lists.newArrayList();
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
+    private boolean isOutputChunkByBucket = false;
+
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     private List<Expr> bucketExprs = Lists.newArrayList();
     private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
@@ -194,6 +196,15 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
         this.isSortedByKeyPerTablet = isSortedByKeyPerTablet;
+    }
+
+    public void setIsOutputChunkByBucket(boolean isOutputChunkByBucket) {
+        this.isOutputChunkByBucket = isOutputChunkByBucket;
+    }
+
+    public void disablePhysicalPropertyOptimize() {
+        setIsSortedByKeyPerTablet(false);
+        setIsOutputChunkByBucket(false);
     }
 
     public List<Long> getSelectedPartitionIds() {
@@ -406,6 +417,9 @@ public class OlapScanNode extends ScanNode {
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
             internalRange.setRow_count(selectedTablet.getRowCount(0));
+            if (isOutputChunkByBucket) {
+                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+            }
 
             List<Replica> replicas = allQueryableReplicas;
 
@@ -465,6 +479,9 @@ public class OlapScanNode extends ScanNode {
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
             internalRange.setRow_count(tablet.getRowCount(0));
+            if (isOutputChunkByBucket) {
+                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+            }
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
@@ -861,6 +878,7 @@ public class OlapScanNode extends ScanNode {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+            msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));

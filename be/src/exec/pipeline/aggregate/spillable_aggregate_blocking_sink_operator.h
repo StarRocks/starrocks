@@ -57,6 +57,8 @@ public:
         return 0;
     }
 
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
 private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 

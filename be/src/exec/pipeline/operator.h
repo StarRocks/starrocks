@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -90,6 +92,9 @@ public:
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
+
+    // return true if operator should ignore eos chunk
+    virtual bool ignore_empty_eos() const { return true; }
 
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
@@ -261,6 +266,11 @@ public:
 
     // memory to be reserved before executing set_finishing
     virtual size_t estimated_memory_reserved() { return 0; }
+
+    // if return true it means the operator has child operators
+    virtual bool is_combinatorial_operator() const { return false; }
+    //
+    virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
 protected:
     OperatorFactory* _factory;
