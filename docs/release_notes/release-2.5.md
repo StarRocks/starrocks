@@ -1,5 +1,32 @@
 # StarRocks version 2.5
 
+## 2.5.11
+
+Release date: August 28, 2023
+
+### Improvements
+
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
+- Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
+- Dynamic partitioning further supports the partitioning unit to be `year`.  [#28386](https://github.com/StarRocks/starrocks/pull/28386)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When data is loaded into tables with multiple replicas, a large number of invalid log records are written if some partitions of the tables are empty. [#28824](https://github.com/StarRocks/starrocks/issues/28824)
+- The DELETE operation fails if the field in the WHERE condition is a BITMAP or HLL field. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- Manually refreshing an asynchronous materialized view via a synchronous call (SYNC MODE) results in multiple INSERT OVERWRITE records in the `information_schema.task_runs` table. [#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- If CLONE operations are triggered on tablets in an ERROR state, disk usage increases. [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- When Join Reorder is enabled, the query result is incorrect if the column to query is a constant. [#29239](https://github.com/StarRocks/starrocks/pull/29239)
+- During tablet migration between SSDs and HDDs, if the FE sends excessive migration tasks to BEs, BEs will encounter OOM issues. [#29055](https://github.com/StarRocks/starrocks/pull/29055)
+- The security vulnerability in `/apache_hdfs_broker/lib/log4j-1.2.17.jar`. [#28866](https://github.com/StarRocks/starrocks/pull/28866)
+- During data queries through Hive Catalog, if a partitioning column and an OR operator are used in the WHERE clause, the query result is incorrect. [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- The error "java.util.ConcurrentModificationException: null" occasionally occurs during data queries. [#29296](https://github.com/StarRocks/starrocks/pull/29296)
+- FEs cannot be restarted if the base table of an asynchronous materialized view is dropped. [#29318](https://github.com/StarRocks/starrocks/pull/29318)
+- For an asynchronous materialized view that is created across databases, the Leader FE occasionally encounters a deadlock when data is being written into base tables of this materialized view. [#29432](https://github.com/StarRocks/starrocks/pull/29432)
+
 ## 2.5.10
 
 Release date: August 7, 2023
