@@ -281,7 +281,8 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay);
+            List<BaseTableInfo> baseTableInfos =
+                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(queryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),

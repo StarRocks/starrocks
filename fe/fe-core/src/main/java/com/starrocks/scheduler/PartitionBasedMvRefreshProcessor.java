@@ -568,7 +568,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (table == null) {
             LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                     context.ctx.getDatabase());
-            throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
+            throw new DmlException(String.format("materialized view:%s in database:%s do not exist when refreshing",
+                    mvId, context.ctx.getDatabase()));
         }
         materializedView = (MaterializedView) table;
         if (!materializedView.isActive()) {
