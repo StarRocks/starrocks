@@ -136,6 +136,10 @@ public class SingleRangePartitionDesc extends PartitionDesc {
             }
         }
 
+        // analyze data property
+        partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                DataProperty.getInferredDefaultDataProperty(), false);
+
         if (partColNum == 1 && properties != null
                 && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
@@ -153,10 +157,6 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                 }
             }
-        } else {
-            // analyze data property
-            partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty(), false);
         }
 
         Preconditions.checkNotNull(partitionDataProperty);
