@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
@@ -36,7 +37,6 @@ import com.starrocks.sql.parser.SqlParser;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.stream.Collectors.toList;
@@ -63,7 +63,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     @Override
     public void gsonPreProcess() throws IOException {
         super.gsonPreProcess();
-        this.serializedPartitionExprs = new ArrayList<>();
+        this.serializedPartitionExprs = Lists.newCopyOnWriteArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr != null) {
                 serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
@@ -74,7 +74,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-        partitionExprs = new ArrayList<>();
+        partitionExprs = Lists.newCopyOnWriteArrayList();
         for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
             if (expressionSql.expressionSql != null) {
                 partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
@@ -155,7 +155,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         List<GsonUtils.ExpressionSerializedObject> expressionSerializedObjects =
                 GsonUtils.GSON.fromJson(json, new TypeToken<List<GsonUtils.ExpressionSerializedObject>>() {
                 }.getType());
-        List<Expr> partitionExprs = new ArrayList<>();
+        List<Expr> partitionExprs = Lists.newCopyOnWriteArrayList();
         for (GsonUtils.ExpressionSerializedObject expressionSql : expressionSerializedObjects) {
             if (expressionSql != null && expressionSql.expressionSql != null) {
                 partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
@@ -186,7 +186,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
-        this.serializedPartitionExprs = new ArrayList<>();
+        this.serializedPartitionExprs = Lists.newCopyOnWriteArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr != null) {
                 serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
