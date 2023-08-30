@@ -43,7 +43,7 @@ Status ArrayConverter::write_quoted_string(OutputStream* os, const Column& colum
     return write_string(os, column, row_num, options);
 }
 
-bool ArrayConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     if (_array_reader == nullptr) {
         _array_reader = ArrayReader::create_array_reader(options);
     }
@@ -78,7 +78,7 @@ bool ArrayConverter::read_string(Column* column, Slice s, const Options& options
     return true;
 }
 
-bool ArrayConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool ArrayConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 
