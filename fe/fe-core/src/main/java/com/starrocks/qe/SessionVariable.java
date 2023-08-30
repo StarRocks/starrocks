@@ -47,6 +47,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
@@ -156,6 +157,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
+    public static final String ENABLE_ERROR_IF_OVERFLOW = "enable_error_if_overflow";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
@@ -797,6 +799,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_ERROR_IF_OVERFLOW)
+    private boolean enableErrorIfOverflow = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -2530,6 +2535,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
+        }
+
+        if (enableErrorIfOverflow) {
+            tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
 
         tResult.setEnable_spill(enableSpill);
