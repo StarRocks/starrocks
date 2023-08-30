@@ -1868,7 +1868,7 @@ aggregationFunction
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
     | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
-    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | GROUP_CONCAT '(' DISTINCT? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
 userVariable

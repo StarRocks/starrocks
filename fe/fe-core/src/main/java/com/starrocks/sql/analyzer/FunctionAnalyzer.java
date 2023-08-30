@@ -118,7 +118,7 @@ public class FunctionAnalyzer {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
                         "group_concat requires at least one parameter: " + functionCallExpr.toSql(),
-                        functionCallExpr.getPos());
+                        functionCallExpr);
             }
 
             int sepPos = functionCallExpr.getParams().exprs().size() - functionCallExpr.getParams().getOrderByElemNum() - 1;
@@ -126,7 +126,7 @@ public class FunctionAnalyzer {
             if (!arg1.getType().isStringType() && !arg1.getType().isNull()) {
                 throw new SemanticException(
                         "group_concat requires separator to be of getType() STRING: " +
-                                functionCallExpr.toSql(), arg1.getPos());
+                                functionCallExpr.toSql());
             }
             return;
         }
