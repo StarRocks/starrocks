@@ -444,6 +444,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -1271,6 +1272,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
+
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
+    private boolean enablePruneComplexTypesInUnnest = true;
 
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
@@ -2468,6 +2472,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public boolean getEnablePruneComplexTypesInUnnest() {
+        return this.enablePruneComplexTypesInUnnest;
+    }
+
+    public void setEnablePruneComplexTypesInUnnest(boolean enablePruneComplexTypesInUnnest) {
+        this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
     }
 
     public int getRangePrunerPredicateMaxLen() {
