@@ -84,7 +84,7 @@ DISTRIBUTED BY HASH(`recruit_date`, `region_num`);
 > 注意
 >
 > * 在 StarRocks 中，字段名不区分大小写，表名区分大小写。
-> * 建表时，`DISTRIBUTED BY` 为必填字段。
+> * 自 3.1 版本起，您在建表时可以不设置分桶键（即 DISTRIBUTED BY 子句）。StarRocks 默认使用随机分桶，将数据随机地分布在分区的所有分桶中。更多信息，请参见[随机分桶](../table_design/Data_distribution.md#随机分桶自-v31)。
 
 ### 建表语句说明
 
