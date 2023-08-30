@@ -103,7 +103,7 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
     return true;
 }
 
-bool MapConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool MapConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     if (!validate(s)) {
         return false;
     }
@@ -149,7 +149,7 @@ bool MapConverter::read_string(Column* column, Slice s, const Options& options) 
     return true;
 }
 
-bool MapConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool MapConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

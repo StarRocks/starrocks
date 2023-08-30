@@ -22,7 +22,7 @@ public:
     explicit ArrayReader(char array_delimiter) : _array_delimiter(array_delimiter) {}
     virtual ~ArrayReader() = default;
     [[nodiscard]] virtual bool validate(const Slice& s) const = 0;
-    [[nodiscard]] virtual bool split_array_elements(Slice s, std::vector<Slice>* elements) const = 0;
+    [[nodiscard]] virtual bool split_array_elements(const Slice& s, std::vector<Slice>& elements) const = 0;
 
     // In Hive nested array, string is not quoted, you should set false here if you want
     // to parse Hive array format.
@@ -39,7 +39,7 @@ class DefaultArrayReader final : public ArrayReader {
 public:
     explicit DefaultArrayReader() : ArrayReader(',') {}
     [[nodiscard]] bool validate(const Slice& s) const override;
-    [[nodiscard]] bool split_array_elements(Slice s, std::vector<Slice>* elements) const override;
+    [[nodiscard]] bool split_array_elements(const Slice& s, std::vector<Slice>& elements) const override;
     [[nodiscard]] bool read_quoted_string(const std::unique_ptr<Converter>& elem_converter, Column* column,
                                           const Slice& s, const Converter::Options& options) const override;
 };
@@ -57,7 +57,7 @@ public:
                                                    options.array_hive_mapkey_delimiter,
                                                    options.array_hive_nested_level)) {}
     [[nodiscard]] bool validate(const Slice& s) const override;
-    [[nodiscard]] bool split_array_elements(Slice s, std::vector<Slice>* elements) const override;
+    [[nodiscard]] bool split_array_elements(const Slice& s, std::vector<Slice>& elements) const override;
     [[nodiscard]] bool read_quoted_string(const std::unique_ptr<Converter>& elem_converter, Column* column,
                                           const Slice& s, const Converter::Options& options) const override;
 

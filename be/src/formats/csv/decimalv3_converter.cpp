@@ -36,7 +36,7 @@ Status DecimalV3Converter<T>::write_quoted_string(OutputStream* os, const Column
 }
 
 template <typename T>
-bool DecimalV3Converter<T>::read_string(Column* column, Slice s, const Options& options) const {
+bool DecimalV3Converter<T>::read_string(Column* column, const Slice& s, const Options& options) const {
     auto decimalv3_column = down_cast<DecimalV3Column<T>*>(column);
     T v;
     bool fail = DecimalV3Cast::from_string<T>(&v, _precision, _scale, s.data, s.size);
@@ -48,7 +48,7 @@ bool DecimalV3Converter<T>::read_string(Column* column, Slice s, const Options& 
 }
 
 template <typename T>
-bool DecimalV3Converter<T>::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool DecimalV3Converter<T>::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     return read_string(column, s, options);
 }
 

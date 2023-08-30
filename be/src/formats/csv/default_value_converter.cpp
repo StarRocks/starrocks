@@ -18,7 +18,7 @@
 
 namespace starrocks::csv {
 
-bool DefaultValueConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool DefaultValueConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     if (options.invalid_field_as_null) {
         column->append_default();
         return true;
@@ -27,7 +27,7 @@ bool DefaultValueConverter::read_quoted_string(Column* column, Slice s, const Op
     }
 }
 
-bool DefaultValueConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool DefaultValueConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     return read_quoted_string(column, s, options);
 }
 
