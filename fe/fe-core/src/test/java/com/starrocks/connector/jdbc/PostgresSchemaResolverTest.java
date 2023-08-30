@@ -169,14 +169,14 @@ public class PostgresSchemaResolverTest {
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("\"test\".\"tbl1\"", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.ORIGINAL_TABLENAME));
+            Assert.assertEquals("tbl1", table.getName());
+            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
             PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
             ResultSet columnSet = postgresSchemaResolver.getColumns(connection, "test", "tbl1");
             List<Column> fullSchema = postgresSchemaResolver.convertToSRTable(columnSet);
             Table table1 = postgresSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
             Assert.assertTrue(table1 instanceof JDBCTable);
-            Assert.assertNull(properties.get(JDBCTable.ORIGINAL_TABLENAME));
+            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
