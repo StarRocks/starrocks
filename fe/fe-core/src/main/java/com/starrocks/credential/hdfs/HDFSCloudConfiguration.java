@@ -14,13 +14,18 @@
 
 package com.starrocks.credential.hdfs;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.StarRocksFE;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +34,8 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_R
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 
 public class HDFSCloudConfiguration implements CloudConfiguration {
+    private static final Logger LOG = LogManager.getLogger(HDFSCloudConfiguration.class);
+
     private final HDFSCloudCredential hdfsCloudCredential;
     private String configResources;
     private String runtimeJars;
@@ -50,11 +57,25 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         return hdfsCloudCredential;
     }
 
+    public void addConfigResourcesToConfiguration(String configResources, Configuration conf) {
+        if (Strings.isNullOrEmpty(configResources)) {
+            return;
+        }
+        String[] parts = configResources.split(",");
+        for (String p : parts) {
+            Path path = new Path(StarRocksFE.STARROCKS_HOME_DIR + "/conf/", p);
+            LOG.debug(String.format("Add path '%s' to configuration", path.toString()));
+            conf.addResource(path);
+        }
+    }
+
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.HDFS);
         Map<String, String> properties = new HashMap<>();
         hdfsCloudCredential.toThrift(properties);
+        properties.put(HDFS_CONFIG_RESOURCES, configResources);
+        properties.put(HDFS_RUNTIME_JARS, configResources);
         if (!properties.isEmpty()) {
             tCloudConfiguration.setCloud_properties_v2(properties);
         }
@@ -65,6 +86,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         hdfsCloudCredential.applyToConfiguration(configuration);
         configuration.set(HDFS_CONFIG_RESOURCES, configResources);
         configuration.set(HDFS_RUNTIME_JARS, runtimeJars);
+        addConfigResourcesToConfiguration(configResources, configuration);
     }
 
     // NOTE(yanz): hdfs credential is quite special. In most cases, people write auth/username/password etc.
