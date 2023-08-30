@@ -116,16 +116,16 @@ public class EquationRewriter {
 
                 // 2. normalize predicate to better match mv
                 // TODO: merge into aggregateFunctionRewriter later.
-                predicate = normalizeCallOperator(predicate);
-                tmp = replace(predicate);
+                CallOperator normalizedPredicate = normalizeCallOperator(predicate);
+                tmp = replace(normalizedPredicate);
                 if (tmp != null) {
                     return tmp;
                 }
 
                 // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
-                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(normalizedPredicate) &&
                         !isUnderAggFunctionRewriteContext()) {
-                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(normalizedPredicate);
                     if (newChooseScalarOp != null) {
                         setUnderAggFunctionRewriteContext(true);
                         // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
