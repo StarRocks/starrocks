@@ -49,6 +49,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             .put(FunctionSet.SUM, FunctionSet.SUM)
             .put(FunctionSet.MULTI_DISTINCT_SUM, FunctionSet.SUM)
             .put(FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.COUNT)
+            .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_AGG)
             .build();
 
     // multi-stage other function mapping
@@ -219,6 +220,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
     private boolean isDistinct(CallOperator call) {
         return call.isDistinct() ||
                 FunctionSet.MULTI_DISTINCT_SUM.equals(call.getFunction().functionName()) ||
-                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName());
+                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName()) ||
+                FunctionSet.ARRAY_AGG_DISTINCT.equals(call.getFunction().functionName());
     }
 }
