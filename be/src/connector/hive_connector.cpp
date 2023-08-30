@@ -434,7 +434,6 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
     if (!nested_fields.empty()) {
         nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
     }
-    LOG(INFO) << "nested_fields " << nested_fields;
     std::map<std::string, std::string> jni_scanner_params;
     jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
     jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
