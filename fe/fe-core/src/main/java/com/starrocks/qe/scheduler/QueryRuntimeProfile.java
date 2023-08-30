@@ -306,6 +306,7 @@ public class QueryRuntimeProfile {
         }
 
         RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
+        long start = System.nanoTime();
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
@@ -492,6 +493,9 @@ public class QueryRuntimeProfile {
         if (execPlanSupplier != null) {
             newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
         }
+        Counter processTimer =
+                newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
+        processTimer.setValue(System.nanoTime() - start);
 
         return newQueryProfile;
     }

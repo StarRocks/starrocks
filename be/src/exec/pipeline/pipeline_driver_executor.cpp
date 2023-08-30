@@ -424,6 +424,16 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
         return instance_profile;
     }
 
+    RuntimeProfile* new_instance_profile = nullptr;
+    int64_t process_raw_timer = 0;
+    DeferOp defer([&new_instance_profile, &process_raw_timer]() {
+        if (new_instance_profile != nullptr) {
+            auto* process_timer = ADD_TIMER(new_instance_profile, "BackendProfileMergeTime");
+            COUNTER_SET(process_timer, process_raw_timer);
+        }
+    });
+
+    SCOPED_RAW_TIMER(&process_raw_timer);
     std::vector<RuntimeProfile*> pipeline_profiles;
     instance_profile->get_children(&pipeline_profiles);
 
@@ -452,7 +462,7 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
         merged_driver_profiles.push_back(merged_driver_profile);
     }
 
-    auto* new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
+    new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
     new_instance_profile->copy_all_info_strings_from(instance_profile);
     new_instance_profile->copy_all_counters_from(instance_profile);
     for (auto* merged_driver_profile : merged_driver_profiles) {
