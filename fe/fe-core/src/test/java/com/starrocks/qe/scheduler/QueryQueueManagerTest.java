@@ -1177,11 +1177,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
-                () -> {
-                    System.out.println("[DEBUG] " + MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-                    return numGroupsWithEffectiveMaxCores * numQueriesPerGroup ==
-                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue();
-                });
+                () -> numGroupsWithEffectiveMaxCores * numQueriesPerGroup == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
         // 2. Group #0 is not overloaded anymore.
         groupUsages = ImmutableList.of(
@@ -1190,11 +1186,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
-                () -> {
-                    System.out.println("[DEBUG] " + MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
-                    return numQueriesPerGroup ==
-                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue();
-                });
+                () -> numQueriesPerGroup == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
         // 3. Group #3 is not overloaded anymore.
         groupUsages = ImmutableList.of(
