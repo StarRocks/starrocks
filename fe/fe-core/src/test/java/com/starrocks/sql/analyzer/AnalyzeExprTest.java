@@ -171,6 +171,9 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(distinct null) from t0;");
         analyzeSuccess("select array_agg(1) from t0;");
         analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
+        analyzeSuccess("select array_agg(distinct v2), count(distinct v3) from t0 group by v1;");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0 group by v1;");
 
         analyzeFail("select array_agg(null, 11);");
         analyzeFail("select array_agg(distinct);");
