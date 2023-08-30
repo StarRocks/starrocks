@@ -837,7 +837,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
-                throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
+                throw unsupportedException("Can't use IgnoreSlotVisitor with un-analyzed slot ref: " + node);
             }
             return new ColumnRefOperator(node.getSlotId().asInt(),
                     node.getType(), node.getColumnName(), node.isNullable());
