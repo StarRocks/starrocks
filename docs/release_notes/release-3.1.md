@@ -22,6 +22,7 @@ Release date: August 18, 2023
 ### New Features
 
 - Supports Azure Blob Storage for [shared-data clusters](../deployment/deploy_shared_data.md).
+- Supports List partitioning for [shared-data clusters](../deployment/deploy_shared_data.md).
 - Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
 - Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
 
