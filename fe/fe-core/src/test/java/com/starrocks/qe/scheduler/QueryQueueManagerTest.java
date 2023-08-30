@@ -51,6 +51,7 @@ import com.starrocks.thrift.TReleaseSlotRequest;
 import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
+import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -91,6 +92,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private static final Frontend LOCAL_FRONTEND = FRONTENDS.get(1);
 
     private static final int ABSENT_CONCURRENCY_LIMIT = -1;
+    private static final int ABSENT_MAX_CPU_CORES = -1;
 
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
 
@@ -1045,7 +1047,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
 
         // 1. Queries are queued, due to CPU usage exceeds cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 10);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 10, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1065,7 +1067,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after CPU usage doesn't exceed cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 1);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 1, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
@@ -1092,7 +1094,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1112,9 +1114,96 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after mem usage doesn't exceed cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 0);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+        coords.forEach(DefaultCoordinator::onFinished);
+    }
+
+    @Test
+    public void testResourceGroupMaxCpuCores() throws Exception {
+        final int numGroupsWithEffectiveMaxCores = 2;
+        final int numQueriesPerGroup = 3;
+
+        GlobalVariable.setEnableQueryQueueSelect(true);
+
+        TWorkGroup group0 = new TWorkGroup().setId(0L).setMax_cpu_cores(1);
+        TWorkGroup group1 = new TWorkGroup().setId(1L).setMax_cpu_cores(0);
+        TWorkGroup group2 = new TWorkGroup().setId(2L).setMax_cpu_cores(ABSENT_MAX_CPU_CORES);
+        TWorkGroup group3 = new TWorkGroup().setId(3L).setMax_cpu_cores(2);
+        TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
+        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
+        groups.forEach(this::mockResourceGroup);
+
+        List<Backend> backends = ImmutableList.of(
+                new Backend(0L, "be0-host", 8030),
+                new Backend(1L, "be1-host", 8030),
+                new Backend(2L, "be2-host", 8030));
+        List<ComputeNode> computeNodes = ImmutableList.of(
+                new ComputeNode(3L, "cn3-host", 8030),
+                new ComputeNode(4L, "cn4-host", 8030),
+                new ComputeNode(5L, "cn5-host", 8030));
+        Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
+        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+
+        // 1. Queries of group #0 and #3 will be pending.
+        List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(10).setMem_used_bytes(10),
+                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(100),
+                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(100),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(30)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+
+        List<Thread> threads = new ArrayList<>();
+        List<DefaultCoordinator> coords = new ArrayList<>();
+        for (int i = 0; i < numQueriesPerGroup; i++) {
+            for (TWorkGroup group : groups) {
+                mockResourceGroup(group);
+
+                DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+                coords.add(coord);
+
+                threads.add(new Thread(() -> {
+                    try {
+                        manager.maybeWait(connectContext, coord);
+                    } catch (UserException | InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }));
+            }
+        }
+
+        threads.forEach(Thread::start);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+                () -> {
+                    System.out.println("[DEBUG] " + MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+                    return numGroupsWithEffectiveMaxCores * numQueriesPerGroup ==
+                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue();
+                });
+
+        // 2. Group #0 is not overloaded anymore.
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(9),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(35)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+                () -> {
+                    System.out.println("[DEBUG] " + MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+                    return numQueriesPerGroup ==
+                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue();
+                });
+
+        // 3. Group #3 is not overloaded anymore.
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(9)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+                () -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1139,7 +1228,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1161,7 +1250,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // 2. Queries are not queued anymore, because the overloaded BE doesn't report in resourceUsageIntervalMs.
         GlobalVariable.setQueryQueueResourceUsageIntervalMs(1000);
         Thread.sleep(2000);
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 0, 0);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
@@ -1188,7 +1277,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0);
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1393,8 +1482,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     /**
      * Make the coordinator of every query uses the mocked resource group.
      *
-     * <p> Mock {@link CoordinatorPreprocessor#prepareResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType)} and
-     * {@link ResourceGroupMgr#getResourceGroup(long)}.
+     * <p> Mock methods:
+     * <ul>
+     *  <li> {@link CoordinatorPreprocessor#prepareResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType)}
+     *  <li> {@link ResourceGroupMgr#getResourceGroup(long)}
+     *  <li> {@link ResourceGroupMgr#getResourceGroupIds()}
+     * </ul>
      *
      * @param group The returned group of the mocked method.
      */
@@ -1411,12 +1504,20 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             if (group.getConcurrency_limit() != ABSENT_CONCURRENCY_LIMIT) {
                 resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
             }
+            if (group.getMax_cpu_cores() != ABSENT_MAX_CPU_CORES) {
+                resourceGroup.setMaxCpuCores(group.getMax_cpu_cores());
+            }
             resourceGroup.setId(group.getId());
             mockedGroups.put(group.getId(), resourceGroup);
             new MockUp<ResourceGroupMgr>() {
                 @Mock
                 public ResourceGroup getResourceGroup(long id) {
                     return mockedGroups.get(id);
+                }
+
+                @Mock
+                public List<Long> getResourceGroupIds() {
+                    return new ArrayList<>(mockedGroups.keySet());
                 }
             };
         }

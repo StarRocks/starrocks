@@ -157,6 +157,15 @@ public class ResourceGroupMgr implements Writable {
         return rows;
     }
 
+    public List<Long> getResourceGroupIds() {
+        readLock();
+        try {
+            return new ArrayList<>(id2ResourceGroupMap.keySet());
+        } finally {
+            readUnlock();
+        }
+    }
+
     private String getUnqualifiedUser(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
         String qualifiedUser = ctx.getQualifiedUser();
@@ -325,6 +334,10 @@ public class ResourceGroupMgr implements Writable {
                 Integer cpuCoreLimit = changedProperties.getCpuCoreLimit();
                 if (cpuCoreLimit != null) {
                     wg.setCpuCoreLimit(cpuCoreLimit);
+                }
+                Integer maxCpuCores = changedProperties.getMaxCpuCores();
+                if (maxCpuCores != null) {
+                    wg.setMaxCpuCores(maxCpuCores);
                 }
                 Double memLimit = changedProperties.getMemLimit();
                 if (memLimit != null) {

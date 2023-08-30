@@ -21,12 +21,16 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
- *
+ * It monitors the resource usages from backends and invokes listeners when the global resource or any group resource becomes
+ * available from non-available.
  */
 public class ResourceUsageMonitor {
-    private final AtomicBoolean isResourceOverloaded = new AtomicBoolean();
+    private final AtomicBoolean isGlobalResourceOverloaded = new AtomicBoolean();
+    private final ConcurrentHashMap<Long, AtomicBoolean> isGroupResourceOverloaded = new ConcurrentHashMap<>();
+
     private final AtomicInteger numListeners = new AtomicInteger();
     private final Map<Integer, Runnable> resourceAvailableListeners = new ConcurrentHashMap<>();
 
@@ -43,27 +47,77 @@ public class ResourceUsageMonitor {
         rejudgeResourceOverloaded();
     }
 
-    public boolean isResourceOverloaded() {
-        return isResourceOverloaded.get();
+    public boolean isGlobalResourceOverloaded() {
+        return isGlobalResourceOverloaded.get();
+    }
+
+    public boolean isGroupResourceOverloaded(long groupId) {
+        AtomicBoolean value = isGroupResourceOverloaded.get(groupId);
+        return value != null && value.get();
     }
 
     private void rejudgeResourceOverloaded() {
+        if (rejudgeGlobalResourceOverloaded() | rejudgeGroupResourceOverloaded()) {
+            resourceAvailableListeners.values().forEach(Runnable::run);
+        }
+    }
+
+    /**
+     * Rejudge whether the global resource is overloaded.
+     * @return whether the global resource becomes available from non-available.
+     */
+    private boolean rejudgeGlobalResourceOverloaded() {
+        return doRejudgeResourceOverloaded(isGlobalResourceOverloaded, this::judgeResourceOverloaded);
+    }
+
+    /**
+     * Rejudge whether each group resource is overloaded.
+     * @return whether any group resource becomes available from non-available.
+     */
+    private boolean rejudgeGroupResourceOverloaded() {
+        boolean needNotify = false;
+        for (Long groupId : GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupIds()) {
+            AtomicBoolean value = isGroupResourceOverloaded.computeIfAbsent(groupId, (k) -> new AtomicBoolean());
+            needNotify |= doRejudgeResourceOverloaded(value, () -> judgeGroupResourceOverloaded(groupId));
+        }
+        return needNotify;
+    }
+
+    /**
+     * Rejudge whether a resource is overloaded.
+     * @return whether the resource becomes available from non-available.
+     */
+    private boolean doRejudgeResourceOverloaded(AtomicBoolean value, Supplier<Boolean> newValueSupplier) {
         boolean prev;
         boolean now;
         boolean updated = false;
         while (!updated) {
-            prev = isResourceOverloaded.get();
-            now = judgeResourceOverloaded();
-            updated = isResourceOverloaded.compareAndSet(prev, now);
+            prev = value.get();
+            now = newValueSupplier.get();
+            updated = value.compareAndSet(prev, now);
             if (updated && prev && !now) {
-                resourceAvailableListeners.values().forEach(Runnable::run);
+                return true;
             }
         }
+
+        return false;
     }
 
+    /**
+     * Judge whether the global resource is overloaded.
+     * @return whether the resource is overloaded.
+     */
     private boolean judgeResourceOverloaded() {
         return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
                 .anyMatch(ComputeNode::isResourceOverloaded);
+    }
+    /**
+     * Judge whether the group resource is overloaded.
+     * @return whether the group resource is overloaded.
+     */
+    private boolean judgeGroupResourceOverloaded(long groupId) {
+        return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+                .anyMatch(worker -> worker.isResourceGroupOverloaded(groupId));
     }
 
 }

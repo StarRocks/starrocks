@@ -27,12 +27,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -67,9 +63,6 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.AfterClass;
@@ -117,66 +110,6 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
-    }
-
-    @Test
-    public void testUpdateResourceUsage() throws TException {
-        ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-
-        Backend backend = new Backend(0, "127.0.0.1", 80);
-        ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long id) {
-                if (id == backend.getId()) {
-                    return backend;
-                }
-                if (id == computeNode.getId()) {
-                    return computeNode;
-                }
-                return null;
-            }
-        };
-        new Expectations(resourceUsageMonitor) {
-            {
-                resourceUsageMonitor.notifyResourceUsageUpdate();
-                times = 2;
-            }
-        };
-
-        long backendId = 0;
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
-        TUpdateResourceUsageRequest request = genUpdateResourceUsageRequest(
-                backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-
-        // For backend, notify pending queries.
-        impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-
-        // For compute node, notify pending queries.
-        numRunningQueries = 10;
-        memLimitBytes = 30;
-        memUsedBytes = 20;
-        cpuUsedPermille = 310;
-        request = genUpdateResourceUsageRequest(
-                backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        impl.updateResourceUsage(request);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-
-        // Don't notify, because this BE doesn't exist.
-        request.setBackend_id(/* Not Exist */ 1);
-        impl.updateResourceUsage(request);
     }
 
     private static ConnectContext connectContext;
@@ -912,7 +845,7 @@ public class FrontendServiceImplTest {
         TListMaterializedViewStatusResult response = impl.listMaterializedViewStatus(request);
         Assert.assertEquals(1, response.materialized_views.size());
     }
-  
+
     @Test
     public void testGetLoadTxnStatus() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
@@ -920,9 +853,9 @@ public class FrontendServiceImplTest {
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
         long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                             Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
-                             new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
-                             TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+                Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
+                new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
         request.setDb("non-exist-db");
@@ -941,7 +874,7 @@ public class FrontendServiceImplTest {
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
     }
-  
+
     @Test
     public void testStreamLoadPutColumnMapException() throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");

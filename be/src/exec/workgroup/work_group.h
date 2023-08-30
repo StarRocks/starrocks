@@ -79,6 +79,8 @@ public:
     /// Update last runtime to the curr runtime.
     void mark_last_runtime_ns() { _last_unadjusted_runtime_ns = _curr_unadjusted_runtime_ns; }
 
+    int64_t unadjusted_runtime_ns() const { return _unadjusted_runtime_ns; }
+
     void incr_runtime_ns(int64_t runtime_ns);
     void adjust_runtime_ns(int64_t runtime_ns);
 
@@ -136,6 +138,9 @@ public:
     size_t cpu_limit() const { return _cpu_limit; }
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
+
+    int64_t driver_runtime_ns() const { return _driver_sched_entity.unadjusted_runtime_ns(); }
+    int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
 
     bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
 
@@ -253,6 +258,8 @@ public:
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
+    using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
+    void for_each_workgroup(WorkGroupConsumer consumer) const;
 
     void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
     void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }
@@ -275,7 +282,7 @@ private:
     void update_metrics_unlocked();
 
 private:
-    std::shared_mutex _mutex;
+    mutable std::shared_mutex _mutex;
     std::unordered_map<int128_t, WorkGroupPtr> _workgroups;
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;

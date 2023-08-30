@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class SlotRequestQueue {
@@ -39,10 +40,12 @@ public class SlotRequestQueue {
     private final Map<Long, LinkedHashMap<TUniqueId, LogicalSlot>> groupIdToSubQueue = new LinkedHashMap<>();
     private int nextGroupIndex = 0;
 
-    private final Supplier<Boolean> isResourceOverloaded;
+    private final Supplier<Boolean> isGlobalResourceOverloaded;
+    private final Function<Long, Boolean> isGroupResourceOverloaded;
 
-    public SlotRequestQueue(Supplier<Boolean> isResourceOverloaded) {
-        this.isResourceOverloaded = isResourceOverloaded;
+    public SlotRequestQueue(Supplier<Boolean> isGlobalResourceOverloaded, Function<Long, Boolean> isGroupResourceOverloaded) {
+        this.isGlobalResourceOverloaded = isGlobalResourceOverloaded;
+        this.isGroupResourceOverloaded = isGroupResourceOverloaded;
     }
 
     public boolean addPendingSlot(LogicalSlot slot) {
@@ -92,7 +95,7 @@ public class SlotRequestQueue {
         }
 
         int numAllocatedSlots = allocatedSlots.getNumSlots();
-        if (!isGlobalSlotAvailable(numAllocatedSlots) || Boolean.TRUE.equals(isResourceOverloaded.get())) {
+        if (!isGlobalSlotAvailable(numAllocatedSlots) || Boolean.TRUE.equals(isGlobalResourceOverloaded.get())) {
             return slotsToAllocate;
         }
 
@@ -142,8 +145,11 @@ public class SlotRequestQueue {
             return true;
         }
 
-        Integer numTotalSlots = group.getConcurrencyLimit();
-        return numTotalSlots == null || numTotalSlots <= 0 || numAllocatedSlotsOfGroup < numTotalSlots;
+        if (group.isConcurrencyLimitEffective() && numAllocatedSlotsOfGroup >= group.getConcurrencyLimit()) {
+            return false;
+        }
+
+        return !isGroupResourceOverloaded.apply(group.getId());
     }
 
     private int peakSlotsToAllocateFromSubQueue(LinkedHashMap<TUniqueId, LogicalSlot> subQueue,
