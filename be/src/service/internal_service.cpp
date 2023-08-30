@@ -333,7 +333,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
+        if (Status status = deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_batch_requests.get());
             !status.ok()) {
             status.to_protobuf(response->mutable_status());
             return;
