@@ -505,6 +505,34 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
+    Status delete_files(const std::vector<std::string>& paths) override {
+        std::vector<std::string> parsed_paths;
+        parsed_paths.reserve(paths.size());
+        std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
+        int64_t shard_id;
+        for (auto&& path : paths) {
+            ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+            auto fs_st = get_shard_filesystem(pair.second);
+            if (!fs_st.ok()) {
+                return to_status(fs_st.status());
+            }
+            if (fs == nullptr) {
+                shard_id = pair.second;
+                fs = *fs_st;
+            }
+            if (shard_id != pair.second) {
+                return Status::InternalError("Not all paths have the same scheme");
+            }
+            parsed_paths.emplace_back(std::move(pair.first));
+        }
+        std::vector<std::string_view> parsed_path_views;
+        parsed_path_views.reserve(parsed_paths.size());
+        for (auto& parsed_path : parsed_paths) {
+            parsed_path_views.emplace_back(parsed_path);
+        }
+        return to_status(fs->delete_files(parsed_path_views));
+    }
+
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
         return g_worker->get_shard_filesystem(shard_id, _conf);

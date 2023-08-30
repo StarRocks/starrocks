@@ -269,6 +269,19 @@ public:
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
     virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+
+    // Batch delete the given files.
+    // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
+    // possibly stop at the first error if is simulating batch deletes.
+    virtual Status delete_files(const std::vector<std::string>& paths) {
+        for (auto&& path : paths) {
+            auto st = delete_file(path);
+            if (!st.ok() && !st.is_not_found()) {
+                return st;
+            }
+        }
+        return Status::OK();
+    }
 };
 
 // Creation-time options for WritableFile
