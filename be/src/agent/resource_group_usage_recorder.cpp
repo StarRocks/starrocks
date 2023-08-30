@@ -51,9 +51,9 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
             });
 
     for (const auto& [group_id, cpu_runtime_ns] : curr_group_to_cpu_runtime_ns) {
-        auto iter_prev = group_to_cpu_runtime_ns.find(group_id);
+        auto iter_prev = _group_to_cpu_runtime_ns.find(group_id);
         int64_t prev_runtime_ns;
-        if (iter_prev == group_to_cpu_runtime_ns.end()) {
+        if (iter_prev == _group_to_cpu_runtime_ns.end()) {
             prev_runtime_ns = 0;
         } else {
             prev_runtime_ns = iter_prev->second;
