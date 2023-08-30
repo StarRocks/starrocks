@@ -75,7 +75,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-        List<Expr> partitionExprs = Lists.newCopyOnWriteArrayList();
+        List<Expr> partitionExprs = Lists.newArrayList();
         for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
             if (expressionSql.expressionSql != null) {
                 partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
