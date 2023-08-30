@@ -126,7 +126,8 @@ public:
         size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
         DCHECK_LE(element_null_count, offset_size.second);
 
-        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first, offset_size.second - element_null_count);
+        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
+                                 offset_size.second - element_null_count);
         this->data(state).append_null(element_null_count);
     }
 
