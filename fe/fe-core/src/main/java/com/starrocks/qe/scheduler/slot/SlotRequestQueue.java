@@ -31,7 +31,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class SlotRequestQueue {
     private final Map<TUniqueId, LogicalSlot> slots = new HashMap<>();
