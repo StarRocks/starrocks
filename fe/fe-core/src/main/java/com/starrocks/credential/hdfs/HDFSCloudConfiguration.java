@@ -19,6 +19,7 @@ import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.HashMap;
@@ -51,6 +52,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        tCloudConfiguration.setCloud_type(TCloudType.HDFS);
         Map<String, String> properties = new HashMap<>();
         hdfsCloudCredential.toThrift(properties);
         if (!properties.isEmpty()) {

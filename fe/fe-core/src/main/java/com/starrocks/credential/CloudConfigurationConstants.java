@@ -89,7 +89,6 @@ public class CloudConfigurationConstants {
             "gcp.gcs.impersonation_service_account";
 
     // Credential for HDFS
-    // TODO: Refactor the name of parameters
     public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
     @Deprecated
     public static final String HDFS_USERNAME_DEPRECATED = "username";
@@ -109,7 +108,6 @@ public class CloudConfigurationConstants {
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
     public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
-    public static final String HDFS_FS_CACHE_USER = "hadoop.fs.cache.user";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
