@@ -1480,7 +1480,7 @@ void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
-        writer_context.tablet_schema = _tablet->tablet_schema();
+        writer_context.tablet_schema = &_tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -1492,9 +1492,9 @@ void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(Datum(merge_column_data[i]));
+            cols[0]->append_datum(vectorized::Datum(keys[i]));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum(merge_column_data[i]));
         }
         writer->flush_chunk(*chunk);
         return *writer->build();
@@ -1553,17 +1553,17 @@ void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index
         keys[i] = i;
         merge_col[i] = i + 1;
     }
-    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    TabletReader reader(_tablet, Version(0, version), schema);
+    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    vectorized::TabletReader reader(_tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     ASSERT_TRUE(iter != nullptr);
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (int i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(Datum(merge_col[i]));
+        cols[0]->append_datum(vectorized::Datum(keys[i]));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum(merge_col[i]));
     }
     size_t count = 0;
     while (true) {
