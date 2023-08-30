@@ -674,6 +674,7 @@ public:
     void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_condition_update_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
@@ -1502,6 +1503,136 @@ TEST_F(TabletUpdatesTest, apply_with_persistent_index) {
 
 TEST_F(TabletUpdatesTest, apply_with_merge_condition) {
     test_apply(false, true);
+}
+
+TEST_F(TabletUpdatesTest, apply_with_merge_condition_pindex) {
+    test_apply(true, true);
+}
+
+void TabletUpdatesTest::test_condition_update_apply(bool enable_persistent_index) {
+    const int N = 100;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    auto build_rowset = [&](std::vector<int64_t>& keys, std::vector<int32_t>& merge_column_data) -> RowsetSharedPtr {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = _tablet->tablet_id();
+        writer_context.tablet_schema_hash = _tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = _tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &_tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.merge_condition = "v2";
+
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
+        for (size_t i = 0; i < keys.size(); i++) {
+            cols[0]->append_datum(Datum(keys[i]));
+            cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+            cols[2]->append_datum(Datum(merge_column_data[i]));
+        }
+        writer->flush_chunk(*chunk);
+        return *writer->build();
+    };
+
+    {
+        std::vector<int64_t> keys(N);
+        std::vector<int32_t> merge_col(N);
+        for (int i = 0; i < N; i++) {
+            keys[i] = i;
+            merge_col[i] = i;
+        }
+        auto rowset = build_rowset(keys, merge_col);
+        auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+        int32_t version = 2;
+        auto st = _tablet->rowset_commit(version, rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    {
+        std::vector<int64_t> keys(N);
+        std::vector<int32_t> merge_col(N);
+        for (int i = 0; i < N / 2; i++) {
+            keys[i] = i;
+            merge_col[i] = i - 1;
+        }
+
+        for (int i = N / 2; i < N; i++) {
+            keys[i] = i;
+            merge_col[i] = i + 1;
+        }
+        auto rowset = build_rowset(keys, merge_col);
+        auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+        int32_t version = 3;
+        auto st = _tablet->rowset_commit(version, rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    int32_t version = 3;
+    std::vector<int64_t> keys(N);
+    std::vector<int32_t> merge_col(N);
+    for (int i = 0; i < N / 2; i++) {
+        keys[i] = i;
+        merge_col[i] = i;
+    }
+
+    for (int i = N / 2; i < N; i++) {
+        keys[i] = i;
+        merge_col[i] = i + 1;
+    }
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    TabletReader reader(_tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    ASSERT_TRUE(iter != nullptr);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
+    auto& cols = full_chunk->columns();
+    for (int i = 0; i < keys.size(); i++) {
+        cols[0]->append_datum(Datum(keys[i]));
+        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->append_datum(Datum(merge_col[i]));
+    }
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            ASSERT_TRUE(false);
+        }
+    }
+    ASSERT_TRUE(count == N);
+}
+
+TEST_F(TabletUpdatesTest, condtion_update_apply) {
+    test_condition_update_apply(false);
+}
+
+TEST_F(TabletUpdatesTest, condtion_update_apply_pindex) {
+    test_condition_update_apply(true);
 }
 
 // NOLINTNEXTLINE
