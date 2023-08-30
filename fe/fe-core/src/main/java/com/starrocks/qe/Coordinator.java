@@ -1932,7 +1932,8 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, uniqueRpcParams);
+                String protocol = connectContext.getSessionVariable().getThriftPlanProtocol();
+                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, uniqueRpcParams, protocol);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.
@@ -1982,7 +1983,8 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest);
+                String protocol = connectContext.getSessionVariable().getThriftPlanProtocol();
+                return BackendServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest, protocol);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.

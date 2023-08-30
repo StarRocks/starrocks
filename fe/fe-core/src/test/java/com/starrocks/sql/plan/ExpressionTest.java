@@ -454,7 +454,7 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains(
-                "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
+                "scalar_fn:TScalarFunction(symbol:), "
                 + "id:0, fid:50303, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
                 + "is_nullable:true"));
     }

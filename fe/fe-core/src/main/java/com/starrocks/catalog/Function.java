@@ -549,7 +549,6 @@ public class Function implements Writable {
 
     public TFunction toThrift() {
         TFunction fn = new TFunction();
-        fn.setSignature(signatureString());
         fn.setName(name.toThrift());
         fn.setBinary_type(binaryType);
         if (location != null) {

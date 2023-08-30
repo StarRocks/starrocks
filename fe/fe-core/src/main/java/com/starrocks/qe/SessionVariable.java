@@ -435,6 +435,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
+    // binary, json, compact
+    public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -961,6 +964,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 32;
+
+    // binary, json, compact,
+    @VarAttr(name = THRIFT_PLAN_PROTOCOL)
+    private String thriftPlanProtocol = "binary";
+
+    public String getThriftPlanProtocol() {
+        return thriftPlanProtocol;
+    }
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;

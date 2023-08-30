@@ -75,10 +75,11 @@ public class BackendServiceClient {
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
-            TNetworkAddress address, TExecPlanFragmentParams tRequest)
+            TNetworkAddress address, TExecPlanFragmentParams tRequest, String protocol)
             throws TException, RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
-        pRequest.setRequest(tRequest);
+        pRequest.setAttachmentProtocol(protocol);
+        pRequest.setRequest(tRequest, protocol);
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.execPlanFragmentAsync(pRequest);
@@ -105,10 +106,11 @@ public class BackendServiceClient {
     }
 
     public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
-            TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest)
+            TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest, String protocol)
             throws TException, RpcException {
         final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
-        pRequest.setRequest(tRequest);
+        pRequest.setAttachmentProtocol(protocol);
+        pRequest.setRequest(tRequest, protocol);
 
         Future<PExecBatchPlanFragmentsResult> resultFuture = null;
         for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {

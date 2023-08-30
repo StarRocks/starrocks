@@ -17,18 +17,37 @@
 
 package com.starrocks.rpc;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TJSONProtocol;
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
     protected byte[] serializedRequest;
     protected byte[] serializedResult;
 
+    public void setRequest(TBase request, String protocol)
+            throws TException {
+        TSerializer serializer;
+        if (StringUtils.equalsIgnoreCase(protocol, "compact")) {
+            serializer = new TSerializer(TCompactProtocol::new);
+        } else if (StringUtils.equalsIgnoreCase(protocol, "json")) {
+            serializer = new TSerializer(TJSONProtocol::new);
+        } else {
+            // default bianry
+            serializer = new TSerializer(TBinaryProtocol::new);
+        }
+
+        serializedRequest = serializer.serialize(request);
+    }
+
     public void setRequest(TBase request) throws TException {
-        TSerializer serializer = new TSerializer();
+        TSerializer serializer = new TSerializer(TBinaryProtocol::new);
         serializedRequest = serializer.serialize(request);
     }
 

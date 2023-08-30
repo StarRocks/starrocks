@@ -332,7 +332,7 @@ struct TFunction {
   // Optional comment to attach to the function
   6: optional string comment
 
-  7: optional string signature
+  7: optional string signature // Deprecated
 
   // HDFS path for the function binary. This binary must exist at the time the
   // function is created.
