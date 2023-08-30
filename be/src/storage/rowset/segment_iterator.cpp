@@ -631,6 +631,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
 
     if (!_opts.short_key_ranges.empty()) {
         RETURN_IF_ERROR(_get_row_ranges_by_short_key_ranges());
+        _opts.stats->rows_key_range_num += _opts.short_key_ranges.size();
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_key_ranges());
     }

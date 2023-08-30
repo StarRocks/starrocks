@@ -116,6 +116,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", "SegmentInit");
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", "SegmentInit");
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", "SegmentInit");
+    _rows_key_range_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, "SegmentInit");
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", "SegmentInit");
 
     // SegmentRead
@@ -474,6 +475,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
