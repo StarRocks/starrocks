@@ -4348,7 +4348,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "DISTRIBUTED BY HASH(k1)" +
                 "PROPERTIES (" +
                 "\"replication_num\" = \"1\")\n");
-        testRewriteFail("SELECT count(distinct k1) FROM count_tbl_1", "select count(*) from count_tbl_1");
+        testRewriteNonmatch("SELECT count(distinct k1) FROM count_tbl_1", "select count(*) from count_tbl_1");
         starRocksAssert.dropTable("count_tbl_1");
     }
 }
