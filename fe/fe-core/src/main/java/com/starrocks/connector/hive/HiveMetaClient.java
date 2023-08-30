@@ -19,10 +19,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -37,15 +40,26 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
+
+    public static final String DLF_HIVE_METASTORE = "dlf";
+    public static final String GLUE_HIVE_METASTORE = "glue";
+    // Maximum number of idle metastore connections in the connection pool at any point.
+    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
+
+    private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
+    private final Object clientPoolLock = new Object();
+
     private final HiveConf conf;
 
     // Required for creating an instance of RetryingMetaStoreClient.
@@ -66,12 +80,66 @@ public class HiveMetaClient {
         return new HiveMetaClient(conf);
     }
 
+    public class RecyclableClient {
+        private final IMetaStoreClient hiveClient;
+
+        private RecyclableClient(HiveConf conf) throws MetaException {
+            if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                        DLFProxyMetaStoreClient.class.getName());
+            } else if (GLUE_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                        AWSCatalogMetastoreClient.class.getName());
+            } else {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                        HiveMetaStoreClient.class.getName());
+            }
+        }
+
+        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
+        // the client will be recycled and reused. If it does, we close the client.
+        public void finish() {
+            synchronized (clientPoolLock) {
+                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
+                    LOG.warn("There are more than {} connections currently accessing the metastore",
+                            MAX_HMS_CONNECTION_POOL_SIZE);
+                    close();
+                } else {
+                    clientPool.offer(this);
+                }
+            }
+        }
+
+        public void close() {
+            hiveClient.close();
+        }
+    }
+
     public int getClientSize() {
-        return RecyclableClient.size();
+        return clientPool.size();
     }
 
     private RecyclableClient getClient() throws MetaException {
-        return RecyclableClient.getInstance(conf);
+        // The MetaStoreClient c'tor relies on knowing the Hadoop version by asking
+        // org.apache.hadoop.util.VersionInfo. The VersionInfo class relies on opening
+        // the 'common-version-info.properties' file as a resource from hadoop-common*.jar
+        // using the Thread's context classloader. If necessary, set the Thread's context
+        // classloader, otherwise VersionInfo will fail in it's c'tor.
+        if (Thread.currentThread().getContextClassLoader() == null) {
+            Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
+        }
+
+        synchronized (clientPoolLock) {
+            RecyclableClient client = clientPool.poll();
+            // The pool was empty so create a new client and return that.
+            // Serialize client creation to defend against possible race conditions accessing
+            // local Kerberos state
+            if (client == null) {
+                return new RecyclableClient(conf);
+            } else {
+                return client;
+            }
+        }
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
@@ -85,11 +153,8 @@ public class HiveMetaClient {
         try {
             client = getClient();
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
-            Method method = client.getHiveClient().getClass().getDeclaredMethod(methodName, argClasses);
-            if (client == null || client.getHiveClient() == null) {
-                System.out.println("client is null or client is null");
-            }
-            return (T) method.invoke(client.getHiveClient(), args);
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
+            return (T) method.invoke(client.hiveClient, args);
         } catch (Throwable e) {
             LOG.error(messageIfError, e);
             connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
@@ -230,7 +295,7 @@ public class HiveMetaClient {
             StarRocksConnectorException connectionException = null;
             try {
                 client = getClient();
-                partitions = client.getHiveClient().getPartitionsByNames(dbName, tblName, partitionNames);
+                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
                 if (partitions.size() != partitionNames.size()) {
                     LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
                             partitionNames.size(), dbName, tblName, partitions.size());
@@ -304,7 +369,7 @@ public class HiveMetaClient {
         try {
             client = getClient();
             for (List<String> parts : partNamesList) {
-                partitions.addAll(client.getHiveClient().getPartitionsByNames(dbName, tableName, parts));
+                partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
             }
             LOG.info("Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
                     dbName, tableName, retryNum, subListSize, partNames.size());
