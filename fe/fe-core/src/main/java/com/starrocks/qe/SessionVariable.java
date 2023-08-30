@@ -361,7 +361,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
-
+    public static final String TOPN = "topn";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -553,6 +553,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
     private boolean runtimeFilterOnExchangeNode = false;
+
+    @VariableMgr.VarAttr(name = TOPN)
+    private boolean topn = false;
 
     @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
     private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
@@ -1396,6 +1399,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableHiveMetadataCacheWithInsert(boolean enableHiveMetadataCacheWithInsert) {
         this.enableHiveMetadataCacheWithInsert = enableHiveMetadataCacheWithInsert;
+    }
+
+    public boolean isTopn() {
+        return topn;
+    }
+
+    public SessionVariable setTopn(boolean topn) {
+        this.topn = topn;
+        return this;
     }
 
     public int getHivePartitionStatsSampleSize() {
