@@ -1862,6 +1862,30 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
+    /**
+     * check privilege for `show tablet` statement
+     * if current user has 'OPERATE' privilege, it will result all the result
+     * otherwise it will only return to the user on which it has any privilege on the corresponding table
+     *
+     * @return `Pair.first` means that whether user can see this tablet, `Pair.second` means
+     * whether we need to hide the ip and port in the returned result
+     */
+    private Pair<Boolean, Boolean> checkPrivForShowTablet(String dbName, Table table) {
+        UserIdentity currentUser = connectContext.getCurrentUserIdentity();
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        try {
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+            return new Pair<>(true, false);
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table);
+                return new Pair<>(true, true);
+            } catch (AccessDeniedException e) {
+                return new Pair<>(false, true);
+            }
+        }
+    }
+
     private void handleShowTablet() throws AnalysisException {
         ShowTabletStmt showStmt = (ShowTabletStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
@@ -1899,6 +1923,12 @@ public class ShowExecutor {
                         break;
                     }
                     tableName = table.getName();
+                    Pair<Boolean, Boolean> privResult = checkPrivForShowTablet(dbName, table);
+                    if (!privResult.first) {
+                        throw new AccessDeniedException(
+                                ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                        "ANY ON TABLE//MV OBJECT"));
+                    }
 
                     OlapTable olapTable = (OlapTable) table;
                     PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
@@ -1966,6 +1996,14 @@ public class ShowExecutor {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 
+                Pair<Boolean, Boolean> privResult = checkPrivForShowTablet(db.getFullName(), table);
+                if (!privResult.first) {
+                    throw new AccessDeniedException(
+                            ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                    "ANY ON TABLE//MV OBJECT"));
+                }
+                Boolean hideIpPort = privResult.second;
+
                 OlapTable olapTable = (OlapTable) table;
                 long sizeLimit = -1;
                 if (showStmt.hasOffset() && showStmt.hasLimit()) {
@@ -2013,7 +2051,8 @@ public class ShowExecutor {
                             } else {
                                 LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                                 tabletInfos.addAll(procDir.fetchComparableResult(
-                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState(),
+                                        hideIpPort));
                             }
                             if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
                                     && tabletInfos.size() >= sizeLimit) {

@@ -212,8 +212,12 @@ import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
+    // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
+    // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
+    private static final Pattern showTabletDetailCmdPattern = Pattern.compile("/dbs/\\d+/\\d+/partitions/\\d+/\\d+/\\d+/?");
 
     public AuthorizerStmtVisitor() {
     }
@@ -286,9 +290,24 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     void checkSelectTableAction(ConnectContext context, Map<TableName, Relation> allTouchedTables) {
         for (Map.Entry<TableName, Relation> tableToBeChecked : allTouchedTables.entrySet()) {
             TableName tableName = tableToBeChecked.getKey();
+<<<<<<< HEAD
             Table table;
             if (tableToBeChecked.getValue() instanceof TableRelation) {
                 table = ((TableRelation) tableToBeChecked.getValue()).getTable();
+=======
+            Table table = tableToBeChecked.getValue();
+
+            if (table instanceof View) {
+                Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        tableName, PrivilegeType.SELECT);
+
+            } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
+            } else if (table.isMaterializedView()) {
+                Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        tableName, PrivilegeType.SELECT);
+>>>>>>> ed501fa03e ([Enhancement] Refine the priv check for be_tablets and show tablet)
             } else {
                 table = ((ViewRelation) tableToBeChecked.getValue()).getView();
             }
@@ -1770,14 +1789,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-        }
+        // Privilege is checked in execution logic, see `ShowExecutor#handleShowTablet()` for details.
         return null;
     }
 
@@ -1922,6 +1934,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         try {
             Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
@@ -1929,6 +1942,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+=======
+        if (!showTabletDetailCmdPattern.matcher(statement.getPath()).matches()) {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+>>>>>>> ed501fa03e ([Enhancement] Refine the priv check for be_tablets and show tablet)
         }
         return null;
     }
