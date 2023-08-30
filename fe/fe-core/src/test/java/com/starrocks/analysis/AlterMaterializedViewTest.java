@@ -183,4 +183,20 @@ public class AlterMaterializedViewTest {
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
+
+    @Test
+    public void testAlterMVWithUnsupportedVars() {
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.unsupported_session_vars\" = \"60\")";
+            try {
+                AlterMaterializedViewStmt stmt =
+                        (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+                currentState.alterMaterializedView(stmt);
+                Assert.fail();
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Modify failed because invalid session properties: " +
+                        "session.unsupported_session_vars=60."));
+            }
+        }
+    }
 }
