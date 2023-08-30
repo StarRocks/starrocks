@@ -69,23 +69,6 @@ enum TExprNodeType {
   MAP_ELEMENT_EXPR,
 }
 
-//enum TAggregationOp {
-//  INVALID,
-//  COUNT,
-//  MAX,
-//  DISTINCT_PC,
-//  MERGE_PC,
-//  DISTINCT_PCSA,
-//  MERGE_PCSA,
-//  MIN,
-//  SUM,
-//}
-//
-//struct TAggregateExpr {
-//  1: required bool is_star
-//  2: required bool is_distinct
-//  3: required TAggregationOp op
-//}
 struct TAggregateExpr {
   // Indicates whether this expr is the merge() of an aggregation.
   1: required bool is_merge_agg
@@ -211,7 +194,7 @@ struct TExprNode {
   30: optional list<string> used_subfield_names;
 
   // For vector query engine
-  50: optional bool use_vectorized
+  50: optional bool use_vectorized  // Deprecated
   51: optional bool has_nullable_child
   52: optional bool is_nullable
   53: optional Types.TTypeDesc child_type_desc

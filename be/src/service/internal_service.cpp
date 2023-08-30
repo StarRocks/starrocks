@@ -217,7 +217,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
         return;
     }
 
-    auto st = _exec_plan_fragment(cntl);
+    auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
     }
@@ -237,7 +237,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
         return;
     }
 
-    auto st = _exec_batch_plan_fragments(cntl);
+    auto st = _exec_batch_plan_fragments(cntl, request);
     if (!st.ok()) {
         LOG(WARNING) << "exec multi plan fragments failed, errmsg=" << st.get_error_msg();
     }
@@ -287,13 +287,14 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) {
+Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
+                                                        const PExecPlanFragmentRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
@@ -307,13 +308,14 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
 }
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller* cntl) {
+Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller* cntl,
+                                                               const PExecBatchPlanFragmentsRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_batch_requests.get()));
     }
 
     auto& common_request = t_batch_requests->common_param;

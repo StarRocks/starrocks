@@ -155,6 +155,17 @@ Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType t
     return Status::OK();
 }
 
+template <class T>
+Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, const std::string& protocol, T* deserialized_msg) {
+    if (protocol == "json") {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::JSON, deserialized_msg);
+    } else if (protocol == "compact") {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::COMPACT, deserialized_msg);
+    } else {
+        return deserialize_thrift_msg<T>(buf, len, TProtocolType::BINARY, deserialized_msg);
+    }
+}
+
 // Redirects all Thrift logging to VLOG(1)
 void init_thrift_logging();
 
