@@ -773,13 +773,15 @@ static std::vector<TResourceGroupUsage> calculate_group_usages(
 
     for (const auto& [group_id, cpu_runtime_ns] : curr_group_to_cpu_runtime_ns) {
         auto iter_prev = group_to_cpu_runtime_ns.find(group_id);
+        int64_t prev_runtime_ns;
         if (iter_prev == group_to_cpu_runtime_ns.end()) {
-            group_to_usage[group_id].__set_cpu_core_used_permille(0);
+            prev_runtime_ns = 0;
         } else {
-            int64_t prev_runtime_ns = iter_prev->second;
-            int32_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
-            group_to_usage[group_id].__set_cpu_core_used_permille(cpu_core_used_permille);
+            prev_runtime_ns = iter_prev->second;
         }
+
+        int32_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
+        group_to_usage[group_id].__set_cpu_core_used_permille(cpu_core_used_permille);
     }
     group_to_cpu_runtime_ns = std::move(curr_group_to_cpu_runtime_ns);
 
