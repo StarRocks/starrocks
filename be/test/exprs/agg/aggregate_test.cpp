@@ -2410,8 +2410,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
 }
 
 TEST_F(AggregateTest, test_array_agg) {
-    const AggregateFunction* agg_function =
-            get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, false);
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(ctx, agg_function);
 
     auto data_column = BinaryColumn::create();
