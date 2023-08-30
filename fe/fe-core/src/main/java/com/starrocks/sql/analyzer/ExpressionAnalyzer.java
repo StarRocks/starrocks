@@ -878,27 +878,28 @@ public class ExpressionAnalyzer {
                         nullsFirst.add(elem.getNullsFirstParam());
                     }
                 }
+                Type[] argsTypes = new Type[argumentTypes.length];
                 for (int i = 0; i < argumentTypes.length; ++i) {
                     // TODO: support nested type
                     if (argumentTypes[i].isComplexType()) {
                         throw new SemanticException(fnName + " can't support inputs of nested types, " +
                                 "but " + i + "-th input is " + argumentTypes[i].toSql());
                     }
-                    argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                     if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
-                        argumentTypes[i] = Type.VARCHAR;
+                        argsTypes[i] = Type.VARCHAR;
                     }
                 }
-                fn.setArgsType(argumentTypes); // as accepting various types
-                ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
-                for (Type t : argumentTypes) {
+                fn.setArgsType(argsTypes); // as accepting various types
+                ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
+                for (Type t : argsTypes) {
                     structTypes.add(new ArrayType(t));
                 }
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
-                    fn.setRetType(new ArrayType(argumentTypes[0]));     // return null if scalar agg with empty input
+                    fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 } else {
                     boolean outputConst = true;
                     for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
