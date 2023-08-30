@@ -53,7 +53,11 @@ Status BinaryConverter::write_quoted_string(OutputStream* os, const Column& colu
     return os->write('"');
 }
 
+<<<<<<< HEAD:be/src/formats/csv/binary_converter.cpp
 bool BinaryConverter::read_string(Column* column, Slice s, const Options& options) const {
+=======
+bool StringConverter::read_string(Column* column, const Slice& s, const Options& options) const {
+>>>>>>> 9e1acf2f39 ([Enhancement] Improve data lake csv reader performance further (#30137)):be/src/formats/csv/string_converter.cpp
     int max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
@@ -68,7 +72,12 @@ bool BinaryConverter::read_string(Column* column, Slice s, const Options& option
     return true;
 }
 
+<<<<<<< HEAD:be/src/formats/csv/binary_converter.cpp
 bool BinaryConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+=======
+bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
+>>>>>>> 9e1acf2f39 ([Enhancement] Improve data lake csv reader performance further (#30137)):be/src/formats/csv/string_converter.cpp
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
     }

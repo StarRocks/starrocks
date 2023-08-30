@@ -18,20 +18,27 @@
 
 namespace starrocks::csv {
 
-class NullableConverter final : public Converter {
+class MapConverter final : public Converter {
 public:
-    explicit NullableConverter(std::unique_ptr<Converter> base_converter)
-            : _base_converter(std::move(base_converter)) {}
+    explicit MapConverter(std::unique_ptr<Converter> key_converter, std::unique_ptr<Converter> value_converter)
+            : _key_converter(std::move(key_converter)),
+              _value_converter(std::move(value_converter)),
+              _map_delimiter(','),
+              _kv_delimiter(':') {}
 
     Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
     Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
-    bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;
 
 private:
-    std::unique_ptr<Converter> _base_converter;
+    bool validate(const Slice& s) const;
+    bool split_map_key_value(Slice s, std::vector<Slice>& keys, std::vector<Slice>& values) const;
+    std::unique_ptr<Converter> _key_converter;
+    std::unique_ptr<Converter> _value_converter;
+    char _map_delimiter;
+    char _kv_delimiter;
 };
 
 } // namespace starrocks::csv

@@ -22,9 +22,17 @@ namespace starrocks {
 // to bind multiple services on single port.
 class ComputeService : public BackendServiceBase {
 public:
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.h
     explicit ComputeService(ExecEnv* exec_env);
 
     ~ComputeService() override;
+=======
+    Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
+    Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+                               const Options& options) const override;
+    bool read_string(Column* column, const Slice& s, const Options& options) const override;
+    bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;
+>>>>>>> 9e1acf2f39 ([Enhancement] Improve data lake csv reader performance further (#30137)):be/src/formats/csv/varbinary_converter.h
 };
 
 } // namespace starrocks
