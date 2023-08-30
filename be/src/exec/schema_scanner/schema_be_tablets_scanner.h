@@ -59,6 +59,8 @@ private:
     std::vector<TabletBasicInfo> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
+
+    TGetTablesConfigResponse _tables_config_response;
 };
 
 } // namespace starrocks
