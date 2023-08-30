@@ -26,6 +26,8 @@ namespace starrocks {
 /// It is not thread-safe.
 class ResourceGroupUsageRecorder {
 public:
+    ResourceGroupUsageRecorder();
+
     /// Get the resource usages of all the resource groups.
     ///
     /// The cpu usage of any group is recorded for the time interval between two invocations of this method.
@@ -33,7 +35,7 @@ public:
 
 private:
     int64_t _timestamp_ns = 0;
-    std::unordered_map<int64_t, int64_t>& _group_to_cpu_runtime_ns;
+    std::unordered_map<int64_t, int64_t> _group_to_cpu_runtime_ns;
 };
 
 } // namespace starrocks

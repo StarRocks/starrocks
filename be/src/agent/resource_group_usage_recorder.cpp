@@ -19,6 +19,11 @@
 
 namespace starrocks {
 
+ResourceGroupUsageRecorder::ResourceGroupUsageRecorder() {
+    // Record cpu usage of all the groups the first time.
+    [[maybe_unused]] auto _ = group_usage_recorder.get_resource_group_usages();
+}
+
 std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_usages() {
     int64_t timestamp_ns = MonotonicNanos();
     int64_t delta_ns = std::max<int64_t>(1, timestamp_ns - _timestamp_ns);
