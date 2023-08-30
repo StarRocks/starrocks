@@ -187,7 +187,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
-        List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs = Lists.newCopyOnWriteArrayList();
+        List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr != null) {
                 serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
