@@ -260,9 +260,6 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             if (table instanceof View) {
                 Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName, PrivilegeType.SELECT);
-            } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE);
             } else if (table.isMaterializedView()) {
                 Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         tableName, PrivilegeType.SELECT);
