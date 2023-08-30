@@ -112,7 +112,7 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
     params.timeout_ms = 30000;
 
     _table_reader = std::make_shared<TableReader>();
-    _table_reader->init(params);
+    RETURN_IF_ERROR(_table_reader->init(params));
 
     _key_slots.resize(_dict_query_expr.key_fields.size());
     for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
