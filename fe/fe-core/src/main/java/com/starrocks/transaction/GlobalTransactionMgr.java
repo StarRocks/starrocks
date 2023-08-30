@@ -178,7 +178,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                     "The cluster is under recovery mode, all load jobs are rejected");
         }
 
-        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+        if (GlobalStateMgr.getCurrentState().isSafeMode()  && !label.contains("delete")) {
             throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
                     "The cluster is under safe mode state, all load jobs are rejected.");
         }
