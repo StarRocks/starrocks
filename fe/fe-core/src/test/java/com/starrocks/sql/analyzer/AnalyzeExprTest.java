@@ -340,6 +340,9 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_agg(1) from t0;");
         analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
         analyzeSuccess("select array_agg(distinct vm) from ttypes group by v1;");
+        analyzeSuccess("select array_agg(distinct v2), count(distinct v3) from t0 group by rollup(v1);");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0 group by rollup(v1);");
 
         analyzeFail("select array_agg(distinct jv) from ttypes group by v1;");
         analyzeFail("select array_agg(null order by 11);");
