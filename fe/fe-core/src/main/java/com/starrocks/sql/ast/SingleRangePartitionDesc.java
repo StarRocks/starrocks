@@ -120,21 +120,27 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         partitionKeyDesc.analyze(partColNum);
 
+        // The priority of the partition attribute is higher than that of the table
+        Map<String, String> partitionProperties = Maps.newHashMap();
+
         if (otherProperties != null) {
             if (properties == null) {
                 this.properties = otherProperties;
+                partitionProperties.putAll(otherProperties);
             } else {
-                // The priority of the partition attribute is higher than that of the table
-                Map<String, String> partitionProperties = Maps.newHashMap();
                 for (String key : otherProperties.keySet()) {
                     partitionProperties.put(key, otherProperties.get(key));
                 }
                 for (String key : properties.keySet()) {
                     partitionProperties.put(key, properties.get(key));
                 }
-                this.properties = partitionProperties;
+                this.properties = Maps.newHashMap(partitionProperties);
             }
         }
+
+        // analyze data property
+        partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(partitionProperties,
+                DataProperty.getInferredDefaultDataProperty(), false);
 
         if (partColNum == 1 && properties != null
                 && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -153,10 +159,6 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                 }
             }
-        } else {
-            // analyze data property
-            partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty(), false);
         }
 
         Preconditions.checkNotNull(partitionDataProperty);

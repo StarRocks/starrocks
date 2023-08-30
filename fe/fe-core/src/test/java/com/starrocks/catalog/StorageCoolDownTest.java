@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
@@ -55,7 +55,7 @@ public class StorageCoolDownTest {
 
     @Test
     public void testForbidCreateTable() throws Exception {
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid data property. storage medium property is not found",
                 () -> createTable(
                         "CREATE TABLE site_access_with_only_ttl(\n" +
@@ -81,7 +81,7 @@ public class StorageCoolDownTest {
                                 ");"
                 ));
 
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Can not assign cooldown ttl to table with HDD storage medium",
                 () -> createTable(
                         "CREATE TABLE site_access_date_with_1_day_ttl_less_than(\n" +
