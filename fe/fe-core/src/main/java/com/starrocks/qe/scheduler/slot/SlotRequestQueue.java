@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -40,10 +41,10 @@ public class SlotRequestQueue {
     private final Map<Long, LinkedHashMap<TUniqueId, LogicalSlot>> groupIdToSubQueue = new LinkedHashMap<>();
     private int nextGroupIndex = 0;
 
-    private final Supplier<Boolean> isGlobalResourceOverloaded;
+    private final BooleanSupplier isGlobalResourceOverloaded;
     private final Function<Long, Boolean> isGroupResourceOverloaded;
 
-    public SlotRequestQueue(Supplier<Boolean> isGlobalResourceOverloaded, Function<Long, Boolean> isGroupResourceOverloaded) {
+    public SlotRequestQueue(BooleanSupplier isGlobalResourceOverloaded, Function<Long, Boolean> isGroupResourceOverloaded) {
         this.isGlobalResourceOverloaded = isGlobalResourceOverloaded;
         this.isGroupResourceOverloaded = isGroupResourceOverloaded;
     }
@@ -95,7 +96,7 @@ public class SlotRequestQueue {
         }
 
         int numAllocatedSlots = allocatedSlots.getNumSlots();
-        if (!isGlobalSlotAvailable(numAllocatedSlots) || Boolean.TRUE.equals(isGlobalResourceOverloaded.get())) {
+        if (!isGlobalSlotAvailable(numAllocatedSlots) || isGlobalResourceOverloaded.getAsBoolean()) {
             return slotsToAllocate;
         }
 

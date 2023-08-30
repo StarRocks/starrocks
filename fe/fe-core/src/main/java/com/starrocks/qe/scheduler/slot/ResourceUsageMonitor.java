@@ -81,6 +81,7 @@ public class ResourceUsageMonitor {
         boolean needNotify = false;
         for (Long groupId : GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupIds()) {
             AtomicBoolean value = isGroupResourceOverloaded.computeIfAbsent(groupId, k -> new AtomicBoolean());
+            // Use | not || to make sure all the methods invoked.
             needNotify |= doRejudgeResourceOverloaded(value, () -> judgeGroupResourceOverloaded(groupId));
         }
         return needNotify;
