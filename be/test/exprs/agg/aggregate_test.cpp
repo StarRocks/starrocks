@@ -2420,7 +2420,6 @@ TEST_F(AggregateTest, test_array_agg) {
         val.append(std::to_string(i));
         data_column->append(val);
     }
-
     const Column* row_column = data_column.get();
 
     // test update
@@ -2428,7 +2427,7 @@ TEST_F(AggregateTest, test_array_agg) {
 
     auto elem = BinaryColumn::create();
     auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(elem, offsets);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     for (int i = 0; i < 6; i++) {
@@ -2459,7 +2458,7 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
 
     auto elem = BinaryColumn::create();
     auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(elem, offsets);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     agg_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(6, elem->size());
@@ -2483,7 +2482,7 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
     auto elem = Int32Column::create();
     auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(elem, offsets);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ(1024, offsets->get_data().back());
@@ -2507,7 +2506,7 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
 
     auto elem = Int32Column::create();
     auto offsets = UInt32Column::create(0);
-    auto result_column = ArrayColumn::create(elem, offsets);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
 
     func->finalize_to_column(ctx, state->state(), result_column.get());
 
