@@ -100,7 +100,7 @@ public class SelectAnalyzer {
             sourceExpressions.add(analyzeState.getHaving());
         }
 
-        List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState,
+        List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
         if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
             if (!groupByExpressions.isEmpty() &&
@@ -421,10 +421,12 @@ public class SelectAnalyzer {
         analyzeState.setGroupingFunctionCallExprs(groupingFunctionCallExprs);
     }
 
-    private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState,
+    private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
                                                           List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
+        aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
+
 
         long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
         for (FunctionCallExpr agg : aggregations) {
