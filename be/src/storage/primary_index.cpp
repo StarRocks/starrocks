@@ -1164,7 +1164,7 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
-        const uint8_t* keys = pks.raw_data();
+        const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
             keys += _key_size;
