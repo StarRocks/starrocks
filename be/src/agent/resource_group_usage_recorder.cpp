@@ -21,7 +21,7 @@ namespace starrocks {
 
 ResourceGroupUsageRecorder::ResourceGroupUsageRecorder() {
     // Record cpu usage of all the groups the first time.
-    [[maybe_unused]] auto _ = group_usage_recorder.get_resource_group_usages();
+    [[maybe_unused]] auto _ = get_resource_group_usages();
 }
 
 std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_usages() {
