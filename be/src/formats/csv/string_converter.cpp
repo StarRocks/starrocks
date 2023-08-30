@@ -116,7 +116,6 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
                 column->get_name(), old_size, new_size, ext_size, max_size);
         return false;
     }
-
     offsets.push_back(bytes.size());
     return true;
 }
