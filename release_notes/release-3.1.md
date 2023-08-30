@@ -21,7 +21,9 @@
 
 ### 新增特性
 
-- [存算分离架构](../deployment/deploy_shared_data.md)下，支持数据存储在 Azure Blob Storage 上。
+- [存算分离架构](../deployment/deploy_shared_data.md)下，支持如下特性：
+  - 数据存储在 Azure Blob Storage 上。
+  - List 分区。
 - 支持聚合函数 [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md)、[COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md)、[CORR](../sql-reference/sql-functions/aggregate-functions/corr.md)。
 - 支持[窗口函数](../sql-reference/sql-functions/Window_function.md) COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP。
 
