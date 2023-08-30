@@ -57,7 +57,7 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
     auto* elements = array->elements_column().get();
 
     std::vector<Slice> fields;
-    if (!s.empty() && !_array_reader->split_array_elements(s, &fields)) {
+    if (!s.empty() && !_array_reader->split_array_elements(s, fields)) {
         return false;
     }
     size_t old_size = elements->size();
