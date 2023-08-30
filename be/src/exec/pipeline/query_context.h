@@ -172,8 +172,8 @@ public:
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
-    bool is_result_sink() const { return _is_result_sink; }
-    void set_result_sink(bool value) { _is_result_sink = value; }
+    bool is_final_sink() const { return _is_final_sink; }
+    void set_final_sink() { _is_final_sink = true; }
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
@@ -231,7 +231,7 @@ private:
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
 
-    bool _is_result_sink = false;
+    bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;

@@ -175,8 +175,8 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
 
 std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
-    // Not transmit delta if it's the result sink node
-    if (_is_result_sink) {
+    // Not transmit delta if it's the final sink
+    if (_is_final_sink) {
         return query_statistic;
     }
 
@@ -197,7 +197,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
-    DCHECK(_is_result_sink) << "must be the result sink";
+    DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
