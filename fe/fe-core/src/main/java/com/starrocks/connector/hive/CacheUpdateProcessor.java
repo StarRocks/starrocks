@@ -58,7 +58,15 @@ public class CacheUpdateProcessor {
         this.executor = executor;
         this.isRecursive = isRecursive;
         if (enableHmsEventsIncrementalSync) {
+            trySyncEventId();
+        }
+    }
+
+    private void trySyncEventId() {
+        try {
             setLastSyncedEventId(metastore.getCurrentEventId());
+        } catch (MetastoreNotificationFetchException e) {
+            LOG.error("Sync event id on init get exception when pulling events on catalog [{}]", catalogName);
         }
     }
 
