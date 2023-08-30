@@ -778,10 +778,6 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
 
-        int64_t curr_time_ns = MonotonicNanos();
-        int64_t delta_ns = std::max<int64_t>(1, curr_time_ns - time_ns);
-        time_ns = curr_time_ns;
-
         resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
 
         request.__set_resource_usage(std::move(resource_usage));
