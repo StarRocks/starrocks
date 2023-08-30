@@ -1104,7 +1104,7 @@ public class ExplainAnalyzer {
 
         public ProfileNodeParser(boolean isRuntimeProfile, RuntimeProfile fragmentProfile) {
             this.isRuntimeProfile = isRuntimeProfile;
-            this.isIntegrated = !fragmentProfile.containsInfoString("NonIntegrated");
+            this.isIntegrated = !fragmentProfile.containsInfoString("NotIdentical");
             this.pipelineProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());

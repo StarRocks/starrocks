@@ -517,7 +517,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
 
-    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles);
+    RuntimeProfile* merged_profile =
+            RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

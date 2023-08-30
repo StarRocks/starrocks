@@ -700,31 +700,35 @@ public class RuntimeProfile {
 
         // merge children
         int maxChildSize = 0;
+        RuntimeProfile profileWithFullChild = null;
         for (RuntimeProfile profile : profiles) {
-            maxChildSize = Math.max(maxChildSize, profile.getChildList().size());
-        }
-        boolean missingParallelism = false;
-        for (int i = 0; i < maxChildSize; i++) {
-            List<RuntimeProfile> subProfiles = Lists.newArrayList();
-            for (RuntimeProfile profile : profiles) {
-                if (i >= profile.childList.size()) {
-                    missingParallelism = true;
-                    LOG.info("find non-isomorphic children, profileName={}, childProfileNames={}" +
-                                    ", another profileName={}, another childProfileNames={}",
-                            mergedProfile.name,
-                            mergedProfile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
-                            profile.name,
-                            profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
-                    continue;
-                }
-                RuntimeProfile child = profile.childList.get(i).first;
-                subProfiles.add(child);
+            if (profile.getChildList().size() > maxChildSize) {
+                maxChildSize = profile.getChildList().size();
+                profileWithFullChild = profile;
             }
-            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
-            mergedProfile.addChild(mergedChild);
         }
-        if (missingParallelism) {
-            mergedProfile.addInfoString("NonIntegrated", "");
+        if (profileWithFullChild != null) {
+            boolean identical = true;
+            for (int i = 0; i < maxChildSize; i++) {
+                Pair<RuntimeProfile, Boolean> prototypeKv = profileWithFullChild.getChildList().get(i);
+                String childName = prototypeKv.first.getName();
+                List<RuntimeProfile> subProfiles = Lists.newArrayList();
+                for (RuntimeProfile profile : profiles) {
+                    RuntimeProfile child = profile.getChild(childName);
+                    if (child == null) {
+                        identical = false;
+                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                                profile.name, childName);
+                        continue;
+                    }
+                    subProfiles.add(child);
+                }
+                RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
+                mergedProfile.addChild(mergedChild);
+            }
+            if (!identical) {
+                mergedProfile.addInfoString("NotIdentical", "");
+            }
         }
 
         return mergedProfile;
