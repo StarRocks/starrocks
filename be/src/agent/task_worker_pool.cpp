@@ -749,62 +749,13 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     return nullptr;
 }
 
-static std::vector<TResourceGroupUsage> calculate_group_usages(
-        std::unordered_map<int64_t, int64_t>& group_to_cpu_runtime_ns, int64_t delta_ns) {
-    std::unordered_map<int64_t, TResourceGroupUsage> group_to_usage;
-    std::unordered_map<int64_t, int64_t> curr_group_to_cpu_runtime_ns;
-    workgroup::WorkGroupManager::instance()->for_each_workgroup(
-            [&group_to_usage, &curr_group_to_cpu_runtime_ns](const workgroup::WorkGroup& wg) {
-                auto it = group_to_usage.find(wg.id());
-                if (it == group_to_usage.end()) {
-                    TResourceGroupUsage group_usage;
-                    group_usage.__set_group_id(wg.id());
-                    group_usage.__set_mem_used_bytes(wg.mem_consumption_bytes());
-                    group_to_usage.emplace(wg.id(), std::move(group_usage));
-
-                    curr_group_to_cpu_runtime_ns.emplace(wg.id(), wg.driver_runtime_ns());
-                } else {
-                    TResourceGroupUsage& group_usage = it->second;
-                    group_usage.__set_mem_used_bytes(group_usage.mem_used_bytes + wg.mem_consumption_bytes());
-
-                    curr_group_to_cpu_runtime_ns[wg.id()] += wg.driver_runtime_ns();
-                }
-            });
-
-    for (const auto& [group_id, cpu_runtime_ns] : curr_group_to_cpu_runtime_ns) {
-        auto iter_prev = group_to_cpu_runtime_ns.find(group_id);
-        int64_t prev_runtime_ns;
-        if (iter_prev == group_to_cpu_runtime_ns.end()) {
-            prev_runtime_ns = 0;
-        } else {
-            prev_runtime_ns = iter_prev->second;
-        }
-
-        int32_t cpu_core_used_permille = (cpu_runtime_ns - prev_runtime_ns) * 1000 / delta_ns;
-        group_to_usage[group_id].__set_cpu_core_used_permille(cpu_core_used_permille);
-    }
-    group_to_cpu_runtime_ns = std::move(curr_group_to_cpu_runtime_ns);
-
-    std::vector<TResourceGroupUsage> group_usages;
-    group_usages.reserve(group_to_usage.size());
-    for (auto& [_, group_usage] : group_to_usage) {
-        // Only report the resource group with effective resource usages.
-        if (group_usage.cpu_core_used_permille > 0 || group_usage.mem_used_bytes > 0) {
-            group_usages.emplace_back(std::move(group_usage));
-        }
-    }
-
-    return group_usages;
-}
-
 void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (ReportResourceUsageTaskWorkerPool*)arg_this;
 
     TReportRequest request;
     AgentStatus status = STARROCKS_SUCCESS;
 
-    std::unordered_map<int64_t, int64_t> group_to_cpu_runtime_ns;
-    int64_t time_ns = MonotonicNanos();
+    ResourceGroupUsageRecorder group_usage_recorder;
 
     while ((!worker_pool_this->_stopped)) {
         auto master_address = get_master_address();
@@ -830,7 +781,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         int64_t delta_ns = std::max<int64_t>(1, curr_time_ns - time_ns);
         time_ns = curr_time_ns;
 
-        resource_usage.__set_group_usages(calculate_group_usages(group_to_cpu_runtime_ns, delta_ns));
+        resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
 
         request.__set_resource_usage(std::move(resource_usage));
         TMasterResult result;

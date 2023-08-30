@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 
 /**
  * It monitors the resource usages from backends and invokes listeners when the global resource or any group resource becomes
@@ -57,13 +57,15 @@ public class ResourceUsageMonitor {
     }
 
     private void rejudgeResourceOverloaded() {
-        if (rejudgeGlobalResourceOverloaded() | rejudgeGroupResourceOverloaded()) {
+        // Use | not || to make sure all the methods invoked.
+        if (rejudgeGlobalResourceOverloaded() | rejudgeGroupResourceOverloaded()) { // NOSONAR
             resourceAvailableListeners.values().forEach(Runnable::run);
         }
     }
 
     /**
      * Rejudge whether the global resource is overloaded.
+     *
      * @return whether the global resource becomes available from non-available.
      */
     private boolean rejudgeGlobalResourceOverloaded() {
@@ -72,12 +74,13 @@ public class ResourceUsageMonitor {
 
     /**
      * Rejudge whether each group resource is overloaded.
+     *
      * @return whether any group resource becomes available from non-available.
      */
     private boolean rejudgeGroupResourceOverloaded() {
         boolean needNotify = false;
         for (Long groupId : GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupIds()) {
-            AtomicBoolean value = isGroupResourceOverloaded.computeIfAbsent(groupId, (k) -> new AtomicBoolean());
+            AtomicBoolean value = isGroupResourceOverloaded.computeIfAbsent(groupId, k -> new AtomicBoolean());
             needNotify |= doRejudgeResourceOverloaded(value, () -> judgeGroupResourceOverloaded(groupId));
         }
         return needNotify;
@@ -85,15 +88,16 @@ public class ResourceUsageMonitor {
 
     /**
      * Rejudge whether a resource is overloaded.
+     *
      * @return whether the resource becomes available from non-available.
      */
-    private boolean doRejudgeResourceOverloaded(AtomicBoolean value, Supplier<Boolean> newValueSupplier) {
+    private boolean doRejudgeResourceOverloaded(AtomicBoolean value, BooleanSupplier newValueSupplier) {
         boolean prev;
         boolean now;
         boolean updated = false;
         while (!updated) {
             prev = value.get();
-            now = newValueSupplier.get();
+            now = newValueSupplier.getAsBoolean();
             updated = value.compareAndSet(prev, now);
             if (updated && prev && !now) {
                 return true;
@@ -105,14 +109,17 @@ public class ResourceUsageMonitor {
 
     /**
      * Judge whether the global resource is overloaded.
+     *
      * @return whether the resource is overloaded.
      */
     private boolean judgeResourceOverloaded() {
         return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
                 .anyMatch(ComputeNode::isResourceOverloaded);
     }
+
     /**
      * Judge whether the group resource is overloaded.
+     *
      * @return whether the group resource is overloaded.
      */
     private boolean judgeGroupResourceOverloaded(long groupId) {

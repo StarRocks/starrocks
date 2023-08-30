@@ -57,7 +57,7 @@ public class ResourceGroup implements Writable {
                     .addColumn(new Column("id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("max_cpu_cores", ScalarType.createVarchar(200)))
+                    .addColumn(new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
