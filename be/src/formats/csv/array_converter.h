@@ -27,8 +27,8 @@ public:
     Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
     Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
-    bool read_string(Column* column, Slice s, const Options& options) const override;
-    bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
+    bool read_string(Column* column, const Slice& s, const Options& options) const override;
+    bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;
 
 private:
     mutable std::unique_ptr<ArrayReader> _array_reader;

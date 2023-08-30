@@ -61,7 +61,7 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
     }
 }
 
-bool NullableConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool NullableConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
     auto* data = nullable->data_column().get();
 
@@ -77,7 +77,7 @@ bool NullableConverter::read_string(Column* column, Slice s, const Options& opti
     }
 }
 
-bool NullableConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool NullableConverter::read_quoted_string(Column* column, const Slice& s, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
     auto* data = nullable->data_column().get();
 

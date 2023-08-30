@@ -36,7 +36,7 @@ Status JsonConverter::write_quoted_string(OutputStream* os, const Column& column
     return os->write('"');
 }
 
-bool JsonConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool JsonConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     auto json = JsonValue::parse(s);
     if (json.ok()) {
         auto json_column = down_cast<JsonColumn*>(column);
@@ -46,7 +46,8 @@ bool JsonConverter::read_string(Column* column, Slice s, const Options& options)
     return false;
 }
 
-bool JsonConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool JsonConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
     }

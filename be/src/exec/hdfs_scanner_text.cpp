@@ -244,6 +244,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
     size_t rows_read = 0;
 
+    CSVReader::Fields fields{};
     for (; rows_read < chunk_size; rows_read++) {
         CSVReader::Record record{};
         Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -272,7 +273,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             return Status::InternalError("Face csv invalidate UTF-8 character line.");
         }
 
-        CSVReader::Fields fields{};
+        fields.resize(0);
         _reader->split_record(record, &fields);
 
         size_t num_materialize_columns = _scanner_params.materialize_slots.size();

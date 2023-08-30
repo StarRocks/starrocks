@@ -34,7 +34,7 @@ Status DatetimeConverter::write_quoted_string(OutputStream* os, const Column& co
     return os->write('"');
 }
 
-bool DatetimeConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool DatetimeConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     TimestampValue v{};
     bool r = v.from_string(s.data, s.size);
     if (r) {
@@ -43,7 +43,8 @@ bool DatetimeConverter::read_string(Column* column, Slice s, const Options& opti
     return r;
 }
 
-bool DatetimeConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool DatetimeConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
     }
