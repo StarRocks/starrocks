@@ -189,12 +189,10 @@ public class PushTask extends AgentTask {
                     tConditions.add(tCondition);
                 }
                 request.setDelete_conditions(tConditions);
-                request.setUse_vectorized(useVectorized);
                 break;
             case LOAD_V2:
                 request.setBroker_scan_range(tBrokerScanRange);
                 request.setDesc_tbl(tDescriptorTable);
-                request.setUse_vectorized(useVectorized);
                 request.setTablet_type(tabletType);
                 break;
             case CANCEL_DELETE:
