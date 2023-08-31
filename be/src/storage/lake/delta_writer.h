@@ -96,6 +96,8 @@ public:
 
     Status check_immutable();
 
+    int64_t last_write_ts() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
