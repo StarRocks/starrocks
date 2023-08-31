@@ -188,7 +188,9 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
-    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                    : state->exec_env()->driver_executor();
+    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     return _export_sink_buffer->set_finishing();
 }
 

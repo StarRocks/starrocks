@@ -74,15 +74,9 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
-<<<<<<< HEAD
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
-=======
-    void close() override;
-    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
-                           bool attach_profile) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
->>>>>>> 728573e241 ([Enhancement] Support audic statistics for insert statement (#29901))
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
