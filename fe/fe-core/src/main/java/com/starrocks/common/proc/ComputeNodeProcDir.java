@@ -132,13 +132,13 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
 
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+
             if (RunMode.allowCreateLakeTable()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
             }
-
-            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
             comparableComputeNodeInfos.add(computeNodeInfo);
         }
