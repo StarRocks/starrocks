@@ -1,0 +1,29 @@
+-- name: test_orderby_agg
+
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT "",
+  `v4` varchar NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 values(1, 2, 3, 'a'), (1, 3, 4, 'b'), (2, 3, 4, 'a'), (null, 1, null, 'c'), (4, null, 1 , null),
+(5, 1 , 3, 'c'), (2, 2, null, 'a'), (4, null, 4, 'c'), (null, null, 2, null);
+
+select min(v1) v1 from t0 group by v3 order by round(count(v2) / min(v1)), min(v1);
+select min(v1) v1, round(count(v2) / min(v1)) round_col from t0 group by v3 order by abs(min(v1)) + abs(v1) asc;
+
+select min(v1) v1 from t0 group by v3 order by round(count(v2) / min(v1)), abs(v1);
+select min(v1) v11 from t0 group by v3 order by round(count(v2) / min(v1)), abs(v11);
+select min(v1) v11, min(v1) v1 from t0 group by v3 order by round(count(v2) / min(v1)), abs(v11), abs(v1);
+select round(count(v1) * 100.0 / min(v2), 4) as potential_customer_rate, min(v2) v2 from t0 group by v4 order by round(count(v1) * 100.0 / min(v2), 4), min(v2);
+select round(count(v1) * 100.0 / min(v2), 4) as potential_customer_rate, min(v2) v2 from t0 group by v4 order by round(count(v1) * 100.0 / min(v2), 4), abs(v2);
