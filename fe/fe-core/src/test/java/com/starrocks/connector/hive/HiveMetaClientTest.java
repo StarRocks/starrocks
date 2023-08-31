@@ -30,10 +30,12 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.thrift.TException;
+import org.apache.thrift.transport.TTransportException;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -231,6 +233,9 @@ public class HiveMetaClientTest {
                 metaStoreClient.getPartitionsByNames(dbName, tblName, new ArrayList<>());
                 result = new TException("something wrong");
 
+                metaStoreClient.getPartitionsByNames(dbName, tblName, Arrays.asList("retry"));
+                result = new TTransportException("something wrong");
+
                 metaStoreClient.getTableColumnStatistics(dbName, tblName, new ArrayList<>());
                 result = any;
 
@@ -251,6 +256,8 @@ public class HiveMetaClientTest {
 
         Assert.assertThrows(StarRocksConnectorException.class,
                 () -> client.getPartitionsByNames(dbName, tblName, new ArrayList<>()));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> client.getPartitionsByNames(dbName, tblName, Arrays.asList("retry")));
 
         client.getTableColumnStats(dbName, tblName, new ArrayList<>());
         client.getPartitionColumnStats(dbName, tblName, new ArrayList<>(), new ArrayList<>());
