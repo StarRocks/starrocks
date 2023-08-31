@@ -54,7 +54,7 @@ Status StringConverter::write_quoted_string(OutputStream* os, const Column& colu
     return os->write('"');
 }
 
-bool StringConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool StringConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     int max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
@@ -70,7 +70,8 @@ bool StringConverter::read_string(Column* column, Slice s, const Options& option
     return true;
 }
 
-bool StringConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
     }

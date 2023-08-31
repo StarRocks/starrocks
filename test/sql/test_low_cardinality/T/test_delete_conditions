@@ -1,0 +1,55 @@
+-- name: test_delete_condition
+create table t0 (
+    c0 string,
+    c1 string,
+    c2 int,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+
+-- analyze and wait dictioanry
+-- insert 
+insert into t0 SELECT generate_series%100, generate_series%100, generate_series%100, generate_series%100 FROM TABLE(generate_series(1, 65535));
+insert into t0 values (null, null, null, null);
+[UC] analyze full table t0;
+function: wait_global_dict_ready('c0', 't0')
+
+-- delete by key
+delete from t0 where c0 = "s_1";
+
+select count(*) from t0;
+select count(*) from t0 where c0 = "s_2";
+select count(*) from t0 where c0 != "s_2";
+select count(*) from t0 where c0 is null;
+select count(*) from t0 where c0 = "s_2" and c1 = "s_2";
+select count(*) from t0 where c0 = "s_2" and c1 = "s_3";
+select distinct c0, c1, c2, c3 from t0 where c0 = "s_2" and c1 = "s_2" order by 1,2,3,4 limit 5;
+select distinct c0, c1, c2, c3 from t0 where c1 = "s_2" order by 1,2,3,4 limit 5;
+
+-- delete null
+delete from t0 where c0 is null;
+select count(*) from t0;
+select count(*), count(c0) from t0 where c0 is not null;
+select count(*), count(c0) from t0 where c0 is not null;
+select count(*), count(c0) from t0 where c1 is not null;
+select count(*), count(c0) from t0 where c2 is not null;
+select count(*), count(c0), count(distinct c0) from t0 where c2 is not null;
+
+-- 
+delete from t0 where c0 = "s_2";
+select count(*) from t0 where c0 = "s_2";
+select count(*) from t0 where c0 != "s_2";
+select count(*) from t0 where c1 = "s_2";
+select count(*) from t0 where c1 = "s_2" or c0 = "s_2";
+-- delete by value
+delete from t0 where c2 = 1000;
+select count(*), count(c0), count(distinct c0), max(c0) from t0;
+select count(*) from t0 where c0 = "s_3";
+select count(*) from t0 where c1 = "s_1000";
+select count(*) from t0 where c2 = 1000;
+
+-- delete all
+delete from t0 where c0 != "";
+select count(*) from t0;
+select count(*) from t0 where c0 = "s_3";
+select count(*) from t0 where c1 = "s_3";
+select count(*) from t0 where c2 = 4;
