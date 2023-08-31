@@ -111,6 +111,6 @@ public class HiveTableSinkTest {
         Assert.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
         Assert.assertEquals(TCompressionType.GZIP, tHiveTableSink.getCompression_type());
         Assert.assertTrue(tHiveTableSink.is_static_partition_sink);
-        Assert.assertEquals(TCloudType.HDFS, tHiveTableSink.getCloud_configuration().cloud_type);
+        Assert.assertEquals(TCloudType.DEFAULT, tHiveTableSink.getCloud_configuration().cloud_type);
     }
 }

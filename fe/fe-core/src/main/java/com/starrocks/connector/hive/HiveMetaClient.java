@@ -361,6 +361,9 @@ public class HiveMetaClient {
                                                    List<String> partNames, int retryNum) throws StarRocksConnectorException {
         int subListSize = (int) Math.pow(2, retryNum);
         int subListNum = partNames.size() / subListSize;
+        if (subListNum == 0) {
+            subListNum = 1;
+        }
         List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
         List<Partition> partitions = Lists.newArrayList();
 
