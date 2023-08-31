@@ -81,6 +81,8 @@ public:
 
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
+    void flush(Callback cb);
+
     void finish(Callback cb);
 
     void close();
@@ -103,6 +105,7 @@ private:
         const uint32_t* indexes = nullptr;
         uint32_t indexes_size = 0;
         bool finish_after_write = false;
+        bool flush_after_write = false;
     };
 
     static int execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter);
@@ -146,6 +149,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         if (st.ok() && iter->chunk != nullptr && iter->indexes_size > 0) {
             st = delta_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
             LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
+                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
+        }
+        if (st.ok() && iter->flush_after_write) {
+            st = delta_writer->flush_async();
+            LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         if (st.ok() && iter->finish_after_write) {
@@ -196,6 +204,19 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+    }
+}
+
+inline void AsyncDeltaWriterImpl::flush(Callback cb) {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    task.cb = std::move(cb); // Do NOT touch |cb| since here
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
     }
 }
@@ -258,6 +279,10 @@ Status AsyncDeltaWriter::open() {
 
 void AsyncDeltaWriter::write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb) {
     _impl->write(chunk, indexes, indexes_size, std::move(cb));
+}
+
+void AsyncDeltaWriter::flush(Callback cb) {
+    _impl->flush(std::move(cb));
 }
 
 void AsyncDeltaWriter::finish(Callback cb) {

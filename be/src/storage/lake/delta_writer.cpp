@@ -235,10 +235,10 @@ Status DeltaWriterImpl::check_immutable() {
         if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
         }
-        VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
-                << " _immutable_tablet_size=" << _immutable_tablet_size
-                << ", data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id)
-                << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
+        LOG(INFO) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
+                  << ", immutable_tablet_size=" << _immutable_tablet_size
+                  << ", data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id)
+                  << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
     }
     return Status::OK();
 }
@@ -287,13 +287,15 @@ inline Status DeltaWriterImpl::flush_async() {
         if (_immutable_tablet_size > 0) {
             _tablet_manager->set_in_writing_data_size(_tablet_id, _txn_id, _tablet_writer->data_size());
             ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-            VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
-                    << " _immutable_tablet_size=" << _immutable_tablet_size
-                    << ", writer_data_size=" << _tablet_writer->data_size()
-                    << ", tablet_data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id);
             if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
                 _is_immutable.store(true, std::memory_order_relaxed);
             }
+            LOG(INFO) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
+                      << " _immutable_tablet_size=" << _immutable_tablet_size
+                      << ", writer_data_size=" << _tablet_writer->data_size()
+                      << ", tablet_data_size=" << tablet.data_size()
+                      << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
+                      << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
         }
     }
     return st;

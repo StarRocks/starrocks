@@ -201,6 +201,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
         _senders[params.sender_id()].has_incremental_open = true;
     } else {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+        for (const PTabletWithPartition& tablet : params.tablets()) {
+            _tablet_id_to_num_remaining_senders[tablet.tablet_id()].store(params.num_senders(), std::memory_order_release);
+        }
     }
     RETURN_IF_ERROR(_create_delta_writers(params, false));
 
@@ -366,11 +369,31 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         sender.next_seq++;
     }
 
+    std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
         auto& writer = _delta_writers[tablet_id];
-        if (writer->is_immutable()) {
+        if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
+            immutable_tablet_ids.insert(tablet_id);
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
+
+            auto it = _tablet_id_to_num_remaining_senders.find(tablet_id);
+            if (it != _tablet_id_to_num_remaining_senders.end()) {
+                int n = it->second.fetch_sub(1, std::memory_order_relaxed);
+                LOG(INFO) << "check tablet writer for tablet " << tablet_id << ", partition " << writer->partition_id()
+                          << ", txn " << _txn_id << ", is_immutable  " << writer->is_immutable()
+                          << ", remaining_senders " << n;
+                if (n <= 1 && !close_channel) {
+                    writer->flush([&, id = tablet_id](const Status& st) {
+                        if (st.ok()) {
+                            LOG(INFO) << "Flush tablet " << id << " txn_id: " << _txn_id << " partition_id: "
+                                      << writer->partition_id() << " is_immutable: " << writer->is_immutable();
+                        } else {
+                            LOG(ERROR) << "Fail to flush immutable tablet " << id << ": " << st << " txn_id: " << _txn_id;
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -467,6 +490,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
         for (size_t i = 0; i < tablet_ids.size(); ++i) {
             _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+            _tablet_id_to_num_remaining_senders[tablet_ids[i]].fetch_add(1, std::memory_order_release);
         }
     }
     return Status::OK();

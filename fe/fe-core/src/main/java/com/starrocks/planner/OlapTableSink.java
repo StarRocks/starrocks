@@ -95,6 +95,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
+import java.util.Collection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -238,7 +239,8 @@ public class OlapTableSink extends DataSink {
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
-        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable, enableAutomaticPartition, partitionIds));
+        tSink.setPartition(
+                createPartition(tSink.getDb_id(), dstTable, enableAutomaticPartition, automaticBucketSize, partitionIds));
         tSink.setLocation(createLocation(dstTable, clusterId, partitionIds, enableReplicatedStorage));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
@@ -325,6 +327,7 @@ public class OlapTableSink extends DataSink {
 
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                             boolean enableAutomaticPartition,
+                                                            long automaticBucketSize,
                                                             List<Long> partitionIds) throws UserException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
@@ -344,15 +347,27 @@ public class OlapTableSink extends DataSink {
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {
                     Partition partition = table.getPartition(partitionId);
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        if (physicalPartition.isImmutable()) {
-                            continue;
+                    Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+                    long index = subPartitions.size();
+                    long selectNum = 0;
+                    for (PhysicalPartition physicalPartition : subPartitions) {
+                        --index;
+                        if (index != 0 || selectNum != 0) {
+                            if (physicalPartition.isImmutable()) {
+                                continue;
+                            }
+                            if (automaticBucketSize > 0 && physicalPartition.getTabletMaxDataSize() > automaticBucketSize) {
+                                physicalPartition.setImmutable(true);
+                                continue;
+                            }
                         }
+                        ++selectNum;
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
                         setIndexAndBucketNums(physicalPartition, tPartition);
                         partitionParam.addToPartitions(tPartition);
+                        LOG.info("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -373,15 +388,27 @@ public class OlapTableSink extends DataSink {
                 DistributionInfo selectedDistInfo = null;
                 for (Long partitionId : partitionIds) {
                     Partition partition = table.getPartition(partitionId);
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        if (physicalPartition.isImmutable()) {
-                            continue;
+                    Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+                    long index = subPartitions.size();
+                    long selectNum = 0;
+                    for (PhysicalPartition physicalPartition : subPartitions) {
+                        --index;
+                        if (index != 0 || selectNum != 0) {
+                            if (physicalPartition.isImmutable()) {
+                                continue;
+                            }
+                            if (automaticBucketSize > 0 && physicalPartition.getTabletMaxDataSize() > automaticBucketSize) {
+                                physicalPartition.setImmutable(true);
+                                continue;
+                            }
                         }
+                        ++selectNum;
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
                         setIndexAndBucketNums(physicalPartition, tPartition);
                         partitionParam.addToPartitions(tPartition);
+                        LOG.info("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -400,15 +427,27 @@ public class OlapTableSink extends DataSink {
                     partition = table.getPartitions().iterator().next();
                 }
 
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    if (physicalPartition.isImmutable()) {
-                        continue;
+                Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+                long index = subPartitions.size();
+                long selectNum = 0;
+                for (PhysicalPartition physicalPartition : subPartitions) {
+                    --index;
+                    if (index != 0 || selectNum != 0) {
+                        if (physicalPartition.isImmutable()) {
+                            continue;
+                        }
+                        if (automaticBucketSize > 0 && physicalPartition.getTabletMaxDataSize() > automaticBucketSize) {
+                            physicalPartition.setImmutable(true);
+                            continue;
+                        }
                     }
+                    ++selectNum;
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
                     setIndexAndBucketNums(physicalPartition, tPartition);
                     partitionParam.addToPartitions(tPartition);
+                    LOG.info("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                 }
                 partitionParam.setDistributed_columns(
                         getDistColumns(partition.getDistributionInfo(), table));
@@ -519,6 +558,9 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.isImmutable()) {
+                    continue;
+                }
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                     for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                         Tablet tablet = index.getTablets().get(idx);

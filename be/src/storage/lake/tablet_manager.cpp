@@ -617,6 +617,35 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     return TxnLogIter{this, std::move(objects)};
 }
 
+StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
+    int64_t size = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        LOG(INFO) << "get tablet " << tablet_id << " data size from version hint: " << *version_hint
+                  << ", size: " << size;
+    } else {
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        LOG(INFO) << "get tablet " << tablet_id << " data size from version : " << metadata->version()
+                  << ", size: " << size;
+    }
+
+    return size;
+}
+
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
