@@ -60,8 +60,7 @@ public class HudiConnectorInternalMgr {
 
     private final MetastoreType metastoreType;
 
-    public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties,
-                                    HdfsEnvironment hdfsEnvironment) {
+    public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
         this.hdfsEnvironment = hdfsEnvironment;

@@ -68,8 +68,7 @@ public interface IHiveMetastore {
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
-    void updateTableStatistics(String dbName, String tableName,
-                               Function<HivePartitionStats, HivePartitionStats> update);
+    void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update);
 
     void updatePartitionStatistics(String dbName, String tableName, String partitionName,
                                    Function<HivePartitionStats, HivePartitionStats> update);
@@ -79,8 +78,7 @@ public interface IHiveMetastore {
         return Lists.newArrayList();
     }
 
-    default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName,
-                                                           boolean onlyCachedPartitions) {
+    default List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
         return Lists.newArrayList();
     }
 

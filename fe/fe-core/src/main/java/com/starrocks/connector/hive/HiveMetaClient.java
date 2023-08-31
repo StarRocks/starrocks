@@ -225,24 +225,21 @@ public class HiveMetaClient {
     public void alterPartition(String dbName, String tableName, Partition newPartition) {
         Class<?>[] argClasses = {String.class, String.class, Partition.class};
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.alterPartition")) {
-            callRPC("alter_partition",
-                    "Failed to alter partition " + dbName + "." + tableName + newPartition.getValues(),
+            callRPC("alter_partition", "Failed to alter partition " + dbName + "." + tableName + newPartition.getValues(),
                     argClasses, dbName, tableName, newPartition);
         }
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames")) {
-            return callRPC("listPartitionNames",
-                    String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
+            return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, (short) -1);
         }
     }
 
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNamesByValue")) {
-            return callRPC("listPartitionNames",
-                    String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
+            return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
                     dbName, tableName, partitionValues, (short) -1);
         }
     }
@@ -308,9 +305,8 @@ public class HiveMetaClient {
                 partitions = getPartitionsWithRetry(dbName, tblName, partitionNames, 1);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on {}.{}", dbName, tblName, e);
-                connectionException =
-                        new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
-                                dbName, tblName, e.getMessage());
+                connectionException = new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
+                        dbName, tblName, e.getMessage());
                 throw connectionException;
             } finally {
                 if (client == null && connectionException != null) {
@@ -345,8 +341,7 @@ public class HiveMetaClient {
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",
-                    String.format(
-                            "Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
+                    String.format("Failed to get partitions column statistics on [%s.%s]. partition size: %d, columns size: %d.",
                             dbName, tableName, partitionNames.size(), columnNames.size()),
                     dbName, tableName, partitionNames, columnNames);
         }
@@ -363,13 +358,9 @@ public class HiveMetaClient {
      *                                     then we determine that there is a bug with the user's hive metastore.
      */
     private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
-                                                   List<String> partNames, int retryNum)
-            throws StarRocksConnectorException {
+                                                   List<String> partNames, int retryNum) throws StarRocksConnectorException {
         int subListSize = (int) Math.pow(2, retryNum);
         int subListNum = partNames.size() / subListSize;
-        if (subListNum == 0) {
-            subListNum = 1;
-        }
         List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
         List<Partition> partitions = Lists.newArrayList();
 
@@ -382,8 +373,7 @@ public class HiveMetaClient {
             for (List<String> parts : partNamesList) {
                 partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
             }
-            LOG.info(
-                    "Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+            LOG.info("Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
                     dbName, tableName, retryNum, subListSize, partNames.size());
             return partitions;
         } catch (TTransportException te) {
@@ -418,8 +408,7 @@ public class HiveMetaClient {
             throws MetastoreNotificationFetchException {
         try {
             Class<?>[] argClasses = {long.class, int.class, IMetaStoreClient.NotificationFilter.class};
-            return callRPC("getNextNotification",
-                    "Failed to get next notification based on last event id: " + lastEventId,
+            return callRPC("getNextNotification", "Failed to get next notification based on last event id: " + lastEventId,
                     argClasses, lastEventId, maxEvents, filter);
         } catch (Exception e) {
             throw new MetastoreNotificationFetchException(e.getMessage());

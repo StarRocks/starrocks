@@ -62,8 +62,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
     @Test
     public void testNormal() throws Exception {
         String dropMvSql = "drop materialized view mv1;";
-        DropMaterializedViewStmt dropMvStmt =
-                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         String dbName = dropMvStmt.getDbName();
         String mvName = dropMvStmt.getMvName();
         Assert.assertEquals("test", dbName);
@@ -74,8 +73,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
     @Test
     public void testIfExistsNormal() throws Exception {
         String dropMvSql = "drop materialized view if exists mv1;";
-        DropMaterializedViewStmt dropMvStmt =
-                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         Assert.assertEquals(true, dropMvStmt.isSetIfExists());
     }
 }

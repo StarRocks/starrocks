@@ -528,7 +528,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
@@ -718,7 +718,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         // TODO(SmithCruise) Maybe we can delete below code, because KS3 is never support officially
@@ -795,7 +795,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         WildcardURI pathUri = new WildcardURI(path);
@@ -949,7 +949,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
@@ -1026,7 +1026,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
@@ -1102,7 +1102,7 @@ public class HdfsFsManager {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
-        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         // TODO(SmithCruise) Maybe we can delete below code, because TOS is never support officially

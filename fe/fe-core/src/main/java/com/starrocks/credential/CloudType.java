@@ -15,9 +15,10 @@
 package com.starrocks.credential;
 
 public enum CloudType {
-    HDFS,
+    DEFAULT,
     AWS,
     AZURE,
     GCP,
-    ALIYUN
+    ALIYUN,
+    HDFS
 }
