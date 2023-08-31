@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES_LOADED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CACHE_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 
@@ -89,6 +90,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         configuration.set(HDFS_CONFIG_RESOURCES, configResources);
         configuration.set(HDFS_RUNTIME_JARS, runtimeJars);
         addConfigResourcesToConfiguration(configResources, configuration);
+        configuration.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
         configuration.set(HDFS_FS_CACHE_KEY, getCredentialString());
     }
 

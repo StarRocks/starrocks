@@ -106,6 +106,7 @@ public class CloudConfigurationConstants {
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
     public static final String HDFS_KERBEROS_KEYTAB_DATA = "hadoop.security.kerberos.keytab_data";
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
+    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
     public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
 
