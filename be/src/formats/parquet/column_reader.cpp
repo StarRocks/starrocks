@@ -23,6 +23,7 @@
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "gutil/strings/substitute.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -371,20 +372,33 @@ public:
         size_t origin_rows_to_skip = _opts.context->rows_to_skip;
 
         // Fill data for non-nullptr subfield column reader
+        bool first_read = true;
+        size_t real_read = 0;
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
                 _opts.context->next_row = origin_next_row;
                 _opts.context->rows_to_skip = origin_rows_to_skip;
                 RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+                size_t current_real_read = child_column->size();
+                real_read = first_read ? current_real_read : real_read;
+                first_read = false;
+                if (UNLIKELY(real_read != current_real_read)) {
+                    return Status::InternalError(strings::Substitute("Unmatched row count, $0", _field->name));
+                }
             }
+        }
+
+        if (UNLIKELY(first_read)) {
+            return Status::InternalError(
+                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
         }
 
         // Append default value for not selected subfield
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
-                child_column->append_default(*num_records);
+                child_column->append_default(real_read);
             }
         }
 
