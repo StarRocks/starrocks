@@ -26,15 +26,18 @@ import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -52,17 +55,25 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
@@ -92,12 +103,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.thrift.TDictQueryExpr;
+import com.starrocks.thrift.TFunctionBinaryType;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -1622,6 +1638,158 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCloneExpr(CloneExpr node, Scope context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDictQueryExpr(DictQueryExpr node, Scope context) {
+            List<Expr> params = node.getParams().exprs();
+            if (!(params.get(0) instanceof StringLiteral)) {
+                throw new SemanticException("dict_mapping function first param table_name should be string literal");
+            }
+            String[] dictTableFullName = ((StringLiteral) params.get(0)).getStringValue().split("\\.");
+            TableName tableName;
+            if (dictTableFullName.length == 1) {
+                tableName = new TableName(null, dictTableFullName[0]);
+                tableName.normalization(session);
+            } else if (dictTableFullName.length == 2) {
+                tableName = new TableName(dictTableFullName[0], dictTableFullName[1]);
+            } else {
+                throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
+            }
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = db.getTable(tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("dict table %s is not found", tableName.getTbl());
+            }
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("dict table type is not OlapTable, type=" + table.getClass());
+            }
+            if (table instanceof MaterializedView) {
+                throw new SemanticException("dict table can't be materialized view");
+            }
+            OlapTable dictTable = (OlapTable) table;
+
+            if (dictTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw new SemanticException("dict table " + tableName + " should be primary key table");
+            }
+
+            // verify keys length and type
+            List<Column> keyColumns = new ArrayList<>();
+            Column valueColumn = null;
+            for (Column column : dictTable.getBaseSchema()) {
+                if (column.isKey()) {
+                    keyColumns.add(column);
+                }
+                if (column.isAutoIncrement()) {
+                    valueColumn = column;
+                }
+            }
+            // (table, keys..., value_column, strict_mode)
+            int valueColumnIdx;
+            int strictModeIdx;
+            if (params.size() == keyColumns.size() + 1) {
+                valueColumnIdx = -1;
+                strictModeIdx = -1;
+            } else if (params.size() == keyColumns.size() + 2) {
+                if (params.get(params.size() - 1).getType().getPrimitiveType().isStringType()) {
+                    valueColumnIdx = params.size() - 1;
+                    strictModeIdx = -1;
+                } else {
+                    strictModeIdx = params.size() - 1;
+                    valueColumnIdx = -1;
+                }
+            } else if (params.size() == keyColumns.size() + 3) {
+                valueColumnIdx = params.size() - 2;
+                strictModeIdx = params.size() - 1;
+            } else {
+                throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
+                    keyColumns.size() + 1, keyColumns.size() + 3));
+            }
+
+            String valueField;
+            if (valueColumnIdx >= 0) {
+                Expr valueFieldExpr = params.get(valueColumnIdx);
+                if (!(valueFieldExpr instanceof StringLiteral)) {
+                    throw new SemanticException("dict_mapping function value_column param should be STRING constant");
+                }
+                valueField = ((StringLiteral) valueFieldExpr).getStringValue();
+                valueColumn = dictTable.getBaseColumn(valueField);
+                if (valueColumn == null) {
+                    throw new SemanticException("dict_mapping function can't find value column " + valueField + " in dict table");
+                }
+            } else {
+                if (valueColumn == null) {
+                    throw new SemanticException("dict_mapping function can't find auto increment column in dict table");
+                }
+                valueField = valueColumn.getName();
+            }
+
+            boolean strictMode = false;
+            if (strictModeIdx >= 0) {
+                Expr strictModeExpr = params.get(strictModeIdx);
+                if (!(strictModeExpr instanceof BoolLiteral)) {
+                    throw new SemanticException("dict_mapping function strict_mode param should be bool constant");
+                }
+                strictMode = ((BoolLiteral) strictModeExpr).getValue();
+            }
+
+            List<Type> expectTypes = new ArrayList<>();
+            expectTypes.add(Type.VARCHAR);
+            for (Column keyColumn : keyColumns) {
+                expectTypes.add(ScalarType.createType(keyColumn.getType().getPrimitiveType()));
+            }
+            if (valueColumnIdx >= 0) {
+                expectTypes.add(Type.VARCHAR);
+            }
+            if (strictModeIdx >= 0) {
+                expectTypes.add(Type.BOOLEAN);
+            }
+            List<Type> actualTypes = params.stream()
+                    .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
+            if (!Objects.equals(expectTypes, actualTypes)) {
+                List<String> expectTypeNames = new ArrayList<>();
+                expectTypeNames.add("VARCHAR dict_table");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    expectTypeNames.add(expectTypes.get(i + 1).canonicalName() + " " + keyColumns.get(i).getName());
+                }
+                if (valueColumnIdx >= 0) {
+                    expectTypeNames.add("VARCHAR value_field_name");
+                }
+                if (strictModeIdx >= 0) {
+                    expectTypeNames.add("BOOLEAN strict_mode");
+                }
+                List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
+                throw new SemanticException(
+                        String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
+                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+            }
+
+            Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());
+
+            final TDictQueryExpr dictQueryExpr = new TDictQueryExpr();
+            dictQueryExpr.setDb_name(tableName.getDb());
+            dictQueryExpr.setTbl_name(tableName.getTbl());
+
+            Map<Long, Long> partitionVersion = new HashMap<>();
+            dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+            dictQueryExpr.setPartition_version(partitionVersion);
+
+            List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
+            dictQueryExpr.setKey_fields(keyFields);
+            dictQueryExpr.setValue_field(valueField);
+            dictQueryExpr.setStrict_mode(strictMode);
+            node.setType(valueType);
+
+            Function fn = new Function(FunctionName.createFnName(FunctionSet.DICT_MAPPING), actualTypes, valueType, false);
+            fn.setBinaryType(TFunctionBinaryType.BUILTIN);
+            node.setFn(fn);
+
+            node.setDictQueryExpr(dictQueryExpr);
             return null;
         }
     }
