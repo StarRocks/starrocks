@@ -458,6 +458,7 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- 手动设置分桶数量为 8
 **注意事项**
 
 - **建表时，如果使用哈希分桶，则必须指定分桶键**。
+- 组成分桶键的列仅支持整型、DECIMAL、DATE/DATETIME、CHAR/VARCHAR/STRING 数据类型。
 - 分桶键指定后不支持修改。
 
 如下示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于 `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。
