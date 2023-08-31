@@ -745,7 +745,7 @@ public class AnalyzeSingleTest {
     }
 
     @Test
-    public void test() {
+    public void testRemoveComments() {
         analyzeFail("select /*+ SET */ v1 from t0",
                 "Unexpected input 'SET', the most similar input is {'SET_VAR'}");
         analyzeFail("select /*+   abc*/ v1 from t0",
