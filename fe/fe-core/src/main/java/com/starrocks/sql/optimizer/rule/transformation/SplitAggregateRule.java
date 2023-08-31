@@ -321,6 +321,11 @@ public class SplitAggregateRule extends TransformationRule {
             return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
+        } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+            // only support const inputs
+            boolean allConst = fnCall.getChildren().stream().allMatch(ScalarOperator::isConstant);
+            Preconditions.checkState(allConst, "can't rewrite to group_concat_distinct for non-const inputs");
+            return fnCall;
         }
         return null;
     }
