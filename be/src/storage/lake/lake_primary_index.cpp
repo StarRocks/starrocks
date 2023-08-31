@@ -80,7 +80,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                     RETURN_IF_ERROR(
                             StorageEngine::instance()->get_persistent_index_store()->create_dir_if_path_not_exists(
                                     path));
-                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+                    _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path, this);
                     return ((LakeLocalPersistentIndex*)_persistent_index.get())
                             ->load_from_lake_tablet(tablet, metadata, base_version, builder);
                 }
