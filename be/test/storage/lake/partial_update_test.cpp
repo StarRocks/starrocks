@@ -37,13 +37,14 @@
 
 namespace starrocks::lake {
 
-class PartialUpdateTest : public TestBase {
+class PartialUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     PartialUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -187,7 +188,7 @@ protected:
     std::vector<std::string> _trash_files;
 };
 
-TEST_F(PartialUpdateTest, test_write) {
+TEST_P(PartialUpdateTest, test_write) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -234,7 +235,7 @@ TEST_F(PartialUpdateTest, test_write) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
 }
 
-TEST_F(PartialUpdateTest, test_write_multi_segment) {
+TEST_P(PartialUpdateTest, test_write_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -287,7 +288,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
 }
 
-TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
+TEST_P(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);
     auto chunk2 = generate_data(kChunkSize, 0, true, 6);
@@ -341,7 +342,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
 }
 
-TEST_F(PartialUpdateTest, test_resolve_conflict) {
+TEST_P(PartialUpdateTest, test_resolve_conflict) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -393,7 +394,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
 }
 
-TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
+TEST_P(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);
     auto chunk2 = generate_data(kChunkSize, 0, true, 6);
@@ -451,5 +452,8 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     // check segment size in last metadata
     EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
 }
+
+INSTANTIATE_TEST_SUITE_P(PartialUpdateTest, PartialUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
 } // namespace starrocks::lake
