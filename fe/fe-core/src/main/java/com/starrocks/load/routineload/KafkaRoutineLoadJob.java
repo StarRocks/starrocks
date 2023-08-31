@@ -110,6 +110,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @SerializedName("ckp")
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched
+    @SerializedName("ctkp")
     private List<Integer> currentKafkaPartitions = Lists.newArrayList();
     // optional, user want to set default offset when new partition add or offset not set.
     private Long kafkaDefaultOffSet = null;
