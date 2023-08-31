@@ -258,14 +258,14 @@ public class ColocatedBackendSelector implements BackendSelector {
      *     <li> a: 1, 3
      *     <li> b: 4, 2
      *     <li> c: 3, 2
-     *     <li> b: 4, 1
+     *     <li> d: 4, 1
      * </ul>
      * Then the selected backend of each bucket by using {@link NormalBucketSequenceIterator} may be as follows:
      * <ul>
      *     <li> a: 1
      *     <li> b: 4
      *     <li> c: 3
-     *     <li> b: 4 (here, both the backend #4 and #1 have already been selected once, resulting in either backend #4 or #1
+     *     <li> d: 4 (here, both the backend #4 and #1 have already been selected once, resulting in either backend #4 or #1
      *     being responsible for two bucket sequences, while backend #2 remains unassigned any bucket sequence.)
      * </ul>
      *
