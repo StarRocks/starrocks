@@ -66,6 +66,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -982,6 +983,19 @@ public class PropertyAnalyzer {
         }
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+
+    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            if (type.equalsIgnoreCase("LOCAL")) {
+                return TPersistentIndexType.LOCAL;
+            } else {
+                throw new AnalysisException("Invalid persistent index type: " + type);
+            }
+        }
+        return TPersistentIndexType.LOCAL;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
