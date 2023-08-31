@@ -772,16 +772,16 @@ public class DDLStmtExecutor {
 
                 context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                // from current session, may execute analyze stmt
-                statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
-                        context.getSessionVariable().getStatisticCollectParallelism());
-                statsConnectCtx.setStatisticsConnection(true);
                 Thread thread = new Thread(() -> {
-                    statsConnectCtx.setThreadLocalInfo();
-                    StatisticExecutor statisticExecutor = new StatisticExecutor();
-                    analyzeJob.run(statsConnectCtx, statisticExecutor);
-                    statsConnectCtx.close();
+                    try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
+                        // from current session, may execute analyze stmt
+                        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                                context.getSessionVariable().getStatisticCollectParallelism());
+                        statsConnectCtx.setStatisticsConnection(true);
+                        statsConnectCtx.setThreadLocalInfo();
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        analyzeJob.run(statsConnectCtx, statisticExecutor);
+                    }
                 });
                 thread.start();
             });
