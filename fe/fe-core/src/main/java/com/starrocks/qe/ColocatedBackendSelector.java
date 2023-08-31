@@ -181,6 +181,7 @@ public class ColocatedBackendSelector implements BackendSelector {
             return new NormalBucketSequenceIterator(scanNode);
         }
 
+        boolean hasMultiReplications = false;
         int numTotalBuckets = 0;
         Set<Long> backends = Sets.newHashSet();
         for (Integer bucket : scanNode.bucketSeq2locations.keySet()) {
@@ -189,14 +190,16 @@ public class ColocatedBackendSelector implements BackendSelector {
                 continue;
             }
 
-            TScanRangeLocations firstLocations = bucketLocations.get(0);
-            for (TScanRangeLocation location : firstLocations.getLocations()) {
+            TScanRangeLocations firstTablet = bucketLocations.get(0);
+            for (TScanRangeLocation location : firstTablet.getLocations()) {
                 backends.add(location.getBackend_id());
             }
-            numTotalBuckets += firstLocations.getLocationsSize();
+            numTotalBuckets += firstTablet.getLocationsSize();
+            hasMultiReplications |= firstTablet.getLocationsSize() > 1;
         }
 
-        boolean useBalancerAssignment = numTotalBuckets <= maxBucketsPerBeToUseBalancerAssignment * backends.size();
+        boolean useBalancerAssignment =
+                hasMultiReplications && numTotalBuckets <= maxBucketsPerBeToUseBalancerAssignment * backends.size();
         if (useBalancerAssignment) {
             return new BalancerBucketSequenceIterator(scanNode);
         } else {
@@ -310,8 +313,8 @@ public class ColocatedBackendSelector implements BackendSelector {
                     continue;
                 }
 
-                TScanRangeLocations firstLocations = bucketLocations.get(0);
-                for (TScanRangeLocation location : firstLocations.getLocations()) {
+                TScanRangeLocations firstTablet = bucketLocations.get(0);
+                for (TScanRangeLocation location : firstTablet.getLocations()) {
                     backendToBuckets.computeIfAbsent(location.getBackend_id(), k -> new HashSet<>()).add(bucket);
                 }
             }

@@ -47,10 +47,60 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ColocatedBackendSelectorTest {
 
     @Test
+    public void testSingleScanNodeWithSingleReplication() throws UserException {
+        final int numBuckets = 4;
+        final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
+                0, ImmutableList.of(1L),
+                1, ImmutableList.of(2L),
+                2, ImmutableList.of(3L),
+                3, ImmutableList.of(4L)
+        );
+        final Set<Long> backendIds =
+                bucketSeqToBackends.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
+
+        OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
+        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        WorkerProvider workerProvider = genWorkerProvider(backendIds);
+
+        {
+            int maxBucketsPerBeToUseBalancerAssignment = 5;
+            Map<Integer, Long> expectedSeqToBackendId = ImmutableMap.of(
+                    0, 1L,
+                    1, 2L,
+                    2, 3L,
+                    3, 4L
+            );
+            checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, expectedSeqToBackendId);
+        }
+
+        {
+            int maxBucketsPerBeToUseBalancerAssignment = 1;
+            Map<Integer, Long> expectedSeqToBackendId = ImmutableMap.of(
+                    0, 1L,
+                    1, 2L,
+                    2, 3L,
+                    3, 4L
+            );
+            checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, expectedSeqToBackendId);
+        }
+
+        {
+            int maxBucketsPerBeToUseBalancerAssignment = -1;
+            Map<Integer, Long> expectedSeqToBackendId = ImmutableMap.of(
+                    0, 1L,
+                    1, 2L,
+                    2, 3L,
+                    3, 4L
+            );
+            checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, expectedSeqToBackendId);
+        }
+    }
+
+    @Test
     public void testSingleScanNode() throws UserException {
         final int numBuckets = 4;
         final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
-                0, ImmutableList.of(1L, 3L),
+                0, ImmutableList.of(1L),
                 1, ImmutableList.of(4L, 2L),
                 2, ImmutableList.of(3L, 2L),
                 3, ImmutableList.of(4L, 1L)
