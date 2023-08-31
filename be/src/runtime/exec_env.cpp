@@ -503,10 +503,6 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
-    if (_stream_mgr != nullptr) {
-        _stream_mgr->close();
-    }
-
     if (_load_channel_mgr) {
         // Clear load channel should be executed before stopping the storage engine,
         // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
@@ -520,6 +516,10 @@ void ExecEnv::stop() {
 
     if (_fragment_mgr) {
         _fragment_mgr->close();
+    }
+
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
     }
 
     if (_pipeline_sink_io_pool) {
