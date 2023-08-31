@@ -59,9 +59,10 @@ public class MVColumnItem {
     private boolean isAggregationTypeImplicit;
     private Expr defineExpr;
     private Set<String> baseColumnNames;
+    private final String aliasName;
 
     public MVColumnItem(String name, Type type, AggregateType aggregateType, boolean isAggregationTypeImplicit,
-                        Expr defineExpr, boolean isAllowNull, Set<String> baseColumnNames) {
+                        Expr defineExpr, boolean isAllowNull, Set<String> baseColumnNames, String aliasName) {
         this.name = name;
         this.type = type;
         this.aggregationType = aggregateType;
@@ -69,6 +70,7 @@ public class MVColumnItem {
         this.defineExpr = defineExpr;
         this.isAllowNull = isAllowNull;
         this.baseColumnNames = baseColumnNames;
+        this.aliasName = aliasName;
     }
 
     public boolean isAllowNull() {
@@ -118,6 +120,10 @@ public class MVColumnItem {
 
     public Set<String> getBaseColumnNames() {
         return baseColumnNames;
+    }
+
+    public String getAliasName() {
+        return aliasName;
     }
 
     public Column toMVColumn(OlapTable olapTable) throws DdlException {

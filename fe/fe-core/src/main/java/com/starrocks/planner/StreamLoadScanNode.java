@@ -303,7 +303,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             }
 
             // check hll_hash
-            if (dstSlotDesc.getType().getPrimitiveType() == PrimitiveType.HLL) {
+            if (!(expr instanceof NullLiteral) && dstSlotDesc.getType().getPrimitiveType() == PrimitiveType.HLL) {
                 if (!(expr instanceof FunctionCallExpr)) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");

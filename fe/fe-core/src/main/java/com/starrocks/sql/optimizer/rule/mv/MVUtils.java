@@ -87,6 +87,13 @@ public class MVUtils {
         return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(baseColumName).toString();
     }
 
+    public static String parseMVColumnName(String mvName) {
+        if (mvName.startsWith(MATERIALIZED_VIEW_NAME_PREFIX)) {
+            return mvName.substring(MATERIALIZED_VIEW_NAME_PREFIX.length());
+        }
+        return mvName;
+    }
+
     // NOTE:
     // 1. check all materialized view column's defineExpr in MaterializedViewRule:
     // - only support slot-ref for non-aggregate column.

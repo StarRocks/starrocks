@@ -88,6 +88,7 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
 }
 
 Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema) {
+    VLOG(2) << "OlapTablePartitionParam schema init:\n" << apache::thrift::ThriftDebugString(tschema);
     _db_id = tschema.db_id;
     _table_id = tschema.table_id;
     _version = tschema.version;
@@ -148,6 +149,8 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
 OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
 Status OlapTablePartitionParam::init(RuntimeState* state) {
+    VLOG(2) << "OlapTablePartitionParam partition init:\n" << apache::thrift::ThriftDebugString(_t_param);
+
     std::map<std::string, SlotDescriptor*> slots_map;
     for (auto slot_desc : _schema->tuple_desc()->slots()) {
         slots_map.emplace(slot_desc->col_name(), slot_desc);
@@ -244,6 +247,10 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             _partitions_map.emplace(&part->end_key, part);
             VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
                     << part->end_key.debug_string();
+        }
+
+        for (const auto& entry : t_part.associated_partition_ids) {
+            part->associated_partition_ids[entry.first] = entry.second;
         }
     }
 

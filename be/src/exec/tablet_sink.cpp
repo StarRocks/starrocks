@@ -49,7 +49,9 @@
 #include "common/statusor.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/tablet_sink_colocate_multi_sender.h"
 #include "exec/tablet_sink_colocate_sender.h"
+#include "exec/tablet_sink_multi_sender.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
@@ -109,6 +111,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     if (table_sink.__isset.enable_replicated_storage) {
         _enable_replicated_storage = table_sink.enable_replicated_storage;
+    }
+    if (table_sink.__isset.enable_colocate_mv_index) {
+        _colocate_mv_index &= table_sink.enable_colocate_mv_index;
     }
     if (table_sink.__isset.db_name) {
         state->set_db(table_sink.db_name);
@@ -251,16 +256,29 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     }
 
     if (_colocate_mv_index) {
-        _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
-                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
-                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
-                _write_quorum_type, _num_repicas);
-
+        if (_vectorized_partition->enable_associated_tables()) {
+            _tablet_sink_sender = std::make_unique<TabletSinkColocateMultiSender>(
+                    _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                    std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                    _write_quorum_type, _num_repicas);
+        } else {
+            _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
+                    _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                    std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                    _write_quorum_type, _num_repicas);
+        }
     } else {
-        _tablet_sink_sender = std::make_unique<TabletSinkSender>(
-                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
-                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
-                _write_quorum_type, _num_repicas);
+        if (_vectorized_partition->enable_associated_tables()) {
+            _tablet_sink_sender = std::make_unique<TabletSinkMultiSender>(
+                    _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                    std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                    _write_quorum_type, _num_repicas);
+        } else {
+            _tablet_sink_sender = std::make_unique<TabletSinkSender>(
+                    _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                    std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                    _write_quorum_type, _num_repicas);
+        }
     }
     return Status::OK();
 }
@@ -276,7 +294,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
             for (auto tablet : part->indexes[i].tablets) {
                 PTabletWithPartition tablet_info;
                 tablet_info.set_tablet_id(tablet);
-                tablet_info.set_partition_id(part->id);
+                tablet_info.set_partition_id(part->partition_id_of_index(index->index_id));
 
                 // setup replicas
                 auto* location = _location->find_tablet(tablet);

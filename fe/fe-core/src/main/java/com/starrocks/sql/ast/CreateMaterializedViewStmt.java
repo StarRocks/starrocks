@@ -134,16 +134,19 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
+    private final TableName targetTable;
 
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
 
-    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
+    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties, 
+                                      TableName targetTable) {
         super(NodePosition.ZERO);
         this.mvTableName = mvTableName;
         this.queryStatement = queryStatement;
         this.properties = properties;
+        this.targetTable = targetTable;
     }
 
     public QueryStatement getQueryStatement() {
@@ -196,6 +199,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public void setMvKeysType(KeysType mvKeysType) {
         this.mvKeysType = mvKeysType;
+    }
+
+    public TableName getTargetTableName() {
+        return targetTable;
     }
 
     // NOTE: This method is used to replay persistent MaterializedViewMeta,
@@ -373,10 +380,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
                 }
                 // TODO: support multi slot-refs later.
-                if (slots.size() > 1) {
+                if (slots.size() > 1 && targetTable == null) {
                     throw new UnsupportedMVException(
                             String.format("The materialized view currently does not support multi-slot-refs expr: {}",
                                     selectListItemExpr.toSql()));
+                }
+                if (targetTable != null && !(selectListItem.getExpr() instanceof SlotRef) &&
+                        Strings.isNullOrEmpty(selectListItem.getAlias())) {
+                    throw new SemanticException("Create materialized view non-slot ref expression in logical mv should have an " +
+                            "alias:" + selectListItem);
                 }
             }
             MVColumnItem mvColumnItem;
@@ -471,7 +483,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
         return new MVColumnItem(columnName, type, null, false, defineExpr,
-                defineExpr.isNullable(),  baseColumnNames);
+                defineExpr.isNullable(),  baseColumnNames, selectListItem.getAlias());
     }
 
     // Convert the aggregate function to MVColumn.
@@ -560,7 +572,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Set<String> baseColumnNames = baseSlotRefs.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toSet());
         return new MVColumnItem(mvColumnName, type, mvAggregateType, false,
-                defineExpr, functionCallExpr.isNullable(), baseColumnNames);
+                defineExpr, functionCallExpr.isNullable(), baseColumnNames, selectListItem.getAlias());
     }
 
     private void analyzeOrderByClause(SelectRelation selectRelation,
