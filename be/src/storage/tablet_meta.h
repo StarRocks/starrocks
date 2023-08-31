@@ -116,9 +116,15 @@ public:
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
     Status save_meta(DataDir* data_dir);
 
+<<<<<<< HEAD
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
+=======
+    [[nodiscard]] Status serialize(std::string* meta_binary);
+    [[nodiscard]] Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+>>>>>>> 1c0a513471 ([BugFix] Restore primary key table cause meta inconsistent when restart BE(#30129) (#30135))
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -171,6 +177,8 @@ public:
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
+
+    void reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb);
 
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     void remove_delete_predicate_by_version(const Version& version);
