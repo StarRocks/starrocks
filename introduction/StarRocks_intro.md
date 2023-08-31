@@ -46,10 +46,10 @@
 - [从 HDFS 导入](../loading/hdfs_load.md)
 - [从云存储导入](../loading/cloud_storage_load.md)
 - [从 Apache Kafka® 持续导入](../loading/RoutineLoad.md)
-- [使用 Apache Spark™ 导入](../loading/SparkLoad.md)
+- [从 Apache Flink® 持续导入](../loading/Flink-connector-starrocks.md)
+- [从 Apache Spark™ 导入](../loading/Spark-connector-starrocks.md)
 - [使用 INSERT 语句导入](../loading/InsertInto.md)
 - [从 MySQL 实时同步](../loading/Flink_cdc_load.md)
-- [从 Apache Flink® 持续导入](../loading/Flink-connector-starrocks.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -70,7 +70,8 @@
 
 - [JSON](../sql-reference/sql-statements/data-types/JSON.md)
 - [ARRAY](../sql-reference/sql-statements/data-types/Array.md)
-
+- [MAP](../sql-reference/sql-statements/data-types/Map.md)
+- [STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md)
 </NavBoxPartItem>
 </NavBoxPart>
 
@@ -81,9 +82,8 @@
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Delta Lake](../data_source/catalog/deltalake_catalog.md)
-- [MySQL](../data_source/External_table.md#mysql-外部表)
-- [Elasticsearch](../data_source/External_table.md#elasticsearch-外部表)
-- [支持 JDBC 的数据库](../data_source/catalog/jdbc_catalog.md)
+- [MySQL 和 PostgreSQL](../data_source/catalog/jdbc_catalog.md)
+- [Elasticsearch](../data_source/catalog/elasticsearch_catalog.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="外部系统集成​">
