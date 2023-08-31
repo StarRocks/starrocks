@@ -18,6 +18,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -66,9 +67,10 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode(
+                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Assert.assertFalse(replayPair.second.contains("table: mv1, rollup: mv1"));
+        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -88,18 +90,18 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     @Ignore
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode(
+                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertFalse(replayPair.second.contains("line_order_flat_mv"));
+        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
         FeConstants.isReplayFromQueryDump = false;
     }
 
     @Test
     public void testMV_MVOnMV1() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
                         null, TExplainLevel.NORMAL);
