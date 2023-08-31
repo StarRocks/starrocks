@@ -260,13 +260,24 @@ public class ColocatedBackendSelector implements BackendSelector {
      *     <li> c: 3, 2
      *     <li> d: 4, 1
      * </ul>
-     * Then the selected backend of each bucket by using {@link NormalBucketSequenceIterator} may be as follows:
+     *
+     * By using {@link NormalBucketSequenceIterator}, the traverse order of the bucket sequences is a, b, c, d, and the result is
+     * as follows:
      * <ul>
      *     <li> a: 1
      *     <li> b: 4
      *     <li> c: 3
      *     <li> d: 4 (here, both the backend #4 and #1 have already been selected once, resulting in either backend #4 or #1
      *     being responsible for two bucket sequences, while backend #2 remains unassigned any bucket sequence.)
+     * </ul>
+     *
+     * By using {@link BalancerBucketSequenceIterator}, the traverse order of the bucket sequences is a, d, b, c, and the result
+     * is as follows:
+     * <ul>
+     *     <li> a: 1
+     *     <li> d: 4
+     *     <li> b: 2
+     *     <li> c: 3
      * </ul>
      *
      * <p> The time complexity of {@link #useBackend} is O(numBucketsPerBE), because it must update the counter backendUsedTimes
