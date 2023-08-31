@@ -84,6 +84,7 @@ jobs:
   FE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
+    if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       branch: ${{ needs.INFO.outputs.BASE_REF }}
@@ -320,6 +321,7 @@ jobs:
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
+    if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       branch: ${{ needs.INFO.outputs.BASE_REF }}
@@ -370,6 +372,7 @@ jobs:
   Admit-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
+    if: needs.INFO.outputs.PR_NUMBER != ''
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       branch: ${{ needs.INFO.outputs.BASE_REF }}
