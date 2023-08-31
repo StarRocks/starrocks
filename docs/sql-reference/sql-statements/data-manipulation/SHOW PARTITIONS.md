@@ -12,8 +12,13 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 
 > NOTE
 >
+<<<<<<< HEAD
 > - This syntax only supports StarRocks tables (`"ENGINE" = "OLAP"`). For Elasticsearch and Hive tables, use SHOW PROC '/dbs/db_id/table_id/partitions'.
 > - This operation requires the SELECT__PRIV privilege on the specified table.
+=======
+> This syntax only supports StarRocks tables (`"ENGINE" = "OLAP"`).
+> Since v3.0, this operation requires the SELECT privilege on the specified table. For v2.5 and earlier versions, this operation requires the SELECT__PRIV privilege on the specified table.
+>>>>>>> 895209bf97 ([Doc] add supported data types and delete obsolete desc in show partitions (#30138))
 
 ## Description of return fields
 
