@@ -526,7 +526,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePipelineEngine = true;
 
     /**
-     * The threshold for determining whether to use a more evenly distributed colocate algorithm during query execution.
+     * The threshold for determining whether to use a more evenly assignment bucket sequences to backend algorithm for query
+     * execution.
      *
      * <p> This algorithm is only used when {@code numBucketsPerBe} is smaller than this threshold, because the time complexity
      * of it is {@code numBucketsPerBe} times than the previous algorithm.
