@@ -101,8 +101,8 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 #### Precautions
 
-- **When  a table is created, you must specify the bucketing columns**.
-- The values of bucketing columns cannot be updated.
+- **When a table is created, you must specify the bucketing columns**.
+- The data types of bucketing columns must be INTEGER, DECIMAL, DATE/DATETIME, or CHAR/VARCHAR/STRING.
 - Bucketing columns cannot be modified after they are specified.
 
 #### Examples
