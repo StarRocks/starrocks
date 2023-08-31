@@ -324,6 +324,38 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
+    auto query_statistics = query_ctx->final_query_statistic();
+
+    TReportAuditStatisticsParams params;
+    params.__set_query_id(fragment_ctx->query_id());
+    params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+    query_statistics->to_params(&params);
+
+    auto fe_addr = fragment_ctx->fe_addr();
+    if (fe_addr.hostname.empty()) {
+        // query executed by external connectors, like spark and flink connector,
+        // does not need to report exec state to FE, so return if fe addr is empty.
+        return;
+    }
+
+    auto exec_env = fragment_ctx->runtime_state()->exec_env();
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
+    auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+    if (!status.ok()) {
+        if (status.is_not_found()) {
+            LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
+                      << print_id(fragment_id);
+        } else {
+            LOG(WARNING) << "[Driver] Fail to report audit statistics fragment_instance_id=" << print_id(fragment_id)
+                         << ", status: " << status.to_string();
+        }
+    } else {
+        LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+    }
+}
+
 size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
     return _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
