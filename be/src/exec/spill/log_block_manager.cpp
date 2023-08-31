@@ -43,6 +43,7 @@ public:
               _id(id) {}
 
     ~LogBlockContainer() {
+        _dir->update_current_size(-size());
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
         // try to delete related dir, only the last one can success, we ignore the error
@@ -169,13 +170,13 @@ public:
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
         if (_container->dir()->get_current_size() + total_size > _container->dir()->get_max_size()) {
             return Status::Aborted(
-                    fmt::format("Dir current used size has exceeded limit {}! Current size {}, total_size {}!",
+                    fmt::format("Dir used size will exceeded limit {}! Current size {}, try to append data size {}!",
                                 _container->dir()->get_max_size(), _container->dir()->get_current_size(), total_size));
         }
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
         _size += total_size;
-        _container->dir()->set_current_size(_container->dir()->get_current_size() + total_size);
+        _container->dir()->update_current_size(total_size);
         return Status::OK();
     }
 
