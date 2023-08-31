@@ -53,7 +53,7 @@ Status BinaryConverter::write_quoted_string(OutputStream* os, const Column& colu
     return os->write('"');
 }
 
-bool BinaryConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool BinaryConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     int max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
@@ -68,7 +68,8 @@ bool BinaryConverter::read_string(Column* column, Slice s, const Options& option
     return true;
 }
 
-bool BinaryConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool BinaryConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;
     }
