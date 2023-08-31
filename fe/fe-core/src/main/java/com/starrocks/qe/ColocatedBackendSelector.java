@@ -175,7 +175,8 @@ public class ColocatedBackendSelector implements BackendSelector {
      * {@link NormalBucketSequenceIterator}, so only use {@link BalancerBucketSequenceIterator} when  {@code numBucketsPerBe} is
      * smaller than the parameter {@code maxBucketsPerBeToUseBalancerAssignment}.
      */
-    private static BucketSequenceIterator createBucketIterator(OlapScanNode scanNode, int maxBucketsPerBeToUseBalancerAssignment) {
+    private static BucketSequenceIterator createBucketIterator(OlapScanNode scanNode,
+                                                               int maxBucketsPerBeToUseBalancerAssignment) {
         if (maxBucketsPerBeToUseBalancerAssignment <= 0) {
             return new NormalBucketSequenceIterator(scanNode);
         }
@@ -214,6 +215,7 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         /**
          * Record a bucket is assigned to a backend.
+         *
          * @param backendId the id of this backend.
          */
         void useBackend(Long backendId);
@@ -253,14 +255,14 @@ public class ColocatedBackendSelector implements BackendSelector {
      * <p> A high value indicates that some backends used by this bucket sequence might have been assigned a substantial number
      * of bucket sequences already, so it's advisable to assign this bucket sequence to the other backends as soon as possible.
      *
-     * <p> For example, assume that there are 4 buckets(a~d) and 4 BEs, and the distribution of buckets is as follows:
+     * <p> For example, assume that there are 4 buckets (a~d) and 4 BEs (1~4), and the distribution of buckets is as follows:
      * <ul>
      *     <li> a: 1, 3
      *     <li> b: 4, 2
      *     <li> c: 3, 2
      *     <li> d: 4, 1
      * </ul>
-     *
+     * <p>
      * By using {@link NormalBucketSequenceIterator}, the traverse order of the bucket sequences is a, b, c, d, and the result is
      * as follows:
      * <ul>
@@ -270,7 +272,7 @@ public class ColocatedBackendSelector implements BackendSelector {
      *     <li> d: 4 (here, both the backend #4 and #1 have already been selected once, resulting in either backend #4 or #1
      *     being responsible for two bucket sequences, while backend #2 remains unassigned any bucket sequence.)
      * </ul>
-     *
+     * <p>
      * By using {@link BalancerBucketSequenceIterator}, the traverse order of the bucket sequences is a, d, b, c, and the result
      * is as follows:
      * <ul>
