@@ -16,6 +16,7 @@
 
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
@@ -67,7 +68,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
             // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
             // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
-            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2) {
+            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
                 LOG(WARNING) << "different format version, we need to rebuild persistent index";
                 status = Status::InternalError("different format version");
             } else {
@@ -174,7 +176,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     _version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
@@ -293,6 +295,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                                                _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     _dump_snapshot = false;
     _flushed = false;
+    _primary_index->update_data_version(base_version);
 
     LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
