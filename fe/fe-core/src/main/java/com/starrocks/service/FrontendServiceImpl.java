@@ -210,13 +210,8 @@ import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
-<<<<<<< HEAD
-=======
-import com.starrocks.thrift.TReleaseSlotRequest;
-import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
->>>>>>> 728573e241 ([Enhancement] Support audic statistics for insert statement (#29901))
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
