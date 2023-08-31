@@ -292,8 +292,7 @@ public class CachingHiveMetastoreTest {
                 .setParameters(new HashMap<>()).build();
 
         HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
-        HivePartitionWithStats hivePartitionWithStats =
-                new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
+        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
         cachingHiveMetastore.alterPartition(hivePartitionWithStats);
     }
 

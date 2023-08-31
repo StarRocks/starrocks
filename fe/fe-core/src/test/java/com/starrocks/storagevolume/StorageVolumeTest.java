@@ -358,12 +358,10 @@ public class StorageVolumeTest {
     public void testFromFileStoreInfo() {
         AwsSimpleCredentialInfo simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder()
                 .setAccessKey("ak").setAccessKeySecret("sk").build();
-        AwsCredentialInfo credentialInfo =
-                AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
+        AwsCredentialInfo credentialInfo = AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
         S3FileStoreInfo s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
                 .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
-        FileStoreInfo fs =
-                FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        FileStoreInfo fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
         StorageVolume sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
 
@@ -375,7 +373,6 @@ public class StorageVolumeTest {
         fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
-
         AwsDefaultCredentialInfo defaultCredentialInfo = AwsDefaultCredentialInfo.newBuilder().build();
         credentialInfo = AwsCredentialInfo.newBuilder().setDefaultCredential(defaultCredentialInfo).build();
         s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
@@ -384,8 +381,7 @@ public class StorageVolumeTest {
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
 
-        AwsInstanceProfileCredentialInfo instanceProfileCredentialInfo =
-                AwsInstanceProfileCredentialInfo.newBuilder().build();
+        AwsInstanceProfileCredentialInfo instanceProfileCredentialInfo = AwsInstanceProfileCredentialInfo.newBuilder().build();
         credentialInfo = AwsCredentialInfo.newBuilder().setProfileCredential(instanceProfileCredentialInfo).build();
         s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
                 .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();

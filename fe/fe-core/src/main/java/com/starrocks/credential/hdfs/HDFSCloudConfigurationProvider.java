@@ -63,7 +63,6 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
             prop.remove(k);
         }
 
-        // TODO(yan): if we don't get username from properties, we can get username from query context.
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
                 getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
