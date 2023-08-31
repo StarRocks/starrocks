@@ -195,6 +195,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
+    runtime_state->set_fragment_ctx(_fragment_ctx.get());
 
     auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
     auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;

@@ -20,7 +20,6 @@ Returns a DOUBLE value.
 
 ## Examples
 
-<<<<<<< HEAD
 Sample dataset
 
 ```plain

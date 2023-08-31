@@ -77,12 +77,10 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
-<<<<<<< HEAD
+    auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                    : state->exec_env()->driver_executor();
+    executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     if (_is_open_done) {
-=======
-    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
-    if (_is_open_done && !_automatic_partition_chunk) {
->>>>>>> 728573e241 ([Enhancement] Support audic statistics for insert statement (#29901))
         // sink's open already finish, we can try_close
         return _sink->try_close(state);
     } else {

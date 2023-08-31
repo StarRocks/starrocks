@@ -48,7 +48,6 @@ void QueryStatistics::to_params(TReportAuditStatisticsParams* params) {
     params->__set_returned_rows(returned_rows);
     params->__set_cpu_cost_ns(cpu_ns);
     params->__set_mem_cost_bytes(mem_cost_bytes);
-    params->__set_spill_bytes(spill_bytes);
     {
         std::lock_guard l(_lock);
         for (const auto& [table_id, stats_item] : _stats_items) {
