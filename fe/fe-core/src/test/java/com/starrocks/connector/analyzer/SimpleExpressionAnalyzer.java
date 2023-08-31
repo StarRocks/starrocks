@@ -189,7 +189,7 @@ public class SimpleExpressionAnalyzer {
             throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+        protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
         }
 
