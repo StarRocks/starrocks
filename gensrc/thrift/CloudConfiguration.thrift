@@ -16,11 +16,12 @@ namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 enum TCloudType {
-    HDFS,
+    DEFAULT,
     AWS,
     AZURE,
     GCP,
-    ALIYUN
+    ALIYUN,
+    HDFS
 }
 
 // Deprecated
