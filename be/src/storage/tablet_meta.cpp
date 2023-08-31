@@ -196,7 +196,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -242,20 +242,11 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaP
     }
 
     // init _schema
-    if (ptablet_schema_pb == nullptr) {
-        if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
-            // Does not collect the memory usage of |_schema|.
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
-        } else {
-            _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
-        }
+    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
     } else {
-        if (ptablet_schema_pb->has_id() && ptablet_schema_pb->id() != TabletSchema::invalid_id()) {
-            // Does not collect the memory usage of |_schema|.
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ptablet_schema_pb).first;
-        } else {
-            _schema = std::make_shared<const TabletSchema>(*ptablet_schema_pb);
-        }
+        _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
 
     // init _rs_metas
@@ -537,6 +528,16 @@ void TabletMeta::create_inital_updates_meta() {
     _updatesPB->mutable_apply_version()->set_minor(edit_version_pb->minor());
     _updatesPB->set_next_log_id(0);
     _updatesPB->set_next_rowset_id(0);
+}
+
+void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
+    _schema.reset();
+    if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+    } else {
+        _schema = std::make_shared<const TabletSchema>(schema_pb);
+    }
 }
 
 bool operator==(const TabletMeta& a, const TabletMeta& b) {
