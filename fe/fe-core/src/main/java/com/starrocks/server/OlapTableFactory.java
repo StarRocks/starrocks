@@ -59,7 +59,6 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang3.StringUtils;
@@ -310,7 +309,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                         table.setEnablePersistentIndex(false);
                     }
                 } else {
-                    table.setPersistentIndexType(TPersistentIndexType.LOCAL);
+                    try {
+                        table.setPersistentIndexType(PropertyAnalyzer.analyzePersistentIndexType(properties));
+                    } catch (AnalysisException e) {
+                        throw new DdlException(e.getMessage());
+                    }
                 }
 
             }
