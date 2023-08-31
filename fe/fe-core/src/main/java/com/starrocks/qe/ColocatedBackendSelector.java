@@ -181,16 +181,15 @@ public class ColocatedBackendSelector implements BackendSelector {
                 continue;
             }
 
-            for (TScanRangeLocations locations : bucketLocations) {
-                for (TScanRangeLocation location : locations.getLocations()) {
-                    backends.add(location.getBackend_id());
-                }
+            TScanRangeLocations firstLocations = bucketLocations.get(0);
+            for (TScanRangeLocation location : firstLocations.getLocations()) {
+                backends.add(location.getBackend_id());
             }
-
-            numTotalBuckets += bucketLocations.get(0).getLocationsSize();
+            numTotalBuckets += firstLocations.getLocationsSize();
         }
 
-        if (numTotalBuckets / backends.size() <= maxBucketsPerBeToUseBalancerAssignment) {
+        boolean useBalancerAssignment = numTotalBuckets <= maxBucketsPerBeToUseBalancerAssignment * backends.size();
+        if (useBalancerAssignment) {
             return new BalancerBucketIterator(scanNode);
         } else {
             return new NormalBucketIterator(scanNode);
@@ -246,7 +245,9 @@ public class ColocatedBackendSelector implements BackendSelector {
                 if (bucketLocations.isEmpty()) {
                     continue;
                 }
-                for (TScanRangeLocation location : bucketLocations.get(0).getLocations()) {
+
+                TScanRangeLocations firstLocations = bucketLocations.get(0);
+                for (TScanRangeLocation location : firstLocations.getLocations()) {
                     backendToBuckets.computeIfAbsent(location.getBackend_id(), k -> new HashSet<>()).add(bucket);
                 }
             }
