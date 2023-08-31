@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -182,7 +183,7 @@ public class AstToStringBuilder {
             sb.append(Joiner.on(", ").join(privList));
             sb.append(" ON ");
 
-            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+            if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
                 sb.append(stmt.getObjectType().name());
             } else {
                 if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
@@ -1175,6 +1176,11 @@ public class AstToStringBuilder {
                     break;
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return visitFunctionCall(node, context);
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {

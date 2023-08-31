@@ -285,7 +285,6 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } else {
             GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
-            return analyzeStatus;
         }
 
         // update StatisticsCache
@@ -300,11 +299,19 @@ public class StatisticExecutor {
                         Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
             }
         } else {
-            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-            GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), refreshAsync);
+            if (table.isNativeTableOrMaterializedView()) {
+                BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
+                        statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
+                        statsJob.getProperties());
+                GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
+                        basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
+                        refreshAsync);
+            } else {
+                // for external table
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(table,
+                        statsJob.getColumns(), refreshAsync);
+            }
         }
         return analyzeStatus;
     }

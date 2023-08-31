@@ -336,6 +336,11 @@ public class SelectAnalyzer {
                 // but should be parsed in sourceScope
                 analyzeExpression(expression, analyzeState, orderByScope.getParent());
             } else {
+                ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+                expressionAnalyzer.analyzeWithoutUpdateState(expression, analyzeState, orderByScope);
+                List<Expr> aggregations = Lists.newArrayList();
+                expression.collectAll(e -> e.isAggregate(), aggregations);
+                aggregations.forEach(e -> analyzeExpression(e, analyzeState, orderByScope.getParent()));
                 analyzeExpression(expression, analyzeState, orderByScope);
             }
 
@@ -417,7 +422,7 @@ public class SelectAnalyzer {
     }
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
-                                                       List<Expr> outputAndOrderByExpressions) {
+                                                          List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
