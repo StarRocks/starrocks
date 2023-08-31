@@ -781,6 +781,7 @@ public class DDLStmtExecutor {
                     statsConnectCtx.setThreadLocalInfo();
                     StatisticExecutor statisticExecutor = new StatisticExecutor();
                     analyzeJob.run(statsConnectCtx, statisticExecutor);
+                    statsConnectCtx.close();
                 });
                 thread.start();
             });

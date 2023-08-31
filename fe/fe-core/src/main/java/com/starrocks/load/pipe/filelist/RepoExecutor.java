@@ -55,8 +55,7 @@ public class RepoExecutor {
     }
 
     public void executeDML(String sql) {
-        try {
-            ConnectContext context = createConnectContext();
+        try (ConnectContext context = createConnectContext()) {
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
@@ -69,14 +68,11 @@ public class RepoExecutor {
         } catch (Exception e) {
             LOG.error("RepoExecutor execute SQL {} failed: {}", sql, e.getMessage(), e);
             throw new SemanticException(String.format("execute sql failed: %s", e.getMessage()), e);
-        } finally {
-            ConnectContext.remove();
         }
     }
 
     public List<TResultBatch> executeDQL(String sql) {
-        try {
-            ConnectContext context = createConnectContext();
+        try (ConnectContext context = createConnectContext()) {
 
             // TODO: use json sink protocol, instead of statistic protocol
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
@@ -92,14 +88,11 @@ public class RepoExecutor {
         } catch (Exception e) {
             LOG.error("Repo execute SQL failed {}", sql, e);
             throw new SemanticException("execute sql failed: " + sql, e);
-        } finally {
-            ConnectContext.remove();
         }
     }
 
     public void executeDDL(String sql) {
-        try {
-            ConnectContext context = createConnectContext();
+        try (ConnectContext context = createConnectContext()) {
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
@@ -107,8 +100,6 @@ public class RepoExecutor {
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
             throw new RuntimeException(e);
-        } finally {
-            ConnectContext.remove();
         }
     }
 

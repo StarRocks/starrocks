@@ -190,17 +190,18 @@ public class StatisticExecutor {
                 "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setThreadLocalInfo();
-        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        try (ConnectContext context = StatisticUtils.buildConnectContext()) {
+            context.setThreadLocalInfo();
+            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
-        if (!sqlResult.second.ok()) {
-            return Pair.create(Collections.emptyList(), sqlResult.second);
-        } else {
-            return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+            ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+            if (!sqlResult.second.ok()) {
+                return Pair.create(Collections.emptyList(), sqlResult.second);
+            } else {
+                return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
+            }
         }
     }
 

@@ -1066,13 +1066,14 @@ public class StmtExecutor {
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
-        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        // from current session, may execute analyze stmt
-        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
-                context.getSessionVariable().getStatisticCollectParallelism());
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
-        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
+            // from current session, may execute analyze stmt
+            statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                    context.getSessionVariable().getStatisticCollectParallelism());
+            statsConnectCtx.setThreadLocalInfo();
+            statsConnectCtx.setStatisticsConnection(true);
+            executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        }
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,

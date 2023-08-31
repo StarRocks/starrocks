@@ -170,7 +170,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             doMvRefresh(context);
         } finally {
             postProcess();
-            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
     }
 

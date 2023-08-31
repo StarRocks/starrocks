@@ -81,10 +81,11 @@ public class StatisticAutoCollector extends FrontendDaemon {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                statsConnectCtx.setStatisticsConnection(true);
-                statsConnectCtx.setThreadLocalInfo();
-                STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
+                try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
+                    statsConnectCtx.setStatisticsConnection(true);
+                    statsConnectCtx.setThreadLocalInfo();
+                    STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
+                }
             }
             LOG.info("auto collect full statistic on all databases end");
         } else {
@@ -94,10 +95,11 @@ public class StatisticAutoCollector extends FrontendDaemon {
                     .collect(Collectors.joining(", "));
             LOG.info("auto collect statistic on analyze job[{}] start", jobIds);
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                statsConnectCtx.setStatisticsConnection(true);
-                statsConnectCtx.setThreadLocalInfo();
-                analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+                try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
+                    statsConnectCtx.setStatisticsConnection(true);
+                    statsConnectCtx.setThreadLocalInfo();
+                    analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+                }
             }
             LOG.info("auto collect statistic on analyze job[{}] end", jobIds);
         }

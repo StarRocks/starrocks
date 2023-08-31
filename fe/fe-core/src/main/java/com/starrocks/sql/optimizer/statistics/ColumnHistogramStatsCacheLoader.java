@@ -60,8 +60,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData =
                         queryHistogramStatistics(connectContext, cacheKey.tableId, Lists.newArrayList(cacheKey.column));
@@ -84,7 +83,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ColumnStatsCacheKey, Optional<Histogram>> result = new HashMap<>();
-            try {
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
                 for (ColumnStatsCacheKey key : keys) {
@@ -92,7 +91,6 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                     columns.add(key.column);
                     result.put(key, Optional.empty());
                 }
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
 
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(connectContext, tableId, columns);

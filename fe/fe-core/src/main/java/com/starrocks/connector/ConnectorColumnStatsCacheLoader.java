@@ -52,8 +52,7 @@ public class ConnectorColumnStatsCacheLoader implements
     public @NonNull CompletableFuture<Optional<ConnectorTableColumnStats>> asyncLoad(@NonNull ConnectorTableColumnKey cacheKey,
                                                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableUUID, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
@@ -75,7 +74,7 @@ public class ConnectorColumnStatsCacheLoader implements
             @NonNull Iterable<? extends @NonNull ConnectorTableColumnKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
 
-            try {
+            try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
                 String tableUUID = null;
                 List<String> columns = new ArrayList<>();
                 for (ConnectorTableColumnKey key : keys) {
@@ -83,7 +82,6 @@ public class ConnectorColumnStatsCacheLoader implements
                     columns.add(key.column);
                 }
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableUUID, columns);
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = Maps.newHashMap();

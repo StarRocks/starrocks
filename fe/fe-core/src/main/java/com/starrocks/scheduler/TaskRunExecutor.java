@@ -56,6 +56,7 @@ public class TaskRunExecutor {
                 status.setErrorCode(-1);
                 status.setErrorMessage(ex.toString());
             } finally {
+                taskRun.close();
                 status.setFinishTime(System.currentTimeMillis());
             }
             return status.getState();

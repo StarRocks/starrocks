@@ -63,7 +63,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -83,7 +82,7 @@ import javax.net.ssl.SSLContext;
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
 // connect with its connection id.
-public class ConnectContext {
+public class ConnectContext implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
     protected static ThreadLocal<ConnectContext> threadLocalInfo = new ThreadLocal<>();
 
@@ -786,14 +785,15 @@ public class ConnectContext {
         }
     }
 
-    public StmtExecutor executeSql(String sql) throws Exception {
-        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
-        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
-        setExecutor(executor);
-        setThreadLocalInfo();
-        executor.execute();
-        return executor;
+    /**
+     * Release resource of this connection
+     */
+    @Override
+    public void close() {
+        GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
+        QeProcessorImpl.INSTANCE.unregisterQuery(getExecutionId());
+        remove();
+        LOG.info("close connection {}", connectionId);
     }
 
     public class ThreadInfo {

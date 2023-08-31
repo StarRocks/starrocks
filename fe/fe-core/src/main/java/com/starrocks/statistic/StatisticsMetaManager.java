@@ -302,19 +302,20 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean createTable(String tableName) {
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        context.setThreadLocalInfo();
+        try (ConnectContext context = StatisticUtils.buildConnectContext()) {
+            context.setThreadLocalInfo();
 
-        if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
-            return createSampleStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
-            return createFullStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createHistogramStatisticsTable(context);
-        } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
-            return createExternalFullStatisticsTable(context);
-        } else {
-            throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+            if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
+                return createSampleStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
+                return createFullStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                return createHistogramStatisticsTable(context);
+            } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
+                return createExternalFullStatisticsTable(context);
+            } else {
+                throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
+            }
         }
     }
 

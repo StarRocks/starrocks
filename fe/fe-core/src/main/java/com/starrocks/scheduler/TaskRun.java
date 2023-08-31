@@ -263,6 +263,12 @@ public class TaskRun implements Comparable<TaskRun> {
         return status;
     }
 
+    public void close() {
+        if (runCtx != null) {
+            runCtx.close();
+        }
+    }
+
     @Override
     public int compareTo(@NotNull TaskRun taskRun) {
         if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
