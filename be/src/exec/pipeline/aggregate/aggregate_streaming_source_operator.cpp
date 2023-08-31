@@ -85,7 +85,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
     RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
 
     if (_aggregator->is_streaming_all_states() && _aggregator->is_ht_eos()) {
-        RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
+        RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr, false));
         _aggregator->set_streaming_all_states(false);
     }
 
