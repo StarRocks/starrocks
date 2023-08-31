@@ -63,6 +63,7 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.authentication.LDAPSecurityIntegration;
@@ -243,6 +244,7 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AlterJobV2.class, "clazz")
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
+                    .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"

@@ -22,6 +22,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
@@ -36,13 +37,13 @@ import java.util.List;
 /*
  * ShowAlterStmt: used to show process state of alter statement.
  * Syntax:
- *      SHOW ALTER TABLE [COLUMN | ROLLUP | MATERIALIZED_VIEW] [FROM dbName] [WHERE TableName="xxx"]
+ *      SHOW ALTER TABLE [COLUMN | ROLLUP | MATERIALIZED_VIEW | OPTIMIZE ] [FROM dbName] [WHERE TableName="xxx"]
  *      [ORDER BY CreateTime DESC] [LIMIT [offset,]rows]
  */
 public class ShowAlterStmt extends ShowStmt {
 
     public enum AlterType {
-        COLUMN, ROLLUP, MATERIALIZED_VIEW
+        COLUMN, ROLLUP, MATERIALIZED_VIEW, OPTIMIZE
     }
 
     private final AlterType type;
@@ -131,6 +132,8 @@ public class ShowAlterStmt extends ShowStmt {
             titleNames = RollupProcDir.TITLE_NAMES;
         } else if (type == AlterType.COLUMN) {
             titleNames = SchemaChangeProcDir.TITLE_NAMES;
+        } else if (type == AlterType.OPTIMIZE) {
+            titleNames = OptimizeProcDir.TITLE_NAMES;
         }
 
         for (String title : titleNames) {

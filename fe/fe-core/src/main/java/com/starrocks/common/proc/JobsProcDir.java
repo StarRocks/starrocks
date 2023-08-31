@@ -62,6 +62,7 @@ public class JobsProcDir implements ProcDirInterface {
     private static final String ROLLUP = "rollup";
     private static final String SCHEMA_CHANGE = "schema_change";
     private static final String EXPORT = "export";
+    private static final String OPTIMIZE = "optimize";
 
     private GlobalStateMgr globalStateMgr;
     private Database db;
@@ -91,6 +92,8 @@ public class JobsProcDir implements ProcDirInterface {
             return new RollupProcDir(globalStateMgr.getRollupHandler(), db);
         } else if (jobTypeName.equals(SCHEMA_CHANGE)) {
             return new SchemaChangeProcDir(globalStateMgr.getSchemaChangeHandler(), db);
+        } else if (jobTypeName.equals(OPTIMIZE)) {
+            return new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), db);
         } else if (jobTypeName.equals(EXPORT)) {
             return new ExportProcNode(globalStateMgr.getExportMgr(), db);
         } else {
