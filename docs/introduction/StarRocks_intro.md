@@ -49,10 +49,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Load data from HDFS](../loading/hdfs_load.md)
 - [Load data from cloud storage](../loading/cloud_storage_load.md)
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
+- [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 - [Load data using Apache Spark™](../loading/Spark-connector-starrocks.md)
 - [Load data using INSERT](../loading/InsertInto.md)
 - [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
-- [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -73,6 +73,8 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [JSON](../sql-reference/sql-statements/data-types/JSON.md)
 - [ARRAY](../sql-reference/sql-statements/data-types/Array.md)
+- [MAP](../sql-reference/sql-statements/data-types/Map.md)
+- [STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -84,9 +86,8 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
 - [Delta Lake](../data_source/catalog/deltalake_catalog.md)
-- [MySQL](../data_source/External_table.md#mysql-external-table)
-- [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
-- [JDBC-compatible database](../data_source/catalog/jdbc_catalog.md)
+- [MySQL and PostgreSQL](../data_source/catalog/jdbc_catalog.md)
+- [Elasticsearch](../data_source/catalog/elasticsearch_catalog.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Integration​">
