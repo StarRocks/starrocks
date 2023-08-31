@@ -647,7 +647,7 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 TEST_F(ParquetScannerTest, int96_timestamp) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime", {"9999-12-31 23:59:59", "2006-01-02 15:04:05"}}};
+            {"col_datetime", {"9999-12-31 23:59:59.009999", "2006-01-02 15:04:05"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
@@ -704,6 +704,32 @@ TEST_F(ParquetScannerTest, get_file_schema) {
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
+    }
+}
+
+TEST_F(ParquetScannerTest, datetime) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/datetime.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_datetime",
+             {"2006-01-02 15:04:05", "2006-01-02 15:04:05.900000", "2006-01-02 15:04:05.999900",
+              "2006-01-02 15:04:05.999990", "2006-01-02 15:04:05.999999"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 5);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
     }
 }
 
