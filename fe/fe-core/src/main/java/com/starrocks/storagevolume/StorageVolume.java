@@ -268,7 +268,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
-        if (svt == StorageVolumeType.AZBLOB) {
+        if (svt == StorageVolumeType.HDFS) {
+            params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
+        } else if (svt == StorageVolumeType.AZBLOB) {
             String container = locations.get(0).split("/")[0];
             params.put(AZURE_BLOB_CONTAINER, container);
         }
