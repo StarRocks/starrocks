@@ -387,3 +387,38 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
+
+  Teardown:
+    runs-on: [self-hosted, normal]
+    name: Teardown
+    needs: [ fe-ut, be-ut ]
+    if: always()
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
+    steps:
+      - name: upload info
+        if: always()
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo ${GITHUB_SHA} > head_sha.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v2
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
+          retention-days: 3
+
+      - name: Clean
+        run: |
+          rm -rf ${{ github.workspace }}/*
