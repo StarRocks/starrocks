@@ -34,6 +34,8 @@ import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.MockedFrontend;
+import org.apache.hadoop.conf.Configuration;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,6 +43,9 @@ import org.junit.Test;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -56,6 +61,12 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_IN
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_FILE;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
 
 public class StorageVolumeTest {
     private static ConnectContext connectContext;
@@ -183,9 +194,9 @@ public class StorageVolumeTest {
     @Test
     public void testHDFSSimpleCredential() {
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put("hadoop.security.authentication", "simple");
-        storageParams.put("username", "username");
-        storageParams.put("password", "password");
+        storageParams.put(HDFS_AUTHENTICATION, "simple");
+        storageParams.put(HDFS_USERNAME, "username");
+        storageParams.put(HDFS_PASSWORD, "password");
         storageParams.put("dfs.nameservices", "ha_cluster");
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
@@ -202,9 +213,9 @@ public class StorageVolumeTest {
         Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
 
         Map<String, String> storageParams1 = new HashMap<>();
-        storageParams1.put("hadoop.security.authentication", "simple");
-        storageParams1.put("username", "username");
-        storageParams1.put("password", "password");
+        storageParams1.put(HDFS_AUTHENTICATION, "simple");
+        storageParams1.put(HDFS_USERNAME, "username");
+        storageParams1.put(HDFS_PASSWORD, "password");
         sv = new StorageVolume("2", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams1, true, "");
         cloudConfiguration = sv.getCloudConfiguration();
@@ -217,9 +228,9 @@ public class StorageVolumeTest {
     @Test
     public void testHDFSKerberosCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put("hadoop.security.authentication", "kerberos");
-        storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
-        storageParams.put("kerberos_keytab", "/keytab/hive.keytab");
+        storageParams.put(HDFS_AUTHENTICATION, "kerberos");
+        storageParams.put(HDFS_KERBEROS_PRINCIPAL, "nn/abc@ABC.COM");
+        storageParams.put(HDFS_KERBEROS_KEYTAB_FILE, "/keytab/hive.keytab");
         storageParams.put("dfs.nameservices", "ha_cluster");
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
@@ -248,6 +259,39 @@ public class StorageVolumeTest {
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasHdfsFsInfo());
+    }
+
+    @Test
+    public void testHDFSAddConfigResources() {
+        String runningDir = MockedFrontend.getInstance().getRunningDir();
+        String confFile = runningDir + "/conf/hdfs-site.xml";
+        String content = "<configuration>\n" +
+                "   <property>\n" +
+                "      <name>XXX</name>\n" +
+                "      <value>YYY</value>\n" +
+                "   </property>\n" +
+                "   </configuration>";
+        Path path = Paths.get(confFile);
+        try {
+            Files.write(path, content.getBytes());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_CONFIG_RESOURCES, confFile);
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+
+        Configuration conf = new Configuration();
+        hdfsCloudConfiguration.applyToConfiguration(conf);
+        Assert.assertEquals(conf.get("XXX"), "YYY");
     }
 
     @Test

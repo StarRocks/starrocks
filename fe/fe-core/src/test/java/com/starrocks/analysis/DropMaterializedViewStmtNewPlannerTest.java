@@ -39,18 +39,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
 public class DropMaterializedViewStmtNewPlannerTest {
-
-    private static String runningDir = "fe/mocked/DropMaterializedViewStmtNewPlannerTest/" + UUID.randomUUID() + "/";
-
     private static ConnectContext connectContext;
 
     @BeforeClass
@@ -66,16 +59,11 @@ public class DropMaterializedViewStmtNewPlannerTest {
         connectContext.setDatabase("test");
     }
 
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
-    }
-
     @Test
     public void testNormal() throws Exception {
         String dropMvSql = "drop materialized view mv1;";
-        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        DropMaterializedViewStmt dropMvStmt =
+                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         String dbName = dropMvStmt.getDbName();
         String mvName = dropMvStmt.getMvName();
         Assert.assertEquals("test", dbName);
@@ -86,7 +74,8 @@ public class DropMaterializedViewStmtNewPlannerTest {
     @Test
     public void testIfExistsNormal() throws Exception {
         String dropMvSql = "drop materialized view if exists mv1;";
-        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        DropMaterializedViewStmt dropMvStmt =
+                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         Assert.assertEquals(true, dropMvStmt.isSetIfExists());
     }
 }
