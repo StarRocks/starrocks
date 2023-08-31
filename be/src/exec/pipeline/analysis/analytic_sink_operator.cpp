@@ -74,7 +74,7 @@ void AnalyticSinkOperator::close(RuntimeState* state) {
 Status AnalyticSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _analytor->input_eos() = true;
-    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
+    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)(state));
     _analytor->sink_complete();
     return Status::OK();
 }
@@ -87,14 +87,14 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
     _analytor->remove_unused_buffer_values(state);
 
     RETURN_IF_ERROR(_analytor->add_chunk(chunk));
-    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
+    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)(state));
 
     return _analytor->check_has_error();
 }
 
-Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() {
+Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing(RuntimeState* state) {
     while (_analytor->has_output()) {
-        if (_analytor->reached_limit()) {
+        if (_analytor->reached_limit() || state->is_cancelled()) {
             return Status::OK();
         }
 
@@ -112,7 +112,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() 
             _analytor->reset_state_for_cur_partition();
         }
 
-        (this->*_process_by_partition)(chunk_size, is_new_partition);
+        (this->*_process_by_partition)(state, chunk_size, is_new_partition);
 
         // Chunk may contains multiply partitions, so the chunk need to be reprocessed
         if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
@@ -124,13 +124,14 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() 
     return Status::OK();
 }
 
-Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_preceding_rows_frame_streaming() {
+Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_preceding_rows_frame_streaming(
+        RuntimeState* state) {
     // When set_finishing(), the has_output() may be false, so add the check
     if (!_analytor->has_output()) {
         return Status::OK();
     }
 
-    if (_analytor->reached_limit()) {
+    if (_analytor->reached_limit() || state->is_cancelled()) {
         return Status::OK();
     }
 
@@ -170,7 +171,8 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
     return Status::OK();
 }
 
-Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming() {
+Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming(
+        RuntimeState* state) {
     // reset state for the first partition
     if (_analytor->current_row_position() == 0) {
         _analytor->reset_window_state();
@@ -178,7 +180,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
 
     bool has_finish_current_partition = true;
     while (_analytor->has_output()) {
-        if (_analytor->reached_limit()) {
+        if (_analytor->reached_limit() || state->is_cancelled()) {
             return Status::OK();
         }
         if (has_finish_current_partition) {
@@ -223,7 +225,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
                 RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
                 _analytor->offer_chunk_to_buffer(chunk);
             }
-            if (_analytor->reached_limit()) {
+            if (_analytor->reached_limit() || state->is_cancelled()) {
                 return Status::OK();
             }
         }
@@ -240,7 +242,8 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
     return Status::OK();
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition) {
+void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(RuntimeState* state, size_t chunk_size,
+                                                                     bool is_new_partition) {
     if (is_new_partition) {
         _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
                                        _analytor->partition_start(), _analytor->partition_end());
@@ -257,7 +260,7 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(size_t chun
 }
 
 void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame_materializing(
-        size_t chunk_size, bool is_new_partition) {
+        RuntimeState* state, size_t chunk_size, bool is_new_partition) {
     while (_analytor->current_row_position() < _analytor->partition_end() &&
            !_analytor->is_current_chunk_finished_eval(chunk_size)) {
         _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
@@ -273,7 +276,8 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
     }
 }
 
-void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
+void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(RuntimeState* state, size_t chunk_size,
+                                                                   bool is_new_partition) {
     if (_analytor->support_cumulative_algo()) {
         while (_analytor->current_row_position() < _analytor->partition_end() &&
                !_analytor->is_current_chunk_finished_eval(chunk_size)) {
