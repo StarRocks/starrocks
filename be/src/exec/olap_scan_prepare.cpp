@@ -379,7 +379,8 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
                 for (const auto& value : pred->hash_set()) {
                     values.insert(value);
                 }
-                range->add_fixed_values(FILTER_IN, values);
+                auto st = range->add_fixed_values(FILTER_IN, values);
+                st.permit_unchecked_error();
             }
         }
     }

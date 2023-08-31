@@ -391,12 +391,13 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     }
 
     root_path = _location_provider->txn_log_root_location(tablet_id);
-    // It's ok to ignore the error here.
-    (void)fs->iterate_dir(root_path, scan_cb);
+    st = fs->iterate_dir(root_path, scan_cb);
+    st.permit_unchecked_error();
 
     for (const auto& obj : objects) {
         erase_metacache(obj);
-        (void)fs->delete_file(obj);
+        st = fs->delete_file(obj);
+        st.permit_unchecked_error();
     }
     //drop tablet schema from metacache;
     erase_metacache(tablet_schema_cache_key(tablet_id));
@@ -923,7 +924,8 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     } else if (!st.ok()) {
         return st;
     } else {
-        (void)fs::delete_file(txn_log_path);
+        st = fs::delete_file(txn_log_path);
+        st.permit_unchecked_error();
         return Status::OK();
     }
 }

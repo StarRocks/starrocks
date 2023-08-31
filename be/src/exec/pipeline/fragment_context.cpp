@@ -170,10 +170,11 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << ss.str();
             }
             DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
-            iterate_drivers([executor](const DriverPtr& driver) {
+            auto st = iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
             });
+            st.permit_unchecked_error();
         }
     }
 }

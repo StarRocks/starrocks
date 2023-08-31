@@ -606,9 +606,11 @@ void Aggregator::close(RuntimeState* state) {
     };
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
-        promise_st->get_future().get();
+        auto st = promise_st->get_future().get();
+        st.permit_unchecked_error();
     } else {
-        agg_close();
+        auto st = agg_close();
+        st.permit_unchecked_error();
     }
 }
 

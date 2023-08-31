@@ -42,7 +42,8 @@ public:
     }
 
     Status set_finished(RuntimeState* state) override {
-        _intersect_ctx->set_finished();
+        auto st = _intersect_ctx->set_finished();
+        st.permit_unchecked_error();
         return Status::OK();
     }
 

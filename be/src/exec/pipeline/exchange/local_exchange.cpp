@@ -230,12 +230,13 @@ Status BroadcastExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
 
 Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t sources_num = _source->get_sources().size();
+    Status st;
     if (sources_num == 1) {
-        _source->get_sources()[0]->add_chunk(chunk);
+        st = _source->get_sources()[0]->add_chunk(chunk);
     } else {
-        _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
+        st = _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
     }
-
+    st.permit_unchecked_error();
     return Status::OK();
 }
 

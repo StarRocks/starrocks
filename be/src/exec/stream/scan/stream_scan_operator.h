@@ -62,7 +62,8 @@ public:
     Status set_epoch_finished(RuntimeState* state) override;
 
     Status do_prepare(RuntimeState* state) override {
-        ConnectorScanOperator::do_prepare(state);
+        auto st = ConnectorScanOperator::do_prepare(state);
+        st.permit_unchecked_error();
         _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
         DCHECK(_stream_epoch_manager);
         return Status::OK();

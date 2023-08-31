@@ -73,9 +73,9 @@ public:
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
 
-    Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
+    [[nodiscard]] Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 
-    Status add_range(SQLFilterOp op, T value);
+    [[nodiscard]] Status add_range(SQLFilterOp op, T value);
 
     void set_precision(int precision);
 

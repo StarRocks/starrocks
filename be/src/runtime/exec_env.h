@@ -111,13 +111,14 @@ public:
     GlobalEnv() = default;
     ~GlobalEnv() { _is_init = false; }
 
-    Status init();
+    [[nodiscard]] Status init();
+
     void stop() {
         _is_init = false;
         _reset_tracker();
     }
 
-    static bool is_init();
+    [[nodiscard]] static bool is_init();
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
@@ -151,10 +152,10 @@ public:
 private:
     static bool _is_init;
 
-    Status _init_mem_tracker();
+    [[nodiscard]] Status _init_mem_tracker();
     void _reset_tracker();
 
-    Status _init_storage_page_cache();
+    [[nodiscard]] Status _init_storage_page_cache();
 
     template <class... Args>
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
@@ -217,7 +218,7 @@ private:
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
+    [[nodiscard]] Status init(const std::vector<StorePath>& store_paths, bool as_cn = false);
     void stop();
     void destroy();
     void wait_for_finish();

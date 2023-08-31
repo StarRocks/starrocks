@@ -431,7 +431,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
-    tablet_manager->start_trash_sweep();
+    CHECK(tablet_manager->start_trash_sweep().ok());
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -508,7 +508,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
-    tablet_manager->start_trash_sweep();
+    CHECK(tablet_manager->start_trash_sweep().ok());
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -557,7 +557,7 @@ int main(int argc, char** argv) {
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
-    starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
+    CHECK(starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir).ok());
 
     starrocks::date::init_date_cache();
     starrocks::TimezoneUtils::init_time_zones();
@@ -586,15 +586,15 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    global_env->init();
+    CHECK(global_env->init().ok());
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    exec_env->init(paths);
+    CHECK(exec_env->init(paths).ok());
     int r = RUN_ALL_TESTS();
 
     sleep(10);
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
+    CHECK(starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     starrocks::fs::remove_all(storage_root.value());
     starrocks::TEST_clear_all_columns_this_thread();
     // delete engine

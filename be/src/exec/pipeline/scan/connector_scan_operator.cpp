@@ -472,7 +472,8 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    _data_source->parse_runtime_filters(state);
+    auto st = _data_source->parse_runtime_filters(state);
+    st.permit_unchecked_error();
     return Status::OK();
 }
 

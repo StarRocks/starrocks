@@ -65,22 +65,23 @@ public:
     ~UserFunctionCache();
 
     // initialize this cache, call this function before others
-    Status init(const std::string& local_path);
+    [[nodiscard]] Status init(const std::string& local_path);
 
     static UserFunctionCache* instance();
 
-    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, std::string* libpath);
+    [[nodiscard]] Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum,
+                                     std::string* libpath);
 
     static int get_function_type(const std::string& url);
 
 private:
-    Status _load_cached_lib();
-    Status _load_entry_from_lib(const std::string& dir, const std::string& file);
-    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                            UserFunctionCacheEntryPtr* output_entry);
-    Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry);
-    Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
-    Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry);
+    [[nodiscard]] Status _load_cached_lib();
+    [[nodiscard]] Status _load_entry_from_lib(const std::string& dir, const std::string& file);
+    [[nodiscard]] Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
+                                          UserFunctionCacheEntryPtr* output_entry);
+    [[nodiscard]] Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry);
+    [[nodiscard]] Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
+    [[nodiscard]] Status _load_cache_entry_internal(UserFunctionCacheEntryPtr& entry);
     std::string _make_lib_file(int64_t function_id, const std::string& checksum, const std::string& shuffix);
     void _destroy_cache_entry(UserFunctionCacheEntryPtr& entry);
 

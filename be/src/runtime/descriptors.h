@@ -403,8 +403,8 @@ class DescriptorTbl {
 public:
     // Creates a descriptor tbl within 'pool' from thrift_tbl and returns it via 'tbl'.
     // Returns OK on success, otherwise error (in which case 'tbl' will be unset).
-    static Status create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
-                         int32_t chunk_size);
+    [[nodiscard]] static Status create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
+                                       DescriptorTbl** tbl, int32_t chunk_size);
 
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;

@@ -231,8 +231,7 @@ Status GlobalEnv::_init_mem_tracker() {
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
-    _init_storage_page_cache(); // TODO: move to StorageEngine
-    return Status::OK();
+    return _init_storage_page_cache(); // TODO: move to StorageEngine
 }
 
 void GlobalEnv::_reset_tracker() {
@@ -427,7 +426,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
-    _result_mgr->init();
+    RETURN_IF_ERROR(_result_mgr->init());
 
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
@@ -478,7 +477,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _agent_server->init_or_die();
 
     _broker_mgr->init();
-    _small_file_mgr->init();
+    RETURN_IF_ERROR(_small_file_mgr->init());
 
     RETURN_IF_ERROR(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
 

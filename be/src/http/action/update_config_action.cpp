@@ -109,7 +109,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             if (mgr != nullptr) {
-                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+                auto st = mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+                st.permit_unchecked_error(); // TODO: handle error
             }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
@@ -121,8 +122,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-            (void)thread_pool->update_max_threads(
+            auto st = thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
+            st.permit_unchecked_error();
         });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
@@ -140,15 +142,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::transaction_apply_worker_count > 0) {
                 max_thread_cnt = config::transaction_apply_worker_count;
             }
-            (void)StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+            auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(
+                    max_thread_cnt);
+            st.permit_unchecked_error();
         });
         _config_callback.emplace("get_pindex_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::get_pindex_worker_count > 0) {
                 max_thread_cnt = config::get_pindex_worker_count;
             }
-            (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+            auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
                     max_thread_cnt);
+            st.permit_unchecked_error();
         });
     });
 

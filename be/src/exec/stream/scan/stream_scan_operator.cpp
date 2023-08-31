@@ -63,7 +63,8 @@ void StreamScanOperator::_reset_chunk_source(RuntimeState* state, int chunk_sour
     auto binlog_offset = _stream_epoch_manager->get_binlog_offset(state->fragment_instance_id(), _id, tablet_id);
 
     DCHECK(binlog_offset != nullptr);
-    chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+    auto st = chunk_source->set_stream_offset(binlog_offset->tablet_version, binlog_offset->lsn);
+    st.permit_unchecked_error();
     chunk_source->set_epoch_limit(_current_epoch_info.max_scan_rows, _current_epoch_info.max_exec_millis);
     chunk_source->reset_status();
 }
@@ -92,7 +93,8 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
-            set_finishing(state);
+            auto st = set_finishing(state);
+            st.permit_unchecked_error();
             return status;
         }
         need_detach = false;
@@ -262,7 +264,8 @@ Status StreamScanOperator::set_epoch_finished(RuntimeState* state) {
     int chunk_source_size = _closed_chunk_sources.size();
     for (int i = 0; i < chunk_source_size; i++) {
         BinlogOffset binlog_offset{0, 2, 2};
-        _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset);
+        auto st = _stream_epoch_manager->update_binlog_offset(state->fragment_instance_id(), _id, 0, binlog_offset);
+        st.permit_unchecked_error();
     }
     return Status::OK();
 }
@@ -355,7 +358,8 @@ void StreamChunkSource::set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_
 
 void StreamChunkSource::reset_status() {
     _status = Status::OK();
-    _get_stream_data_source()->reset_status();
+    auto st = _get_stream_data_source()->reset_status();
+    st.permit_unchecked_error();
 }
 
 bool StreamChunkSource::_reach_eof() const {

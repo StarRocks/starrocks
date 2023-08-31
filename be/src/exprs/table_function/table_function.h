@@ -25,7 +25,7 @@ namespace starrocks {
 class TableFunctionState {
 public:
     TableFunctionState() = default;
-    virtual ~TableFunctionState() = default;
+    virtual ~TableFunctionState() { _status.permit_unchecked_error(); }
 
     void set_params(starrocks::Columns columns) {
         this->_columns = std::move(columns);

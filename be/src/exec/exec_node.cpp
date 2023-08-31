@@ -331,7 +331,8 @@ void ExecNode::close(RuntimeState* state) {
         return;
     }
     _is_closed = true;
-    exec_debug_action(TExecNodePhase::CLOSE);
+    auto st = exec_debug_action(TExecNodePhase::CLOSE);
+    st.permit_unchecked_error();
 
     if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);

@@ -120,6 +120,7 @@ ConnectorScanNode::~ConnectorScanNode() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }
+    _status.permit_unchecked_error();
 }
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {

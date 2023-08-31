@@ -141,6 +141,7 @@ EsPredicate::~EsPredicate() {
         delete _disjunct;
     }
     _disjuncts.clear();
+    _es_query_status.permit_unchecked_error();
 }
 
 Status EsPredicate::build_disjuncts_list() {

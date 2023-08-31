@@ -12,6 +12,7 @@
 #include "gen_cpp/StatusCode_types.h" // for TStatus
 #include "util/slice.h"               // for Slice
 #include "util/time.h"
+
 namespace starrocks {
 
 class StatusPB;
@@ -22,8 +23,12 @@ class StatusOr;
 
 class Status {
 public:
-    Status() {}
+    Status() = default;
+
     ~Status() noexcept {
+#ifdef STARROCKS_ASSERT_STATUS_CHECKED
+        CHECK(_checked) << "Failed to check status";
+#endif
         if (!is_moved_from(_state)) {
             delete[] _state;
         }
@@ -37,16 +42,25 @@ public:
 #endif
 
     // Copy c'tor makes copy of error detail so Status can be returned by value
-    Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
+    Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {
+        s.mark_checked();
+        must_check();
+    }
 
     // Move c'tor
-    Status(Status&& s) noexcept : _state(s._state) { s._state = moved_from_state(); }
+    Status(Status&& s) noexcept : _state(s._state) {
+        s._state = moved_from_state();
+        s.mark_checked();
+        must_check();
+    }
 
     // Same as copy c'tor
     Status& operator=(const Status& s) {
         if (this != &s) {
             Status tmp(s);
             std::swap(this->_state, tmp._state);
+            tmp.mark_checked();
+            must_check();
         }
         return *this;
     }
@@ -56,6 +70,8 @@ public:
         if (this != &s) {
             Status tmp(std::move(s));
             std::swap(this->_state, tmp._state);
+            tmp.mark_checked();
+            must_check();
         }
         return *this;
     }
@@ -83,6 +99,20 @@ public:
     //
     void update(const Status& new_status);
     void update(Status&& new_status);
+
+    // In case of intentionally swallowing an error, user must explicitly call
+    // this function. That way we are easily able to search the code to find where
+    // error swallowing occurs.
+    //
+    // Inspired by Status in RocksDB:
+    // https://github.com/facebook/rocksdb/blob/05daa123323b1471bde4723dc441763d687fd825/include/rocksdb/status.h#L67
+    void permit_unchecked_error() const { mark_checked(); }
+
+    inline void must_check() const {
+#ifdef STARROCKS_ASSERT_STATUS_CHECKED
+        _checked = false;
+#endif // STARROCKS_ASSERT_STATUS_CHECKED
+    }
 
     static Status OK() { return Status(); }
 
@@ -151,40 +181,109 @@ public:
 
     static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
-    bool ok() const { return _state == nullptr; }
+    bool ok() const {
+        mark_checked();
+        return _state == nullptr;
+    }
 
-    bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
-    bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
-    bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
-    bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
-    bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
-    bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
-    bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
-    bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
-    bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
-    bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
+    bool is_cancelled() const {
+        mark_checked();
+        return code() == TStatusCode::CANCELLED;
+    }
+
+    bool is_mem_limit_exceeded() const {
+        mark_checked();
+        return code() == TStatusCode::MEM_LIMIT_EXCEEDED;
+    }
+
+    bool is_thrift_rpc_error() const {
+        mark_checked();
+        return code() == TStatusCode::THRIFT_RPC_ERROR;
+    }
+
+    bool is_end_of_file() const {
+        mark_checked();
+        return code() == TStatusCode::END_OF_FILE;
+    }
+
+    bool is_ok_or_eof() const {
+        mark_checked();
+        return ok() || is_end_of_file();
+    }
+
+    bool is_not_found() const {
+        mark_checked();
+        return code() == TStatusCode::NOT_FOUND;
+    }
+
+    bool is_already_exist() const {
+        mark_checked();
+        return code() == TStatusCode::ALREADY_EXIST;
+    }
+
+    bool is_io_error() const {
+        mark_checked();
+        return code() == TStatusCode::IO_ERROR;
+    }
+
+    bool is_not_supported() const {
+        mark_checked();
+        return code() == TStatusCode::NOT_IMPLEMENTED_ERROR;
+    }
+
+    bool is_corruption() const {
+        mark_checked();
+        return code() == TStatusCode::CORRUPTION;
+    }
 
     /// @return @c true if the status indicates Uninitialized.
-    bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
+    bool is_uninitialized() const {
+        mark_checked();
+        return code() == TStatusCode::UNINITIALIZED;
+    }
 
     // @return @c true if the status indicates an Aborted error.
-    bool is_aborted() const { return code() == TStatusCode::ABORTED; }
+    bool is_aborted() const {
+        mark_checked();
+        return code() == TStatusCode::ABORTED;
+    }
 
     /// @return @c true if the status indicates an InvalidArgument error.
-    bool is_invalid_argument() const { return code() == TStatusCode::INVALID_ARGUMENT; }
+    bool is_invalid_argument() const {
+        mark_checked();
+        return code() == TStatusCode::INVALID_ARGUMENT;
+    }
 
     // @return @c true if the status indicates ServiceUnavailable.
-    bool is_service_unavailable() const { return code() == TStatusCode::SERVICE_UNAVAILABLE; }
+    bool is_service_unavailable() const {
+        mark_checked();
+        return code() == TStatusCode::SERVICE_UNAVAILABLE;
+    }
 
-    bool is_data_quality_error() const { return code() == TStatusCode::DATA_QUALITY_ERROR; }
+    bool is_data_quality_error() const {
+        mark_checked();
+        return code() == TStatusCode::DATA_QUALITY_ERROR;
+    }
 
-    bool is_version_already_merged() const { return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED; }
+    bool is_version_already_merged() const {
+        mark_checked();
+        return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED;
+    }
 
-    bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
+    bool is_duplicate_rpc_invocation() const {
+        mark_checked();
+        return code() == TStatusCode::DUPLICATE_RPC_INVOCATION;
+    }
 
-    bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+    bool is_time_out() const {
+        mark_checked();
+        return code() == TStatusCode::TIMEOUT;
+    }
 
-    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
+    bool is_eagain() const {
+        mark_checked();
+        return code() == TStatusCode::SR_EAGAIN;
+    }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -199,6 +298,7 @@ public:
     void to_protobuf(StatusPB* status) const;
 
     std::string get_error_msg() const {
+        mark_checked();
         auto msg = message();
         return std::string(msg.data, msg.size);
     }
@@ -225,6 +325,7 @@ public:
     Slice detailed_message() const;
 
     TStatusCode::type code() const {
+        mark_checked();
         return _state == nullptr ? TStatusCode::OK : static_cast<TStatusCode::type>(_state[4]);
     }
 
@@ -261,6 +362,12 @@ private:
     Status(TStatusCode::type code, Slice msg) : Status(code, msg, {}) {}
     Status(TStatusCode::type code, Slice msg, Slice ctx);
 
+    void mark_checked() const {
+#ifdef STARROCKS_ASSERT_STATUS_CHECKED
+        _checked = true;
+#endif
+    }
+
 private:
     // OK status has a nullptr _state.  Otherwise, _state is a new[] array
     // of the following form:
@@ -270,6 +377,11 @@ private:
     //    _state[5.. 5 + len1]                == message
     //    _state[5 + len1 .. 5 + len1 + len2] == context
     const char* _state = nullptr;
+#ifdef STARROCKS_ASSERT_STATUS_CHECKED
+    // This field design follows Status in RocksDB
+    // https://github.com/facebook/rocksdb/blob/05daa123323b1471bde4723dc441763d687fd825/include/rocksdb/status.h#L467
+    mutable bool _checked = false;
+#endif
 };
 
 inline void Status::update(const Status& new_status) {
@@ -279,8 +391,10 @@ inline void Status::update(const Status& new_status) {
 }
 
 inline void Status::update(Status&& new_status) {
+    new_status.mark_checked();
     if (ok()) {
         *this = std::move(new_status);
+        must_check();
     }
 }
 

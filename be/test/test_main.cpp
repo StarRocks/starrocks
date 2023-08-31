@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
-    starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
+    CHECK(starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir).ok());
 
     starrocks::date::init_date_cache();
     starrocks::TimezoneUtils::init_time_zones();
@@ -85,18 +85,18 @@ int main(int argc, char** argv) {
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
     starrocks::config::disable_storage_page_cache = true;
-    global_env->init();
+    CHECK(global_env->init().ok());
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     // Pagecache is turned on by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
-    exec_env->init(paths);
+    CHECK(exec_env->init(paths).ok());
 
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
+    CHECK(starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
     starrocks::TEST_clear_all_columns_this_thread();
     // delete engine

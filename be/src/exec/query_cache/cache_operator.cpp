@@ -421,7 +421,8 @@ void CacheOperator::populate_cache(int64_t tablet_id) {
     _cache_populate_chunks_counter->update(buffer->chunks.size());
     _cache_populate_rows_counter->update(buffer->num_rows);
     _populate_tablets.insert(tablet_id);
-    _cache_mgr->populate(cache_key, cache_value);
+    auto st = _cache_mgr->populate(cache_key, cache_value);
+    st.permit_unchecked_error();
     buffer->state = PLBS_POPULATE;
 }
 
@@ -521,9 +522,11 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
         _lane_arbiter->enable_passthrough_mode();
         for (auto i = 0; i <= premature_finished_idx; ++i) {
             auto& multi_op = _multilane_operators[i];
-            multi_op->set_finished(state);
+            auto st = multi_op->set_finished(state);
+            st.permit_unchecked_error();
         }
-        _scan_operator->set_finished(state);
+        auto st = _scan_operator->set_finished(state);
+        st.permit_unchecked_error();
     }
     return Status::OK();
 }

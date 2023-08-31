@@ -673,7 +673,8 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
-            StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+            auto st = StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+            st.permit_unchecked_error();
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -1023,7 +1024,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
-    (void)_tablet_manager->start_trash_sweep();
+    CHECK(_tablet_manager->start_trash_sweep().ok());
 
     // clean rubbish transactions
     _clean_unused_txns();

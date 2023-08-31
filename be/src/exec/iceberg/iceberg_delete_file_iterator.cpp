@@ -41,7 +41,8 @@ Status IcebergDeleteFileIterator::init(FileSystem* fs, const std::string& timezo
 
 bool IcebergDeleteFileIterator::has_next() {
     if (_file_reader) {
-        _file_reader->next_batch(&_batch);
+        auto st = _file_reader->next_batch(&_batch);
+        st.permit_unchecked_error();
         if (_batch) {
             return true;
         }
