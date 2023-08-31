@@ -727,15 +727,25 @@ class StarrocksSQLApiLib(object):
             file_dict[file] = self.merge_case_info(part, file, logs)
 
         for file, logs in file_dict.items():
+            t_file = file.replace("/R/", "/T/")
+            case_names = self._get_case_names(t_file)
             # write into file
             file_path = os.path.join(self.root_path, file)
 
             if not os.path.exists(os.path.dirname(file_path)):
                 os.makedirs(os.path.dirname(file_path))
 
+            lines = list()
+            for case_name in case_names:
+                lines.append(logs.get(case_name, ""))
+                if case_name in logs.keys():
+                    logs.pop(case_name)
+
+            if len(logs) > 0:
+                log.info("% has case logs not write to R files: %s" % (file, logs))
+
             with open(file_path, "w") as f:
-                lines = "\n".join(logs.values())
-                f.write(lines)
+                f.write("\n".join(lines))
 
         # drop db
         self.connect_starrocks()
@@ -790,6 +800,22 @@ class StarrocksSQLApiLib(object):
             info_dict[case_name] = "".join(case_log)
 
         return info_dict
+
+    def _get_case_names(self, t_file):
+        file_path = os.path.join(self.root_path, t_file)
+
+        case_names = list()
+        if not os.path.exists(file_path):
+            return case_names
+
+        with open(file_path, "r") as f:
+            contents = f.readlines()
+
+        for line in contents:
+            if not line.startswith(NAME_FLAG):
+                continue
+            case_names.append(re.compile("name: ([a-zA-Z0-9_-]+)").findall(line)[0])
+        return case_names
 
     def show_schema_change_task(self):
         show_sql = "show alter table column"
@@ -1116,7 +1142,7 @@ class StarrocksSQLApiLib(object):
         # load data
         data_files = self.get_common_data_files(data_name)
         for data in data_files:
-            if ".gitkeep" in data: 
+            if ".gitkeep" in data:
                 continue
             label = "%s_load_label_%s" % (data_name, uuid.uuid1().hex)
             file_name = data.split("/")[-1]
