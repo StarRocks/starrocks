@@ -180,6 +180,53 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
+    public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultConnectorTableStatistics(columns);
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result =
+                    connectorTableCachedStatistics.synchronous().getAll(cacheKeys);
+            List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
+
+            for (String column : columns) {
+                Optional<ConnectorTableColumnStats> columnStatistic =
+                        result.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
+                if (columnStatistic.isPresent()) {
+                    columnStatistics.add(columnStatistic.get());
+                } else {
+                    columnStatistics.add(ConnectorTableColumnStats.unknown());
+                }
+            }
+            return columnStatistics;
+        } catch (Exception e) {
+            LOG.warn(e);
+            return getDefaultConnectorTableStatistics(columns);
+        }
+    }
+
+    @Override
+    public void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+        if (table == null || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = Lists.newArrayList();
+        for (String column : columns) {
+            ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
+            allKeys.add(key);
+        }
+        connectorTableCachedStatistics.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
         Preconditions.checkState(table != null);
 

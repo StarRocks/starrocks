@@ -342,7 +342,9 @@ public class MetadataMgr {
             ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
-                statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                if (!connectorTableColumnStats.isUnknown()) {
+                    statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                }
             }
         }
         return statistics.build();
@@ -355,7 +357,7 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
         Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown)) {
+        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata ->
                     metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
