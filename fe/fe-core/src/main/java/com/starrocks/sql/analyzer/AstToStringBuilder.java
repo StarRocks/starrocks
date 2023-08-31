@@ -182,7 +182,7 @@ public class AstToStringBuilder {
             sb.append(Joiner.on(", ").join(privList));
             sb.append(" ON ");
 
-            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+            if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
                 sb.append(stmt.getObjectType().name());
             } else {
                 if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {

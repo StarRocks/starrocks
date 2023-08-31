@@ -17,6 +17,7 @@ package com.starrocks.privilege;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.InternalCatalog;
@@ -30,6 +31,8 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -48,6 +51,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -60,6 +64,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -297,41 +304,71 @@ public class AuthorizationMgrTest {
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME));
     }
 
+    void saveRBACPrivilege(GlobalStateMgr globalStateMgr, DataOutputStream dataOutputStream) throws IOException {
+        AuthenticationMgr authenticationMgr = globalStateMgr.getAuthenticationMgr();
+        AuthorizationMgr authorizationMgr = globalStateMgr.getAuthorizationMgr();
+        authenticationMgr.saveV2(dataOutputStream);
+        authorizationMgr.saveV2(dataOutputStream);
+    }
+
+    void loadRBACPrivilege(GlobalStateMgr globalStateMgr, DataInputStream dataInputStream)
+            throws IOException, SRMetaBlockEOFException, SRMetaBlockException, PrivilegeException {
+        AuthenticationMgr authenticationMgr = globalStateMgr.getAuthenticationMgr();
+        AuthorizationMgr authorizationMgr = globalStateMgr.getAuthorizationMgr();
+
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dataInputStream);
+        authenticationMgr.loadV2(srMetaBlockReader);
+        srMetaBlockReader.close();
+        srMetaBlockReader = new SRMetaBlockReader(dataInputStream);
+        authorizationMgr.loadV2(srMetaBlockReader);
+        srMetaBlockReader.close();
+
+        for (UserIdentity userIdentity : authorizationMgr.getAllUserIdentities()) {
+            authorizationMgr.invalidateUserInCache(userIdentity);
+        }
+
+        for (String roleName : authorizationMgr.getAllRoles()) {
+            Long roleId = authorizationMgr.getRoleIdByNameAllowNull(roleName);
+            authorizationMgr.invalidateRolesInCacheRoleUnlocked(roleId);
+        }
+    }
+
     @Test
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
-        AuthorizationMgr masterManager = masterGlobalStateMgr.getAuthorizationMgr();
+
+        AuthenticationMgr authenticationMgr = masterGlobalStateMgr.getAuthenticationMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(emptyImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.grant(grantStmt);
+        authorizationMgr.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
                 PrivilegeType.SELECT);
 
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(grantImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, grantImage.getDataOutputStream());
 
         sql = "revoke select on db.tbl1 from test_user";
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
         ;
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(revokeImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, revokeImage.getDataOutputStream());
 
         // start to replay
-        masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
         AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo)
@@ -349,11 +386,13 @@ public class AuthorizationMgrTest {
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
 
         // check image
-        masterGlobalStateMgr.loadRBACPrivilege(grantImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, grantImage.getDataInputStream());
+        authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
                 PrivilegeType.SELECT);
 
-        masterGlobalStateMgr.loadRBACPrivilege(revokeImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, revokeImage.getDataInputStream());
+        authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
     }
@@ -434,7 +473,8 @@ public class AuthorizationMgrTest {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(emptyImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(masterManager.checkRoleExists("test_persist_role1"));
 
@@ -446,7 +486,7 @@ public class AuthorizationMgrTest {
             Assert.assertTrue(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage createRoleImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(createRoleImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, createRoleImage.getDataOutputStream());
 
         // 2. grant select on db.tbl<i> to role
         for (int i = 0; i != 2; ++i) {
@@ -454,7 +494,7 @@ public class AuthorizationMgrTest {
                     "grant select on db.tbl" + i + " to role test_persist_role" + i, ctx), ctx);
         }
         UtFrameUtils.PseudoImage grantPrivsToRoleImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(grantPrivsToRoleImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getDataOutputStream());
         assertTableSelectOnTest(masterManager, false, false);
 
         // 3. grant test_persist_role0 to test_user
@@ -462,28 +502,28 @@ public class AuthorizationMgrTest {
                 "grant test_persist_role0 to test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage grantRoleToUserImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(grantRoleToUserImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, grantRoleToUserImage.getDataOutputStream());
 
         // 4. grant test_persist_role1 to role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_persist_role1 to role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, true);
         UtFrameUtils.PseudoImage grantRoleToRoleImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(grantRoleToRoleImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, grantRoleToRoleImage.getDataOutputStream());
 
         // 5. revoke test_persist_role1 from role test_persist_role0
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role1 from role test_persist_role0", ctx), ctx);
         assertTableSelectOnTest(masterManager, true, false);
         UtFrameUtils.PseudoImage revokeRoleFromRoleImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(revokeRoleFromRoleImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromRoleImage.getDataOutputStream());
 
         // 6. revoke test_persist_role0 from test_user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke test_persist_role0 from test_user", ctx), ctx);
         assertTableSelectOnTest(masterManager, false, false);
         UtFrameUtils.PseudoImage revokeRoleFromUserImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(revokeRoleFromUserImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, revokeRoleFromUserImage.getDataOutputStream());
 
         // 7. drop 2 roles
         for (int i = 0; i != 2; ++i) {
@@ -492,12 +532,13 @@ public class AuthorizationMgrTest {
             Assert.assertFalse(masterManager.checkRoleExists("test_persist_role" + i));
         }
         UtFrameUtils.PseudoImage dropRoleImage = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(dropRoleImage.getDataOutputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, dropRoleImage.getDataOutputStream());
 
         //
         // start to replay
         //
-        masterGlobalStateMgr.loadRBACPrivilege(emptyImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
         AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role0"));
         Assert.assertFalse(followerManager.checkRoleExists("test_persist_role1"));
@@ -562,38 +603,38 @@ public class AuthorizationMgrTest {
         // check image
         //
         // 1. check image after create role
-        masterGlobalStateMgr.loadRBACPrivilege(createRoleImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, createRoleImage.getDataInputStream());
         AuthorizationMgr imageManager = masterGlobalStateMgr.getAuthorizationMgr();
 
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role0"));
         Assert.assertTrue(imageManager.checkRoleExists("test_persist_role1"));
 
         // 2. check image after grant select on db.tbl<i> to role
-        masterGlobalStateMgr.loadRBACPrivilege(grantPrivsToRoleImage.getDataInputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, grantPrivsToRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, false, false);
 
         // 3. check image after grant test_persist_role0 to test_user
-        masterGlobalStateMgr.loadRBACPrivilege(
+        loadRBACPrivilege(masterGlobalStateMgr,
                 grantRoleToUserImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, false);
 
         // 4. check image after grant test_persist_role1 to role test_persist_role0
-        masterGlobalStateMgr.loadRBACPrivilege(
+        loadRBACPrivilege(masterGlobalStateMgr,
                 grantRoleToRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, true);
 
         // 5. check image after revoke test_persist_role1 from role test_persist_role0
-        masterGlobalStateMgr.loadRBACPrivilege(
+        loadRBACPrivilege(masterGlobalStateMgr,
                 revokeRoleFromRoleImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, true, false);
 
         // 6. check image after revoke test_persist_role0 from test_user
-        masterGlobalStateMgr.loadRBACPrivilege(
+        loadRBACPrivilege(masterGlobalStateMgr,
                 revokeRoleFromUserImage.getDataInputStream());
         assertTableSelectOnTest(imageManager, false, false);
 
         // 7. check image after drop 2 roles
-        masterGlobalStateMgr.loadRBACPrivilege(
+        loadRBACPrivilege(masterGlobalStateMgr,
                 dropRoleImage.getDataInputStream());
         imageManager = masterGlobalStateMgr.getAuthorizationMgr();
         Assert.assertFalse(imageManager.checkRoleExists("test_persist_role0"));
@@ -1778,8 +1819,8 @@ public class AuthorizationMgrTest {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        masterGlobalStateMgr.saveRBACPrivilege(image.getDataOutputStream());
-        masterGlobalStateMgr.loadRBACPrivilege(image.getDataInputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, image.getDataOutputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, image.getDataInputStream());
 
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         UserPrivilegeCollectionV2 up1 = authorizationMgr.getUserPrivilegeCollectionUnlockedAllowNull(
@@ -1796,7 +1837,31 @@ public class AuthorizationMgrTest {
         authorizationMgr.checkAction(up3, ObjectType.CATALOG, PrivilegeType.USAGE,
                 Lists.newArrayList("hive_catalog_1"));
 
-        masterGlobalStateMgr.saveRBACPrivilege(image.getDataOutputStream());
-        masterGlobalStateMgr.loadRBACPrivilege(image.getDataInputStream());
+        saveRBACPrivilege(masterGlobalStateMgr, image.getDataOutputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, image.getDataInputStream());
+    }
+
+    @Test
+    public void testSysTypeError() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr masterManager = masterGlobalStateMgr.getAuthorizationMgr();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user user_for_system", ctx), ctx);
+
+        String sql = "GRANT OPERATE ON SYSTEM TO USER user_for_system";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.grant(grantStmt);
+
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
+
+        sql = "show grants for user_for_system";
+        ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showStreamLoadStmt);
+        ShowResultSet resultSet = executor.execute();
     }
 }
