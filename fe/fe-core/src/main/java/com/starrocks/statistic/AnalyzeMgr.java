@@ -218,6 +218,19 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    public void refreshConnectorTableBasicStatisticsCache(Table table, List<String> columns, boolean async) {
+        if (table == null) {
+            return;
+        }
+
+        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+        }
+    }
+
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
