@@ -31,8 +31,9 @@ import com.starrocks.thrift.TShowResultSetMetaData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 // Result set of show statement.
 // Redefine ResultSet now, because JDBC is too complicated.
@@ -112,9 +113,8 @@ public class ShowResultSet {
         }
 
         set.resultRows = Lists.newArrayList();
-        for (int i = 0; i < resultRows.size(); i++) {
-            ArrayList<String> list = Lists.newArrayList();
-            list.addAll(resultRows.get(i));
+        for (List<String> resultRow : resultRows) {
+            List<String> list = resultRow.stream().map(x -> Objects.toString(x, "")).collect(Collectors.toList());
             set.resultRows.add(list);
         }
         return set;
