@@ -759,6 +759,5 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 /*    a*/ from t0");
         analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
         analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
-
     }
 }
