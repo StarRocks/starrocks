@@ -164,6 +164,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starrocks-bdb-je</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
