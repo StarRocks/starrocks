@@ -32,6 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
@@ -349,6 +350,9 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         @Override
         public Integer next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
             return buckets.pollLast();
         }
     }
