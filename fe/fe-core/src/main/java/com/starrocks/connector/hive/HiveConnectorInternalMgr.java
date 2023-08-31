@@ -62,8 +62,7 @@ public class HiveConnectorInternalMgr {
     private final boolean enableBackgroundRefreshHiveMetadata;
     private final MetastoreType metastoreType;
 
-    public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties,
-                                    HdfsEnvironment hdfsEnvironment) {
+    public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -76,12 +75,10 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "true"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
-        this.updateRemoteFileMetadataThreadNum =
-                Integer.parseInt(properties.getOrDefault("remote_file_update_thread_num",
-                        String.valueOf(Config.remote_file_metadata_load_concurrency / 4)));
-        this.enableHmsEventsIncrementalSync =
-                Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
-                        String.valueOf(Config.enable_hms_events_incremental_sync)));
+        this.updateRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_update_thread_num",
+                String.valueOf(Config.remote_file_metadata_load_concurrency / 4)));
+        this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
+                String.valueOf(Config.enable_hms_events_incremental_sync)));
 
         this.enableBackgroundRefreshHiveMetadata = Boolean.parseBoolean(properties.getOrDefault(
                 "enable_background_refresh_connector_metadata", "true"));
