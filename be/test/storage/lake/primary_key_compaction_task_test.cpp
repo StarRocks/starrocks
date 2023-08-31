@@ -52,6 +52,7 @@ public:
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_cumulative_point(0);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -620,8 +621,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, false},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, true},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, true}),
                          to_string_param_name);
 
 } // namespace starrocks::lake

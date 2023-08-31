@@ -16,6 +16,7 @@
 
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
@@ -61,13 +62,21 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         EditVersion version = index_meta.version();
 
         // Compaction of Lake tablet also generate a new version
+<<<<<<< HEAD
         // here just use version.major so that PersistentIndexMetaPB need't to be modified,
         // the minor is meaningless
         if (version.major() == base_version) {
             // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
+=======
+        // here just use version.major_number so that PersistentIndexMetaPB need't to be modified,
+        // the minor_number is meaningless
+        if (version.major_number() == base_version) {
+            // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
+>>>>>>> 7279d362de ([BugFix] fix lake primary table's local persistent index load (#30110))
             // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
-            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2) {
+            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
+                index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
                 LOG(WARNING) << "different format version, we need to rebuild persistent index";
                 status = Status::InternalError("different format version");
             } else {
@@ -174,7 +183,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
     index_meta.clear_l2_versions();
     index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     _version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
@@ -293,6 +302,7 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
                                                _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     _dump_snapshot = false;
     _flushed = false;
+    _primary_index->update_data_version(base_version);
 
     LOG(INFO) << "build persistent index finish tablet: " << tablet->id() << " version:" << base_version
               << " #rowset:" << rowsets->size() << " #segment:" << total_segments << " data_size:" << total_data_size
