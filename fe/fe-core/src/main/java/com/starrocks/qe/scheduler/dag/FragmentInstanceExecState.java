@@ -157,7 +157,8 @@ public class FragmentInstanceExecState {
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
-            deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy);
+            deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
+                    jobSpec.getPlanProtocol());
         } catch (RpcException | TException e) {
             // DO NOT throw exception here, return a complete future with error code,
             // so that the following logic will cancel the fragment.
