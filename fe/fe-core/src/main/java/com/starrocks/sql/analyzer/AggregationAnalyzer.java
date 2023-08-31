@@ -229,7 +229,11 @@ public class AggregationAnalyzer {
                             arg.getFn() instanceof AggregateFunction, aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
+<<<<<<< HEAD
                     throw new SemanticException("Cannot nest aggregations inside aggregation '%s'", expr.toSql());
+=======
+                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());
+>>>>>>> eea93eff7f ([BugFix] fix agg in order by not being analyzed correctly (#30108))
                 }
 
                 if (expr.getChildren().stream().anyMatch(childExpr -> {

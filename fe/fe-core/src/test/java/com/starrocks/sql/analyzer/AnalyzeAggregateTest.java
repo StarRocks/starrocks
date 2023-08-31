@@ -40,6 +40,7 @@ public class AnalyzeAggregateTest {
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2) over ()))",
                 "Cannot nest window function inside aggregation");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2))",
+<<<<<<< HEAD
                 "Cannot nest aggregations inside aggregation");
         analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
                 "Cannot nest aggregations inside aggregation");
@@ -47,6 +48,17 @@ public class AnalyzeAggregateTest {
                 "Cannot nest aggregations inside aggregation");
         analyzeFail("select sum(1 + max(v2)) from t0",
                 "Cannot nest aggregations inside aggregation");
+=======
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select sum(v1) from t0 order by sum(abs(max(v2)))",
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select sum(max(v2)) from t0",
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select sum(1 + max(v2)) from t0",
+                "Unsupported nest aggregation function inside aggregation.");
+        analyzeFail("select min(v1) col from t0 order by min(col) + 1,  min(col)",
+                "Column 'col' cannot be resolved");
+>>>>>>> eea93eff7f ([BugFix] fix agg in order by not being analyzed correctly (#30108))
 
         analyzeFail("select v1 from t0 group by v1,cast(v2 as int) having cast(v2 as boolean)",
                 "must be an aggregate expression or appear in GROUP BY clause");
@@ -153,6 +165,47 @@ public class AnalyzeAggregateTest {
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
         analyzeFail("select distinct v1 from t0 having sum(v1) > 2");
     }
+<<<<<<< HEAD
+=======
+    @Test
+    public void testDistinctAggOnComplexTypes() {
+        analyzeSuccess("select count(distinct va) from ttypes group by v1");
+        analyzeSuccess("select count(*) from ttypes group by va");
+
+        // more than one count distinct
+        analyzeFail("select count(distinct va), count(distinct va1) from ttypes group by v1");
+        analyzeFail("select count(distinct va), count(distinct va1) from ttypes");
+        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
+        analyzeFail("select count(distinct vm), count(distinct vm1) from ttypes");
+        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
+        analyzeFail("select count(distinct vs), count(distinct vs1) from ttypes");
+        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
+        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
+
+        // single count distinct
+        analyzeFail("select count(distinct vm) from ttypes",
+                "No matching function with signature: multi_distinct_count(map");
+        analyzeFail("select count(distinct vs) from ttypes",
+                "No matching function with signature: multi_distinct_count(struct");
+        analyzeFail("select count(distinct vj) from ttypes",
+                "No matching function with signature: multi_distinct_count(json");
+        analyzeFail("select count(distinct vm) from ttypes group by v1",
+                "No matching function with signature: multi_distinct_count(map");
+        analyzeFail("select count(distinct vs) from ttypes group by v1",
+                "No matching function with signature: multi_distinct_count(struct");
+        analyzeFail("select count(distinct vj) from ttypes group by v1",
+                "No matching function with signature: multi_distinct_count(json");
+        analyzeFail("select count(distinct va),count(distinct vm) from ttypes group by v1",
+                "No matching function with signature: multi_distinct_count(array");
+        analyzeFail("select count(distinct va) vj from ttypes group by v1 order by count(distinct vj)",
+                "No matching function with signature: multi_distinct_count(array");
+
+        // group by complex types
+        analyzeSuccess("select count(*) from ttypes group by vm");
+        analyzeSuccess("select count(*) from ttypes group by vs");
+        analyzeFail("select count(*) from ttypes group by vj");
+    }
+>>>>>>> eea93eff7f ([BugFix] fix agg in order by not being analyzed correctly (#30108))
 
     @Test
     public void testGroupByUseOutput() {

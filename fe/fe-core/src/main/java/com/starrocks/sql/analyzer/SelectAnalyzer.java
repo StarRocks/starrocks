@@ -341,6 +341,11 @@ public class SelectAnalyzer {
                 // but should be parsed in sourceScope
                 analyzeExpression(expression, analyzeState, orderByScope.getParent());
             } else {
+                ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+                expressionAnalyzer.analyzeWithoutUpdateState(expression, analyzeState, orderByScope);
+                List<Expr> aggregations = Lists.newArrayList();
+                expression.collectAll(e -> e.isAggregate(), aggregations);
+                aggregations.forEach(e -> analyzeExpression(e, analyzeState, orderByScope.getParent()));
                 analyzeExpression(expression, analyzeState, orderByScope);
             }
 
@@ -423,15 +428,30 @@ public class SelectAnalyzer {
     }
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
-                                                       List<Expr> outputAndOrderByExpressions) {
+                                                          List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
+<<<<<<< HEAD
         if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1) {
             for (FunctionCallExpr agg : aggregations) {
                 if (agg.isDistinct() && agg.getChildren().size() > 0 && agg.getChild(0).getType().isArrayType()) {
                     throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+=======
+
+        long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
+        for (FunctionCallExpr agg : aggregations) {
+            if (agg.isDistinct() && agg.getChildren().size() > 0) {
+                Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                if (Arrays.stream(args).anyMatch(t -> t.isComplexType() || t.isJsonType())) {
+                    // only select single count(distinct array) can be rewritten to group by array
+                    if (distinctNum == 1 && args[0].isArrayType()) {
+                        continue;
+                    }
+                    throw new SemanticException("No matching function with signature: multi_distinct_count(" +
+                            Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
+>>>>>>> eea93eff7f ([BugFix] fix agg in order by not being analyzed correctly (#30108))
                 }
             }
         }
