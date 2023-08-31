@@ -37,13 +37,14 @@
 
 namespace starrocks::lake {
 
-class ConditionUpdateTest : public TestBase {
+class ConditionUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     ConditionUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
 
         //
         //  | column | type | KEY | NULL |
@@ -166,7 +167,7 @@ protected:
     int64_t _partition_id = 4561;
 };
 
-TEST_F(ConditionUpdateTest, test_condition_update) {
+TEST_P(ConditionUpdateTest, test_condition_update) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -222,7 +223,7 @@ TEST_F(ConditionUpdateTest, test_condition_update) {
     }
 }
 
-TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
+TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -271,7 +272,7 @@ TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
 }
 
-TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
+TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     // condition update
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -302,5 +303,8 @@ TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
 }
+
+INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
 } // namespace starrocks::lake
