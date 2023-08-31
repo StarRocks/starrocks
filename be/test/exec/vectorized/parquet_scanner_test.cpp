@@ -581,7 +581,7 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 TEST_F(ParquetScannerTest, int96_timestamp) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime", {"9999-12-31 23:59:59", "2006-01-02 15:04:05"}}};
+            {"col_datetime", {"9999-12-31 23:59:59.009999", "2006-01-02 15:04:05"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
@@ -602,4 +602,73 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
     }
 }
 
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
 } // namespace starrocks::vectorized
+=======
+TEST_F(ParquetScannerTest, get_file_schema) {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
+            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet", {{"col_datetime", TYPE_DATETIME}}},
+            {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
+             {{"col_json_int8", TYPE_INT},
+              {"col_json_int16", TYPE_INT},
+              {"col_json_int32", TYPE_INT},
+              {"col_json_int64", TYPE_BIGINT},
+              {"col_json_uint8", TYPE_INT},
+              {"col_json_uint16", TYPE_INT},
+              {"col_json_uint32", TYPE_BIGINT},
+              {"col_json_uint64", TYPE_BIGINT},
+              {"col_json_timestamp", TYPE_DATETIME},
+              {"col_json_float32", TYPE_FLOAT},
+              {"col_json_float64", TYPE_DOUBLE},
+              {"col_json_bool", TYPE_BOOLEAN},
+              {"col_json_string", TYPE_VARCHAR},
+              // complex type is treat as VARCHAR now.
+              {"col_json_list", TYPE_VARCHAR},
+              {"col_json_map", TYPE_VARCHAR},
+              {"col_json_map_timestamp", TYPE_VARCHAR},
+              {"col_json_struct", TYPE_VARCHAR},
+              {"col_json_list_list", TYPE_VARCHAR},
+              {"col_json_map_list", TYPE_VARCHAR},
+              {"col_json_list_struct", TYPE_VARCHAR},
+              {"col_json_struct_struct", TYPE_VARCHAR},
+              {"col_json_struct_string", TYPE_VARCHAR},
+              {"col_json_json_string", TYPE_VARCHAR}}},
+            {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
+             {{"col_decimal32", TYPE_DECIMAL32},
+              {"col_decimal64", TYPE_DECIMAL64},
+              {"col_decimal128_byte_array", TYPE_DECIMAL128},
+              {"col_decimal128_fixed_len_byte_array", TYPE_DECIMAL128}}}};
+
+    for (const auto& test_case : test_cases) {
+        check_schema(test_case.first, test_case.second);
+    }
+}
+
+TEST_F(ParquetScannerTest, datetime) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/datetime.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_datetime",
+             {"2006-01-02 15:04:05", "2006-01-02 15:04:05.900000", "2006-01-02 15:04:05.999900",
+              "2006-01-02 15:04:05.999990", "2006-01-02 15:04:05.999999"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 5);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
+    }
+}
+
+} // namespace starrocks
+>>>>>>> d1bbc18e29 ([Feature] broker load support parquet datetime in microsecond (#29996)):be/test/exec/parquet_scanner_test.cpp
