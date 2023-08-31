@@ -770,6 +770,17 @@ public class RuntimeProfile {
 
         @Override
         public String format(RuntimeProfile profile, String prefix) {
+            this.doFormat(profile, prefix);
+            return builder.toString();
+        }
+
+        @Override
+        public String format(RuntimeProfile profile) {
+            this.doFormat(profile, "");
+            return builder.toString();
+        }
+
+        private void doFormat(RuntimeProfile profile, String prefix) {
             Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
@@ -803,14 +814,8 @@ public class RuntimeProfile {
             for (Pair<RuntimeProfile, Boolean> childPair : profile.getChildList()) {
                 boolean indent = childPair.second;
                 RuntimeProfile childProfile = childPair.first;
-                format(childProfile, prefix + (indent ? "  " : ""));
+                doFormat(childProfile, prefix + (indent ? "  " : ""));
             }
-            return builder.toString();
-        }
-
-        @Override
-        public String format(RuntimeProfile profile) {
-            return this.format(profile, "");
         }
 
         private void printChildCounters(RuntimeProfile profile, String prefix, String counterName) {
