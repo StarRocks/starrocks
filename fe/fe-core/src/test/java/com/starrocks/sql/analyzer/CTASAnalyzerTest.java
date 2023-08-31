@@ -388,8 +388,8 @@ public class CTASAnalyzerTest {
         Assert.assertEquals(properties2.get("replication_num"), "3");
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testUnsupported() throws Exception {
+    @Test
+    public void testCTASAutomaticPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create table table_01 PARTITION BY date_trunc('day', k1) as " +
                 "select k1, k2, k3 from  duplicate_table_with_null;";
