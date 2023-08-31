@@ -741,8 +741,6 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Teardown
     needs: [ deploy, SQL-Tester, admit ]
-    if: always()
-    needs: [ deploy, SQL-Tester, admit ]
     if: always() && needs.deploy.outputs.deploy_conf_file != ''
     env:
       PR_NUMBER: ${{ github.event.number }}
