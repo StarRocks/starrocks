@@ -525,8 +525,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
-    @VariableMgr.VarAttr(name = MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT)
-    private int maxBucketsPerBeToUseBalancerAssignment = 3;
+    /**
+     * The threshold for determining whether to use a more evenly distributed colocate algorithm during query execution.
+     *
+     * <p> This algorithm is only used when {@code numBucketsPerBe} is smaller than this threshold, because the time complexity
+     * of it is {@code numBucketsPerBe} times than the previous algorithm.
+     *
+     * @see ColocatedBackendSelector
+     */
+    @VariableMgr.VarAttr(name = MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT, flag = VariableMgr.INVISIBLE)
+    private int maxBucketsPerBeToUseBalancerAssignment = 6;
 
     @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
     private boolean enableRuntimeAdaptiveDop = false;

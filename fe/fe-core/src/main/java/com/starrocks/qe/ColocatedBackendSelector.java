@@ -43,7 +43,7 @@ public class ColocatedBackendSelector implements BackendSelector {
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
     private final boolean isRightOrFullBucketShuffleFragment;
     private final WorkerProvider workerProvider;
-    private final BucketIterator bucketIterator;
+    private final BucketSequenceIterator bucketSequenceIterator;
 
     public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
                                     ColocatedBackendSelector.Assignment colocatedAssignment,
@@ -54,7 +54,7 @@ public class ColocatedBackendSelector implements BackendSelector {
         this.colocatedAssignment = colocatedAssignment;
         this.isRightOrFullBucketShuffleFragment = isRightOrFullBucketShuffleFragment;
         this.workerProvider = workerProvider;
-        this.bucketIterator = createBucketIterator(scanNode, maxBucketsPerBeToUseBalancerAssignment);
+        this.bucketSequenceIterator = createBucketIterator(scanNode, maxBucketsPerBeToUseBalancerAssignment);
     }
 
     @Override
@@ -62,7 +62,7 @@ public class ColocatedBackendSelector implements BackendSelector {
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
         ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange = colocatedAssignment.seqToScanRange;
 
-        Iterable<Integer> bucketSeqs = () -> bucketIterator;
+        Iterable<Integer> bucketSeqs = bucketSequenceIterator.createIterable();
         for (Integer bucketSeq : bucketSeqs) {
             List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
@@ -129,7 +129,7 @@ public class ColocatedBackendSelector implements BackendSelector {
         buckendIdToBucketCountMap.put(minBackendId, minBucketNum + 1);
         workerProvider.selectWorker(minBackendId);
         colocatedAssignment.seqToWorkerId.put(bucketSeq, minBackendId);
-        bucketIterator.useBackend(minBackendId);
+        bucketSequenceIterator.useBackend(minBackendId);
     }
 
     public static class BucketSeqToScanRange
@@ -168,9 +168,16 @@ public class ColocatedBackendSelector implements BackendSelector {
         }
     }
 
-    private static BucketIterator createBucketIterator(OlapScanNode scanNode, int maxBucketsPerBeToUseBalancerAssignment) {
+    /**
+     * Decide whether to use {@link BalancerBucketSequenceIterator}.
+     *
+     * <p> The time complexity of {@link BalancerBucketSequenceIterator} is {@code numBucketsPerBe} times that of
+     * {@link NormalBucketSequenceIterator}, so only use {@link BalancerBucketSequenceIterator} when  {@code numBucketsPerBe} is
+     * smaller than the parameter {@code maxBucketsPerBeToUseBalancerAssignment}.
+     */
+    private static BucketSequenceIterator createBucketIterator(OlapScanNode scanNode, int maxBucketsPerBeToUseBalancerAssignment) {
         if (maxBucketsPerBeToUseBalancerAssignment <= 0) {
-            return new NormalBucketIterator(scanNode);
+            return new NormalBucketSequenceIterator(scanNode);
         }
 
         int numTotalBuckets = 0;
@@ -190,25 +197,41 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         boolean useBalancerAssignment = numTotalBuckets <= maxBucketsPerBeToUseBalancerAssignment * backends.size();
         if (useBalancerAssignment) {
-            return new BalancerBucketIterator(scanNode);
+            return new BalancerBucketSequenceIterator(scanNode);
         } else {
-            return new NormalBucketIterator(scanNode);
+            return new NormalBucketSequenceIterator(scanNode);
         }
     }
 
-    private interface BucketIterator extends Iterator<Integer> {
-        void useBackend(Long backend);
+    /**
+     * Define the order of traversing the bucket sequences.
+     * Upon reaching each bucket sequence, the backend to assign it will be decided.
+     */
+    private interface BucketSequenceIterator extends Iterator<Integer> {
+        default Iterable<Integer> createIterable() {
+            return () -> this;
+        }
+
+        /**
+         * Record a bucket is assigned to a backend.
+         * @param backendId the id of this backend.
+         */
+        void useBackend(Long backendId);
     }
 
-    private static class NormalBucketIterator implements BucketIterator {
+    /**
+     * This iterator does not care about the order of bucket sequences.
+     * It just uses the order from the keys of the hash map {@code bucketSeq2locations}.
+     */
+    private static class NormalBucketSequenceIterator implements BucketSequenceIterator {
         private final Iterator<Integer> iterator;
 
-        public NormalBucketIterator(OlapScanNode scanNode) {
+        public NormalBucketSequenceIterator(OlapScanNode scanNode) {
             this.iterator = scanNode.bucketSeq2locations.keySet().iterator();
         }
 
         @Override
-        public void useBackend(Long backend) {
+        public void useBackend(Long backendId) {
             // Do nothing.
         }
 
@@ -223,12 +246,40 @@ public class ColocatedBackendSelector implements BackendSelector {
         }
     }
 
-    private static class BalancerBucketIterator implements BucketIterator {
+    /**
+     * It gives priority to selecting the bucket sequence with the highest sum of selection counts for backends where its
+     * replicas are located.
+     *
+     * <p> A high value indicates that some backends used by this bucket sequence might have been assigned a substantial number
+     * of bucket sequences already, so it's advisable to assign this bucket sequence to the other backends as soon as possible.
+     *
+     * <p> For example, assume that there are 4 buckets(a~d) and 4 BEs, and the distribution of buckets is as follows:
+     * <ul>
+     *     <li> a: 1, 3
+     *     <li> b: 4, 2
+     *     <li> c: 3, 2
+     *     <li> b: 4, 1
+     * </ul>
+     * Then the selected backend of each bucket by using {@link NormalBucketSequenceIterator} may be as follows:
+     * <ul>
+     *     <li> a: 1
+     *     <li> b: 4
+     *     <li> c: 3
+     *     <li> b: 4 (here, both the backend #4 and #1 have already been selected once, resulting in either backend #4 or #1
+     *     being responsible for two bucket sequences, while backend #2 remains unassigned any bucket sequence.)
+     * </ul>
+     *
+     * <p> The time complexity of {@link #useBackend} is O(numBucketsPerBE), because it must update the counter backendUsedTimes
+     * of all the bucket sequences in this backend. Therefore, it is only used when numBucketsPerBE is small enough.
+     *
+     * @see SessionVariable#getMaxBucketsPerBeToUseBalancerAssignment()
+     */
+    private static class BalancerBucketSequenceIterator implements BucketSequenceIterator {
         private final Map<Long, Set<Integer>> backendToBuckets;
         private final Map<Integer, Integer> bucketToBackendUsedTimes;
         private final NavigableSet<Integer> buckets;
 
-        public BalancerBucketIterator(OlapScanNode scanNode) {
+        public BalancerBucketSequenceIterator(OlapScanNode scanNode) {
             ArrayListMultimap<Integer, TScanRangeLocations> bucketToLocations = scanNode.bucketSeq2locations;
 
             this.backendToBuckets = Maps.newHashMap();
@@ -254,8 +305,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         }
 
         @Override
-        public void useBackend(Long backend) {
-            Set<Integer> bucketsOfBackend = backendToBuckets.get(backend);
+        public void useBackend(Long backendId) {
+            Set<Integer> bucketsOfBackend = backendToBuckets.get(backendId);
             if (bucketsOfBackend == null) {
                 return;
             }
