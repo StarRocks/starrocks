@@ -99,7 +99,7 @@ struct TDescribeTableParams {
   6: optional i64 limit
 
   // If not set, match default_catalog
-  7: optional string catalog_name 
+  7: optional string catalog_name
 }
 
 // Results of a call to describeTable()
@@ -371,8 +371,8 @@ struct TMaterializedViewStatus {
     1: optional string id
     2: optional string database_name
     3: optional string name
-    4: optional string refresh_type 
-    5: optional string is_active 
+    4: optional string refresh_type
+    5: optional string is_active
     6: optional string last_refresh_start_time
     7: optional string last_refresh_finished_time
     8: optional string last_refresh_duration
@@ -382,7 +382,7 @@ struct TMaterializedViewStatus {
     12: optional string text
     13: optional string rows
 
-    14: optional string partition_type 
+    14: optional string partition_type
     15: optional string last_refresh_force_refresh
     16: optional string last_refresh_start_partition
     17: optional string last_refresh_end_partition
@@ -406,7 +406,7 @@ struct TListPipesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
-    
+
     // schema info
     10: optional string database_name
 
@@ -431,8 +431,8 @@ struct TListPipeFilesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
-    3: optional string database_name    
-    
+    3: optional string database_name
+
 
     // file entity
     10: optional string file_name
@@ -441,12 +441,12 @@ struct TListPipeFilesInfo {
     13: optional i64 file_size
     14: optional i64 file_rows
     15: optional string last_modified
-    
+
     // load status
     20: optional string staged_time
     21: optional string start_load
     22: optional string finish_load
-    
+
     // error information
     30: optional string first_error_msg
     31: optional i64 error_count
@@ -1314,7 +1314,7 @@ struct TAuthInfo {
     2: optional string user   // deprecated
     3: optional string user_ip    // deprecated
     4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
-    
+
     // If not set, match default_catalog
     5: optional string catalog_name
 }
@@ -1405,7 +1405,7 @@ struct TRequireSlotRequest {
 }
 
 struct TRequireSlotResponse {
-    
+
 }
 
 struct TFinishSlotRequirementRequest {
@@ -1523,6 +1523,18 @@ struct TGetProfileResponse {
     2: optional list<string> query_result
 }
 
+struct TGetDictQueryParamRequest {
+    1: optional string db_name
+    2: optional string table_name
+}
+
+struct TGetDictQueryParamResponse {
+  1: required Descriptors.TOlapTableSchemaParam schema
+  2: required Descriptors.TOlapTablePartitionParam partition
+  3: required Descriptors.TOlapTableLocationParam location
+  4: required Descriptors.TNodesInfo nodes_info
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1593,7 +1605,7 @@ service FrontendService {
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetWarehousesResponse getWarehouses(1: TGetWarehousesRequest request)
-    
+
     // For Materialized View
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 
@@ -1607,7 +1619,9 @@ service FrontendService {
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
     TReleaseSlotResponse releaseSlot(1: TReleaseSlotRequest request)
-    
+
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+
+    TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
 }
 

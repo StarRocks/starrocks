@@ -199,7 +199,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService) {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -263,9 +263,8 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), false);
         System.out.println(param);
 
         // Check
@@ -280,7 +279,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) {
+            @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -347,9 +346,8 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, true, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), true);
         System.out.println(param);
 
         // Check

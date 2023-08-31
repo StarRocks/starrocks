@@ -36,6 +36,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -5669,6 +5670,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         fnName, Lists.newArrayList(e1, e2, new StringLiteral(" ")), pos);
                 return functionCallExpr;
             }
+        }
+
+        if (functionName.equals(FunctionSet.DICT_MAPPING)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            return new DictQueryExpr(params);
         }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
