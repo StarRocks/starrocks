@@ -598,6 +598,7 @@ public abstract class FileSystem extends Configured
             return createFileSystem(uri, conf);
         }
 
+        LOGGER.warn("[XXX] FileSystem.Cache from hadoop-ext package");
         return CACHE.get(uri, conf);
     }
 
