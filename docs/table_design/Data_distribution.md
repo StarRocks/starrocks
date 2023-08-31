@@ -469,6 +469,7 @@ If partition data cannot be evenly distributed across all the buckets by using o
 #### Precautions
 
 - **When a table is created, you must specify the bucketing columns**.
+- The data types of bucketing columns must be INTEGER, DECIMAL, DATE/DATETIME, or CHAR/VARCHAR/STRING.
 - Bucketing columns cannot be modified after they are specified.
 
 #### Examples
