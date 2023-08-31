@@ -24,6 +24,8 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CACHE_KEY;
+
 public class AzureCloudConfiguration implements CloudConfiguration {
 
     private final AzureStorageCloudCredential azureStorageCloudCredential;
@@ -35,15 +37,16 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
         Map<String, String> properties = new HashMap<>();
         azureStorageCloudCredential.toThrift(properties);
+        properties.put(HDFS_FS_CACHE_KEY, getCredentialString());
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
         azureStorageCloudCredential.applyToConfiguration(configuration);
+        configuration.set(HDFS_FS_CACHE_KEY, getCredentialString());
     }
 
     @Override

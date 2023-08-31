@@ -15,6 +15,7 @@
 package com.starrocks.credential.hdfs;
 
 import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
 
@@ -72,12 +73,18 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
                 getOrDefault(properties, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
                 prop
         );
-        if (!hdfsCloudCredential.validate()) {
+        String configResources = getOrDefault(properties, HDFS_CONFIG_RESOURCES);
+        String runtimeJars = getOrDefault(prop, HDFS_RUNTIME_JARS);
+        boolean useHDFS = false;
+        if (!Strings.isNullOrEmpty(configResources) || !Strings.isNullOrEmpty(runtimeJars)) {
+            useHDFS = true;
+        }
+        if (!useHDFS && !hdfsCloudCredential.validate()) {
             return null;
         }
         HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
-        conf.setConfigResources(getOrDefault(properties, HDFS_CONFIG_RESOURCES));
-        conf.setRuntimeJars(getOrDefault(prop, HDFS_RUNTIME_JARS));
+        conf.setConfigResources(configResources);
+        conf.setRuntimeJars(runtimeJars);
         return conf;
     }
 }
