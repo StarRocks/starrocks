@@ -25,12 +25,14 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -45,6 +47,34 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class ColocatedBackendSelectorTest {
+    @Test
+    public void testSingleScanNodeWithEmptyReplication() {
+        final int numBuckets = 4;
+        final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
+                0, ImmutableList.of(),
+                1, ImmutableList.of(2L),
+                2, ImmutableList.of(3L),
+                3, ImmutableList.of(4L)
+        );
+        final Set<Long> backendIds =
+                bucketSeqToBackends.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
+
+        OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
+        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        WorkerProvider workerProvider = genWorkerProvider(backendIds);
+
+        {
+            int maxBucketsPerBeToUseBalancerAssignment = 5;
+            Assert.assertThrows("Backend node not found", NonRecoverableException.class,
+                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null));
+        }
+
+        {
+            int maxBucketsPerBeToUseBalancerAssignment = 0;
+            Assert.assertThrows("Backend node not found", NonRecoverableException.class,
+                    () -> checkColocatedAssignment(scanNode, workerProvider, maxBucketsPerBeToUseBalancerAssignment, null));
+        }
+    }
 
     @Test
     public void testSingleScanNodeWithSingleReplication() throws UserException {
