@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -257,6 +258,61 @@ public class CachedStatisticStorageTest {
         Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
         Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
         Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
+    }
+
+    @Test
+    public void testGetConnectorTableStatisticsSync(
+            @Mocked AsyncLoadingCache<ConnectorTableColumnKey,
+                    Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
+            @Mocked LoadingCache<ConnectorTableColumnKey,
+                    Optional<ConnectorTableColumnStats>> connectorTableTableSyncCachedStatistics) {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        List<ConnectorTableColumnKey> cacheKeys =
+                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
+                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
+
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
+        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
+                Optional.of(new ConnectorTableColumnStats(
+                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
+        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
+                Optional.of(new ConnectorTableColumnStats(
+                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
+
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        List<ConnectorTableColumnStats> connectorColumnStatistics = cachedStatisticStorage.
+                getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
+        Assert.assertEquals(2, connectorColumnStatistics.size());
+
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean checkStatisticTableStateNormal() {
+                return false;
+            }
+        };
+        connectorColumnStatistics = cachedStatisticStorage.
+                getConnectorTableStatisticsSync(table, ImmutableList.of("c1", "c2"));
+        Assert.assertEquals(2, connectorColumnStatistics.size());
+        Assert.assertTrue(connectorColumnStatistics.get(0).getColumnStatistic().isUnknown());
+        Assert.assertTrue(connectorColumnStatistics.get(1).getColumnStatistic().isUnknown());
+    }
+
+    @Test
+    public void testExpireConnectorTableColumnStatistics() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        try {
+            cachedStatisticStorage.expireConnectorTableColumnStatistics(table, ImmutableList.of("c1", "c2"));
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 
     @Test

@@ -33,6 +33,10 @@ public class ConnectorTableColumnStats {
         return UNKNOWN;
     }
 
+    public boolean isUnknown() {
+        return columnStatistic.isUnknown();
+    }
+
     public ColumnStatistic getColumnStatistic() {
         return columnStatistic;
     }
