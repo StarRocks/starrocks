@@ -301,9 +301,10 @@ SHOW PARTITIONS FROM site_access;
 
 **注意**
 
-- **建表时，必须指定分桶键**。
-- 作为分桶键的列，该列的值不能够更新。
+- **建表时，如果使用哈希分桶，则必须指定分桶键**。
+- 组成分桶键的列仅支持整型、DECIMAL、DATE/DATETIME、CHAR/VARCHAR/STRING 数据类型。
 - 分桶键指定后不支持修改。
+- 组成分桶键的列，该列的值不能够更新。
 
 还是以上述 Range+Hash 组合分布的建表语句为例：
 
