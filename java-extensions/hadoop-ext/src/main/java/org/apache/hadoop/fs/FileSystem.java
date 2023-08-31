@@ -595,6 +595,7 @@ public abstract class FileSystem extends Configured
             return createFileSystem(uri, conf);
         }
 
+        LOGGER.warn("[XXX] FileSystem.Cache from hadoop-ext package");
         return CACHE.get(uri, conf);
     }
 
@@ -3792,7 +3793,6 @@ public abstract class FileSystem extends Configured
         }
 
         FileSystem get(URI uri, Configuration conf) throws IOException {
-            System.out.println("[XXX] FileSystem.Cache from hadoop-srext package");
             Key key = new Key(uri, conf);
             return getInternal(uri, conf, key);
         }
