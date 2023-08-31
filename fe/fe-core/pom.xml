@@ -168,7 +168,7 @@ under the License.
             <exclusions>
                 <exclusion>
                     <groupId>org.checkerframework</groupId>
-                    <artifactId>checker</artifactId>
+                    <artifactId>checker-qual</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
