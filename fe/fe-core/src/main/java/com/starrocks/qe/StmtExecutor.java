@@ -295,7 +295,6 @@ public class StmtExecutor {
                 coord.mergeIsomorphicProfiles(getQueryStatisticsForAuditLog());
                 profile.addChild(coord.getQueryProfile());
             }
-            coord = null;
         }
     }
 
@@ -1300,6 +1299,9 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
+        if (statisticsForAuditLog == null && coord != null) {
+            statisticsForAuditLog = coord.getAuditStatistics();
+        }
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
         }
