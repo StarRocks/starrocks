@@ -111,8 +111,8 @@ StarRocks BE 中的内存分为以下几类。
 | 名称 | 默认值 | 说明|  
 | --- | --- | --- |
 | mem_limit | 90% | BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。|
-| load_process_max_memory_limit_bytes | 107374182400 | 导入内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值。如导入内存到达限制，则会触发刷盘和反压逻辑。|
-| load_process_max_memory_limit_percent | 30 | 导入内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值，导入内存到达限制，会触发刷盘和反压逻辑。|
+| load_process_max_memory_limit_bytes | 107374182400 | 单节点上所有的导入线程占据的内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值。如导入内存到达限制，则会触发刷盘和反压逻辑。|
+| load_process_max_memory_limit_percent | 30 | 单节点上所有的导入线程占据的内存上限比例，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值，导入内存到达限制，会触发刷盘和反压逻辑。|
 | compaction_max_memory_limit | -1 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | compaction_max_memory_limit_percent | 100 | Compaction 内存百分比上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | disable_storage_page_cache | false | 是否开启 PageCache。开启 PageCache 后，查询结果会缓存在 Cache 中，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。该配置项与 storage_page_cache_limit 配合使用，在内存资源充足和有大数据量 Scan 的场景中启用能够加速查询性能。自 2.4 版本起，该参数默认值由 `TRUE` 变更为 `FALSE`。 |
