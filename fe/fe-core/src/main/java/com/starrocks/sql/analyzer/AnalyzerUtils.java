@@ -16,6 +16,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
@@ -459,10 +460,51 @@ public class AnalyzerUtils {
             if (node.hasWithClause()) {
                 node.getCteRelations().forEach(this::visit);
             }
-            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
-                node.getPredicate().getChildren().forEach(this::visit);
+
+            if (node.getOrderBy() != null) {
+                for (OrderByElement orderByElement : node.getOrderBy()) {
+                    visit(orderByElement.getExpr());
+                }
             }
+
+            if (node.getOutputExpression() != null) {
+                node.getOutputExpression().forEach(this::visit);
+            }
+
+            if (node.getPredicate() != null) {
+                visit(node.getPredicate());
+            }
+
+            if (node.getGroupBy() != null) {
+                node.getGroupBy().forEach(this::visit);
+            }
+
+            if (node.getAggregate() != null) {
+                node.getAggregate().forEach(this::visit);
+            }
+
+            if (node.getHaving() != null) {
+                visit(node.getHaving());
+            }
+
             return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitExpression(Expr node, Void context) {
+            node.getChildren().forEach(this::visit);
+            return null;
+        }
+
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            if (node.getOnPredicate() != null) {
+                visit(node.getOnPredicate());
+            }
+
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
         }
 
         @Override
@@ -473,6 +515,7 @@ public class AnalyzerUtils {
             return null;
         }
 
+        @Override
         public Void visitSubquery(Subquery node, Void context) {
             return visit(node.getQueryStatement());
         }

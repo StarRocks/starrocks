@@ -2228,8 +2228,25 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testCollectAllTableAndView() {
+    public void testCollectAllTableAndView1() {
         String sql = "select k2,v1 from test.tbl1 where k2 > 0 and v1 not in (select v1 from test.tbl2 where k2 > 0);";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Map<TableName, Table> result = AnalyzerUtils.collectAllTableAndView(statementBase);
+            Assert.assertEquals(result.size(), 2);
+        } catch (Exception e) {
+            LOG.error("Test CollectAllTableAndView failed", e);
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCollectAllTableAndView2() {
+        String sql = "select * from test.tbl2 " +
+                "inner join (select k2,v1 from test.tbl1 where k2 > 0 and v1 in " +
+                "(select distinct v1 from test.tbl2 where k2 > 0)) t on t.v1 = tbl2.v1 " +
+                "inner join (select k2, v1 from test.tbl1 where k2 > 20 and " +
+                " v1 in (select distinct v1 from test.tbl1 where k2 < 0)) t2 on t2.v1=tbl2.v1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Map<TableName, Table> result = AnalyzerUtils.collectAllTableAndView(statementBase);
