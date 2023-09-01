@@ -476,7 +476,7 @@ public class MvUtils {
     }
 
     /**
-     * Canonize the predicate into a more normalized form to be better compare.
+     * Canonize the predicate into a more normalized form to be compared better.
      * NOTE:
      * 1. `canonizePredicateForRewrite` will do more optimizations than `canonizePredicate`.
      * 2. if you need to rewrite src predicate to target predicate, should use `canonizePredicateForRewrite`

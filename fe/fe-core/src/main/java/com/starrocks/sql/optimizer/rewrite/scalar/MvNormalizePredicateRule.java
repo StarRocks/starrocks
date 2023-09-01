@@ -107,7 +107,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         ScalarOperator l = predicate.getChild(0);
         ScalarOperator r = predicate.getChild(1);
         if (l.isVariable() && r.isVariable()) {
-            // `a < b` is equal to `b < a`, but here we all normalized it into a < b for better rewrite.
+            // `a < b` is equal to `b > a`, but here we all normalized it into a < b for better rewrite.
             if (SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID.compare(l, r) <= 0) {
                 return predicate;
             }
