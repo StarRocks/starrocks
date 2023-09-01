@@ -1448,7 +1448,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("default_wg|0|be0-host|3.112|39|38\n" +
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
+                    "default_wg|0|be0-host|3.112|39|38\n" +
                     "default_mv_wg|1|be1-host|4.11|49|48\n" +
                     "wg0|10|be0-host|0.112|9|8\n" +
                     "wg0|10|be1-host|1.11|19|18\n" +
@@ -1479,7 +1480,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "wg0|10|be0-host|0.21|29|28\n" +
                     "wg1|11|be0-host|0.2|0|0\n" +
                     "wg2|12|be1-host|1.22|27|26\n" +
-                    "wg3|13|be1-host|0.23|0|0\n");
+                    "wg3|13|be1-host|0.23|0|0");
         }
     }
 
