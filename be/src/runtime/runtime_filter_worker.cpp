@@ -401,7 +401,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         auto& t = targets[index];
         bool is_local = (local == t.first);
         auto* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
-        if (stub == nullptr) {
+        if (UNLIKELY(stub == nullptr)) {
             LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", t.first.hostname, t.first.port);
             return;
         }
@@ -655,7 +655,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         addr.hostname = t.host();
         addr.port = t.port();
         auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
-        if (stub == nullptr) {
+        if (UNLIKELY(stub == nullptr)) {
             LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
             return;
         }
@@ -755,7 +755,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
     auto* rpc_closure = new RuntimeFilterRpcClosure();
     SingleClosureJoinAndClean join_and_join(rpc_closure);
     auto* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
-    if (stub == nullptr) {
+    if (UNLIKELY(stub == nullptr)) {
         LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", first_dest.address.hostname,
                                             first_dest.address.port);
         return;
@@ -783,7 +783,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
             auto request = params;
             auto& dest = destinations[start_idx + i];
             auto* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
-            if (stub == nullptr) {
+            if (UNLIKELY(stub == nullptr)) {
                 LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", dest.address.hostname,
                                                     dest.address.port);
                 return;
@@ -826,7 +826,7 @@ void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddre
     BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     for (const auto& addr : transmit_addrs) {
         auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
-        if (stub == nullptr) {
+        if (UNLIKELY(stub == nullptr)) {
             LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
             return;
         }

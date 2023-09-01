@@ -199,7 +199,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         return Status::InternalError("no brpc destination");
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
-    if (_brpc_stub == nullptr) {
+    if (UNLIKELY(_brpc_stub == nullptr)) {
         auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
