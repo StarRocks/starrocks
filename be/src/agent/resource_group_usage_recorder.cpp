@@ -46,7 +46,7 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                 } else {
                     TResourceGroupUsage& group_usage = it->second;
                     group_usage.__set_mem_used_bytes(group_usage.mem_used_bytes + wg.mem_consumption_bytes());
-                    group_usage.__set_mem_used_bytes(group_usage.num_running_queries + wg.num_running_queries());
+                    group_usage.__set_num_running_queries(group_usage.num_running_queries + wg.num_running_queries());
 
                     curr_group_to_cpu_runtime_ns[wg.id()] += wg.cpu_runtime_ns();
                 }
