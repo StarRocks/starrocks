@@ -111,12 +111,12 @@ public:
         if (!is_valid_ip(host)) {
             realhost = hostname_to_ip(host);
             if (realhost == "") {
-                LOG(WARNING) << "failed to get ip from host";
+                LOG(WARNING) << "failed to get ip from host, host=" << host;
                 return nullptr;
             }
         }
         if (str2endpoint(realhost.c_str(), port, &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, host = " << host;
+            LOG(WARNING) << "unknown endpoint, host=" << host;
             return nullptr;
         }
         return get_stub(endpoint);
