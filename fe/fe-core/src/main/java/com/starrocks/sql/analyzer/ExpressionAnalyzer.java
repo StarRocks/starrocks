@@ -867,8 +867,22 @@ public class ExpressionAnalyzer {
                 if (node.getChildren().size() == 0) {
                     throw new SemanticException(fnName + " should have at least one input");
                 }
+                int start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
+                    throw new SemanticException(fnName + " should have output expressions before [ORDER BY]");
+                } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
+                    throw new SemanticException(fnName + " should have exact one output expressions before" +
+                            " [ORDER BY]");
+                }
+                for (int i = start; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].canOrderBy()) {
+                        throw new SemanticException(fnName + " can't support order by the " + i +
+                                "-th input with type of " + argumentTypes[i].toSql());
+                    }
+                }
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
                 List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
                 List<Boolean> isAscOrder = new ArrayList<>();
                 List<Boolean> nullsFirst = new ArrayList<>();
@@ -898,25 +912,41 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                boolean outputConst = true;
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                     fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                    outputConst = node.getChild(0).isConstant();
                 } else {
-                    boolean outputConst = true;
+                    fn.setRetType(Type.VARCHAR);
                     for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
                         if (!node.getChild(i).isConstant()) {
                             outputConst = false;
                             break;
                         }
                     }
-                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
-                            (!isAscOrder.isEmpty() || outputConst));
-                    fn.setRetType(Type.VARCHAR);
                 }
-            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
-                // This must before test for DecimalV3.
-                if (!(node.getChild(1) instanceof IntLiteral)) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be a constant interval");
+                // need to distinct output columns in finalize phase
+                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                        (!isAscOrder.isEmpty() || outputConst));
+            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
+                argumentTypes[1] = Type.DOUBLE;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                // correct decimal's precision and scale
+                if (fn.getArgs()[0].isDecimalV3()) {
+                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
+
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
+                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
+
+                    newFn.setFunctionId(fn.getFunctionId());
+                    newFn.setChecksum(fn.getChecksum());
+                    newFn.setBinaryType(fn.getBinaryType());
+                    newFn.setHasVarArgs(fn.hasVarArgs());
+                    newFn.setId(fn.getId());
+                    newFn.setUserVisible(fn.isUserVisible());
+                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
+
+                    fn = newFn;
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(

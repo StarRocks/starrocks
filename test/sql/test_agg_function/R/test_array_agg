@@ -1,0 +1,1541 @@
+-- name: testArrayAgg
+CREATE TABLE `ss` (
+  `id` int(11) NULL COMMENT "",
+  `name` varchar(255) NULL COMMENT "",
+  `subject` varchar(255) NULL COMMENT "",
+  `score` int(11) NULL COMMENT "",
+   arr array<int>,
+   mmap map<int,varchar(20)>
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into ss values (1,"Tom","English",90, [1,2],map{2:'name'});
+-- result:
+-- !result
+insert into ss values (1,"Tom","Math",80, [1,2], map{2:'name'});
+-- result:
+-- !result
+insert into ss values (2,"Tom","English",NULL,[], map{});
+-- result:
+-- !result
+insert into ss values (2,"Tom",NULL,NULL,null,null);
+-- result:
+-- !result
+insert into ss values (3,"May",NULL,NULL,[2],map{3:'3',4:'4'});
+-- result:
+-- !result
+insert into ss values (3,"Ti","English",98, [null],map{null:null});
+-- result:
+-- !result
+insert into ss values (4,NULL,NULL,NULL,null,null);
+-- result:
+-- !result
+insert into ss values (NULL,NULL,NULL,NULL,null,null);
+-- result:
+-- !result
+insert into ss values (NULL,"Ti","物理Phy",99,[3,4],map{9:''});
+-- result:
+-- !result
+insert into ss values (11,"张三此地无银三百两","英文English",98,[0,2], map{});
+-- result:
+-- !result
+insert into ss values (11,"张三掩耳盗铃","Math数学欧拉方程",78,[],map{7:'y'});
+-- result:
+-- !result
+insert into ss values (12,"李四大闹天空","英语外语美誉",NULL,[89], map{6:'6'});
+-- result:
+-- !result
+insert into ss values (2,"王武程咬金","语文北京上海",22,[23],map{8:''});
+-- result:
+-- !result
+insert into ss values (3,"欧阳诸葛方程","数学大不列颠",NULL,[],null);
+-- result:
+-- !result
+select max(id), array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2  order by 1;
+-- result:
+1	["Tom"]	1	["Tom","Tom"]
+-- !result
+select max(id), array_agg(distinct name) from ss where id < 2  order by 1;
+-- result:
+1	["Tom"]
+-- !result
+select max(id), array_agg(distinct name), array_agg(distinct (score > 0)) from ss where id < 2 order by 1;
+-- result:
+1	["Tom"]	[1]
+-- !result
+select max(id),array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2  order by 1;
+-- result:
+1	["Tom"]	1	["Tom","Tom"]
+-- !result
+select max(id),array_agg(distinct name) from ss where id < 2  order by 1;
+-- result:
+1	["Tom"]
+-- !result
+select max(id),array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2  order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 53. Detail message: Unexpected input 'order', the most similar input is {',', ')'}.")
+-- !result
+select max(id),array_agg(name), array_agg(distinct name) from ss where id < 2 order by 1;
+-- result:
+1	["Tom","Tom"]	["Tom"]
+-- !result
+select max(id),array_agg(distinct name), array_agg(distinct (score > 0)) from ss where id < 2 order by 1;
+-- result:
+1	["Tom"]	[1]
+-- !result
+select id, array_agg(distinct name), count(distinct score), array_agg(name) from ss where id < 2 group by id order by 1;
+-- result:
+1	["Tom"]	2	["Tom","Tom"]
+-- !result
+select id, array_agg(distinct name) from ss where id < 2 group by id order by id;
+-- result:
+1	["Tom"]
+-- !result
+select id, array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2 group by id order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 49. Detail message: Unexpected input 'order', the most similar input is {',', ')'}.")
+-- !result
+select id, array_agg(name), array_agg(distinct name) from ss where id < 2 group by id order by 1;
+-- result:
+1	["Tom","Tom"]	["Tom"]
+-- !result
+select id, array_agg(distinct name), array_agg(distinct (score > 1)) from ss where id < 2 group by id order by 1;
+-- result:
+1	["Tom"]	[1]
+-- !result
+select score, array_agg(distinct name), count(distinct id), array_agg(name) from ss where id < 2 group by score order by 1;
+-- result:
+80	["Tom"]	1	["Tom"]
+90	["Tom"]	1	["Tom"]
+-- !result
+select score, array_agg(distinct name) from ss where id < 2 group by score order by score;
+-- result:
+80	["Tom"]
+90	["Tom"]
+-- !result
+select score, array_agg(name), array_agg(name,score order by 1,2) from ss where id < 2 group by score order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 52. Detail message: Unexpected input 'order', the most similar input is {',', ')'}.")
+-- !result
+select score, array_agg(name), array_agg(distinct name) from ss where id < 2 group by score order by 1;
+-- result:
+80	["Tom"]	["Tom"]
+90	["Tom"]	["Tom"]
+-- !result
+select score, array_agg(distinct name), array_agg(distinct (score > 1)) from ss where id < 2 group by score order by 1;
+-- result:
+80	["Tom"]	[1]
+90	["Tom"]	[1]
+-- !result
+select id, array_agg(distinct name), count(distinct score), array_agg(name) from ss where id < 2 group by rollup(id) order by 1;
+-- result:
+None	["Tom"]	2	["Tom","Tom"]
+1	["Tom"]	2	["Tom","Tom"]
+-- !result
+select id, array_agg(distinct name) from ss where id < 2 group by rollup(id) order by id;
+-- result:
+None	["Tom"]
+1	["Tom"]
+-- !result
+select id, array_agg(name), array_agg(name order by 1) from ss where id < 2 group by rollup(id) order by 1;
+-- result:
+None	["Tom","Tom"]	["Tom","Tom"]
+1	["Tom","Tom"]	["Tom","Tom"]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by rollup(id) order by 1;
+-- result:
+[null]	1	[null]
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+[null,"Ti"]	0	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	1	["May","Ti","欧阳诸葛方程"]
+["Tom"]	1	["Tom","Tom"]
+["Tom","王武程咬金"]	1	["Tom","Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	1	["李四大闹天空"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss group by rollup(id) order by id;
+-- result:
+[null,"物理Phy"]
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+["English","Math"]
+[null,"English","语文北京上海"]
+[null,"English","数学大不列颠"]
+[null]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by rollup(id) order by 1;
+-- result:
+[null]	1
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	9
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
+-- !result
+select array_agg(distinct name order by 1), array_agg(distinct subject order by 1) from ss group by rollup(score) order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+[null,"May","Tom","李四大闹天空","欧阳诸葛方程"]	[null,"English","数学大不列颠","英语外语美誉"]
+["Ti"]	["物理Phy"]
+["Ti","张三此地无银三百两"]	["English","英文English"]
+["Tom"]	["Math"]
+["Tom"]	["English"]
+["张三掩耳盗铃"]	["Math数学欧拉方程"]
+["王武程咬金"]	["语文北京上海"]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
+-- result:
+[null]	1	[null]
+[null,"Ti"]	0	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	1	["May","Ti","欧阳诸葛方程"]
+["Tom"]	1	["Tom","Tom"]
+["Tom","王武程咬金"]	1	["Tom","Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	1	["李四大闹天空"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+-- result:
+[null,"物理Phy"]
+["English","Math"]
+[null,"English","语文北京上海"]
+[null,"English","数学大不列颠"]
+[null]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+-- result:
+[null]	1
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+["Tom","Tom"]	["Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,99]
+["May","Ti","欧阳诸葛方程"]	[null,98]
+["Tom"]	[80,90]
+["Tom","王武程咬金"]	[null,22]
+["张三掩耳盗铃","张三此地无银三百两"]	[78,98]
+["李四大闹天空"]	[null]
+-- !result
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]
+["Tom"]
+["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, cardinality(arr), arr)) from ss group by id order by 1;
+-- result:
+1
+1
+1
+2
+2
+3
+3
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","欧阳诸葛方程","Ti"]	1	98
+["Tom"]	1	90
+["Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by id;
+-- result:
+2
+1
+3
+3
+1
+2
+1
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,name, subject)), cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+1	1
+2	2
+2	2
+3	3
+3	3
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+-- result:
+[null]	[null]	[null]
+[null]	["英语外语美誉"]	["英语外语美誉"]
+[null,22]	[null,"English","语文北京上海"]	[null,"English","语文北京上海"]
+[null,98]	[null,"数学大不列颠","English"]	[null,"数学大不列颠","English"]
+[null,99]	[null,"物理Phy"]	[null,"物理Phy"]
+[78,98]	["Math数学欧拉方程","英文English"]	["Math数学欧拉方程","英文English"]
+[80,90]	["Math","English"]	["Math","English"]
+-- !result
+select array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss group by id order by 1;
+-- result:
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+-- result:
+None	[4]	None
+TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
+Ti物理Phy	[null]	99
+TomEnglish,TomMath	[1]	90
+TomEnglish,王武程咬金语文北京上海	[2]	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
+李四大闹天空英语外语美誉	[12]	None
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+["Tom","Tom"]	1	90
+["Tom","Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"English","语文北京上海"]	1	22
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["English",null,"语文北京上海"]	1	22
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+2	2
+2	1
+2	2
+3	3
+3	2
+-- !result
+select array_agg( null order by score,4.00) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null]
+[null,null]
+[null,null]
+[null,null,null]
+[null,null,null]
+-- !result
+select array_agg( score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg( score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr)) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	9
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,1)) from ss order by 1;
+-- result:
+9
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+-- !result
+select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
+-- result:
+9	12
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
+-- result:
+[null]	[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss order by 1;
+-- result:
+9	9
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+-- !result
+select array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct score order by 1,name) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss order by 1;
+-- result:
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select group_concat(name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss order by 1;
+-- result:
+TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	[null,1,2,3,4,11,12]	99
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,null,"数学大不列颠","英语外语美誉",null,"English","语文北京上海","Math数学欧拉方程","Math","English","英文English","English","物理Phy"]	6	99
+-- !result
+select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+-- result:
+["李四大闹天空",null,null,"欧阳诸葛方程","May","Tom","Tom","王武程咬金","张三掩耳盗铃","Tom","Tom","张三此地无银三百两","Ti","Ti"]	["李四大闹天空",null,"欧阳诸葛方程","May","Tom","王武程咬金","张三掩耳盗铃","张三此地无银三百两","Ti"]
+-- !result
+select array_agg( null order by score,4.00) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg( score order by 1) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg( score order by 1,name) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
+-- result:
+[null]	1	[null]
+[null,"Ti"]	0	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	1	["May","Ti","欧阳诸葛方程"]
+["Tom"]	1	["Tom","Tom"]
+["Tom","王武程咬金"]	1	["Tom","Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	1	["李四大闹天空"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+-- result:
+[null,"物理Phy"]
+["English","Math"]
+[null,"English","语文北京上海"]
+[null,"English","数学大不列颠"]
+[null]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+-- result:
+[null]	1
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+["Tom","Tom"]	["Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,99]
+["May","Ti","欧阳诸葛方程"]	[null,98]
+["Tom"]	[80,90]
+["Tom","王武程咬金"]	[null,22]
+["张三掩耳盗铃","张三此地无银三百两"]	[78,98]
+["李四大闹天空"]	[null]
+-- !result
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]
+["Tom"]
+["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, 1)) from ss group by id order by 1;
+-- result:
+1
+1
+1
+2
+2
+3
+3
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","欧阳诸葛方程","Ti"]	1	98
+["Tom"]	1	90
+["Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by id;
+-- result:
+2
+1
+3
+3
+1
+2
+1
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+1	1
+2	2
+2	2
+3	3
+3	3
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+-- result:
+[null]	[null]	[null]
+[null]	["英语外语美誉"]	["英语外语美誉"]
+[null,22]	[null,"English","语文北京上海"]	[null,"English","语文北京上海"]
+[null,98]	[null,"数学大不列颠","English"]	[null,"数学大不列颠","English"]
+[null,99]	[null,"物理Phy"]	[null,"物理Phy"]
+[78,98]	["Math数学欧拉方程","英文English"]	["Math数学欧拉方程","英文English"]
+[80,90]	["Math","English"]	["Math","English"]
+-- !result
+select array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss group by id order by 1;
+-- result:
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+-- result:
+None	[4]	None
+TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
+Ti物理Phy	[null]	99
+TomEnglish,TomMath	[1]	90
+TomEnglish,王武程咬金语文北京上海	[2]	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
+李四大闹天空英语外语美誉	[12]	None
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+["Tom","Tom"]	1	90
+["Tom","Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"English","语文北京上海"]	1	22
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["English",null,"语文北京上海"]	1	22
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+2	2
+2	1
+2	2
+3	3
+3	2
+-- !result
+select array_agg( null order by score,4.00) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null]
+[null,null]
+[null,null]
+[null,null,null]
+[null,null,null]
+-- !result
+select array_agg( score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg( score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr)) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	9
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
+-- result:
+9
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+-- !result
+select cardinality(array_agg(distinct mmap order by score, cardinality(mmap)), name),max(id) as a from ss order by a;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 83. Detail message: No matching function with signature: cardinality(array<map<int(11),varchar(20)>>, varchar(255)).')
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
+-- result:
+[null]	[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss order by 1;
+-- result:
+9	9
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+-- !result
+select array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct score order by 1,name) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss order by 1;
+-- result:
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select group_concat(name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss order by 1;
+-- result:
+TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	[null,1,2,3,4,11,12]	99
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+-- result:
+["英语外语美誉",null,"数学大不列颠",null,"English",null,null,"语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
+-- !result
+select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+-- result:
+["李四大闹天空","May","Tom","Tom",null,null,"欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Tom","Tom","Ti","张三此地无银三百两","Ti"]	["李四大闹天空","May","Tom","欧阳诸葛方程",null,"王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]
+-- !result
+select array_agg( null order by score,4.00) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg( score order by 1) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg( score order by 1,name) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+set new_planner_agg_stage = 0;
+-- result:
+-- !result
+set enable_exchange_pass_through = false;
+-- result:
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
+-- result:
+[null]	1	[null]
+[null,"Ti"]	0	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	1	["May","Ti","欧阳诸葛方程"]
+["Tom"]	1	["Tom","Tom"]
+["Tom","王武程咬金"]	1	["Tom","Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	1	["李四大闹天空"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+-- result:
+[null,"物理Phy"]
+["English","Math"]
+[null,"English","语文北京上海"]
+[null,"English","数学大不列颠"]
+[null]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+-- result:
+[null]	1
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+["Tom","Tom"]	["Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,99]
+["May","Ti","欧阳诸葛方程"]	[null,98]
+["Tom"]	[80,90]
+["Tom","王武程咬金"]	[null,22]
+["张三掩耳盗铃","张三此地无银三百两"]	[78,98]
+["李四大闹天空"]	[null]
+-- !result
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]
+["Tom"]
+["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,1)) from ss group by id order by 1;
+-- result:
+1
+1
+1
+2
+2
+3
+3
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","欧阳诸葛方程","Ti"]	1	98
+["Tom"]	1	90
+["Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by id;
+-- result:
+2
+1
+3
+3
+1
+2
+1
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null]	[null,null,null]
+[null]	[null,null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null,null]
+[null]	[null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+1	1
+2	2
+2	2
+3	3
+3	3
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+-- result:
+[null]	[null]	[null]
+[null]	["英语外语美誉"]	["英语外语美誉"]
+[null,22]	[null,"English","语文北京上海"]	[null,"English","语文北京上海"]
+[null,98]	[null,"数学大不列颠","English"]	[null,"数学大不列颠","English"]
+[null,99]	[null,"物理Phy"]	[null,"物理Phy"]
+[78,98]	["Math数学欧拉方程","英文English"]	["Math数学欧拉方程","英文English"]
+[80,90]	["Math","English"]	["Math","English"]
+-- !result
+select array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,22]
+[null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss group by id order by 1;
+-- result:
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"English","数学大不列颠"]
+[null,"English","语文北京上海"]
+[null,"物理Phy"]
+["English","Math"]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
+-- result:
+None	[4]	None
+TiEnglish,欧阳诸葛方程数学大不列颠	[3]	98
+Ti物理Phy	[null]	99
+TomEnglish,TomMath	[1]	90
+TomEnglish,王武程咬金语文北京上海	[2]	22
+张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	[11]	98
+李四大闹天空英语外语美誉	[12]	None
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"Ti"]	0	99
+["May","Ti","欧阳诸葛方程"]	1	98
+["Tom","Tom"]	1	90
+["Tom","Tom","王武程咬金"]	1	22
+["张三掩耳盗铃","张三此地无银三百两"]	1	98
+["李四大闹天空"]	1	None
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"English","语文北京上海"]	1	22
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
+-- result:
+[null]	1	None
+[null,"数学大不列颠","English"]	1	98
+[null,"物理Phy"]	0	99
+["English",null,"语文北京上海"]	1	22
+["Math","English"]	1	90
+["Math数学欧拉方程","英文English"]	1	98
+["英语外语美誉"]	1	None
+-- !result
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+-- result:
+1	1
+1	1
+2	2
+2	1
+2	2
+3	3
+3	2
+-- !result
+select array_agg( null order by score,4.00) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null]
+[null,null]
+[null,null]
+[null,null,null]
+[null,null,null]
+-- !result
+select array_agg( score order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg( score order by 1,name) from ss group by id order by 1;
+-- result:
+[null]
+[null]
+[null,null,22]
+[null,null,98]
+[null,99]
+[78,98]
+[80,90]
+-- !result
+select array_agg(distinct 1 order by 1) from ss group by id order by 1;
+-- result:
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+[1]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	9
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
+-- result:
+9
+-- !result
+select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+-- !result
+select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
+-- result:
+9	12
+-- !result
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
+-- result:
+[null]	[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg(distinct subject order by 1, null) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, cardinality(arr),name)), cardinality(array_agg(distinct mmap order by score,cardinality(mmap),name)) from ss order by 1;
+-- result:
+9	9
+-- !result
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+-- !result
+select array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct score order by 1,name) from ss order by 1;
+-- result:
+[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+select array_agg(distinct 12 order by score) from ss order by 1;
+-- result:
+[12]
+-- !result
+select array_agg(distinct subject order by 1) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select group_concat(name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss order by 1;
+-- result:
+TiEnglish,Ti物理Phy,TomEnglish,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海	[null,1,2,3,4,11,12]	99
+-- !result
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
+-- !result
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
+-- !result
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss order by 1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
+-- !result
+select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss order by 1;
+-- result:
+[null,null,"数学大不列颠",null,null,"英语外语美誉","English","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]	6	99
+-- !result
+select array_agg( name order by score,4.00),array_agg(distinct name order by score,4.00) from ss order by 1;
+-- result:
+[null,"Tom","Tom",null,"李四大闹天空","欧阳诸葛方程","May","王武程咬金","张三掩耳盗铃","Tom","Tom","Ti","张三此地无银三百两","Ti"]	[null,"Tom","李四大闹天空","欧阳诸葛方程","May","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]
+-- !result
+select array_agg( null order by score,4.00) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+-- !result
+select array_agg( score order by 1) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg( score order by 1,name) from ss order by 1;
+-- result:
+[null,null,null,null,null,null,null,22,78,80,90,98,98,99]
+-- !result
+select array_agg(distinct 1 order by 1) from ss order by 1;
+-- result:
+[1]
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select array_agg(distinct subject order by 1), count(distinct score), array_agg(name order by 1) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select count(distinct score), array_agg(name order by 1) from ss order by 1;
+-- result:
+6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
+-- result:
+[null]	1	[null]
+[null,"Ti"]	0	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	1	["May","Ti","欧阳诸葛方程"]
+["Tom"]	1	["Tom","Tom"]
+["Tom","王武程咬金"]	1	["Tom","Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	1	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	1	["李四大闹天空"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+-- result:
+[null,"物理Phy"]
+["English","Math"]
+[null,"English","语文北京上海"]
+[null,"English","数学大不列颠"]
+[null]
+["Math数学欧拉方程","英文English"]
+["英语外语美誉"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
+-- result:
+[null]	1
+[null,"Ti"]	2
+["May","Ti","欧阳诸葛方程"]	3
+["Tom"]	1
+["Tom","王武程咬金"]	3
+["张三掩耳盗铃","张三此地无银三百两"]	2
+["李四大闹天空"]	1
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]	["May","Ti","欧阳诸葛方程"]
+["Tom","Tom"]	["Tom"]
+["Tom","Tom","王武程咬金"]	["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]	["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]	["李四大闹天空"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
+-- result:
+[null]	[null]
+[null,"Ti"]	[null,99]
+["May","Ti","欧阳诸葛方程"]	[null,98]
+["Tom"]	[80,90]
+["Tom","王武程咬金"]	[null,22]
+["张三掩耳盗铃","张三此地无银三百两"]	[78,98]
+["李四大闹天空"]	[null]
+-- !result
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+-- result:
+[null]
+[null,"Ti"]
+["May","Ti","欧阳诸葛方程"]
+["Tom"]
+["Tom","王武程咬金"]
+["张三掩耳盗铃","张三此地无银三百两"]
+["李四大闹天空"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, 1)) from ss group by id order by 1;
+-- result:
+1
+1
+1
+2
+2
+3
+3
+-- !result
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct subject order by 1, name) from ss order by 1;
+-- result:
+[null,"English","Math","Math数学欧拉方程","数学大不列颠","物理Phy","英文English","英语外语美誉","语文北京上海"]
+-- !result
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	9
+-- !result
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss order by 1;
+-- result:
+[null,null,"May","Ti","Ti","Tom","Tom","Tom","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	[null,22,78,80,90,98,99]
+-- !result
+select array_agg(distinct name order by 1) from ss order by 1;
+-- result:
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]
+-- !result
+select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
+-- result:
+9
+-- !result
+select array_agg();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 17. Detail message: array_agg should have at least one input.')
+-- !result
+select array_agg() from ss;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 17. Detail message: array_agg should have at least one input.')
+-- !result
+select array_agg(',');
+-- result:
+[","]
+-- !result
+select array_agg("中国" order by 1, id) from ss;
+-- result:
+["中国","中国","中国","中国","中国","中国","中国","中国","中国","中国","中国","中国","中国","中国"]
+-- !result
+select array_agg("中国" order by 2, id separator NULL) from ss;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 37. Detail message: Unexpected input 'separator', the most similar input is {',', ')'}.")
+-- !result
+select array_agg("中国",name order by 2, "第一", id) from ss;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 27. Detail message: Unexpected input 'order', the most similar input is {',', ')'}.")
+-- !result
+select array_agg(  order by score) from ss order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 16. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
+-- !result
+select array_agg(distinct  order by score) from ss order by 1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 27. Detail message: Unexpected input 'order', the most similar input is {a legal identifier}.")
+-- !result
+select array_agg([1,2]) from ss;
+-- result:
+[[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2],[1,2]]
+-- !result
+select array_agg(json_object("2:3")) from ss;
+-- result:
+['{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}','{"2:3": null}']
+-- !result
+select array_agg(distinct json_object("2:3")) from ss;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: array_agg(DISTINCT json_object('2:3')) can't rewrite distinct to group by on (json).")
+-- !result
+select array_agg(distinct [json_object("2:3")]) from ss;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: array_agg(DISTINCT [json_object('2:3')]) can't rewrite distinct to group by on (array<json>).")
+-- !result
+select array_agg(map(2,3)) from ss;
+-- result:
+[{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3},{2:3}]
+-- !result
+select array_agg(distinct map(2,3)) from ss;
+-- result:
+E: (1064, 'Unknown error')
+-- !result
+select array_agg(null);
+-- result:
+[null]
+-- !result
+select array_agg(order by 1 separator '');
+-- result:
+E: (1064, "Getting syntax error at line 1, column 16. Detail message: Unexpected input '(', the most similar input is {<EOF>, ';'}.")
+-- !result
+select array_agg(separator NULL);
+-- result:
+E: (1064, "Getting syntax error at line 1, column 27. Detail message: No viable statement for input 'array_agg(separator NULL'.")
+-- !result
