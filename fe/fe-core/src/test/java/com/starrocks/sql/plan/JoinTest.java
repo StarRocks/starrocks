@@ -3041,5 +3041,106 @@ public class JoinTest extends PlanTestBase {
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode");
+
+        sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            t0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            t0\n" +
+                "            LEFT JOIN t1 ON t0.v1 = t1.v4\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    2000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            t0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            t0\n" +
+                "            LEFT JOIN t1 ON t0.v1 = t1.v4 where t1.v5 is null\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    20";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other predicates: 5: v5 IS NULL\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode");
+
+        sql = "select\n" +
+                "    *\n" +
+                "from\n" +
+                "    (\n" +
+                "        select\n" +
+                "            *\n" +
+                "        from\n" +
+                "            (\n" +
+                "                SELECT\n" +
+                "                    *\n" +
+                "                FROM\n" +
+                "                    (\n" +
+                "                        SELECT\n" +
+                "                            c.*,\n" +
+                "                            p.v5,\n" +
+                "                            p.v6\n" +
+                "                        FROM\n" +
+                "                            t0 c\n" +
+                "                            RIGHT JOIN t1 p ON c.v1 = p.v4\n" +
+                "                    ) AS one_level\n" +
+                "                ORDER BY\n" +
+                "                    one_level.v5\n" +
+                "                LIMIT\n" +
+                "                    20\n" +
+                "            ) AS two_level\n" +
+                "            LEFT JOIN t2 o ON two_level.v1 = o.v7\n" +
+                "    ) twice_join\n" +
+                "ORDER BY\n" +
+                "    twice_join.v2\n" +
+                "limit\n" +
+                "    100;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:TOP-N\n" +
+                "  |  order by: <slot 2> 2: v2 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 100\n" +
+                "  |  \n" +
+                "  12:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE\n" +
+                "  |    \n" +
+                "  9:MERGING-EXCHANGE\n" +
+                "     limit: 20");
     }
 }

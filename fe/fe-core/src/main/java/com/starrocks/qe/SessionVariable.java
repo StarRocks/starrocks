@@ -361,7 +361,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
-    public static final String TOPN = "topn";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -495,6 +494,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
+    public static final String PUSHDOWN_TOPN_LIMIT_NUM = "push_down_topn_limit_num";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -553,9 +554,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
     private boolean runtimeFilterOnExchangeNode = false;
-
-    @VariableMgr.VarAttr(name = TOPN)
-    private boolean topn = false;
 
     @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
     private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
@@ -1048,6 +1046,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
     private String thriftPlanProtocol = "binary";
 
+    @VarAttr(name = PUSHDOWN_TOPN_LIMIT_NUM)
+    private long pushDownTopNLimit = 1000;
+
+    public long getPushDownTopNLimit() {
+        return pushDownTopNLimit;
+    }
+
+    public SessionVariable setPushDownTopNLimit(long pushDownTopNLimit) {
+        this.pushDownTopNLimit = pushDownTopNLimit;
+        return this;
+    }
+
     public String getThriftPlanProtocol() {
         return thriftPlanProtocol;
     }
@@ -1399,15 +1409,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableHiveMetadataCacheWithInsert(boolean enableHiveMetadataCacheWithInsert) {
         this.enableHiveMetadataCacheWithInsert = enableHiveMetadataCacheWithInsert;
-    }
-
-    public boolean isTopn() {
-        return topn;
-    }
-
-    public SessionVariable setTopn(boolean topn) {
-        this.topn = topn;
-        return this;
     }
 
     public int getHivePartitionStatsSampleSize() {

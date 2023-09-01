@@ -402,9 +402,7 @@ public class Optimizer {
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-        if (sessionVariable.isTopn()) {
-            ruleRewriteOnlyOnce(tree, rootTaskContext, new OuterJoinAddRedundantTopNRule());
-        }
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new OuterJoinAddRedundantTopNRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 

@@ -40,6 +40,10 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
 
+        if (topn.getLimit() > context.getSessionVariable().getPushDownTopNLimit()) {
+            return false;
+        }
+
         OptExpression childExpr = input.inputAt(0);
         LogicalJoinOperator joinOperator = childExpr.getOp().cast();
         JoinOperator joinType = joinOperator.getJoinType();
@@ -48,21 +52,28 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
             return false;
         }
 
+        if (joinOperator.getPredicate() != null) {
+            return false;
+        }
+
+        OptExpression joinChild = null;
+        if (joinType.isLeftOuterJoin()) {
+            joinChild = childExpr.inputAt(0);
+        } else if (joinType.isRightJoin()) {
+            joinChild = childExpr.inputAt(1);
+        }
+
+        assert joinChild != null;
+        if (topn.hasLimit() && joinChild.getOp().hasLimit() && topn.getLimit() >= joinChild.getOp().getLimit()) {
+            return false;
+        }
+
         List<Integer> colIds = topn.getOrderByElements().stream()
                 .map(Ordering::getColumnRef)
                 .map(ColumnRefOperator::getId)
                 .collect(Collectors.toList());
-        if (joinType.isLeftOuterJoin()) {
-            OptExpression joinLeftChild = childExpr.inputAt(0);
-            return joinLeftChild.getOutputColumns().containsAll(colIds);
-        }
 
-        if (joinType.isRightJoin()) {
-            OptExpression joinRightChild = childExpr.inputAt(1);
-            return joinRightChild.getOutputColumns().containsAll(colIds);
-        }
-
-        return false;
+        return joinChild.getOutputColumns().containsAll(colIds);
     }
 
     @Override
