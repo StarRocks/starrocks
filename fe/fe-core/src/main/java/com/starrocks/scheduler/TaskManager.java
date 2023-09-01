@@ -127,6 +127,7 @@ public class TaskManager {
     }
 
     private void registerPeriodicalTask() {
+        LocalDateTime scheduleTime = LocalDateTime.now();
         for (Task task : nameToTaskMap.values()) {
             if (task.getType() != Constants.TaskType.PERIODICAL) {
                 continue;
@@ -143,7 +144,7 @@ public class TaskManager {
             long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                     taskSchedule.getTimeUnit());
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            long initialDelay = getInitialDelayTime(period, startTime, LocalDateTime.now());
+            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
             // Tasks that run automatically have the lowest priority,
             // but are automatically merged if they are found to be merge-able.
             ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
@@ -152,6 +153,7 @@ public class TaskManager {
                             executeTask(task.getName(), option), initialDelay,
                     period, TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
+            scheduleTime = scheduleTime.plusSeconds(5);
         }
     }
 
