@@ -396,8 +396,10 @@ private:
 };
 
 inline void Status::update(const Status& new_status) {
+    new_status.mark_checked();
     if (ok()) {
         *this = new_status;
+        must_check();
     }
 }
 
