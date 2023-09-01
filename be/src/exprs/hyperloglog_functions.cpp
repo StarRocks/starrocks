@@ -17,6 +17,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/object_column.h"
+#include "exprs/base64.h"
 #include "exprs/function_context.h"
 #include "exprs/unary_function.h"
 #include "types/hll.h"
@@ -109,6 +110,47 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* conte
     } else {
         return hll_column;
     }
+}
+
+// base64_to_hll
+StatusOr<ColumnPtr> HyperloglogFunctions::base64_to_hll(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_HLL> builder(size);
+    std::unique_ptr<char[]> p;
+    int last_len = 0;
+    int curr_len = 0;
+
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto src_value = viewer.value(row);
+        int ssize = src_value.size;
+        if (ssize == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        curr_len = ssize + 3;
+        if (last_len < curr_len) {
+            p.reset(new char[curr_len]);
+            last_len = curr_len;
+        }
+
+        int decode_len = base64_decode2(src_value.data, ssize, p.get());
+        if (decode_len < 0) {
+            builder.append_null();
+            continue;
+        }
+
+        HyperLogLog hll;
+        hll.deserialize(Slice(p.get(), decode_len));
+        builder.append(std::move(hll));
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks

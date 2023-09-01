@@ -17,6 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "column/column_viewer.h"
+#include "exprs/base64.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "util/phmap/phmap.h"
 
@@ -32,6 +34,10 @@ private:
     std::unique_ptr<FunctionContext> ctx_ptr;
     FunctionContext* ctx;
 };
+
+static uint64_t hash(uint64_t value) {
+    return HashUtil::murmur_hash64A(&value, 8, 0);
+}
 
 TEST_F(HyperLogLogFunctionsTest, hllEmptyTest) {
     {
@@ -228,4 +234,193 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         }
     }
 }
+
+TEST_F(HyperLogLogFunctionsTest, base64ToEmptyHllTest) {
+    uint8_t buf[HLL_REGISTERS_COUNT + 1];
+    { // Empty hll
+        HyperLogLog hll;
+        ASSERT_EQ(HLL_DATA_EMPTY, hll.get_type());
+        ASSERT_EQ(0, hll.estimate_cardinality());
+
+        // serialize
+        int serialized_len = hll.serialize(buf);
+        ASSERT_EQ(1, serialized_len);
+
+        // base64 encode
+        int len = (size_t)(4.0 * ceil((double)serialized_len / 3.0)) + 1;
+        std::unique_ptr<char[]> p;
+        p.reset(new char[len]);
+        memset(p.get(), 0, len);
+        int encoded_len = base64_encode2(buf, serialized_len, (unsigned char*)p.get());
+
+        auto col = BinaryColumn::create();
+        col->append(Slice(p.get(), encoded_len));
+        Columns columns;
+        columns.push_back(col);
+
+        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ASSERT_EQ(0, viewer.value(0)->estimate_cardinality());
+    }
+}
+
+TEST_F(HyperLogLogFunctionsTest, base64ToHllTest) {
+    uint8_t buf[HLL_REGISTERS_COUNT + 1];
+
+    { // explicit hll
+        HyperLogLog hll;
+        int HLL_EXPLICLIT_INT64_NUM = 160;
+        for (int i = 0; i < HLL_EXPLICLIT_INT64_NUM; i++) {
+            hll.update(hash(i));
+        }
+
+        ASSERT_EQ(HLL_DATA_EXPLICIT, hll.get_type());
+        ASSERT_EQ(HLL_EXPLICLIT_INT64_NUM, hll.estimate_cardinality());
+
+        // serialize
+        int serialized_len = hll.serialize(buf);
+
+        HyperLogLog test_hll(Slice((char*)buf, serialized_len));
+        ASSERT_EQ(HLL_DATA_EXPLICIT, test_hll.get_type());
+        ASSERT_EQ(HLL_EXPLICLIT_INT64_NUM, test_hll.estimate_cardinality());
+
+        // base64 encode
+        int len = (size_t)(4.0 * ceil((double)serialized_len / 3.0)) + 1;
+        std::unique_ptr<char[]> p;
+        p.reset(new char[len]);
+        memset(p.get(), 0, len);
+        int encoded_len = base64_encode2(buf, serialized_len, (unsigned char*)p.get());
+
+        auto col = BinaryColumn::create();
+        col->append(Slice(p.get(), encoded_len));
+        Columns columns;
+        columns.push_back(col);
+
+        // base64 string to hll
+        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+
+        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ASSERT_EQ(HLL_EXPLICLIT_INT64_NUM, viewer.value(0)->estimate_cardinality());
+    }
+}
+
+TEST_F(HyperLogLogFunctionsTest, base64ToExplicitHllTest) {
+    uint8_t buf[HLL_REGISTERS_COUNT + 1];
+    { // explicit hll
+        HyperLogLog hll;
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < HLL_EXPLICLIT_INT64_NUM; i++) {
+            hll.update(hash(i));
+            ASSERT_EQ(HLL_DATA_EXPLICIT, hll.get_type());
+            ASSERT_EQ(i + 1, hll.estimate_cardinality());
+
+            // serialize
+            int serialized_len = hll.serialize(buf);
+
+            // base64 encode
+            int len = (size_t)(4.0 * ceil((double)serialized_len / 3.0)) + 1;
+            std::unique_ptr<char[]> p;
+            p.reset(new char[len]);
+            memset(p.get(), 0, len);
+            int encoded_len = base64_encode2(buf, serialized_len, (unsigned char*)p.get());
+
+            col->append(Slice(p.get(), encoded_len));
+        }
+
+        Columns columns;
+        columns.push_back(col);
+
+        // base64 string to hll
+        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+
+        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        for (int i = 0; i < HLL_EXPLICLIT_INT64_NUM; i++) {
+            ASSERT_EQ(i + 1, viewer.value(i)->estimate_cardinality());
+        }
+    }
+}
+
+TEST_F(HyperLogLogFunctionsTest, base64ToSparseHllTest) {
+    uint8_t buf[HLL_REGISTERS_COUNT + 1];
+    { // sparse hll
+        HyperLogLog hll;
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < HLL_SPARSE_THRESHOLD; i++) {
+            hll.update(hash(i));
+            if (i < HLL_EXPLICLIT_INT64_NUM) {
+                ASSERT_EQ(HLL_DATA_EXPLICIT, hll.get_type());
+            }
+
+            // serialize
+            int serialized_len = hll.serialize(buf);
+
+            // base64 encode
+            int len = (size_t)(4.0 * ceil((double)serialized_len / 3.0)) + 1;
+            std::unique_ptr<char[]> p;
+            p.reset(new char[len]);
+            memset(p.get(), 0, len);
+            int encoded_len = base64_encode2(buf, serialized_len, (unsigned char*)p.get());
+
+            col->append(Slice(p.get(), encoded_len));
+        }
+
+        Columns columns;
+        columns.push_back(col);
+
+        // base64 string to hll
+        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+
+        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        for (int i = 0; i < HLL_SPARSE_THRESHOLD; i++) {
+            auto cardinality = viewer.value(i)->estimate_cardinality();
+            if (i < HLL_EXPLICLIT_INT64_NUM) {
+                ASSERT_EQ(i + 1, cardinality);
+            } else {
+                // 2% error rate
+                ASSERT_TRUE(cardinality > i * 0.98 && cardinality < i * 1.02);
+            }
+        }
+    }
+}
+
+TEST_F(HyperLogLogFunctionsTest, base64ToFullHllTest) {
+    uint8_t buf[HLL_REGISTERS_COUNT + 1];
+    { // sparse hll
+        HyperLogLog hll;
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < HLL_SPARSE_THRESHOLD + 100; i++) {
+            hll.update(hash(i));
+
+            // serialize
+            int serialized_len = hll.serialize(buf);
+
+            // base64 encode
+            int len = (size_t)(4.0 * ceil((double)serialized_len / 3.0)) + 1;
+            std::unique_ptr<char[]> p;
+            p.reset(new char[len]);
+            memset(p.get(), 0, len);
+            int encoded_len = base64_encode2(buf, serialized_len, (unsigned char*)p.get());
+
+            col->append(Slice(p.get(), encoded_len));
+        }
+
+        Columns columns;
+        columns.push_back(col);
+
+        // base64 string to hll
+        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+
+        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        for (int i = 0; i < HLL_SPARSE_THRESHOLD + 100; i++) {
+            auto cardinality = viewer.value(i)->estimate_cardinality();
+            if (i < HLL_EXPLICLIT_INT64_NUM) {
+                ASSERT_EQ(i + 1, cardinality);
+            } else {
+                // 2% error rate
+                ASSERT_TRUE(cardinality > i * 0.98 && cardinality < i * 1.02);
+            }
+        }
+    }
+}
+
 } // namespace starrocks

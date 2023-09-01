@@ -588,6 +588,7 @@ vectorized_functions = [
 
     [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
     [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
+    [80050, 'base64_to_hll', 'HLL', ['VARCHAR'], 'HyperloglogFunction::base64_to_hll'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],
