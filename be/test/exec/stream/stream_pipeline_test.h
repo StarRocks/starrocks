@@ -88,7 +88,7 @@ std::vector<ChunkPtr> StreamPipelineTest::fetch_results(const EpochInfo& epoch_i
                 for (auto& chunk : result_chunks) {
                     VLOG_ROW << "FetchResults, result: " << chunk->debug_columns();
                 }
-                stream_sink_op->reset_epoch(nullptr);
+                CHECK(stream_sink_op->reset_epoch(nullptr).ok());
                 break;
             }
         }

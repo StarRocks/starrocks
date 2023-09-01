@@ -61,7 +61,7 @@ public:
         return &s_fp_registry;
     }
 
-    Status add(FailPoint* fp);
+    [[nodiscard]] Status add(FailPoint* fp);
     FailPoint* get(const std::string& name);
 
     void iterate(std::function<void(FailPoint*)> callback);
