@@ -358,7 +358,7 @@ The following example explains how to load data with Spark SQL by using the `INS
 
 ### Load data into columns of BITMAP type 
 
-[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
+[`BITMAP`](../sql-reference/sql-statements/data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
  
 1. Create a StarRocks Aggregate table
@@ -377,7 +377,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 3. Create a Spark table 
 
-    The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `BITMAP` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap) function to convert the data of `BIGINT` type into `BITMAP` type.
+    The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `BITMAP` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) function to convert the data of `BIGINT` type into `BITMAP` type.
     
     Run the following DDL in `spark-sql`:
     
@@ -421,13 +421,13 @@ Here we take the counting of UV as an example to show how to load data into colu
     ```
 > **NOTICE:**
 > 
-> The connector uses [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
+> The connector uses [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
 > function to convert data of the `TINYINT`, `SMALLINT`, `INTEGER`, and `BIGINT` types in Spark to the `BITMAP` type in StarRocks, and uses
-> [`bitmap_hash`](https://docs.starrocks.io/zh-cn/latest/sql-reference/sql-functions/bitmap-functions/bitmap_hash) function for other Spark data types.
+> [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) function for other Spark data types.
 
 ### Load data into columns of HLL type
 
-[`HLL`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/HLL) can be used for approximate count distinct, see [Use HLL for approximate count distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_HLL). 
+[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md). 
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.  **`HLL` is supported since version 1.1.1**.
 
@@ -492,7 +492,7 @@ DISTRIBUTED BY HASH(`page_id`);
 
 
 
-The following example explains how to load data into columns of the [`ARRAY`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/Array) type.
+The following example explains how to load data into columns of the [`ARRAY`](../sql-reference/sql-statements/data-types/Array.md) type.
 
 1. Create a StarRocks table.
 
