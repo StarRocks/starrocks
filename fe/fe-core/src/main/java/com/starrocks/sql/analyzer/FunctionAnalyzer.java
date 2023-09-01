@@ -159,6 +159,7 @@ public class FunctionAnalyzer {
             return;
         }
 
+<<<<<<< HEAD
         if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
             if (fnParams.isDistinct()) {
                 throw new SemanticException("array_agg does not support DISTINCT");
@@ -183,6 +184,8 @@ public class FunctionAnalyzer {
             }
         }
 
+=======
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>");

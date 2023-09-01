@@ -146,13 +146,49 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1,v2 from t0 order by v3");
         analyzeFail("select distinct v1 from t0 order by sum(v2)");
 
+<<<<<<< HEAD
         analyzeFail("select count(distinct v1), count(distinct v3) from tarray",
                 "No matching function with signature: multi_distinct_count(ARRAY)");
+=======
+        analyzeSuccess("select count(distinct v1), count(distinct v3) from tarray");
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
 
         analyzeFail("select abs(distinct v1) from t0");
         analyzeFail("SELECT VAR_SAMP ( DISTINCT v2 ) FROM v0");
         analyzeFail("select distinct v1 from t0 having sum(v1) > 2");
     }
+<<<<<<< HEAD
+=======
+    @Test
+    public void testDistinctAggOnComplexTypes() {
+        analyzeSuccess("select count(distinct va) from ttypes group by v1");
+        analyzeSuccess("select count(*) from ttypes group by va");
+
+        // more than one count distinct
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va), count(distinct va1) from ttypes");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vm), count(distinct vm1) from ttypes");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs), count(distinct vs1) from ttypes");
+        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes group by v1");
+        analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
+
+        // single count distinct
+        analyzeSuccess("select count(distinct vm) from ttypes");
+        analyzeSuccess("select count(distinct vs) from ttypes");
+        analyzeFail("select count(distinct vj) from ttypes");
+        analyzeSuccess("select count(distinct vm) from ttypes group by v1");
+        analyzeSuccess("select count(distinct vs) from ttypes group by v1");
+        analyzeFail("select count(distinct vj) from ttypes group by v1");
+        analyzeSuccess("select count(distinct va),count(distinct vm) from ttypes group by v1");
+
+        // group by complex types
+        analyzeSuccess("select count(*) from ttypes group by vm");
+        analyzeSuccess("select count(*) from ttypes group by vs");
+        analyzeFail("select count(*) from ttypes group by vj");
+    }
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
 
     @Test
     public void testGroupByUseOutput() {

@@ -898,25 +898,49 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                boolean outputConst = true;
                 if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                     fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                    outputConst = node.getChild(0).isConstant();
                 } else {
-                    boolean outputConst = true;
+                    fn.setRetType(Type.VARCHAR);
                     for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
                         if (!node.getChild(i).isConstant()) {
                             outputConst = false;
                             break;
                         }
                     }
-                    ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
-                            (!isAscOrder.isEmpty() || outputConst));
-                    fn.setRetType(Type.VARCHAR);
                 }
+<<<<<<< HEAD
             } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 // This must before test for DecimalV3.
                 if (!(node.getChild(1) instanceof IntLiteral)) {
                     throw new SemanticException(
                             fnName + " requires second parameter must be a constant interval");
+=======
+                // need to distinct output columns in finalize phase
+                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                        (!isAscOrder.isEmpty() || outputConst));
+            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
+                argumentTypes[1] = Type.DOUBLE;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                // correct decimal's precision and scale
+                if (fn.getArgs()[0].isDecimalV3()) {
+                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
+
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
+                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
+
+                    newFn.setFunctionId(fn.getFunctionId());
+                    newFn.setChecksum(fn.getChecksum());
+                    newFn.setBinaryType(fn.getBinaryType());
+                    newFn.setHasVarArgs(fn.hasVarArgs());
+                    newFn.setId(fn.getId());
+                    newFn.setUserVisible(fn.isUserVisible());
+                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
+
+                    fn = newFn;
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(
@@ -1068,6 +1092,223 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            switch (fnName) {
+                case FunctionSet.TIME_SLICE:
+                case FunctionSet.DATE_SLICE:
+                    if (!(node.getChild(1) instanceof IntLiteral)) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be a constant interval", node.getPos());
+                    }
+                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be greater than 0", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of array_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ALL_MATCH:
+                case FunctionSet.ANY_MATCH:
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have a input array", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName + " should be an array",
+                                node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of " + fnName +
+                                node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_SORTBY:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_GENERATE:
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                        throw new SemanticException(fnName + " has wrong input numbers");
+                    }
+                    for (Expr expr : node.getChildren()) {
+                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                        }
+                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                        }
+                    }
+                    break;
+                case FunctionSet.MAP_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 inputs, " +
+                                "but there are just " + node.getChildren().size() + " inputs.");
+                    }
+                    if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be a map or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be a array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of map_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                    }
+                    break;
+                case FunctionSet.GROUP_CONCAT:
+                case FunctionSet.ARRAY_AGG: {
+                    if (node.getChildren().size() == 0) {
+                        throw new SemanticException(fnName + " should have at least one input", node.getPos());
+                    }
+                    int start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
+                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                node.getPos());
+                    } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
+                        throw new SemanticException(fnName + " should have exact one output expressions before" +
+                                " [ORDER BY]", node.getPos());
+                    }
+                    for (int i = start; i < argumentTypes.length; ++i) {
+                        if (!argumentTypes[i].canOrderBy()) {
+                            throw new SemanticException(fnName + " can't support order by the " + i +
+                                    "-th input with type of " + argumentTypes[i].toSql(), node.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.NAMED_STRUCT: {
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    if (node.getChildren().size() % 2 != 0) {
+                        throw new SemanticException(fnName + " arguments must be in name/value pairs", node.getPos());
+                    }
+
+                    Set<String> check = Sets.newHashSet();
+                    for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                        if (!(node.getChild(i) instanceof StringLiteral)) {
+                            throw new SemanticException(
+                                    "The " + (i + 1) + "-th input of named_struct must be string literal",
+                                    node.getPos());
+                        }
+
+                        String name = ((StringLiteral) node.getChild(i)).getValue();
+                        if (check.contains(name.toLowerCase())) {
+                            throw new SemanticException("named_struct contains duplicate subfield name: " +
+                                    name + " at " + (i + 1) + "-th input", node.getPos());
+                        }
+
+                        check.add(name.toLowerCase());
+                    }
+                    break;
+                }
+                case FunctionSet.ROW: {
+                    if (node.getChildren().size() < 1) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_AVG:
+                case FunctionSet.ARRAY_MAX:
+                case FunctionSet.ARRAY_MIN:
+                case FunctionSet.ARRAY_SORT:
+                case FunctionSet.ARRAY_SUM:
+                case FunctionSet.ARRAY_CUM_SUM:
+                case FunctionSet.ARRAY_DIFFERENCE:
+                case FunctionSet.ARRAY_DISTINCT:
+                case FunctionSet.ARRAY_LENGTH:
+                case FunctionSet.ARRAY_TO_BITMAP: {
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have only one input", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The only one input of " + fnName +
+                                " should be an array, rather than " + node.getChild(0).getType().toSql(),
+                                node.getPos());
+                    }
+
+                    break;
+                }
+                case FunctionSet.ARRAY_CONTAINS_ALL:
+                case FunctionSet.ARRAYS_OVERLAP: {
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have only two inputs", node.getPos());
+                    }
+                    for (int i = 0; i < node.getChildren().size(); ++i) {
+                        if (!node.getChild(i).getType().isArrayType() && !node.getChild(i).getType().isNull()) {
+                            throw new SemanticException((i + 1) + "-th input of " + fnName +
+                                    " should be an array, rather than " + node.getChild(i).getType().toSql(),
+                                    node.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_INTERSECT:
+                case FunctionSet.ARRAY_CONCAT: {
+                    if (node.getChildren().isEmpty()) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    for (int i = 0; i < node.getChildren().size(); ++i) {
+                        if (!node.getChild(i).getType().isArrayType() && !node.getChild(i).getType().isNull()) {
+                            throw new SemanticException((i + 1) + "-th input of " + fnName +
+                                    " should be an array, rather than " + node.getChild(i).getType().toSql(),
+                                    node.getPos());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.ARRAY_CONTAINS:
+                case FunctionSet.ARRAY_APPEND:
+                case FunctionSet.ARRAY_JOIN:
+                case FunctionSet.ARRAY_POSITION:
+                case FunctionSet.ARRAY_REMOVE:
+                case FunctionSet.ARRAY_SLICE: {
+                    if (node.getChildren().isEmpty()) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array", node.getPos());
+                    }
+                    break;
+                }
+            }
+        }
+
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
             /*
              * @TODO: Determine the return type of this function

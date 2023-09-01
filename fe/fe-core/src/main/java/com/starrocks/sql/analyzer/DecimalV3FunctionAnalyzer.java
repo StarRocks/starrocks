@@ -51,7 +51,11 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
+<<<<<<< HEAD
                     .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG)
+=======
+                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).add(FunctionSet.ARRAY_AGG_DISTINCT)
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
                     .add(FunctionSet.HISTOGRAM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =

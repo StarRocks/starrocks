@@ -428,10 +428,19 @@ public class SelectAnalyzer {
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
+<<<<<<< HEAD
         if (aggregations.stream().filter(FunctionCallExpr::isDistinct).count() > 1) {
             for (FunctionCallExpr agg : aggregations) {
                 if (agg.isDistinct() && agg.getChildren().size() > 0 && agg.getChild(0).getType().isArrayType()) {
                     throw new SemanticException("No matching function with signature: multi_distinct_count(ARRAY)");
+=======
+        for (FunctionCallExpr agg : aggregations) {
+            if (agg.isDistinct() && agg.getChildren().size() > 0) {
+                Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                if (Arrays.stream(args).anyMatch(t -> (t.isJsonType() || t.isComplexType()) && !t.canGroupBy())) {
+                    throw new SemanticException(agg.toSql() + " can't rewrite distinct to group by on (" +
+                            Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
                 }
             }
         }

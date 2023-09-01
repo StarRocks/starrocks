@@ -1863,12 +1863,21 @@ functionCall
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
+<<<<<<< HEAD
     | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
     | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' DISTINCT? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+=======
+    | COUNT '(' (setQuantifier bracketHint?)? (expression (',' expression)*)? ')'
+    | MAX '(' setQuantifier? expression ')'
+    | MIN '(' setQuantifier? expression ')'
+    | SUM '(' setQuantifier? expression ')'
+    | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
     ;
 
 userVariable
@@ -2251,6 +2260,7 @@ number
     ;
 
 nonReserved
+<<<<<<< HEAD
     : ACTIVE | AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2258,6 +2268,19 @@ nonReserved
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+=======
+    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BUILTIN | BASE
+    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
+    | CONFIG | COMPACT
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
+    | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
+    | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
+    | FUNCTIONS
+>>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
     | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
