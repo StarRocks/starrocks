@@ -162,6 +162,8 @@ LogicalType thrift_to_type(TPrimitiveType::type ttype) {
         return TYPE_##ttype;
         APPLY_FOR_SCALAR_THRIFT_TYPE(M)
 #undef M
+    case TPrimitiveType::ARRAY:
+        return TYPE_ARRAY;
     }
 
     return TYPE_UNKNOWN;
