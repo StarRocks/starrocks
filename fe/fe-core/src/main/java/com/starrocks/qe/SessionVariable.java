@@ -494,7 +494,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
-    public static final String PUSHDOWN_TOPN_LIMIT_NUM = "push_down_topn_limit_num";
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1046,16 +1046,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
     private String thriftPlanProtocol = "binary";
 
-    @VarAttr(name = PUSHDOWN_TOPN_LIMIT_NUM)
-    private long pushDownTopNLimit = 1000;
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
 
-    public long getPushDownTopNLimit() {
-        return pushDownTopNLimit;
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
     }
 
-    public SessionVariable setPushDownTopNLimit(long pushDownTopNLimit) {
-        this.pushDownTopNLimit = pushDownTopNLimit;
-        return this;
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
     }
 
     public String getThriftPlanProtocol() {

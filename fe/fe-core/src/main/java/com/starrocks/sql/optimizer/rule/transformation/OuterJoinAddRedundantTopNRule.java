@@ -33,14 +33,15 @@ import java.util.stream.Collectors;
 public class OuterJoinAddRedundantTopNRule extends TransformationRule {
     public OuterJoinAddRedundantTopNRule() {
         super(RuleType.TF_PUSH_DOWN_TOPN_OUTER_JOIN,
-                Pattern.create(OperatorType.LOGICAL_TOPN).addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)));
+                Pattern.create(OperatorType.LOGICAL_TOPN).addChildren(
+                        Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_LEAF, OperatorType.PATTERN_LEAF)));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
 
-        if (topn.getLimit() > context.getSessionVariable().getPushDownTopNLimit()) {
+        if (topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
             return false;
         }
 
@@ -63,7 +64,6 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
             joinChild = childExpr.inputAt(1);
         }
 
-        assert joinChild != null;
         if (topn.hasLimit() && joinChild.getOp().hasLimit() && topn.getLimit() >= joinChild.getOp().getLimit()) {
             return false;
         }
