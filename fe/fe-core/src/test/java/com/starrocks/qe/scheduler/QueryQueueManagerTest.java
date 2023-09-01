@@ -1149,10 +1149,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 1. Queries of group #0 and #3 will be pending.
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(10).setMem_used_bytes(10),
-                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(100),
-                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(100),
-                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(30)
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(1000).setMem_used_bytes(10),
+                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(10000),
+                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(10000),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(3000)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
 
@@ -1181,8 +1181,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 2. Group #0 is not overloaded anymore.
         groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(9),
-                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(35)
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(900),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(3500)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
@@ -1190,7 +1190,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 3. Group #3 is not overloaded anymore.
         groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(9)
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(900)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(

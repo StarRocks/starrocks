@@ -612,7 +612,7 @@ public class ComputeNode implements IComputable, Writable {
 
         ResourceGroupUsage usage = currGroupIdToUsage.get(groupId);
         return usage.group.isMaxCpuCoresEffective() && usage.isCpuCoreUsagePermilleEffective() &&
-                usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 10;
+                usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 1000;
     }
 
     public static class ResourceGroupUsage {
