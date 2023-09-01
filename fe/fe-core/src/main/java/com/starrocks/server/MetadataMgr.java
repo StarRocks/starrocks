@@ -71,7 +71,8 @@ import java.util.stream.Collectors;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
-    private class QueryMetadatas {
+
+    public class QueryMetadatas {
         private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
 
         public QueryMetadatas() {}
@@ -102,9 +103,7 @@ public class MetadataMgr {
         QueryMetadatas meta = notification.getValue();
         if (meta != null) {
             meta.metadatas.values().forEach(ConnectorMetadata::clear);
-            if (notification.getCause() == RemovalCause.EXPLICIT) {
-                LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
-            } else {
+            if (notification.getCause() != RemovalCause.EXPLICIT) {
                 LOG.info("Evict cache due to {} and deregister query-level " +
                         "connector metadata on query id: {}", notification.getCause(), queryId);
             }
