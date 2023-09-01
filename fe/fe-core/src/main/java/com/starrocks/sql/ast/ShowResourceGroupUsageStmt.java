@@ -29,10 +29,6 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * Show all the unfinished queries retrieving from the slot manager.
- * <p> Note that it only shows the queries managed by the slot manager, that is, enabling query queue.
- */
 public class ShowResourceGroupUsageStmt extends ShowStmt {
     private static final List<Pair<Column, Function<ShowItem, String>>> META_DATA =
             ImmutableList.of(
