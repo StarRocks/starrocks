@@ -749,9 +749,6 @@ public class RuntimeProfile {
 
         @Override
         public String format(RuntimeProfile profile, String prefix) {
-<<<<<<< HEAD
-            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
-=======
             this.doFormat(profile, prefix);
             return builder.toString();
         }
@@ -763,8 +760,7 @@ public class RuntimeProfile {
         }
 
         private void doFormat(RuntimeProfile profile, String prefix) {
-            Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
->>>>>>> 4437950f92 ([Enhancement] Improve the profile serialization performance (#30221))
+            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
             builder.append(prefix).append(profile.getName()).append(":");
