@@ -94,7 +94,9 @@ models:
 {{ config(materialized='materialized_view') }}        
 {{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
 {{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='materialized_view', properties={"storage_medium":"SSD"}) }}
 ```
+For materialized view only support partition_by、buckets、distributed_by、properties、refresh_method configuration.
 
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
