@@ -85,7 +85,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"col0,col1,col2"`. |
-| starrocks.column.types                         | NO       | None          | Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-HLL-type) type.|
+| starrocks.column.types                         | NO       | None          | Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-hll-type) type.|
 | starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). |
 | starrocks.write.properties.format              | NO       | CSV           | The file format based on which the Spark connector transforms each batch of data before the data is sent to StarRocks. Valid values: CSV and JSON. |
 | starrocks.write.properties.row_delimiter       | NO       | \n            | The row delimiter for CSV-formatted data.                    |
@@ -96,7 +96,6 @@ Directly download the corresponding version of the Spark connector JAR from the 
 ## Data type mapping between Spark and StarRocks
 
 - The default data type mapping is as follows:
-
 
 	| Spark data type | StarRocks data type                                          |
 	| --------------- | ------------------------------------------------------------ |
@@ -436,7 +435,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.  **`HLL` is supported since version 1.1.1**.
 
-1. Create a StarRocks Aggregate table
+1. Create a StarRocks Aggregate table.
 	
    In the database `test`, create an Aggregate table `hll_uv` where the column `visit_users` is defined as the `HLL` type and configured with the aggregate function `HLL_UNION`. 
 
@@ -450,9 +449,9 @@ AGGREGATE KEY(`page_id`, `visit_date`)
 DISTRIBUTED BY HASH(`page_id`);
 ```
 
-2. Create a Spark table
+2. Create a Spark table.
 
-   The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `HLL` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`hll_hash`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/aggregate-functions/hll_hash) function to convert the data of `BIGINT` type into `HLL` type.
+   The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `HLL` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash) function to convert the data of `BIGINT` type into `HLL` type.
 
     Run the following DDL in `spark-sql`:
     
@@ -469,7 +468,7 @@ DISTRIBUTED BY HASH(`page_id`);
     );
     ```
 
-3. Load data into StarRocks table
+3. Load data into StarRocks table.
 
     Run the following DML in `spark-sql`:
     
@@ -499,55 +498,55 @@ DISTRIBUTED BY HASH(`page_id`);
 
 The following example explains how to load data into columns of the [`ARRAY`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/Array) type.
 
-1. Create a StarRocks table
+1. Create a StarRocks table.
 
-In the database `test`, create a Primary Key table `array_tbl` that includes one `INT` column and two `ARRAY` columns.
+	In the database `test`, create a Primary Key table `array_tbl` that includes one `INT` column and two `ARRAY` columns.
+	
+	```SQL
+	CREATE TABLE `array_tbl` (
+	  `id` INT NOT NULL,
+	  `a0` ARRAY<STRING>,
+	  `a1` ARRAY<ARRAY<INT>>
+	) ENGINE=OLAP
+	PRIMARY KEY(`id`)
+	DISTRIBUTED BY HASH(`id`)
+	;
+	```
 
-```SQL
-CREATE TABLE `array_tbl` (
-  `id` INT NOT NULL,
-  `a0` ARRAY<STRING>,
-  `a1` ARRAY<ARRAY<INT>>
-) ENGINE=OLAP
-PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`)
-;
-```
-
-2. Write data to StarRocks
+2. Write data to StarRocks.
    
-Because some versions of StarRocks does not provide the metadata of `ARRAY` column, the connector can not infer
-the corresponding Spark data type for this column. However, you can explicitly specify the corresponding Spark data type of the column in the option `starrocks.column.types`. In this exapmle, you can configure the option as `a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>`.
-
-Run the following codes in `spark-shell`:
-
-```scala
-val data = Seq(
-   |  (1, Seq("hello", "starrocks"), Seq(Seq(1, 2), Seq(3, 4))),
-   |  (2, Seq("hello", "spark"), Seq(Seq(5, 6, 7), Seq(8, 9, 10)))
-   | )
-val df = data.toDF("id", "a0", "a1")
-df.write
-     .format("starrocks")
-     .option("starrocks.fe.http.url", "127.0.0.1:8030")
-     .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
-     .option("starrocks.table.identifier", "test.array_tbl")
-     .option("starrocks.user", "root")
-     .option("starrocks.password", "")
-     .option("starrocks.column.types", "a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>")
-     .mode("append")
-     .save()
-```
+	Because some versions of StarRocks does not provide the metadata of `ARRAY` column, the connector can not infer
+	the corresponding Spark data type for this column. However, you can explicitly specify the corresponding Spark data type of the column in the option `starrocks.column.types`. In this exapmle, you can configure the option as `a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>`.
+	
+	Run the following codes in `spark-shell`:
+	
+	```scala
+	val data = Seq(
+	   |  (1, Seq("hello", "starrocks"), Seq(Seq(1, 2), Seq(3, 4))),
+	   |  (2, Seq("hello", "spark"), Seq(Seq(5, 6, 7), Seq(8, 9, 10)))
+	   | )
+	val df = data.toDF("id", "a0", "a1")
+	df.write
+	     .format("starrocks")
+	     .option("starrocks.fe.http.url", "127.0.0.1:8030")
+	     .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
+	     .option("starrocks.table.identifier", "test.array_tbl")
+	     .option("starrocks.user", "root")
+	     .option("starrocks.password", "")
+	     .option("starrocks.column.types", "a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>")
+	     .mode("append")
+	     .save()
+	```
 
 3. Query data in the StarRocks table.
 
-```SQL
-MySQL [test]> SELECT * FROM `array_tbl`;
-+------+-----------------------+--------------------+
-| id   | a0                    | a1                 |
-+------+-----------------------+--------------------+
-|    1 | ["hello","starrocks"] | [[1,2],[3,4]]      |
-|    2 | ["hello","spark"]     | [[5,6,7],[8,9,10]] |
-+------+-----------------------+--------------------+
-2 rows in set (0.01 sec)
-```
+	```SQL
+	MySQL [test]> SELECT * FROM `array_tbl`;
+	+------+-----------------------+--------------------+
+	| id   | a0                    | a1                 |
+	+------+-----------------------+--------------------+
+	|    1 | ["hello","starrocks"] | [[1,2],[3,4]]      |
+	|    2 | ["hello","spark"]     | [[5,6,7],[8,9,10]] |
+	+------+-----------------------+--------------------+
+	2 rows in set (0.01 sec)
+	```
