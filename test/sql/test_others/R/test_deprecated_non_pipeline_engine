@@ -1,0 +1,22 @@
+-- name: test_deprecated_non_pipeline_engine @sequential
+set enable_pipeline_engine=false;
+-- result:
+-- !result
+select 1;
+-- result:
+[REGEX].*non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.*
+-- !result
+update information_schema.be_configs set value=60 where name = 'base_compaction_check_interval_seconds';
+-- result:
+-- !result
+select `value` from information_schema.be_configs where name = 'base_compaction_check_interval_seconds' limit 1;
+-- result:
+[REGEX].*non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.*
+-- !result
+set enable_pipeline_engine=true;
+-- result:
+-- !result
+select `value` from information_schema.be_configs where name = 'base_compaction_check_interval_seconds' limit 1;
+-- result:
+60
+-- !result

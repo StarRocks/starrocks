@@ -714,7 +714,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public boolean canUsePipeLine() {
-        return false;
+        return true;
     }
 
     public boolean canUseRuntimeAdaptiveDop() {

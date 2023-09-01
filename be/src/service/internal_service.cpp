@@ -411,7 +411,15 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
-        return _exec_plan_fragment_by_non_pipeline(t_request);
+        bool has_schema_table_sink = t_request.__isset.fragment && t_request.fragment.__isset.output_sink &&
+                                     t_request.fragment.output_sink.type == TDataSinkType::SCHEMA_TABLE_SINK;
+        // SchemaTableSink is not supported on the Pipeline engine, we have to allow it to be executed on non-pipeline engine temporarily,
+        // this will be removed in the future.
+        if (has_schema_table_sink) {
+            return _exec_plan_fragment_by_non_pipeline(t_request);
+        }
+        return Status::InvalidArgument(
+                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.");
     }
 }
 
