@@ -36,15 +36,21 @@ public class Tracers {
 
     private static final ThreadLocal<Tracers> THREAD_LOCAL = ThreadLocal.withInitial(Tracers::new);
 
+    // [empty tracer, real tracer]
     private final Tracer[] allTracer = new Tracer[] {EMPTY_TRACER, EMPTY_TRACER};
 
+    // mark enable module
     private int moduleMask = 0;
 
+    // mark enable mode
     private int modeMask = 0;
 
     private boolean isCommandLog = false;
 
     private Tracer tracer(Module module, Mode mode) {
+        // need return real tracer when mode && module enable
+        // enable mode is `modeMask |= 1 << mode.ordinal()`, check mode is `(modeMask >> mode.ordinal()) & 1`, so
+        // when enable mode will return allTracer[1], disable will return allTracer[0]
         return allTracer[(modeMask >> mode.ordinal()) & (moduleMask >> module.ordinal() & 1)];
     }
 
@@ -52,6 +58,14 @@ public class Tracers {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.isCommandLog = StringUtils.equalsIgnoreCase("command", context.getSessionVariable().getTraceLogMode());
         LogTracer logTracer = tracers.isCommandLog ? new CommandLogTracer() : new FileLogTracer();
+        tracers.allTracer[0] = EMPTY_TRACER;
+        tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
+    }
+
+    public static void register() {
+        // default register FileLogTracer
+        Tracers tracers = THREAD_LOCAL.get();
+        LogTracer logTracer = new FileLogTracer();
         tracers.allTracer[0] = EMPTY_TRACER;
         tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
     }

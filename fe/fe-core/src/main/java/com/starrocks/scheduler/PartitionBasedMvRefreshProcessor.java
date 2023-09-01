@@ -165,11 +165,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // 5. update the source table version map if refresh task completes successfully
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
+        Tracers.register();
         prepare(context);
         try {
             doMvRefresh(context);
         } finally {
             postProcess();
+            Tracers.close();
         }
     }
 
@@ -983,7 +985,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
-        Tracers.register(ctx);
         ctx.setThreadLocalInfo();
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
@@ -1040,7 +1041,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
             }
         }
-        Tracers.close();
         return insertStmt;
     }
 

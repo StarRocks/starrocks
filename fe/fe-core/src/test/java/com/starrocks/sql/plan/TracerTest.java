@@ -99,4 +99,39 @@ public class TracerTest extends PlanTestBase {
         assertContains(pr, "origin logicOperatorTree");
         assertContains(pr, "TRACE QUERY");
     }
+
+    @Test
+    public void testTracerLog1Optimizer() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "Optimizer");
+        String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
+                "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
+                "from lineitem\n" +
+                "where l_shipdate <= date '1998-12-01'\n" +
+                "group by l_returnflag \n" +
+                "order by l_returnflag;";
+        getFragmentPlan(sql);
+        String pr = Tracers.printLogs();
+        System.out.println(pr);
+        Tracers.close();
+        assertContains(pr, "origin logicOperatorTree");
+        assertContains(pr, "TRACE QUERY");
+    }
+
+    @Test
+    public void testTracerLogAnalyze() throws Exception {
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, Tracers.Mode.LOGS, "Analyze");
+        String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
+                "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
+                "from lineitem\n" +
+                "where l_shipdate <= date '1998-12-01'\n" +
+                "group by l_returnflag \n" +
+                "order by l_returnflag;";
+        getFragmentPlan(sql);
+        String pr = Tracers.printLogs();
+        System.out.println(pr);
+        Tracers.close();
+        assertContains(pr, "QueryStatement");
+    }
 }
