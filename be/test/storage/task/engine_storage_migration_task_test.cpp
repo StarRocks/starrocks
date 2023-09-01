@@ -16,14 +16,19 @@
 
 #include <gtest/gtest.h>
 
+#include "butil/file_util.h"
+#include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/time_types.h"
+#include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/options.h"
@@ -31,10 +36,14 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_meta.h"
+#include "storage/update_manager.h"
 #include "testutil/assert.h"
-#include "testutil/init_test_env.h"
+#include "util/cpu_info.h"
 #include "util/disk_info.h"
+#include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -262,8 +271,7 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -296,8 +304,7 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -424,7 +431,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
-    CHECK(tablet_manager->start_trash_sweep().ok());
+    tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -501,7 +508,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
-    CHECK(tablet_manager->start_trash_sweep().ok());
+    tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
@@ -522,5 +529,84 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
 } // namespace starrocks
 
 int main(int argc, char** argv) {
-    return starrocks::init_test_env(argc, argv);
+    starrocks::init_glog("be_test", true);
+    ::testing::InitGoogleTest(&argc, argv);
+    if (getenv("STARROCKS_HOME") == nullptr) {
+        fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
+        exit(-1);
+    }
+    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
+    if (!starrocks::config::init(conffile.c_str(), false)) {
+        fprintf(stderr, "error read config file. \n");
+        return -1;
+    }
+
+    starrocks::config::sys_log_level = "INFO";
+    butil::FilePath storage_root;
+    CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
+    std::string root_path_1 = storage_root.value() + "/migration_test_path_1";
+    std::string root_path_2 = storage_root.value() + "/migration_test_path_2";
+    starrocks::fs::remove_all(root_path_1);
+    starrocks::fs::create_directories(root_path_1);
+    starrocks::fs::remove_all(root_path_2);
+    starrocks::fs::create_directories(root_path_2);
+
+    starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
+    starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
+
+    starrocks::CpuInfo::init();
+    starrocks::DiskInfo::init();
+    starrocks::MemInfo::init();
+    starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
+
+    starrocks::date::init_date_cache();
+    starrocks::TimezoneUtils::init_time_zones();
+
+    // first create the starrocks::config::storage_root_path ahead
+    std::vector<starrocks::StorePath> paths;
+    auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+    if (!olap_res.ok()) {
+        LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
+        exit(-1);
+    }
+
+    std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    starrocks::StorageEngine* engine = nullptr;
+    starrocks::EngineOptions options;
+    options.store_paths = paths;
+    options.compaction_mem_tracker = compaction_mem_tracker.get();
+    options.update_mem_tracker = update_mem_tracker.get();
+    starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
+    if (!s.ok()) {
+        starrocks::fs::remove_all(root_path_1);
+        starrocks::fs::remove_all(root_path_2);
+        fprintf(stderr, "storage engine open failed, path=%s, msg=%s\n", starrocks::config::storage_root_path.c_str(),
+                s.to_string().c_str());
+        return -1;
+    }
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    auto st = global_env->init();
+    st.permit_unchecked_error();
+    auto* exec_env = starrocks::ExecEnv::GetInstance();
+    st = exec_env->init(paths);
+    st.permit_unchecked_error();
+    int r = RUN_ALL_TESTS();
+
+    sleep(10);
+
+    // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
+    starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
+    starrocks::fs::remove_all(storage_root.value());
+    starrocks::TEST_clear_all_columns_this_thread();
+    // delete engine
+    engine->stop();
+    delete engine;
+    // destroy exec env
+    starrocks::tls_thread_status.set_mem_tracker(nullptr);
+    exec_env->stop();
+    exec_env->destroy();
+    global_env->stop();
+
+    return r;
 }
