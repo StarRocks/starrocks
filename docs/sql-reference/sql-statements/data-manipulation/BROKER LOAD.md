@@ -638,6 +638,14 @@ If the columns of the data file cannot be mapped one on one in sequence to the c
 
 For detailed examples, see [Configure column mapping](#configure-column-mapping).
 
+## Related configuration items
+
+The [FE configuration item](../../../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+
+In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
+
+Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter described above. You can use [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+
 ## Examples
 
 This section uses HDFS as an example to describe various load configurations.
