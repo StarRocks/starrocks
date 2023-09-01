@@ -522,8 +522,6 @@ protected:
 
     // Schedule counters
     // Record global schedule count during this driver lifecycle
-    RuntimeProfile::Counter* _global_schedule_counter = nullptr;
-    RuntimeProfile::Counter* _global_schedule_timer = nullptr;
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;

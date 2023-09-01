@@ -40,6 +40,7 @@ public:
     explicit LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range);
     ~LakeDataSource() override;
 
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
@@ -195,6 +196,10 @@ LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TSc
 LakeDataSource::~LakeDataSource() {
     _reader.reset();
     _predicate_free_pool.clear();
+}
+
+std::string LakeDataSource::name() const {
+    return "LakeDataSource";
 }
 
 Status LakeDataSource::open(RuntimeState* state) {

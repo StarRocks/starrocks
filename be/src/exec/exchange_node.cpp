@@ -262,7 +262,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
             // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
             // stream to satisfied the ordering property
-            operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators);
+            operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), operators);
         } else {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
                     context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
@@ -285,7 +285,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         may_add_chunk_accumulate_operator(operators, context, id());
     }
 
-    operators = context->maybe_interpolate_collect_stats(runtime_state(), operators);
+    operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
 
     return operators;
 }

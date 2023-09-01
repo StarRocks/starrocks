@@ -419,7 +419,7 @@ public:
 
     // Adds a string to the runtime profile.  If a value already exists for 'key',
     // the value will be updated.
-    void add_info_string(const std::string& key, const std::string& value);
+    void add_info_string(const std::string& key, const std::string& value = "");
 
     // Creates and returns a new EventSequence (owned by the runtime
     // profile) - unless a timer with the same 'key' already exists, in
@@ -590,7 +590,8 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles);
+    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+                                                     bool require_identical = true);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;

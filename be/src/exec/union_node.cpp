@@ -419,14 +419,14 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     context->set_force_disable_adaptive_dop(prev_force_disable_adaptive_dop);
-    final_operators = context->maybe_interpolate_collect_stats(runtime_state(), final_operators);
+    final_operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), final_operators);
 
     return final_operators;
 }

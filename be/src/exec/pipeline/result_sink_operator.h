@@ -30,10 +30,18 @@ namespace pipeline {
 class ResultSinkOperator final : public Operator {
 public:
     ResultSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+<<<<<<< HEAD
                        TResultSinkType::type sink_type, std::vector<ExprContext*> output_expr_ctxs,
                        const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_result_sinks,
                        std::atomic<int64_t>& num_written_rows, FragmentContext* const fragment_ctx)
             : Operator(factory, id, "result_sink", plan_node_id, driver_sequence),
+=======
+                       TResultSinkType::type sink_type, TResultSinkFormatType::type format_type,
+                       std::vector<ExprContext*> output_expr_ctxs, const std::shared_ptr<BufferControlBlock>& sender,
+                       std::atomic<int32_t>& num_result_sinks, std::atomic<int64_t>& num_written_rows,
+                       FragmentContext* const fragment_ctx)
+            : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
+>>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
               _sink_type(sink_type),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _sender(sender),
@@ -89,9 +97,15 @@ private:
 
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, std::vector<TExpr> t_output_expr,
                               FragmentContext* const fragment_ctx)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+=======
+    ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, TResultSinkFormatType::type format_type,
+                              std::vector<TExpr> t_output_expr, FragmentContext* const fragment_ctx)
+            : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+>>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
               _sink_type(sink_type),
               _t_output_expr(std::move(t_output_expr)),
               _fragment_ctx(fragment_ctx) {}

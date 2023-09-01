@@ -28,27 +28,29 @@
 namespace starrocks {
 namespace pipeline {
 
-class IcebergTableSinkOperator final : public Operator {
+class HiveTableSinkOperator final : public Operator {
 public:
-    IcebergTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                             std::string location, std::string file_format, TCompressionType::type compression_codec,
-                             const TCloudConfiguration& cloud_conf, IcebergTableDescriptor* iceberg_table,
-                             FragmentContext* fragment_ctx, const std::shared_ptr<::parquet::schema::GroupNode>& schema,
-                             const std::vector<ExprContext*>& output_expr_ctxs,
-                             const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert)
-            : Operator(factory, id, "iceberg_table_sink", plan_node_id, false, driver_sequence),
+    HiveTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                          std::string location, std::string file_format, TCompressionType::type compression_codec,
+                          const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
+                          const std::shared_ptr<::parquet::schema::GroupNode>& schema,
+                          const std::vector<ExprContext*>& output_expr_ctxs,
+                          const vector<ExprContext*>& partition_output_expr,
+                          const vector<std::string>& partition_column_names,
+                          const vector<std::string>& data_column_names, bool is_static_partition_insert)
+            : Operator(factory, id, "hive_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
-              _iceberg_table_data_location(_location + "/data/"),
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),
               _cloud_conf(cloud_conf),
-              _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
               _output_expr(output_expr_ctxs),
               _partition_expr(partition_output_expr),
-              _is_static_partition_insert(is_static_partition_insert) {}
+              _is_static_partition_insert(is_static_partition_insert),
+              _partition_column_names(partition_column_names),
+              _data_column_names(data_column_names) {}
 
-    ~IcebergTableSinkOperator() override = default;
+    ~HiveTableSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -70,42 +72,42 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+    static void add_hive_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
 
     static Status partition_value_to_string(Column* column, std::string& partition_value);
 
 private:
-    std::string _get_partition_location(const std::vector<std::string>& names, const std::vector<std::string>& values);
+    std::string _get_partition_location(const std::vector<std::string>& values);
 
     std::string _location;
-    std::string _iceberg_table_data_location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
     TCloudConfiguration _cloud_conf;
 
-    IcebergTableDescriptor* _iceberg_table;
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::vector<ExprContext*> _output_expr;
     std::vector<ExprContext*> _partition_expr;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
+    std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _data_column_names;
 };
 
-class IcebergTableSinkOperatorFactory final : public OperatorFactory {
+class HiveTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    IcebergTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx, vector<TExpr> t_output_expr,
-                                    IcebergTableDescriptor* iceberg_table,
-                                    const TIcebergTableSink& t_iceberg_table_sink,
-                                    std::vector<ExprContext*> partition_expr_ctxs);
+    HiveTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx, const THiveTableSink& t_hive_table_sink,
+                                 vector<TExpr> t_output_expr, std::vector<ExprContext*> partition_expr_ctxs);
 
-    ~IcebergTableSinkOperatorFactory() override = default;
+    ~HiveTableSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<IcebergTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _location,
-                                                          _file_format, _compression_codec, _cloud_conf, _iceberg_table,
-                                                          _fragment_ctx, _parquet_file_schema, _output_expr_ctxs,
-                                                          _partition_expr_ctxs, is_static_partition_insert);
+        return std::make_shared<HiveTableSinkOperator>(
+                this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _cloud_conf,
+                _fragment_ctx, _parquet_file_schema,
+                std::vector<ExprContext*>(_output_expr_ctxs.begin(),
+                                          _output_expr_ctxs.begin() + _data_column_names.size()),
+                _partition_expr_ctxs, _partition_column_names, _data_column_names, is_static_partition_insert);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -113,21 +115,19 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    std::vector<parquet::FileColumnId> generate_parquet_field_ids(const std::vector<TIcebergSchemaField>& fields);
-
-private:
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
+    std::vector<ExprContext*> _partition_expr_ctxs;
+
+    std::vector<std::string> _data_column_names;
+    std::vector<std::string> _partition_column_names;
 
     FragmentContext* _fragment_ctx = nullptr;
-    IcebergTableDescriptor* _iceberg_table;
     std::string _location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
     TCloudConfiguration _cloud_conf;
-
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
-    std::vector<ExprContext*> _partition_expr_ctxs;
     bool is_static_partition_insert = false;
 };
 

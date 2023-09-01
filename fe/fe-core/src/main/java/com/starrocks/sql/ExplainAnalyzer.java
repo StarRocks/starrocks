@@ -20,10 +20,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.AggregationNode;
-import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
@@ -31,7 +31,6 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SortNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
@@ -40,7 +39,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,7 +62,7 @@ import java.util.stream.Collectors;
 public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
 
-    private static final int RESULT_SINK_PSEUDO_PLAN_NODE_ID = Integer.MAX_VALUE;
+    private static final int FINAL_SINK_PSEUDO_PLAN_NODE_ID = -1;
     private static final Pattern PLAN_NODE_ID = Pattern.compile("^.*?\\(.*?plan_node_id=([-0-9]+)\\)$");
 
     // ANSI Characters
@@ -82,15 +80,7 @@ public class ExplainAnalyzer {
             "IOTaskWaitTime", "IOTaskExecTime"
     );
 
-    private static boolean isResultSink(RuntimeProfile operator) {
-        return ("RESULT_SINK".equals(operator.getName())
-                || "OLAP_TABLE_SINK".equals(operator.getName()));
-    }
-
     private static int getPlanNodeId(RuntimeProfile operator) {
-        if (isResultSink(operator)) {
-            return RESULT_SINK_PSEUDO_PLAN_NODE_ID;
-        }
         Matcher matcher = PLAN_NODE_ID.matcher(operator.getName());
         Preconditions.checkState(matcher.matches());
         return Integer.parseInt(matcher.group(1));
@@ -127,36 +117,14 @@ public class ExplainAnalyzer {
     private final StringBuilder detailBuffer = new StringBuilder();
     private final LinkedList<String> indents = Lists.newLinkedList();
     private final Map<Integer, NodeInfo> allNodeInfos = Maps.newHashMap();
-    private final List<NodeInfo> allScanNodeInfos = Lists.newArrayList();
-    private final List<NodeInfo> allExchangeNodeInfos = Lists.newArrayList();
-    private final Counter scheduleTime = new Counter(TUnit.TIME_NS, null, 0);
     private boolean isRuntimeProfile;
 
     private String color = ANSI_RESET;
 
     private long cumulativeOperatorTime;
-
-    private static String transformNodeName(Class<?> clazz) {
-        String name = clazz.getSimpleName();
-        String suffixToRemove = "Node";
-        if (name.endsWith(suffixToRemove)) {
-            name = name.substring(0, name.length() - suffixToRemove.length());
-        }
-
-        StringBuilder transformedName = new StringBuilder();
-
-        for (int i = 0; i < name.length(); i++) {
-            char currentChar = name.charAt(i);
-
-            if (Character.isUpperCase(currentChar) && i != 0) {
-                transformedName.append("_");
-            }
-
-            transformedName.append(Character.toUpperCase(currentChar));
-        }
-
-        return transformedName.toString();
-    }
+    private Counter cumulativeScanTime;
+    private Counter cumulativeNetworkTime;
+    private Counter scheduleTime;
 
     public ExplainAnalyzer(ProfilingExecPlan plan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
         this.plan = plan;
@@ -207,14 +175,6 @@ public class ExplainAnalyzer {
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
 
-            for (Pair<RuntimeProfile, Boolean> kv : fragmentProfile.getChildList()) {
-                RuntimeProfile pipelineProfile = kv.first;
-                Counter scheduleTime = pipelineProfile.getMaxCounter("ScheduleTime");
-                if (scheduleTime != null && scheduleTime.getValue() > this.scheduleTime.getValue()) {
-                    this.scheduleTime.setValue(scheduleTime.getValue());
-                }
-            }
-
             ProfileNodeParser parser = new ProfileNodeParser(isRuntimeProfile, fragmentProfile);
             Map<Integer, NodeInfo> nodeInfos = parser.parse();
 
@@ -233,9 +193,9 @@ public class ExplainAnalyzer {
         plan.getFragments().forEach((fragment) -> {
             ProfilingExecPlan.ProfilingElement sink = fragment.getSink();
             if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
-                NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+                NodeInfo resultNodeInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 if (resultNodeInfo == null) {
-                    resultNodeInfo = new NodeInfo(isRuntimeProfile, RESULT_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
+                    resultNodeInfo = new NodeInfo(isRuntimeProfile, FINAL_SINK_PSEUDO_PLAN_NODE_ID, true, null, null);
                     allNodeInfos.put(resultNodeInfo.planNodeId, resultNodeInfo);
                 }
                 resultNodeInfo.element = sink;
@@ -266,7 +226,7 @@ public class ExplainAnalyzer {
         allNodeInfos.values().forEach(NodeInfo::initState);
 
         allNodeInfos.values().forEach(nodeInfo -> {
-            if (nodeInfo.planNodeId == RESULT_SINK_PSEUDO_PLAN_NODE_ID) {
+            if (nodeInfo.planNodeId == FINAL_SINK_PSEUDO_PLAN_NODE_ID) {
                 nodeInfo.outputRowNums = searchMetricFromUpperLevel(nodeInfo, "CommonMetrics", "PushRowNum");
             } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
                 nodeInfo.outputRowNums = sumUpMetric(nodeInfo, false, false, "CommonMetrics", "PullRowNum");
@@ -275,32 +235,13 @@ public class ExplainAnalyzer {
             }
         });
 
-        for (NodeInfo nodeInfo : allNodeInfos.values()) {
-            if (nodeInfo.element.instanceOf(ScanNode.class)) {
-                allScanNodeInfos.add(nodeInfo);
-            } else if (nodeInfo.element.instanceOf(ExchangeNode.class)) {
-                allExchangeNodeInfos.add(nodeInfo);
-            }
-        }
-
         cumulativeOperatorTime = executionProfile.getCounter("QueryCumulativeOperatorTime").getValue();
+        cumulativeScanTime = executionProfile.getCounter("QueryCumulativeScanTime");
+        cumulativeNetworkTime = executionProfile.getCounter("QueryCumulativeNetworkTime");
+        scheduleTime = executionProfile.getCounter("QueryPeakScheduleTime");
     }
 
     private void appendSummaryInfo() {
-        Counter allNetworkTime = new Counter(TUnit.TIME_NS, null, 0);
-        for (NodeInfo nodeInfo : allExchangeNodeInfos) {
-            if (nodeInfo.networkTime != null) {
-                allNetworkTime.update(nodeInfo.networkTime.getValue());
-            }
-        }
-
-        Counter allScanTime = new Counter(TUnit.TIME_NS, null, 0);
-        for (NodeInfo nodeInfo : allScanNodeInfos) {
-            if (nodeInfo.scanTime != null) {
-                allScanTime.update(nodeInfo.scanTime.getValue());
-            }
-        }
-
         appendSummaryLine("Summary");
 
         // 1. Brief information
@@ -311,16 +252,18 @@ public class ExplainAnalyzer {
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
         }
-        appendSummaryLine("QueryId: ", summaryProfile.getInfoString("Query ID"));
+        appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
-        appendSummaryLine("State: ", summaryProfile.getInfoString("Query State"));
+        appendSummaryLine("State: ", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         if (isRuntimeProfile) {
             appendSummaryLine("Legend: ", NodeState.INIT.symbol, " for blocked; ", NodeState.RUNNING.symbol,
                     " for running; ", NodeState.FINISHED.symbol, " for finished");
         }
 
         // 2. Time Usage
-        appendSummaryLine("TotalTime: ", summaryProfile.getInfoString("Total"));
+        appendSummaryLine("TotalTime: ", summaryProfile.containsInfoString(ProfileManager.TOTAL_TIME) ?
+                summaryProfile.getInfoString(ProfileManager.TOTAL_TIME) :
+                summaryProfile.getCounter(ProfileManager.TOTAL_TIME));
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         Counter executionWallTime = executionProfile.getCounter("QueryExecutionWallTime");
         if (executionWallTime == null) {
@@ -332,17 +275,21 @@ public class ExplainAnalyzer {
         }
         if (executionWallTime != null) {
             appendSummaryLine("ExecutionTime: ", executionWallTime, " [",
-                    "Scan: ", allScanTime,
-                    String.format(" (%.2f%%)", 100.0 * allScanTime.getValue() / executionWallTime.getValue()),
-                    ", Network: ", allNetworkTime,
-                    String.format(" (%.2f%%)", 100.0 * allNetworkTime.getValue() / executionWallTime.getValue()),
+                    "Scan: ", cumulativeScanTime,
+                    String.format(" (%.2f%%)", 100.0 * cumulativeScanTime.getValue() / executionWallTime.getValue()),
+                    ", Network: ", cumulativeNetworkTime,
+                    String.format(" (%.2f%%)", 100.0 * cumulativeNetworkTime.getValue() / executionWallTime.getValue()),
                     ", ResultDeliverTime: ", resultDeliverTime,
                     String.format(" (%.2f%%)", 100.0 * resultDeliverTime.getValue() / executionWallTime.getValue()),
                     ", ScheduleTime: ", scheduleTime,
                     String.format(" (%.2f%%)", 100.0 * scheduleTime.getValue() / executionWallTime.getValue()),
                     "]");
         }
-        appendSummaryLine("CollectProfileTime: ", summaryProfile.getInfoString("Collect Profile Time"));
+        if (!isRuntimeProfile) {
+            appendSummaryLine("CollectProfileTime: ", summaryProfile.containsInfoString(ProfileManager.PROFILE_TIME) ?
+                    summaryProfile.getInfoString(ProfileManager.PROFILE_TIME) :
+                    summaryProfile.getCounter(ProfileManager.PROFILE_TIME));
+        }
         popIndent(); // metric indent
 
         // 3. Memory Usage
@@ -420,7 +367,7 @@ public class ExplainAnalyzer {
 
     private void appendMemoryNodes() {
         List<NodeInfo> topMemoryNodes = Lists.newArrayList(allNodeInfos.values()).stream()
-                .filter(NodeInfo::isMemoryConsumingOperator)
+                .filter(nodeInfo -> nodeInfo.element.isMemoryConsumingOperator())
                 .filter(nodeInfo -> nodeInfo.peekMemory != null)
                 .sorted((info1, info2) -> Long.compare(info2.peekMemory.getValue(), info1.peekMemory.getValue()))
                 .limit(10)
@@ -464,14 +411,14 @@ public class ExplainAnalyzer {
             if (CollectionUtils.isNotEmpty(sink.getMultiSinkIds())) {
                 sink.getMultiSinkIds().forEach(id -> ids.add(Integer.toString(id)));
             }
-            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClazz()),
+            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, sink.getDisplayName(),
                     String.format(" (ids=[%s])", String.join(", ", ids)));
         } else {
             if (sink.instanceOf(ResultSink.class) || sink.instanceOf(OlapTableSink.class)) {
                 isFinalSink = true;
                 // Calculate result sink's time info, other sink's type will be properly processed
                 // at the receiver side fragment through exchange node
-                sinkInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+                sinkInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 sinkInfo.computeTimeUsage(cumulativeOperatorTime);
                 if (sinkInfo.isMostConsuming) {
                     setRedColor();
@@ -481,14 +428,14 @@ public class ExplainAnalyzer {
             } else {
                 sinkInfo = allNodeInfos.get(sink.getId());
             }
-            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, transformNodeName(sink.getClazz()),
+            appendDetailLine(GraphElement.LST_OPERATOR_INDENT, sink.getDisplayName(),
                     isFinalSink ? "" : String.format(" (id=%d)", sink.getId()));
         }
         pushIndent(GraphElement.LAST_CHILD_OPERATOR_INDENT);
         pushIndent(GraphElement.NON_LEAF_METRIC_INDENT);
         if (isFinalSink && !sinkInfo.state.isInit()) {
             // Time Usage
-            NodeInfo resultNodeInfo = allNodeInfos.get(RESULT_SINK_PSEUDO_PLAN_NODE_ID);
+            NodeInfo resultNodeInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
             List<Object> items = Lists.newArrayList();
             items.addAll(Arrays.asList("TotalTime: ", resultNodeInfo.totalTime,
                     String.format(" (%.2f%%)", resultNodeInfo.totalTimePercentage)));
@@ -613,7 +560,7 @@ public class ExplainAnalyzer {
         appendDetailLine("OutputRows: ", nodeInfo.outputRowNums);
 
         // 4. Memory Infos
-        if (nodeInfo.isMemoryConsumingOperator()) {
+        if (nodeInfo.element.isMemoryConsumingOperator()) {
             appendDetailLine("PeakMemory: ", nodeInfo.peekMemory, ", AllocatedMemory: ", nodeInfo.allocatedMemory);
         }
 
@@ -632,7 +579,7 @@ public class ExplainAnalyzer {
                 appendDetailLine(String.format("Progress (processed rows/total rows): %.2f%%",
                         100.0 * nodeInfo.outputRowNums.getValue() / totalRowNum.getValue()));
             } else {
-                appendDetailLine("Progress (processed rows/total rows): ?%");
+                appendDetailLine("Progress (processed rows/total rows): ?");
             }
         }
 
@@ -676,7 +623,7 @@ public class ExplainAnalyzer {
             appendDetailLine("BuildTime: ", buildTime);
             appendDetailLine("ProbeTime: ", probeTime);
         } else if (nodeInfo.element.instanceOf(AggregationNode.class)) {
-            Optional<RuntimeProfile> cacheOptional = nodeInfo.pseudoOperatorProfiles.stream()
+            Optional<RuntimeProfile> cacheOptional = nodeInfo.subordinateOperatorProfiles.stream()
                     .filter(profile -> profile.getName().contains("CACHE ("))
                     .findAny();
             if (cacheOptional.isPresent() && nodeInfo.element.hasChild(0) &&
@@ -842,12 +789,12 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
     }
 
-    private static Counter searchMetric(NodeInfo nodeInfo, boolean searchPseudoOperator, String pattern,
+    private static Counter searchMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, String pattern,
                                         boolean useMaxValue, String... nameLevels) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
         profiles.addAll(nodeInfo.operatorProfiles);
-        if (searchPseudoOperator) {
-            profiles.addAll(nodeInfo.pseudoOperatorProfiles);
+        if (searchSubordinateOperator) {
+            profiles.addAll(nodeInfo.subordinateOperatorProfiles);
         }
         for (RuntimeProfile operatorProfile : profiles) {
             if (pattern != null && !operatorProfile.getName().contains(pattern)) {
@@ -877,10 +824,7 @@ public class ExplainAnalyzer {
     private static Counter searchMetricFromUpperLevel(NodeInfo nodeInfo, String... nameLevels) {
         for (int i = 0; i < nodeInfo.operatorProfiles.size(); i++) {
             RuntimeProfile operatorProfile = nodeInfo.operatorProfiles.get(i);
-            if (i < nodeInfo.operatorProfiles.size() - 1
-                    && (operatorProfile.getName().contains("CHUNK_ACCUMULATE (")
-                    || operatorProfile.getName().contains("_SINK (")
-                    || operatorProfile.getName().contains("_PREPARE ("))) {
+            if (i < nodeInfo.operatorProfiles.size() - 1 && operatorProfile.getName().contains("_SINK (")) {
                 continue;
             }
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
@@ -890,12 +834,12 @@ public class ExplainAnalyzer {
         return null;
     }
 
-    private static Counter sumUpMetric(NodeInfo nodeInfo, boolean searchPseudoOperator, boolean useMaxValue,
+    private static Counter sumUpMetric(NodeInfo nodeInfo, boolean searchSubordinateOperator, boolean useMaxValue,
                                        String... nameLevels) {
         Counter counterSumUp = null;
         List<RuntimeProfile> operatorProfiles = Lists.newArrayList(nodeInfo.operatorProfiles);
-        if (searchPseudoOperator) {
-            operatorProfiles.addAll(nodeInfo.pseudoOperatorProfiles);
+        if (searchSubordinateOperator) {
+            operatorProfiles.addAll(nodeInfo.subordinateOperatorProfiles);
         }
         for (RuntimeProfile operatorProfile : operatorProfiles) {
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
@@ -1025,9 +969,9 @@ public class ExplainAnalyzer {
 
         // One node in plan may be decomposed into multiply pipeline operators
         // like `aggregate -> (aggregate_sink_operator, aggregate_source_operator)`
-        // as well as some pseudo operators, including local_exchange_operator and chunk_accumulate etc.
+        // as well as some subordinate operators, including local_exchange_operator and chunk_accumulate etc.
         private final List<RuntimeProfile> operatorProfiles;
-        private final List<RuntimeProfile> pseudoOperatorProfiles;
+        private final List<RuntimeProfile> subordinateOperatorProfiles;
 
         private ProfilingExecPlan.ProfilingElement element;
         private Counter totalTime;
@@ -1043,13 +987,13 @@ public class ExplainAnalyzer {
         private NodeState state;
 
         public NodeInfo(boolean isRuntimeProfile, int planNodeId, boolean isIntegrated,
-                        List<RuntimeProfile> operatorProfiles, List<RuntimeProfile> pseudoOperatorProfiles) {
+                        List<RuntimeProfile> operatorProfiles, List<RuntimeProfile> subordinateOperatorProfiles) {
             this.isRuntimeProfile = isRuntimeProfile;
             this.planNodeId = planNodeId;
             this.isIntegrated = isIntegrated;
             this.operatorProfiles = operatorProfiles == null ? Lists.newArrayList() : operatorProfiles;
-            this.pseudoOperatorProfiles =
-                    pseudoOperatorProfiles == null ? Lists.newArrayList() : pseudoOperatorProfiles;
+            this.subordinateOperatorProfiles =
+                    subordinateOperatorProfiles == null ? Lists.newArrayList() : subordinateOperatorProfiles;
         }
 
         public void initState() {
@@ -1063,7 +1007,7 @@ public class ExplainAnalyzer {
                 }
                 for (RuntimeProfile operatorProfile : operatorProfiles) {
                     RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
-                    if (Objects.equals("Running", commonMetrics.getInfoString("Status"))) {
+                    if (commonMetrics.containsInfoString("IsRunning")) {
                         state = NodeState.RUNNING;
                         return;
                     }
@@ -1095,14 +1039,9 @@ public class ExplainAnalyzer {
             return false;
         }
 
-        public boolean isMemoryConsumingOperator() {
-            return element.instanceOf(AggregationNode.class) || element.instanceOf(JoinNode.class)
-                    || element.instanceOf(SortNode.class) || element.instanceOf(AnalyticEvalNode.class);
-        }
-
         public void merge(NodeInfo other) {
             this.operatorProfiles.addAll(other.operatorProfiles);
-            this.pseudoOperatorProfiles.addAll(other.pseudoOperatorProfiles);
+            this.subordinateOperatorProfiles.addAll(other.subordinateOperatorProfiles);
         }
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
@@ -1137,7 +1076,7 @@ public class ExplainAnalyzer {
 
         public String getTitle() {
             StringBuilder titleBuilder = new StringBuilder();
-            titleBuilder.append(transformNodeName(element.getClazz()));
+            titleBuilder.append(element.getDisplayName());
             if (!(element.instanceOf(ResultSink.class) && !(element.instanceOf(OlapTableSink.class)))) {
                 titleBuilder.append(String.format(" (id=%d) ", planNodeId));
             }
@@ -1165,7 +1104,7 @@ public class ExplainAnalyzer {
 
         public ProfileNodeParser(boolean isRuntimeProfile, RuntimeProfile fragmentProfile) {
             this.isRuntimeProfile = isRuntimeProfile;
-            this.isIntegrated = !StringUtils.equalsIgnoreCase("false", fragmentProfile.getInfoString("IsIntegrated"));
+            this.isIntegrated = !fragmentProfile.containsInfoString("NotIdentical");
             this.pipelineProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
@@ -1177,40 +1116,23 @@ public class ExplainAnalyzer {
             Map<Integer, NodeInfo> nodes = Maps.newHashMap();
             while (hasNext()) {
                 List<RuntimeProfile> operatorProfiles = Lists.newArrayList();
-                List<RuntimeProfile> pseudoOperatorProfiles = Lists.newArrayList();
+                List<RuntimeProfile> subordinateOperatorProfiles = Lists.newArrayList();
 
                 RuntimeProfile nextOperator = nextOperator();
-                while (hasNext() && getPlanNodeId(nextOperator) < 0) {
-                    pseudoOperatorProfiles.add(nextOperator);
-                    moveForward();
-                    nextOperator = nextOperator();
-                }
-
-                // Find next operator with the different plan node id, and all the auxiliary
-                // operators along the path belong to the current plan node id.
                 int planNodeId = getPlanNodeId(nextOperator);
-                Preconditions.checkState(planNodeId >= 0);
-                operatorProfiles.add(nextOperator);
+                RuntimeProfile commonMetrics = nextOperator.getChild("CommonMetrics");
+                boolean isSubordinate = commonMetrics != null && commonMetrics.containsInfoString("IsSubordinate");
+                boolean isFinalSink = commonMetrics != null && commonMetrics.containsInfoString("IsFinalSink");
+                Preconditions.checkState(isFinalSink || planNodeId != FINAL_SINK_PSEUDO_PLAN_NODE_ID);
+                if (isSubordinate) {
+                    subordinateOperatorProfiles.add(nextOperator);
+                } else {
+                    operatorProfiles.add(nextOperator);
+                }
                 moveForward();
 
-                while (hasNext()) {
-                    nextOperator = nextOperator();
-                    int nextPlanNodeId = getPlanNodeId(nextOperator);
-                    if (nextPlanNodeId >= 0 && (nextPlanNodeId != planNodeId)) {
-                        break;
-                    }
-
-                    // Now operator must share the same plan node id or is the auxiliary operator
-                    if (nextPlanNodeId >= 0) {
-                        operatorProfiles.add(nextOperator);
-                    } else {
-                        pseudoOperatorProfiles.add(nextOperator);
-                    }
-                    moveForward();
-                }
-
                 NodeInfo node = new NodeInfo(isRuntimeProfile, planNodeId, isIntegrated,
-                        operatorProfiles, pseudoOperatorProfiles);
+                        operatorProfiles, subordinateOperatorProfiles);
                 if (nodes.containsKey(planNodeId)) {
                     NodeInfo existingNode = nodes.get(planNodeId);
                     existingNode.merge(node);

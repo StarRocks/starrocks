@@ -202,7 +202,7 @@ Status FileSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) 
 FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> t_output_expr,
                                                  std::shared_ptr<ResultFileOptions> file_opts, int32_t _num_sinkers,
                                                  FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _file_opts(std::move(file_opts)),
           _num_sinkers(_num_sinkers),
