@@ -454,6 +454,7 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
+        connectContext.setThreadLocalInfo();
         return buildPlan(connectContext, originStmt,
                 (context, statementBase, execPlan) -> new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()),
                         execPlan));

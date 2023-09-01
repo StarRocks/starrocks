@@ -296,6 +296,10 @@ public class ConnectContext implements AutoCloseable {
         threadLocalInfo.set(this);
     }
 
+    public void removeThreadLocalInfo() {
+        threadLocalInfo.remove();
+    }
+
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
