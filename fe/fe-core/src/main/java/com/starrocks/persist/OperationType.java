@@ -408,6 +408,10 @@ public class OperationType {
     // modify table property bucket size
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
+    // external table analyze
+    public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
+    public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
+
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
     public static final short OP_ALTER_DB_V2 = 12002;
