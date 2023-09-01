@@ -63,6 +63,10 @@ Status HiveDataSource::_check_all_slots_nullable() {
     return Status::OK();
 }
 
+std::string HiveDataSource::name() const {
+    return "HiveDataSource";
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,

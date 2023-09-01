@@ -50,7 +50,7 @@ public:
     std::vector<ChunkPtr> fetch_results(const EpochInfo& epoch_info);
 
     size_t next_operator_id() { return _pipeline_context->next_operator_id(); }
-    size_t next_plan_node_id() { return _pipeline_context->next_pseudo_plan_node_id(); }
+    size_t next_plan_node_id() { return _next_operator_id++; }
     uint32_t next_pipeline_id() { return _pipeline_context->next_pipe_id(); }
 
 protected:
@@ -70,6 +70,9 @@ protected:
     std::shared_ptr<starrocks::ConnectorScanNode> _connector_node;
     size_t _degree_of_parallelism;
     pipeline::PipelineBuilderContext* _pipeline_context = nullptr;
+
+private:
+    size_t _next_operator_id = 0;
 };
 
 template <typename T>
