@@ -409,16 +409,6 @@ select array_agg(name order by score,4,1), count(distinct id), max(score)  from 
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
 -- !result
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
--- result:
-[null]	1	None
-[null,"数学大不列颠","English"]	1	98
-[null,"物理Phy"]	0	99
-["English",null,"语文北京上海"]	1	22
-["Math","English"]	1	90
-["Math数学欧拉方程","英文English"]	1	98
-["英语外语美誉"]	1	None
--- !result
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
 -- result:
 1	1
@@ -797,16 +787,6 @@ select array_agg( subject order by score,1), count(distinct id), max(score)  fro
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
--- !result
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
--- result:
-[null]	1	None
-[null,"数学大不列颠","English"]	1	98
-[null,"物理Phy"]	0	99
-["English",null,"语文北京上海"]	1	22
-["Math","English"]	1	90
-["Math数学欧拉方程","英文English"]	1	98
-["英语外语美誉"]	1	None
 -- !result
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
 -- result:
@@ -1189,16 +1169,6 @@ select array_agg( subject order by score,1), count(distinct id), max(score)  fro
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 -- result:
 E: (1064, 'Getting syntax error from line 1, column 7 to line 1, column 40. Detail message: ORDER BY position 4 is not in array_agg output list.')
--- !result
-select array_agg(subject order by score,4.00), count(distinct id), max(score)  from ss group by id order by 1;
--- result:
-[null]	1	None
-[null,"数学大不列颠","English"]	1	98
-[null,"物理Phy"]	0	99
-["English",null,"语文北京上海"]	1	22
-["Math","English"]	1	90
-["Math数学欧拉方程","英文English"]	1	98
-["英语外语美誉"]	1	None
 -- !result
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
 -- result:
