@@ -270,20 +270,14 @@ public class StmtExecutor {
 
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-<<<<<<< HEAD
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-                coord.endProfile();
-                coord.mergeIsomorphicProfiles();
-                profile.addChild(coord.getQueryProfile());
-=======
                 coord.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 long profileCollectStartTime = System.currentTimeMillis();
                 coord.endProfile();
                 profile.getChild("Summary").addInfoString(ProfileManager.PROFILE_TIME,
                         DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
-                profile.addChild(coord.buildMergedQueryProfile());
->>>>>>> 4437950f92 ([Enhancement] Improve the profile serialization performance (#30221))
+                coord.mergeIsomorphicProfiles();
+                profile.addChild(coord.getQueryProfile());
             }
         }
         profile.computeTimeInChildProfile();
@@ -635,24 +629,9 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-<<<<<<< HEAD
     private void writeProfile(long beginTimeInNanoSecond) {
-        long profileBeginTime = System.currentTimeMillis();
         initProfile(beginTimeInNanoSecond);
-        profile.computeTimeInChildProfile();
-        long profileEndTime = System.currentTimeMillis();
-        profile.getChild("Summary")
-                .addInfoString(ProfileManager.PROFILE_TIME,
-                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
-        StringBuilder builder = new StringBuilder();
-        profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
-=======
-    private void writeProfile(ExecPlan plan, long beginTimeInNanoSecond) {
-        initProfile(beginTimeInNanoSecond);
-        ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-        String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
->>>>>>> 4437950f92 ([Enhancement] Improve the profile serialization performance (#30221))
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
         }
