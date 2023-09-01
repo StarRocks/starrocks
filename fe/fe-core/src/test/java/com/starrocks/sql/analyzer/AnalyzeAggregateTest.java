@@ -175,22 +175,6 @@ public class AnalyzeAggregateTest {
         analyzeFail("select count(distinct vj), count(distinct vj1) from ttypes");
 
         // single count distinct
-<<<<<<< HEAD
-        analyzeFail("select count(distinct vm) from ttypes",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(map");
-        analyzeFail("select count(distinct vs) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(struct");
-        analyzeFail("select count(distinct vj) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(json");
-        analyzeFail("select count(distinct va),count(distinct vm) from ttypes group by v1",
-                "No matching function with signature: multi_distinct_count(array");
-=======
         analyzeSuccess("select count(distinct vm) from ttypes");
         analyzeSuccess("select count(distinct vs) from ttypes");
         analyzeFail("select count(distinct vj) from ttypes");
@@ -198,7 +182,6 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select count(distinct vs) from ttypes group by v1");
         analyzeFail("select count(distinct vj) from ttypes group by v1");
         analyzeSuccess("select count(distinct va),count(distinct vm) from ttypes group by v1");
->>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
 
         // group by complex types
         analyzeSuccess("select count(*) from ttypes group by vm");
