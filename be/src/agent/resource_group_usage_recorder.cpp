@@ -39,12 +39,14 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
                     TResourceGroupUsage group_usage;
                     group_usage.__set_group_id(wg.id());
                     group_usage.__set_mem_used_bytes(wg.mem_consumption_bytes());
+                    group_usage.__set_num_running_queries(wg.num_running_queries());
                     group_to_usage.emplace(wg.id(), std::move(group_usage));
 
                     curr_group_to_cpu_runtime_ns.emplace(wg.id(), wg.driver_runtime_ns());
                 } else {
                     TResourceGroupUsage& group_usage = it->second;
                     group_usage.__set_mem_used_bytes(group_usage.mem_used_bytes + wg.mem_consumption_bytes());
+                    group_usage.__set_mem_used_bytes(group_usage.num_running_queries + wg.num_running_queries());
 
                     curr_group_to_cpu_runtime_ns[wg.id()] += wg.driver_runtime_ns();
                 }
@@ -68,7 +70,8 @@ std::vector<TResourceGroupUsage> ResourceGroupUsageRecorder::get_resource_group_
     group_usages.reserve(group_to_usage.size());
     for (auto& [_, group_usage] : group_to_usage) {
         // Only report the resource group with effective resource usages.
-        if (group_usage.cpu_core_used_permille > 0 || group_usage.mem_used_bytes > 0) {
+        if (group_usage.cpu_core_used_permille > 0 || group_usage.mem_used_bytes > 0 ||
+            group_usage.num_running_queries > 0) {
             group_usages.emplace_back(std::move(group_usage));
         }
     }

@@ -35,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -594,6 +595,10 @@ public class ComputeNode implements IComputable, Writable {
                 getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 
+    public Collection<ResourceGroupUsage> getResourceGroupUsages() {
+        return groupIdToUsage.get().values();
+    }
+
     public boolean isResourceGroupOverloaded(long groupId) {
         if (!isResourceUsageFresh()) {
             return false;
@@ -610,23 +615,42 @@ public class ComputeNode implements IComputable, Writable {
                 usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 10;
     }
 
-    private static class ResourceGroupUsage {
+    public static class ResourceGroupUsage {
         private final ResourceGroup group;
         private final int cpuCoreUsagePermille;
         private final long memUsageBytes;
+        private final int numRunningQueries;
 
-        private ResourceGroupUsage(ResourceGroup group, int cpuCoreUsagePermille, long memUsageBytes) {
+        private ResourceGroupUsage(ResourceGroup group, int cpuCoreUsagePermille, long memUsageBytes, int numRunningQueries) {
             this.group = group;
             this.cpuCoreUsagePermille = cpuCoreUsagePermille;
             this.memUsageBytes = memUsageBytes;
+            this.numRunningQueries = numRunningQueries;
         }
 
         private static ResourceGroupUsage fromThrift(TResourceGroupUsage tUsage, ResourceGroup group) {
-            return new ResourceGroupUsage(group, tUsage.getCpu_core_used_permille(), tUsage.getMem_used_bytes());
+            return new ResourceGroupUsage(group, tUsage.getCpu_core_used_permille(), tUsage.getMem_used_bytes(),
+                    tUsage.getNum_running_queries());
         }
 
-        private boolean isCpuCoreUsagePermilleEffective() {
+        public boolean isCpuCoreUsagePermilleEffective() {
             return cpuCoreUsagePermille > 0;
+        }
+
+        public ResourceGroup getGroup() {
+            return group;
+        }
+
+        public int getCpuCoreUsagePermille() {
+            return cpuCoreUsagePermille;
+        }
+
+        public long getMemUsageBytes() {
+            return memUsageBytes;
+        }
+
+        public int getNumRunningQueries() {
+            return numRunningQueries;
         }
     }
 }

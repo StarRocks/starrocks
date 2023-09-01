@@ -1402,6 +1402,82 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         runningCoords.forEach(DefaultCoordinator::onFinished);
     }
 
+    @Test
+    public void testShowResourceGroupUsage() throws Exception {
+        TWorkGroup group0 = new TWorkGroup().setId(0L).setName("wg0");
+        TWorkGroup group1 = new TWorkGroup().setId(1L).setName("wg1");
+        TWorkGroup group2 = new TWorkGroup().setId(2L).setName("wg2");
+        TWorkGroup group3 = new TWorkGroup().setId(3L).setName("wg3");
+        TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
+        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
+        groups.forEach(this::mockResourceGroup);
+
+        List<Backend> backends = ImmutableList.of(
+                new Backend(0L, "be0-host", 8030),
+                new Backend(1L, "be1-host", 8030));
+        backends.forEach(cn -> cn.setAlive(true));
+        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
+
+        {
+            String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
+            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n");
+        }
+
+        List<TResourceGroupUsage> groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(112).setMem_used_bytes(9)
+                        .setNum_running_queries(8),
+                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(100),
+                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(120).setMem_used_bytes(7)
+                        .setNum_running_queries(6),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(30)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(1110).setMem_used_bytes(19)
+                        .setNum_running_queries(18),
+                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(1100),
+                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(1120).setMem_used_bytes(17)
+                        .setNum_running_queries(16),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(130)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
+
+        {
+            String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
+            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n" +
+                    "wg0|0|be0-host|11.2|9|8\n" +
+                    "wg0|0|be1-host|111.0|19|18\n" +
+                    "wg1|1|be0-host|10.0|0|0\n" +
+                    "wg1|1|be1-host|110.0|0|0\n" +
+                    "wg2|2|be0-host|12.0|7|6\n" +
+                    "wg2|2|be1-host|112.0|17|16\n" +
+                    "wg3|3|be0-host|3.0|0|0\n" +
+                    "wg3|3|be1-host|13.0|0|0");
+        }
+
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(210).setMem_used_bytes(29)
+                        .setNum_running_queries(28),
+                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(200)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        groupUsages = ImmutableList.of(
+                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(1220).setMem_used_bytes(27)
+                        .setNum_running_queries(26),
+                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(230)
+        );
+        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
+
+        {
+            String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
+            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n" +
+                    "wg0|0|be0-host|21.0|29|28\n" +
+                    "wg1|1|be0-host|20.0|0|0\n" +
+                    "wg2|2|be1-host|122.0|27|26\n" +
+                    "wg3|3|be1-host|23.0|0|0");
+        }
+    }
+
     private void mockNeedCheckQueue() {
         new Expectations(manager) {
             {
@@ -1500,6 +1576,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 resourceGroup.setMaxCpuCores(group.getMax_cpu_cores());
             }
             resourceGroup.setId(group.getId());
+            resourceGroup.setName(group.getName());
             mockedGroups.put(group.getId(), resourceGroup);
             new MockUp<ResourceGroupMgr>() {
                 @Mock

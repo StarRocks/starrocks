@@ -21,6 +21,7 @@ struct TResourceGroupUsage {
 
     2: optional i32 cpu_core_used_permille
     3: optional i64 mem_used_bytes;
+    4: optional i32 num_running_queries;
 }
 
 struct TResourceUsage {
