@@ -211,5 +211,12 @@ public class DecimalTypeTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
+        try {
+            String sql = "select array_agg(distinct c_2_0) from tab2";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "array_agg_distinct");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+        }
     }
 }

@@ -284,6 +284,7 @@ public class FunctionSet {
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -830,6 +831,9 @@ public class FunctionSet {
         // MultiDistinctSum
         registerBuiltinMultiDistinctSumAggFunction();
 
+        // array_agg(distinct)
+        registerBuiltinArrayAggDistinctFunction();
+
         // Avg
         registerBuiltinAvgAggFunction();
 
@@ -1009,6 +1013,32 @@ public class FunctionSet {
         }
         addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARBINARY, false, true, false));
+    }
+
+    private void registerBuiltinArrayAggDistinctFunction() {
+        // array_agg(distinct)
+        for (ScalarType type : Type.getNumericTypes()) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+        for (ScalarType type : Type.STRING_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.DATE_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                    Lists.newArrayList(type), arrayType, arrayType,
+                    false, false, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
+                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
     }
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available

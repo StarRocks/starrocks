@@ -159,9 +159,10 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("array_agg does not support DISTINCT");
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG) ||
+                fnName.getFunction().equals(FunctionSet.ARRAY_AGG_DISTINCT)) {
+            if (arg.getType().isComplexType()) {
+                throw new SemanticException("array_agg does not support " + arg.getType().toString());
             }
         }
 

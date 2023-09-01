@@ -1867,7 +1867,7 @@ aggregationFunction
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
-    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | ARRAY_AGG '(' DISTINCT? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' DISTINCT? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
@@ -2251,7 +2251,7 @@ number
     ;
 
 nonReserved
-    : ACTIVE | AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    : ACTIVE | AFTER | AGGREGATE | ARRAY_AGG | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT | CONFIG

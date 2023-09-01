@@ -246,8 +246,24 @@ public class AnalyzeExprTest {
                 "union all select v1 as a, v3 as b from t0)A;");
         analyzeSuccess("select array_agg(v1 order by v1),array_sortby(array_agg(v1),array_agg(v2)) from t0;");
         analyzeSuccess("select array_agg(tj) from tall");
+        analyzeFail("select array_agg(distinct v_json) from tjson");
+        analyzeSuccess("select array_agg(v_json) from tjson");
+
         analyzeSuccess("select array_agg(tj order by ta) from tall group by tc");
 
+        analyzeSuccess("select array_agg(distinct v1), array_agg(v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1), count(distinct v1) from t0;");
+        analyzeSuccess("select array_agg(distinct v1) from t0 group by v3;");
+        analyzeSuccess("select array_agg(distinct v3) from t0 group by v1;");
+        analyzeSuccess("select array_agg(distinct null) from t0;");
+        analyzeSuccess("select array_agg(1) from t0;");
+        analyzeSuccess("select array_agg(distinct 1) from t0 group by v2;");
+        analyzeFail("select array_agg(distinct vm) from ttypes group by v1;");
+        analyzeSuccess("select array_agg(distinct v2), count(distinct v3) from t0 group by rollup(v1);");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0");
+        analyzeSuccess("select array_agg(distinct v2), array_agg(distinct v3) from t0 group by rollup(v1);");
+
+        analyzeFail("select array_agg(distinct vj) from ttypes group by v1;");
         analyzeFail("select array_agg(null order by 11);");
         analyzeFail("select array_agg(null order by);");
         analyzeFail("select array_agg(null,'a');");
