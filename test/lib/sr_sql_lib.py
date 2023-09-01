@@ -550,7 +550,7 @@ class StarrocksSQLApiLib(object):
 
             # check str
             log.info("[check type]: Str")
-            tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
+            tools.assert_equal(type(exp), type(act), "exp and act results' type not match for %s" % sql)
 
             if exp.startswith("E:") and act.startswith("E:"):
                 if "url:" in exp and "url:" in act:

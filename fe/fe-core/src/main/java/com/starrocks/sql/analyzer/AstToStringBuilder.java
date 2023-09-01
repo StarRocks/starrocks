@@ -902,7 +902,7 @@ public class AstToStringBuilder {
                 if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
                     end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
                 }
-                for (int i = 0; i < end; ++i) {
+                for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
                     if (i != 0) {
                         sb.append(",");
                     }
