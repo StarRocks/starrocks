@@ -428,10 +428,6 @@ public class SelectAnalyzer {
         TreeNode.collect(outputAndOrderByExpressions, Expr.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
 
-<<<<<<< HEAD
-        long distinctNum = aggregations.stream().filter(FunctionCallExpr::isDistinct).count();
-=======
->>>>>>> 5bf81350c6 ([Enhancement] array_agg supports distinct (#29907))
         for (FunctionCallExpr agg : aggregations) {
             if (agg.isDistinct() && agg.getChildren().size() > 0) {
                 Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
