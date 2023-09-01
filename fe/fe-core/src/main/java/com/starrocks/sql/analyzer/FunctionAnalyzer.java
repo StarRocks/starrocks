@@ -165,12 +165,6 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("array_agg does not support DISTINCT", functionCallExpr.getPos());
-            }
-        }
-
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>", arg.getPos());
