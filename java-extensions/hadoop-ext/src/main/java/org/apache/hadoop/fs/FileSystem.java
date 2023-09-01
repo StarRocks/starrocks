@@ -4026,6 +4026,7 @@ public abstract class FileSystem extends Configured
                     LOGGER.debug(String.format("[hadoop-ext] Add path '%s' to configuration", path.toString()));
                     conf.addResource(path);
                 }
+                conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
             }
 
             public static String getFSCredential(Configuration conf) {
