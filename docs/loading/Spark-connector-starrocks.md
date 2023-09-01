@@ -97,23 +97,23 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 - The default data type mapping is as follows:
 
-	| Spark data type | StarRocks data type                                          |
-	| --------------- | ------------------------------------------------------------ |
-	| BooleanType     | BOOLEAN                                                      |
-	| ByteType        | TINYINT                                                      |
-	| ShortType       | SMALLINT                                                     |
-	| IntegerType     | INT                                                          |
-	| LongType        | BIGINT                                                       |
-	| StringType      | LARGEINT                                                     |
-	| FloatType       | FLOAT                                                        |
-	| DoubleType      | DOUBLE                                                       |
-	| DecimalType     | DECIMAL                                                      |
-	| StringType      | CHAR                                                         |
-	| StringType      | VARCHAR                                                      |
-	| StringType      | STRING                                                       |
-	| DateType        | DATE                                                         |
-	| TimestampType   | DATETIME                                                     |
-	| ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
+| Spark data type | StarRocks data type                                          |
+| --------------- | ------------------------------------------------------------ |
+| BooleanType     | BOOLEAN                                                      |
+| ByteType        | TINYINT                                                      |
+| ShortType       | SMALLINT                                                     |
+| IntegerType     | INT                                                          |
+| LongType        | BIGINT                                                       |
+| StringType      | LARGEINT                                                     |
+| FloatType       | FLOAT                                                        |
+| DoubleType      | DOUBLE                                                       |
+| DecimalType     | DECIMAL                                                      |
+| StringType      | CHAR                                                         |
+| StringType      | VARCHAR                                                      |
+| StringType      | STRING                                                       |
+| DateType        | DATE                                                         |
+| TimestampType   | DATETIME                                                     |
+| ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
 
 - You can also customize the data type mapping.
 
