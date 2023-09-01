@@ -329,11 +329,12 @@ public class MaterializedViewRewriter {
                 // for outer join, we should check some extra conditions
                 if (!checkJoinMatch(queryJoinType, queryExpr, mvExpr)) {
                     logMVRewrite(mvRewriteContext, "join match check failed, joinType: {}", queryJoinType);
+                    return false;
                 }
                 return true;
             }
 
-            if (JOIN_COMPATIBLE_MAP.containsKey(mvJoinType) &&
+            if (!JOIN_COMPATIBLE_MAP.containsKey(mvJoinType) ||
                     !JOIN_COMPATIBLE_MAP.get(mvJoinType).contains(queryJoinType)) {
                 logMVRewrite(mvRewriteContext, "join type is not compatible {} not contains {}", mvJoinType,
                         queryJoinType);
@@ -2008,8 +2009,9 @@ public class MaterializedViewRewriter {
                 ColumnRefOperator first = iterator.next();
                 while (iterator.hasNext()) {
                     ColumnRefOperator next = iterator.next();
-                    ec.addEquivalence(first, next);
-                    ec.addRedundantEquivalence(first, next);
+                    if (ec.addRedundantEquivalence(first, next)) {
+                        ec.addEquivalence(first, next);
+                    }
                 }
             }
         }
@@ -2452,6 +2454,27 @@ public class MaterializedViewRewriter {
         return simplifier.simplify(targetPr);
     }
 
+    // remove redundant from equivalence
+
+    /**
+     * Remove redundant keys from the different equivalence classes. Return true if the diff is empty after pruning.
+     */
+    private boolean removeRedundantKeysInDiff(EquivalenceClasses ec,
+                                              Set<ColumnRefOperator> difference) {
+        int size = difference.size();
+        Iterator<ColumnRefOperator> it = difference.iterator();
+        // skip if diff is redundant
+        while (it.hasNext()) {
+            ColumnRefOperator next = it.next();
+            if (ec.containsRedundantKey(next)) {
+                ec.deleteRedundantKey(next);
+                it.remove();
+                size--;
+            }
+        }
+        return size == 0;
+    }
+
     // compute the compensation equality predicates
     // here do the equality join subsumption test
     // if targetEc is not contained in sourceEc, return null
@@ -2486,16 +2509,17 @@ public class MaterializedViewRewriter {
         ScalarOperator compensation = ConstantOperator.createBoolean(true);
         for (int i = 0; i < sourceEquivalenceClassesList.size(); i++) {
             if (!mapping.containsKey(i)) {
-                // it means that the targetEc do not have the corresponding mapping ec
-                // we should all equality predicates between each column in ec into compensation
-                Iterator<ColumnRefOperator> it = sourceEquivalenceClassesList.get(i).iterator();
-                ColumnRefOperator first = it.next();
+                Set<ColumnRefOperator> difference = Sets.newHashSet(sourceEquivalenceClassesList.get(i));
 
-                // ignore if first is redundant
-                if (sourceEquivalenceClasses.containsRedundantKey(first)) {
-                    sourceEquivalenceClasses.deleteRedundantKey(first);
+                // remove redundant from equivalence
+                if (removeRedundantKeysInDiff(sourceEquivalenceClasses, difference)) {
                     continue;
                 }
+
+                // it means that the targetEc do not have the corresponding mapping ec
+                // we should all equality predicates between each column in ec into compensation
+                Iterator<ColumnRefOperator> it = difference.iterator();
+                ColumnRefOperator first = it.next();
 
                 while (it.hasNext()) {
                     ColumnRefOperator next = it.next();
@@ -2512,26 +2536,9 @@ public class MaterializedViewRewriter {
                         continue;
                     }
 
-                    {
-                        // remove redundant from equivalence
-                        Iterator<ColumnRefOperator> it = difference.iterator();
-                        ColumnRefOperator first = it.next();
-                        if (sourceEquivalenceClasses.containsRedundantKey(first)) {
-                            sourceEquivalenceClasses.deleteRedundantKey(first);
-
-                            // skip if diff is redundant
-                            it.remove();
-                            while (it.hasNext()) {
-                                ColumnRefOperator next = it.next();
-                                if (sourceEquivalenceClasses.containsRedundantKey(next)) {
-                                    it.remove();
-                                }
-                            }
-                        }
-
-                        if (difference.size() == 0) {
-                            continue;
-                        }
+                    // remove redundant from equivalence
+                    if (removeRedundantKeysInDiff(sourceEquivalenceClasses, difference)) {
+                        continue;
                     }
 
                     ScalarOperator targetFirst = targetColumnRefs.iterator().next();

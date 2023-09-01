@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.google.common.base.Preconditions;
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -37,24 +37,20 @@ import java.util.stream.Collectors;
 
 public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // Comparator to normalize predicates, only use scalar operators' string to compare.
-    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR =
-            new Comparator<ScalarOperator>() {
-                @Override
-                public int compare(ScalarOperator o1, ScalarOperator o2) {
-                    if (o1 == null && o2 == null) {
-                        return 0;
-                    } else if (o1 == null) {
-                        return -1;
-                    } else if (o2 == null) {
-                        return 1;
-                    } else {
-                        String s1 = o1.toString();
-                        String s2 = o2.toString();
-                        return s1.compareTo(s2);
-                    }
-                }
-            };
-
+    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR = new Comparator<ScalarOperator>() {
+        @Override
+        public int compare(ScalarOperator o1, ScalarOperator o2) {
+            if (o1 == null && o2 == null) {
+                return 0;
+            } else if (o1 == null) {
+                return -1;
+            } else if (o2 == null) {
+                return 1;
+            } else {
+                return o1.toString().compareTo(o2.toString());
+            }
+        }
+    };
 
     // Comparator to normalize predicates, only use scalar operators' string to compare.
     private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
@@ -73,11 +69,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                         String n1 = s1.replaceAll("[0-9]", "");
                         String n2 = s2.replaceAll("[0-9]", "");
                         int ret = n1.compareTo(n2);
-                        if (ret == 0) {
-                            return s1.compareTo(s2);
-                        } else {
-                            return ret;
-                        }
+                        return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
                 }
             };

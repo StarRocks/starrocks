@@ -315,7 +315,7 @@ public class MvRewriteTestBase {
         return s;
     }
 
-    protected Table getTable(String dbName, String mvName) {
+    public static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
         Assert.assertNotNull(table);

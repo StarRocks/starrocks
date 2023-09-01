@@ -61,13 +61,9 @@ public class EquivalenceClasses implements Cloneable {
 
     public void addEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
         cacheColumnToEquivalenceClass = null;
-        addElementsIntoEquivalenceClass(columnToEquivalenceClass, left, right);
-    }
 
-    private void addElementsIntoEquivalenceClass(Map<ColumnRefOperator, Set<ColumnRefOperator>> equivalenceClass,
-                                                 ColumnRefOperator left, ColumnRefOperator right) {
-        Set<ColumnRefOperator> s1 = equivalenceClass.get(left);
-        Set<ColumnRefOperator> s2 = equivalenceClass.get(right);
+        Set<ColumnRefOperator> s1 = columnToEquivalenceClass.get(left);
+        Set<ColumnRefOperator> s2 = columnToEquivalenceClass.get(right);
 
         if (s1 != null && s2 != null) {
             if (s1.size() < s2.size()) {
@@ -77,20 +73,20 @@ public class EquivalenceClasses implements Cloneable {
             }
             for (ColumnRefOperator columnRefOperator : s2) {
                 s1.add(columnRefOperator);
-                equivalenceClass.put(columnRefOperator, s1);
+                columnToEquivalenceClass.put(columnRefOperator, s1);
             }
         } else if (s1 != null) {
             s1.add(right);
-            equivalenceClass.put(right, s1);
+            columnToEquivalenceClass.put(right, s1);
         } else if (s2 != null) {
             s2.add(left);
-            equivalenceClass.put(left, s2);
+            columnToEquivalenceClass.put(left, s2);
         } else {
             Set<ColumnRefOperator> ec = Sets.newLinkedHashSet();
             ec.add(left);
             ec.add(right);
-            equivalenceClass.put(left, ec);
-            equivalenceClass.put(right, ec);
+            columnToEquivalenceClass.put(left, ec);
+            columnToEquivalenceClass.put(right, ec);
         }
     }
 
@@ -123,8 +119,25 @@ public class EquivalenceClasses implements Cloneable {
         return cacheColumnToEquivalenceClass;
     }
 
-    public void addRedundantEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
-        addElementsIntoEquivalenceClass(redundantColumnToEquivalenceClass, left, right);
+    public boolean addRedundantEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
+        boolean isContainsLeft = columnToEquivalenceClass.containsKey(left);
+        boolean isContainsRight = columnToEquivalenceClass.containsKey(right);
+        boolean isAddIntoRedundant = false;
+        if (!isContainsLeft) {
+            redundantColumnToEquivalenceClass.computeIfAbsent(left, x -> Sets.newHashSet(left));
+            if (!isContainsRight) {
+                redundantColumnToEquivalenceClass.get(left).add(right);
+            }
+            isAddIntoRedundant = true;
+        }
+        if (!isContainsRight) {
+            redundantColumnToEquivalenceClass.computeIfAbsent(right, x -> Sets.newHashSet(right));
+            if (!isContainsLeft) {
+                redundantColumnToEquivalenceClass.get(right).add(left);
+            }
+            isAddIntoRedundant = true;
+        }
+        return isAddIntoRedundant;
     }
 
     public boolean containsRedundantKey(ColumnRefOperator column) {
