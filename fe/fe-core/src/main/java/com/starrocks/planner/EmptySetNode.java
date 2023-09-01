@@ -71,11 +71,6 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
-    public boolean canUsePipeLine() {
-        return true;
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
     }
