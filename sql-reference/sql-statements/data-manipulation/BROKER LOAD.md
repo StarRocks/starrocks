@@ -694,6 +694,14 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 有关操作示例，参见[设置列映射关系](#设置列映射关系)。
 
+## 相关配置项
+
+[FE 配置项](../../../administration/Configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+
+StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
+
+自 StarRocks v2.5 版本起，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照作业创建时指定的优先级被放到队列中排队等待调度。参见上面介绍的可选参数 `priority`。您可以使用 [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) 语句修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
+
 ## 示例
 
 本文以 HDFS 数据源为例，介绍各种导入配置。
