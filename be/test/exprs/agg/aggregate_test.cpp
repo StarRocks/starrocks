@@ -1735,7 +1735,7 @@ TEST_F(AggregateTest, test_exchange_bytes) {
     ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
 }
 
-TEST_F(AggregateTest, test_array_agg) {
+TEST_F(AggregateTest, test_array_aggV2) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
@@ -2407,6 +2407,110 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_TRUE(local_ctx->has_error());
     }
+}
+
+TEST_F(AggregateTest, test_array_agg) {
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, false);
+    auto state = ManagedAggrState::create(ctx, agg_function);
+
+    auto data_column = BinaryColumn::create();
+
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        data_column->append(val);
+    }
+    const Column* row_column = data_column.get();
+
+    // test update
+    agg_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
+
+    auto elem = BinaryColumn::create();
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    agg_function->finalize_to_column(ctx, state->state(), result_column.get());
+
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        ASSERT_EQ(val, elem->get_slice(i).to_string());
+    }
+}
+
+TEST_F(AggregateTest, test_array_agg_distinct) {
+    const AggregateFunction* agg_function =
+            get_aggregate_function("array_agg_distinct", TYPE_VARCHAR, TYPE_ARRAY, false);
+    auto state = ManagedAggrState::create(ctx, agg_function);
+
+    auto data_column = BinaryColumn::create();
+
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        data_column->append(val);
+        data_column->append(val);
+    }
+
+    const Column* row_column = data_column.get();
+
+    // test update
+    agg_function->update_batch_single_state(ctx, data_column->size(), &row_column, state->state());
+
+    auto elem = BinaryColumn::create();
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    agg_function->finalize_to_column(ctx, state->state(), result_column.get());
+
+    ASSERT_EQ(6, elem->size());
+}
+
+TEST_F(AggregateTest, test_array_agg_nullable) {
+    const AggregateFunction* func = get_aggregate_function("array_agg", TYPE_INT, TYPE_ARRAY, true);
+    auto state = ManagedAggrState::create(ctx, func);
+
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        data_column->append(i % 2 ? 0 : i);
+        null_column->append(i % 2 ? 1 : 0);
+    }
+
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+
+    const Column* row_column = column.get();
+    func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
+    auto elem = Int32Column::create();
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+    func->finalize_to_column(ctx, state->state(), result_column.get());
+
+    ASSERT_EQ(1024, offsets->get_data().back());
+}
+
+TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
+    const AggregateFunction* func = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
+    auto state = ManagedAggrState::create(ctx, func);
+
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+
+    for (int i = 0; i < 1024; i++) {
+        data_column->append(i % 100);
+        null_column->append(i % 4 ? 1 : 0);
+    }
+
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const Column* row_column = column.get();
+    func->update_batch_single_state(ctx, column->size(), &row_column, state->state());
+
+    auto elem = Int32Column::create();
+    auto offsets = UInt32Column::create(0);
+    auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+
+    func->finalize_to_column(ctx, state->state(), result_column.get());
+
+    ASSERT_EQ(26, offsets->get_data().back());
 }
 
 } // namespace starrocks

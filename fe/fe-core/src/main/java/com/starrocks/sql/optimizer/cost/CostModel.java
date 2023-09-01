@@ -235,7 +235,7 @@ public class CostModel {
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
                         callOperator.isDistinct())) {
                     return false;
                 }

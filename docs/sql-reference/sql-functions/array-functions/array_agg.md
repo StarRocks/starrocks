@@ -7,7 +7,7 @@ Aggregates values (including `NULL`) in a column into an array (multiple rows to
 ## Syntax
 
 ```Haskell
-ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
+ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 
 ## Parameters
