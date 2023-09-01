@@ -240,6 +240,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
     private boolean isDistinct(CallOperator call) {
         return call.isDistinct() ||
                 FunctionSet.MULTI_DISTINCT_SUM.equals(call.getFunction().functionName()) ||
-                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName());
+                FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName()) ||
+                FunctionSet.ARRAY_AGG_DISTINCT.equals(call.getFunction().functionName());
     }
 }

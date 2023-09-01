@@ -84,6 +84,8 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
+                } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
+                    newAggOperator = buildArrayAggDistinct(oldFunctionCall);
                 }
                 newAggMap.put(aggregation.getKey(), newAggOperator);
             } else {
@@ -178,6 +180,17 @@ public class RewriteMultiDistinctRule extends TransformationRule {
 
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fn.getReturnType(), oldFunctionCall.getChildren(),
+                        fn),
+                DEFAULT_TYPE_CAST_RULE);
+    }
+
+    private CallOperator buildArrayAggDistinct(CallOperator oldFunctionCall) {
+        Function searchDesc = new Function(new FunctionName(FunctionSet.ARRAY_AGG_DISTINCT),
+                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+
+        return (CallOperator) scalarRewriter.rewrite(
+                new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fn.getReturnType(), oldFunctionCall.getChildren(),
                         fn),
                 DEFAULT_TYPE_CAST_RULE);
     }
