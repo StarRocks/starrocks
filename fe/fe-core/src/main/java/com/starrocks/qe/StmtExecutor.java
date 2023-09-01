@@ -270,12 +270,17 @@ public class StmtExecutor {
 
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                long profileCollectStartTime = System.currentTimeMillis();
                 coord.endProfile();
+                profile.getChild("Summary").addInfoString(ProfileManager.PROFILE_TIME,
+                        DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
                 coord.mergeIsomorphicProfiles();
                 profile.addChild(coord.getQueryProfile());
             }
         }
+        profile.computeTimeInChildProfile();
     }
 
     public boolean isForwardToLeader() {
@@ -625,15 +630,7 @@ public class StmtExecutor {
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {
-        long profileBeginTime = System.currentTimeMillis();
         initProfile(beginTimeInNanoSecond);
-        profile.computeTimeInChildProfile();
-        long profileEndTime = System.currentTimeMillis();
-        profile.getChild("Summary")
-                .addInfoString(ProfileManager.PROFILE_TIME,
-                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
-        StringBuilder builder = new StringBuilder();
-        profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
