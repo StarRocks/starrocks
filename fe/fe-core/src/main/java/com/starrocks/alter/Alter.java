@@ -491,13 +491,25 @@ public class Alter {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-        db.dropTable(oldMaterializedView.getName());
-        oldMaterializedView.setName(newMaterializedViewName);
-        db.createTable(oldMaterializedView);
-        updateTaskDefinition(oldMaterializedView);
-        LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                newMaterializedViewName, oldMaterializedView.getId());
+
+        db.writeLock();
+        MaterializedView oldMaterializedView = null;
+        try {
+            oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+            db.dropTable(oldMaterializedView.getName());
+            oldMaterializedView.setName(newMaterializedViewName);
+            db.createTable(oldMaterializedView);
+            updateTaskDefinition(oldMaterializedView);
+            LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                    newMaterializedViewName, oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setActive(false);
+                LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
+            }
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     private void updateTaskDefinition(MaterializedView materializedView) {
@@ -514,8 +526,8 @@ public class Alter {
         long id = log.getId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView oldMaterializedView = null;
         try {
-            MaterializedView oldMaterializedView;
             final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
 
             oldMaterializedView = (MaterializedView) db.getTable(id);
@@ -537,6 +549,12 @@ public class Alter {
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setActive(false);
+                LOG.warn("replay change materialized-view refresh scheme failed: {}",
+                        oldMaterializedView.getName(), e);
+            }
         } finally {
             db.writeUnlock();
         }
@@ -549,8 +567,9 @@ public class Alter {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
             if  (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
@@ -558,6 +577,11 @@ public class Alter {
             } else {
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+            }
+        } catch (Throwable e) {
+            if (mv != null) {
+                mv.setActive(false);
+                LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
             db.writeUnlock();
@@ -569,9 +593,15 @@ public class Alter {
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             processChangeMaterializedViewStatus(mv, log.getStatus());
+        } catch (Exception e) {
+            if (mv != null) {
+                mv.setActive(false);
+                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
+            }
         } finally {
             db.writeUnlock();
         }
