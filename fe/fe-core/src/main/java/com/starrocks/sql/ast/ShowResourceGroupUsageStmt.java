@@ -38,11 +38,11 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
                             item -> Long.toString(item.usage.getGroup().getId())),
                     Pair.create(new Column("Backend", ScalarType.createVarchar(64)),
                             item -> item.worker.getHost()),
-                    Pair.create(new Column("InUseCpuCores", ScalarType.createVarchar(64)),
-                            item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 10.0D)),
-                    Pair.create(new Column("InUseMemBytes", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BEInUseCpuCores", ScalarType.createVarchar(64)),
+                            item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 1000.0D)),
+                    Pair.create(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
-                    Pair.create(new Column("RunningQueries", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BERunningQueries", ScalarType.createVarchar(64)),
                             item -> Integer.toString(item.usage.getNumRunningQueries()))
             );
 
@@ -86,7 +86,6 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
     public String getGroupName() {
         return groupName;
     }
-
 
     public static class ShowItem implements Comparable<ShowItem> {
         final ComputeNode worker;

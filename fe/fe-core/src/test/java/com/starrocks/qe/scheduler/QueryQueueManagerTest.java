@@ -1420,7 +1420,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n");
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n");
         }
 
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
@@ -1444,15 +1444,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n" +
-                    "wg0|0|be0-host|11.2|9|8\n" +
-                    "wg0|0|be1-host|111.0|19|18\n" +
-                    "wg1|1|be0-host|10.0|0|0\n" +
-                    "wg1|1|be1-host|110.0|0|0\n" +
-                    "wg2|2|be0-host|12.0|7|6\n" +
-                    "wg2|2|be1-host|112.0|17|16\n" +
-                    "wg3|3|be0-host|3.0|0|0\n" +
-                    "wg3|3|be1-host|13.0|0|0");
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
+                    "wg0|0|be0-host|0.112|9|8\n" +
+                    "wg0|0|be1-host|1.11|19|18\n" +
+                    "wg1|1|be0-host|0.1|0|0\n" +
+                    "wg1|1|be1-host|1.1|0|0\n" +
+                    "wg2|2|be0-host|0.12|7|6\n" +
+                    "wg2|2|be1-host|1.12|17|16\n" +
+                    "wg3|3|be0-host|0.03|0|0\n" +
+                    "wg3|3|be1-host|0.13|0|0");
         }
 
         groupUsages = ImmutableList.of(
@@ -1470,11 +1470,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|InUseCpuCores|InUseMemBytes|RunningQueries\n" +
-                    "wg0|0|be0-host|21.0|29|28\n" +
-                    "wg1|1|be0-host|20.0|0|0\n" +
-                    "wg2|2|be1-host|122.0|27|26\n" +
-                    "wg3|3|be1-host|23.0|0|0");
+            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
+                    "wg0|0|be0-host|0.21|29|28\n" +
+                    "wg1|1|be0-host|0.2|0|0\n" +
+                    "wg2|2|be1-host|1.22|27|26\n" +
+                    "wg3|3|be1-host|0.23|0|0");
         }
     }
 
