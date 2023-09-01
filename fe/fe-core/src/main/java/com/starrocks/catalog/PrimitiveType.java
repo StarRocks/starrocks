@@ -420,6 +420,7 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
+            case ARRAY:
                 // use 16 as char type estimate size
                 typeSize = 16;
                 break;
@@ -434,9 +435,6 @@ public enum PrimitiveType {
                 break;
             case JSON:
                 typeSize = 1024;
-                break;
-            case ARRAY:
-                typeSize = 16;
                 break;
             default:
                 Preconditions.checkState(false, "unknown type " + this);
