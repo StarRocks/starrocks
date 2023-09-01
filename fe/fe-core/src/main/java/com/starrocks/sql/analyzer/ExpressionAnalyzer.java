@@ -928,25 +928,11 @@ public class ExpressionAnalyzer {
                 // need to distinct output columns in finalize phase
                 ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
                         (!isAscOrder.isEmpty() || outputConst));
-            } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
-                argumentTypes[1] = Type.DOUBLE;
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
-                // correct decimal's precision and scale
-                if (fn.getArgs()[0].isDecimalV3()) {
-                    List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
-
-                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), argTypes, argumentTypes[0],
-                            ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
-
-                    newFn.setFunctionId(fn.getFunctionId());
-                    newFn.setChecksum(fn.getChecksum());
-                    newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setHasVarArgs(fn.hasVarArgs());
-                    newFn.setId(fn.getId());
-                    newFn.setUserVisible(fn.isUserVisible());
-                    newFn.setisAnalyticFn(((AggregateFunction) fn).isAnalyticFn());
-
-                    fn = newFn;
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
+                // This must before test for DecimalV3.
+                if (!(node.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(
+                            fnName + " requires second parameter must be a constant interval");
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(

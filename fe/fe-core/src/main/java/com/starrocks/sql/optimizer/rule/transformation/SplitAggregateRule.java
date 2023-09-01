@@ -102,7 +102,7 @@ public class SplitAggregateRule extends TransformationRule {
         }
         // 2 Must do multi stage aggregate when aggregate distinct function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
+                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
                 callOperator.isDistinct())) {
             return true;
         }
