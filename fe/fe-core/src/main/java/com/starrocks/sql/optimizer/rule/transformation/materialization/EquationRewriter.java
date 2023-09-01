@@ -107,25 +107,25 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator visitCall(CallOperator predicate, Void context) {
+            public ScalarOperator visitCall(CallOperator call, Void context) {
                 // 1. rewrite query's predicate
-                ScalarOperator tmp = replace(predicate);
+                ScalarOperator tmp = replace(call);
                 if (tmp != null) {
                     return tmp;
                 }
 
                 // 2. normalize predicate to better match mv
                 // TODO: merge into aggregateFunctionRewriter later.
-                predicate = normalizeCallOperator(predicate);
-                tmp = replace(predicate);
+                CallOperator normalizedCall = normalizeCallOperator(call);
+                tmp = replace(normalizedCall);
                 if (tmp != null) {
                     return tmp;
                 }
 
                 // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
-                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(normalizedCall) &&
                         !isUnderAggFunctionRewriteContext()) {
-                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(normalizedCall);
                     if (newChooseScalarOp != null) {
                         setUnderAggFunctionRewriteContext(true);
                         // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
@@ -136,7 +136,7 @@ public class EquationRewriter {
                     }
                 }
 
-                return super.visitCall(predicate, context);
+                return super.visitCall(call, context);
             }
 
             @Override
