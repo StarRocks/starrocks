@@ -369,7 +369,11 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id) {
     while (index < size) {
         auto& t = targets[index];
         bool is_local = (local == t.first);
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", t.first.hostname, t.first.port);
+            return;
+        }
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
         for (const auto& inst : t.second) {
@@ -610,7 +614,11 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         TNetworkAddress addr;
         addr.hostname = t.host();
         addr.port = t.port();
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
+            return;
+        }
 
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
@@ -706,7 +714,12 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_relay(PTransmitRunti
 
     auto* rpc_closure = new RuntimeFilterRpcClosure();
     SingleClosureJoinAndClean join_and_join(rpc_closure);
-    doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
+    auto* stub = _exec_env->brpc_stub_cache()->get_stub(first_dest.address);
+    if (UNLIKELY(stub == nullptr)) {
+        LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", first_dest.address.hostname,
+                                            first_dest.address.port);
+        return;
+    }
     _exec_env->add_rf_event(
             {request.query_id(), request.filter_id(), first_dest.address.hostname, "DELIVER_BROADCAST_RF_RELAY"});
     rpc_closure->ref();
@@ -729,7 +742,12 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
         for (auto i = 0; i < num_inflight; ++i) {
             auto request = params;
             auto& dest = destinations[start_idx + i];
-            doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
+            auto* stub = _exec_env->brpc_stub_cache()->get_stub(dest.address);
+            if (UNLIKELY(stub == nullptr)) {
+                LOG(WARNING) << strings::Substitute("The brpc stub of $0:$1 is null.", dest.address.hostname,
+                                                    dest.address.port);
+                return;
+            }
             request.clear_probe_finst_ids();
             request.clear_forward_targets();
             for (const auto& id : dest.finstance_ids) {
@@ -767,7 +785,11 @@ void RuntimeFilterWorker::_deliver_part_runtime_filter(std::vector<TNetworkAddre
     rpc_closures.reserve(transmit_addrs.size());
     BatchClosuresJoinAndClean join_and_clean(rpc_closures);
     for (const auto& addr : transmit_addrs) {
-        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        auto* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        if (UNLIKELY(stub == nullptr)) {
+            LOG(WARNING) << strings::Substitute("The brpc stub of {}:{} is null.", addr.hostname, addr.port);
+            return;
+        }
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), addr.hostname, "SEND_PART_RF_RPC"});
         rpc_closures.push_back(new RuntimeFilterRpcClosure());
         auto* closure = rpc_closures.back();
