@@ -311,13 +311,9 @@ public class StmtExecutor {
         profile = buildTopLevelProfile();
         if (coord != null) {
             if (coord.getQueryProfile() != null) {
-<<<<<<< HEAD
-                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-=======
                 coord.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 long profileCollectStartTime = System.currentTimeMillis();
->>>>>>> 4437950f92 ([Enhancement] Improve the profile serialization performance (#30221))
                 coord.endProfile();
                 profile.getChild("Summary").addInfoString(ProfileManager.PROFILE_TIME,
                         DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
