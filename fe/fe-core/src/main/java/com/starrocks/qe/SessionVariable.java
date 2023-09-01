@@ -361,7 +361,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
-
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -494,6 +493,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
+
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1044,6 +1045,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact,
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
     private String thriftPlanProtocol = "binary";
+
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
 
     public String getThriftPlanProtocol() {
         return thriftPlanProtocol;
