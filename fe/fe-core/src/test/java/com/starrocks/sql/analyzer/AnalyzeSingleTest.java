@@ -654,4 +654,19 @@ public class AnalyzeSingleTest {
                 "contend and col = \"''```中\t文  \\\"\r\n" +
                 "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
     }
+
+    @Test
+    public void testRemoveComments() {
+        analyzeFail("select /*+ SET */ v1 from t0");
+        analyzeFail("select /*+   abc*/ v1 from t0");
+
+        analyzeSuccess("select v1 /*+*/ from t0");
+        analyzeSuccess("select v1 /*+\n*/ from t0");
+        analyzeSuccess("select v1 /*+   \n\n*/ from t0");
+        analyzeSuccess("select v1 /**/ from t0");
+        analyzeSuccess("select v1 /*    */ from t0");
+        analyzeSuccess("select v1 /*    a*/ from t0");
+        analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
+        analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
+    }
 }
