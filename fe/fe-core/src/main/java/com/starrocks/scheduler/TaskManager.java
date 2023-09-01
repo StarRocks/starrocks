@@ -143,8 +143,7 @@ public class TaskManager {
             long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                     taskSchedule.getTimeUnit());
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            LocalDateTime scheduleTime = LocalDateTime.now();
-            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
+            long initialDelay = getInitialDelayTime(period, startTime, LocalDateTime.now());
             // Tasks that run automatically have the lowest priority,
             // but are automatically merged if they are found to be merge-able.
             ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
@@ -157,8 +156,7 @@ public class TaskManager {
     }
 
     @VisibleForTesting
-    static long getInitialDelayTime(long period, LocalDateTime startTime,
-                                    LocalDateTime scheduleTime) {
+    static long getInitialDelayTime(long period, LocalDateTime startTime, LocalDateTime scheduleTime) {
         Duration duration = Duration.between(scheduleTime, startTime);
         long initialDelay = duration.getSeconds();
         // if startTime < now, start scheduling from the next period
@@ -440,12 +438,7 @@ public class TaskManager {
     private void registerScheduler(Task task) {
         TaskSchedule schedule = task.getSchedule();
         LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-        Duration duration = Duration.between(LocalDateTime.now(), startTime);
-        long initialDelay = duration.getSeconds();
-        // if startTime < now, start scheduling now
-        if (initialDelay < 0) {
-            initialDelay = 0;
-        }
+        long initialDelay = getInitialDelayTime(schedule.getPeriod(), startTime, LocalDateTime.now());
         // this operation should only run in master
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
