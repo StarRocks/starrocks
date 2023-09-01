@@ -165,11 +165,14 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starrocks-bdb-je</artifactId>
-
             <exclusions>
                 <exclusion>
                     <groupId>com.sun</groupId>
                     <artifactId>tools</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
