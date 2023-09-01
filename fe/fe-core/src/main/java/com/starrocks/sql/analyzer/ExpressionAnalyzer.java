@@ -895,10 +895,15 @@ public class ExpressionAnalyzer {
                 Type[] argsTypes = new Type[argumentTypes.length];
                 for (int i = 0; i < argumentTypes.length; ++i) {
                     // TODO: support nested type
-                    if (argumentTypes[i].isComplexType()) {
-                        throw new SemanticException(fnName + " can't support inputs of nested types, " +
+                    if (node.getParams().isDistinct() && argumentTypes[i].isJsonType()) {
+                        throw new SemanticException(fnName + " can't support distinct on complex types, " +
                                 "but " + i + "-th input is " + argumentTypes[i].toSql());
                     }
+                    if (argumentTypes[i].isComplexType()) {
+                        throw new SemanticException(fnName + " can't support inputs of complex types, " +
+                                "but " + i + "-th input is " + argumentTypes[i].toSql());
+                    }
+
                     argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
                     if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
                         argsTypes[i] = Type.VARCHAR;

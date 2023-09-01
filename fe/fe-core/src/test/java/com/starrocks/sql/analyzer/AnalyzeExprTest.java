@@ -246,6 +246,7 @@ public class AnalyzeExprTest {
                 "union all select v1 as a, v3 as b from t0)A;");
         analyzeSuccess("select array_agg(v1 order by v1),array_sortby(array_agg(v1),array_agg(v2)) from t0;");
         analyzeSuccess("select array_agg(tj) from tall");
+        analyzeFail("select array_agg(distinct tj) from tall");
         analyzeSuccess("select array_agg(tj order by ta) from tall group by tc");
 
         analyzeSuccess("select array_agg(distinct v1), array_agg(v1) from t0;");

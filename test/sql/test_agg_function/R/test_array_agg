@@ -1452,7 +1452,7 @@ E: (1064, "You have an error in your SQL syntax; check the manual that correspon
 -- !result
 select array_agg([1,2]) from ss;
 -- result:
-E: (1064, "array_agg can't support inputs of nested types, but 0-th input is ARRAY<tinyint(4)>")
+E: (1064, "array_agg can't support inputs of complex types, but 0-th input is ARRAY<tinyint(4)>")
 -- !result
 select array_agg(json_object("2:3")) from ss;
 -- result:
@@ -1460,11 +1460,11 @@ select array_agg(json_object("2:3")) from ss;
 -- !result
 select array_agg(distinct json_object("2:3")) from ss;
 -- result:
-[201,238,203,19,46,91,144,48,11,74,129,112,16,8]
+E: (1064, "array_agg can't support distinct on complex types, but 0-th input is json")
 -- !result
 select array_agg(distinct [json_object("2:3")]) from ss;
 -- result:
-E: (1064, "array_agg can't support inputs of nested types, but 0-th input is ARRAY<json>")
+E: (1064, "array_agg can't support inputs of complex types, but 0-th input is ARRAY<json>")
 -- !result
 select array_agg(map(2,3)) from ss;
 -- result:
