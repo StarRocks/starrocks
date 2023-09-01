@@ -417,18 +417,13 @@ public class AlterJobMgr {
         db.writeLock();
         MaterializedView mv = null;
         try {
-<<<<<<< HEAD
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
-            processChangeMaterializedViewStatus(mv, log.getStatus(), true);
-=======
             mv = (MaterializedView) db.getTable(tableId);
-            alterMaterializedViewStatus(mv, log.getStatus(), true);
+            processChangeMaterializedViewStatus(mv, log.getStatus(), true);
         } catch (Throwable e) {
             if (mv != null) {
                 LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
                 mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
             }
->>>>>>> 873c3810a9 (catch exception for mv when replaying journal (#30015))
         } finally {
             db.writeUnlock();
         }
