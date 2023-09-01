@@ -435,6 +435,9 @@ public enum PrimitiveType {
             case JSON:
                 typeSize = 1024;
                 break;
+            case ARRAY:
+                typeSize = 16;
+                break;
             default:
                 Preconditions.checkState(false, "unknown type " + this);
         }
