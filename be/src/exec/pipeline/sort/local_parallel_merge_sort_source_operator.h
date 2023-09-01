@@ -50,7 +50,7 @@ public:
     LocalParallelMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t driver_sequence, SortContext* sort_context, bool is_gathered,
                                          merge_path::MergePathCascadeMerger* merge_path_merger)
-            : SourceOperator(factory, id, "local_parallel_merge_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "local_parallel_merge_source", plan_node_id, false, driver_sequence),
               _sort_context(sort_context),
               _merger(merge_path_merger),
               _merge_parallel_id(is_gathered ? driver_sequence : 0) {}

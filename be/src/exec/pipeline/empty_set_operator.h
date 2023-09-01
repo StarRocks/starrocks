@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 class EmptySetOperator final : public SourceOperator {
 public:
     EmptySetOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : SourceOperator(factory, id, "empty_set", plan_node_id, driver_sequence) {}
+            : SourceOperator(factory, id, "empty_set", plan_node_id, false, driver_sequence) {}
 
     ~EmptySetOperator() override = default;
 

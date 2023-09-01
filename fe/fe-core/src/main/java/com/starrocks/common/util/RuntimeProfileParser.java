@@ -42,8 +42,10 @@ public class RuntimeProfileParser {
             Pattern.compile("^- (.*?): (((-?\\d+(\\.\\d+)?)(ms|us|ns|h|m|s))+)$");
     private static final Pattern TIMER_SEGMENT_PATTERN =
             Pattern.compile("(-?\\d+(\\.\\d+)?)(ms|us|ns|h|m|s)");
-    private static final Pattern INFO_STRING_PATTERN =
+    private static final Pattern INFO_KV_STRING_PATTERN =
             Pattern.compile("^- (.*?): (.*?)$");
+    private static final Pattern INFO_KEY_STRING_PATTERN =
+            Pattern.compile("^- (.*?)$");
 
     public static RuntimeProfile parseFrom(String content) {
         BufferedReader bufferedReader = new BufferedReader(new StringReader(content));
@@ -148,9 +150,14 @@ public class RuntimeProfileParser {
     }
 
     private static InfoStringTuple tryParseInfoString(String item) {
-        Matcher matcher = INFO_STRING_PATTERN.matcher(item);
+        Matcher matcher = INFO_KV_STRING_PATTERN.matcher(item);
         if (!matcher.matches()) {
-            return null;
+            matcher = INFO_KEY_STRING_PATTERN.matcher(item);
+            if (!matcher.matches()) {
+                return null;
+            }
+            String name = matcher.group(1);
+            return new InfoStringTuple(name, "");
         }
 
         String name = matcher.group(1);

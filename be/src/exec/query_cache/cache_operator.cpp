@@ -126,7 +126,8 @@ struct PerLaneBuffer {
 
 CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                              const CacheParam& cache_param)
-        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), true,
+                             driver_sequence),
           _cache_mgr(cache_mgr),
           _cache_param(cache_param),
           _lane_arbiter(std::make_shared<LaneArbiter>(_cache_param.num_lanes)) {

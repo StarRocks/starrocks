@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 LocalPartitionTopnSourceOperator::LocalPartitionTopnSourceOperator(OperatorFactory* factory, int32_t id,
                                                                    int32_t plan_node_id, int32_t driver_sequence,
                                                                    LocalPartitionTopnContext* partition_topn_ctx)
-        : SourceOperator(factory, id, "local_partition_topn_source", plan_node_id, driver_sequence),
+        : SourceOperator(factory, id, "local_partition_topn_source", plan_node_id, false, driver_sequence),
           _partition_topn_ctx(partition_topn_ctx) {}
 
 bool LocalPartitionTopnSourceOperator::has_output() const {

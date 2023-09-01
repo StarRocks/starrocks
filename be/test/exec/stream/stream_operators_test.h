@@ -40,7 +40,7 @@ class GeneratorStreamSourceOperator final : public SourceOperator {
 public:
     GeneratorStreamSourceOperator(pipeline::OperatorFactory* factory, int32_t id, const std::string& name,
                                   int32_t plan_node_id, int32_t driver_sequence, GeneratorStreamSourceParam param)
-            : SourceOperator(factory, id, name, plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, name, plan_node_id, false, driver_sequence),
               _param(param),
               _tablet_id(driver_sequence) {}
 
@@ -100,7 +100,7 @@ private:
 class PrinterStreamSinkOperator final : public Operator {
 public:
     PrinterStreamSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : Operator(factory, id, "printer_stream_sink", plan_node_id, driver_sequence) {}
+            : Operator(factory, id, "printer_stream_sink", plan_node_id, false, driver_sequence) {}
 
     ~PrinterStreamSinkOperator() override = default;
 

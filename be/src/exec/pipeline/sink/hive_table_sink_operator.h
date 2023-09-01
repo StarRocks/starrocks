@@ -38,7 +38,7 @@ public:
                           const vector<ExprContext*>& partition_output_expr,
                           const vector<std::string>& partition_column_names,
                           const vector<std::string>& data_column_names, bool is_static_partition_insert)
-            : Operator(factory, id, "hive_table_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "hive_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),

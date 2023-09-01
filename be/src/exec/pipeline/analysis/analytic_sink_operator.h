@@ -24,7 +24,7 @@ class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                          const TPlanNode& tnode, AnalytorPtr&& analytor)
-            : Operator(factory, id, "analytic_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "analytic_sink", plan_node_id, false, driver_sequence),
               _tnode(tnode),
               _analytor(std::move(analytor)) {
         _analytor->ref();

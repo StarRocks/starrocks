@@ -49,7 +49,7 @@ public:
                               std::shared_ptr<ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
                               SortContext* sort_context, RuntimeFilterHub* hub, const char* name = "local_sort_sink")
-            : Operator(factory, id, name, plan_node_id, driver_sequence),
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),

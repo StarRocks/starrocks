@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_prober,
                                              HashJoinerPtr join_builder)
-        : OperatorWithDependency(factory, id, name, plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, name, plan_node_id, false, driver_sequence),
           _join_prober(std::move(join_prober)),
           _join_builder(std::move(join_builder)) {}
 

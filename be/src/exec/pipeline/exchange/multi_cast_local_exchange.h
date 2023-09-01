@@ -93,7 +93,7 @@ public:
     MultiCastLocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t driver_sequence, int32_t mcast_consumer_index,
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id, true, driver_sequence),
               _mcast_consumer_index(mcast_consumer_index),
               _exchanger(std::move(std::move(exchanger))) {}
 
@@ -138,7 +138,7 @@ public:
     MultiCastLocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                        const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id, true, driver_sequence),
               _exchanger(std::move(std::move(exchanger))) {}
 
     ~MultiCastLocalExchangeSinkOperator() override = default;

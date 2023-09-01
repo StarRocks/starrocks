@@ -24,7 +24,7 @@ namespace starrocks::pipeline {
 class NoopSinkOperator final : public Operator {
 public:
     NoopSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : Operator(factory, id, "noop_sink", plan_node_id, driver_sequence) {}
+            : Operator(factory, id, "noop_sink", plan_node_id, true, driver_sequence) {}
 
     ~NoopSinkOperator() override = default;
 

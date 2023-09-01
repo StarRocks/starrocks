@@ -41,8 +41,8 @@ using DriverDependencies = std::vector<DriverDependencyPtr>;
 class OperatorWithDependency : public Operator {
 public:
     OperatorWithDependency(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-                           int32_t driver_sequence)
-            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
+                           bool is_subordinate, int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, is_subordinate, driver_sequence) {}
     ~OperatorWithDependency() override = default;
     // return true if the corresponding right operator is full materialized, otherwise return false.
     virtual bool is_ready() const = 0;

@@ -32,7 +32,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
                                          const std::vector<ExprContext*>& conjunct_ctxs,
                                          const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                          const std::shared_ptr<NLJoinContext>& cross_join_context)
-        : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, false, driver_sequence),
           _join_op(join_op),
           _col_types(col_types),
           _probe_column_count(probe_column_count),

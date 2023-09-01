@@ -121,8 +121,8 @@ protected:
 class SourceOperator : public Operator {
 public:
     SourceOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-                   int32_t driver_sequence)
-            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
+                   bool is_subordinate, int32_t driver_sequence)
+            : Operator(factory, id, name, plan_node_id, is_subordinate, driver_sequence) {}
     ~SourceOperator() override = default;
 
     bool need_input() const override { return false; }

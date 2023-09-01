@@ -157,7 +157,7 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
                                                                  IcebergTableDescriptor* iceberg_table,
                                                                  const TIcebergTableSink& thrift_sink,
                                                                  std::vector<ExprContext*> partition_expr_ctxs)
-        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_iceberg_table_sink),
+        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _fragment_ctx(std::move(fragment_ctx)),
           _iceberg_table(iceberg_table),
