@@ -109,12 +109,6 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
-<<<<<<< HEAD
-    scan_rows += statistics.scan_rows();
-    scan_bytes += statistics.scan_bytes();
-    cpu_ns += statistics.cpu_cost_ns();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
-=======
     if (statistics.has_scan_rows()) {
         scan_rows += statistics.scan_rows();
     }
@@ -124,13 +118,9 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     if (statistics.has_cpu_cost_ns()) {
         cpu_ns += statistics.cpu_cost_ns();
     }
-    if (statistics.has_spill_bytes()) {
-        spill_bytes += statistics.spill_bytes();
-    }
     if (statistics.has_mem_cost_bytes()) {
         mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
     }
->>>>>>> e9653a0f28 ([BugFix] Fix negative audit values (#30271))
     {
         std::lock_guard l(_lock);
         for (int i = 0; i < statistics.stats_items_size(); ++i) {
