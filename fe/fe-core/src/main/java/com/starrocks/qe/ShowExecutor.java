@@ -68,6 +68,7 @@ import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -1866,7 +1867,7 @@ public class ShowExecutor {
                     long indexSize = 0;
                     long indexReplicaCount = 0;
                     long indexRowCount = 0;
-                    for (Partition partition : olapTable.getAllPartitions()) {
+                    for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
                         MaterializedIndex mIndex = partition.getIndex(indexId);
                         indexSize += mIndex.getDataSize();
                         indexReplicaCount += mIndex.getReplicaCount();
@@ -1958,14 +1959,15 @@ public class ShowExecutor {
                     tableName = table.getName();
 
                     OlapTable olapTable = (OlapTable) table;
-                    Partition partition = olapTable.getPartition(partitionId);
-                    if (partition == null) {
+                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
+                    if (physicalPartition == null) {
                         isSync = false;
                         break;
                     }
+                    Partition partition = olapTable.getPartition(physicalPartition.getParentId());
                     partitionName = partition.getName();
 
-                    MaterializedIndex index = partition.getIndex(indexId);
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
                     if (index == null) {
                         isSync = false;
                         break;
@@ -2057,22 +2059,24 @@ public class ShowExecutor {
                     if (stop) {
                         break;
                     }
-                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
-                        if (indexId > -1 && index.getId() != indexId) {
-                            continue;
-                        }
-                        if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                            LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
-                            tabletInfos.addAll(procNode.fetchComparableResult());
-                        } else {
-                            LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
-                            tabletInfos.addAll(procDir.fetchComparableResult(
-                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
-                        }
-                        if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
-                                && tabletInfos.size() >= sizeLimit) {
-                            stop = true;
-                            break;
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                            if (indexId > -1 && index.getId() != indexId) {
+                                continue;
+                            }
+                            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                                LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procNode.fetchComparableResult());
+                            } else {
+                                LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procDir.fetchComparableResult(
+                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                            }
+                            if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                    && tabletInfos.size() >= sizeLimit) {
+                                stop = true;
+                                break;
+                            }
                         }
                     }
                 }

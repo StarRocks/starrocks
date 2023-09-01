@@ -39,7 +39,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -185,7 +185,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
                 OlapTable olapTable = (OlapTable) table;
                 long tableSize = 0;
-                for (Partition partition : olapTable.getAllPartitions()) {
+                for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
                     long partitionSize = 0;
                     for (MaterializedIndex mIndex : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         long indexSize = 0;

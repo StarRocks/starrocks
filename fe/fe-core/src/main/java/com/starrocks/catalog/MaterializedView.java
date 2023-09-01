@@ -1105,6 +1105,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)).append("\"");
         }
 
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)).append("\"");
+        }
+
         // partition TTL
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)

@@ -67,7 +67,6 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -339,6 +338,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
+            try {
+                long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
+                if (bucketSize > 0) {
+                    table.setAutomaticBucketSize(bucketSize);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+                    
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -563,7 +572,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
-                    metastore.buildPartitions(db, table, Collections.singletonList(partition));
+                    metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()));
                     table.addPartition(partition);
                 } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                     try {
@@ -603,7 +612,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.
-                    metastore.buildPartitions(db, table, partitions);
+                    metastore.buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
+                            .flatMap(p -> p.stream()).collect(Collectors.toList()));
                     for (Partition partition : partitions) {
                         table.addPartition(partition);
                     }

@@ -120,8 +120,8 @@ TEST_F(LakeDeltaWriterTest, test_open) {
     {
         auto txn_id = next_id();
         auto tablet_id = -1;
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
@@ -140,7 +140,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // Write and flush
@@ -213,7 +213,7 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // write()
@@ -246,7 +246,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // write()
@@ -272,7 +272,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->finish());
     delta_writer->close();
@@ -295,7 +295,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
 TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, -1, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, -1, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
     ASSERT_ERROR(delta_writer->finish());
     delta_writer->close();
@@ -314,7 +314,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // Write three times
@@ -358,7 +358,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
@@ -403,7 +403,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
@@ -449,7 +449,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0, _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
 
     // Write three times

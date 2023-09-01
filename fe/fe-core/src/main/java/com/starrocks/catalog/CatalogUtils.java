@@ -306,6 +306,16 @@ public class CatalogUtils {
         }
     }
 
+    public static int calPhysicalPartitionBucketNum() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
+        return Math.min(backendNum, 16);
+    }
+
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 

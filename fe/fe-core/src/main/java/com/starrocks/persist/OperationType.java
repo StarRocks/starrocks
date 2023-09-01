@@ -371,6 +371,8 @@ public class OperationType {
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
 
+    public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
+
     // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
@@ -402,6 +404,9 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    // modify table property bucket size
+    public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;

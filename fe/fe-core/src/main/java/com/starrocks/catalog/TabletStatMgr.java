@@ -217,7 +217,7 @@ public class TabletStatMgr extends FrontendDaemon {
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
         db.readLock();
         try {
-            for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
                 long version = partition.getVisibleVersion();
                 // partition init version is 1
@@ -288,7 +288,7 @@ public class TabletStatMgr extends FrontendDaemon {
         // update tablet stats
         db.writeLock();
         try {
-            for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
                 if (!partitionToVersion.containsKey(partitionId)) {
                     continue;

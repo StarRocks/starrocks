@@ -90,7 +90,7 @@ public class CTASAutoTabletTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum1, 6);
-        Assert.assertEquals(bucketNum2, 6);
+        Assert.assertEquals(bucketNum2, 3);
         Assert.assertEquals(bucketNum3, 6);
     }
 }

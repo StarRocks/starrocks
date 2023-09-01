@@ -17,7 +17,7 @@ package com.starrocks.binlog;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -69,11 +69,11 @@ public class BinlogManager {
         tableIdToPartitions = new HashMap<>();
     }
 
-    private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<Partition> curPartitions) {
+    private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<PhysicalPartition> curPartitions) {
         if (prePartitions.size() != curPartitions.size()) {
             return true;
         }
-        for (Partition partition : curPartitions) {
+        for (PhysicalPartition partition : curPartitions) {
             if (!prePartitions.contains(partition.getId())) {
                 return true;
             }
@@ -94,13 +94,13 @@ public class BinlogManager {
                 // the first tablet of the table to be reported,
                 // no need to check whether the partitions have been changed
                 if (!partitions.isEmpty()) {
-                    isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
+                    isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPhysicalPartitions());
                 }
 
                 if (isPartitionChanged) {
                     // for the sake of simplicity, if the partition have been changed, re-statistics
                     partitions.clear();
-                    partitions.addAll(table.getAllPartitions().stream().
+                    partitions.addAll(table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getId()).
                             collect(Collectors.toSet()));
                     tableIdToReportedNum.clear();
@@ -121,7 +121,7 @@ public class BinlogManager {
                 }
                 tableIdToBinlogVersion.put(table.getId(), table.getBinlogVersion());
                 if (!tableIdToReplicaCount.containsKey(table.getId())) {
-                    long totalReplicaCount = table.getAllPartitions().stream().
+                    long totalReplicaCount = table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
                     tableIdToReplicaCount.put(table.getId(), totalReplicaCount);
@@ -142,7 +142,7 @@ public class BinlogManager {
                 db.writeLock();
                 try {
                     // check again if all replicas have been reported
-                    long totalReplicaCount = table.getAllPartitions().stream().
+                    long totalReplicaCount = table.getAllPhysicalPartitions().stream().
                             map(partition -> partition.getBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
 

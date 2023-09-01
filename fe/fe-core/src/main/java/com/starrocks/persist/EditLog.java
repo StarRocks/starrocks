@@ -285,6 +285,13 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
+                    AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
+                    for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
+                        globalStateMgr.replayAddSubPartition(info);
+                    }
+                    break;
+                }
                 case OperationType.OP_DROP_PARTITION: {
                     DropPartitionInfo info = (DropPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
@@ -829,6 +836,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                case OperationType.OP_MODIFY_BUCKET_SIZE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -1270,6 +1278,10 @@ public class EditLog {
 
     public void logAddPartitions(AddPartitionsInfoV2 info) {
         logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+    }
+
+    public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
     public void logDropPartition(DropPartitionInfo info) {
@@ -1829,6 +1841,10 @@ public class EditLog {
 
     public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
+    }
+
+    public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

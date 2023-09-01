@@ -45,6 +45,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -147,38 +148,40 @@ public class StatisticProcDir implements ProcDirInterface {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
-                        for (MaterializedIndex materializedIndex : partition
-                                .getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            ++dbIndexNum;
-                            for (Tablet tablet : materializedIndex.getTablets()) {
-                                ++dbTabletNum;
+                        for (PhysicalPartition physicalParition : partition.getSubPartitions()) {
+                            for (MaterializedIndex materializedIndex : physicalParition
+                                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                ++dbIndexNum;
+                                for (Tablet tablet : materializedIndex.getTablets()) {
+                                    ++dbTabletNum;
 
-                                if (table.isCloudNativeTableOrMaterializedView()) {
-                                    continue;
-                                }
+                                    if (table.isCloudNativeTableOrMaterializedView()) {
+                                        continue;
+                                    }
 
-                                LocalTablet localTablet = (LocalTablet) tablet;
-                                dbReplicaNum += localTablet.getImmutableReplicas().size();
-                                if (localTablet.getErrorStateReplicaNum() > 0) {
-                                    errorStateTabletIds.put(dbId, tablet.getId());
-                                }
+                                    LocalTablet localTablet = (LocalTablet) tablet;
+                                    dbReplicaNum += localTablet.getImmutableReplicas().size();
+                                    if (localTablet.getErrorStateReplicaNum() > 0) {
+                                        errorStateTabletIds.put(dbId, tablet.getId());
+                                    }
 
-                                Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
-                                        infoService, partition.getVisibleVersion(),
-                                        replicationNum, aliveBeIdsInCluster);
+                                    Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
+                                            infoService, physicalParition.getVisibleVersion(),
+                                            replicationNum, aliveBeIdsInCluster);
 
-                                // here we treat REDUNDANT as HEALTHY, for user friendly.
-                                if (res.first != TabletStatus.HEALTHY && res.first != TabletStatus.REDUNDANT
-                                        && res.first != TabletStatus.COLOCATE_REDUNDANT &&
-                                        res.first != TabletStatus.NEED_FURTHER_REPAIR) {
-                                    unhealthyTabletIds.put(dbId, tablet.getId());
-                                }
+                                    // here we treat REDUNDANT as HEALTHY, for user friendly.
+                                    if (res.first != TabletStatus.HEALTHY && res.first != TabletStatus.REDUNDANT
+                                            && res.first != TabletStatus.COLOCATE_REDUNDANT &&
+                                            res.first != TabletStatus.NEED_FURTHER_REPAIR) {
+                                        unhealthyTabletIds.put(dbId, tablet.getId());
+                                    }
 
-                                if (!localTablet.isConsistent()) {
-                                    inconsistentTabletIds.put(dbId, tablet.getId());
-                                }
-                            } // end for tablets
-                        } // end for indices
+                                    if (!localTablet.isConsistent()) {
+                                        inconsistentTabletIds.put(dbId, tablet.getId());
+                                    }
+                                } // end for tablets
+                            } // end for indices
+                        }
                     } // end for partitions
                 } // end for tables
 

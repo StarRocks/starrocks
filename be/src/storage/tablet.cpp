@@ -1635,6 +1635,39 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+int64_t Tablet::data_size() {
+    std::shared_lock rdlock(_meta_lock);
+    if (_updates) {
+        return _updates->data_size();
+    } else {
+        return _tablet_meta->tablet_footprint();
+    }
+}
+
+int64_t Tablet::in_writing_data_size() {
+    int64_t size = 0;
+    std::shared_lock rdlock(_meta_lock);
+    for (auto& [k, v] : _in_writing_txn_size) {
+        size += v;
+    }
+    VLOG(1) << "tablet " << tablet_id() << " in writing data size: " << size;
+    return size;
+}
+
+void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
+            << " delta: " << delta << " txn_id: " << txn_id;
+    _in_writing_txn_size[txn_id] += delta;
+}
+
+void Tablet::remove_in_writing_data_size(int64_t txn_id) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
+            << " txn_id: " << txn_id;
+    _in_writing_txn_size.erase(txn_id);
+}
+
 Status Tablet::verify() {
     int64_t version = max_continuous_version();
     std::vector<RowsetSharedPtr> rowsets;

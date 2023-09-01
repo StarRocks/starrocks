@@ -17,7 +17,7 @@ package com.starrocks.lake;
 
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -48,7 +48,7 @@ class DeleteLakeTableTask implements Runnable {
     public void run() {
         Tablet anyTablet = null;
         Set<Long> tabletIds = new HashSet<>();
-        for (Partition partition : table.getAllPartitions()) {
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex materializedIndex : allIndices) {
                 for (Tablet tablet : materializedIndex.getTablets()) {

@@ -22,6 +22,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -70,7 +71,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         GlobalStateMgr.getCurrentState()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
-                                .map(Partition::getShardGroupId)
+                                .map(Partition::getSubPartitions)
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupId))
                                 .forEach(groupIds::add);
                     }
                 }

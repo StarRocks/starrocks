@@ -16,6 +16,7 @@
 
 #include <bthread/types.h>
 
+#include <shared_mutex>
 #include <variant>
 
 #include "common/statusor.h"
@@ -151,6 +152,12 @@ public:
 
     Cache* metacache() { return _metacache.get(); }
 
+    int64_t in_writing_data_size(int64_t tablet_id);
+
+    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+
+    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
@@ -185,6 +192,9 @@ private:
     std::unique_ptr<Cache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
+
+    std::shared_mutex _meta_lock;
+    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
 };
 
 } // namespace starrocks::lake

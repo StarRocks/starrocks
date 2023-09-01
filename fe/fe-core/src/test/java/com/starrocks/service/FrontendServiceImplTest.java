@@ -17,7 +17,9 @@ package com.starrocks.service;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -44,6 +46,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TImmutablePartitionRequest;
+import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
@@ -96,6 +100,23 @@ public class FrontendServiceImplTest {
         request.setBackend_id(backendId);
 
         return request;
+    }
+
+    @Test
+    public void testUpdateImmutablePartitionException() throws TException {
+        new MockUp<FrontendServiceImpl>() {
+            @Mock
+            public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(
+                    TImmutablePartitionRequest request) {
+                throw new RuntimeException("test");
+            }
+        };
+
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
     }
 
     @Test
@@ -174,6 +195,30 @@ public class FrontendServiceImplTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access_auto (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");")
+                .withTable("CREATE TABLE site_access_exception (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE site_access_empty (\n" +
                         "    event_day DATETIME NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -275,6 +320,74 @@ public class FrontendServiceImplTest {
         } catch (Exception ex) {
 
         }
+    }
+
+    @Test
+    public void testImmutablePartitionException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("site_access_exception");
+        List<Long> partitionIds = Lists.newArrayList();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Table t = db.getTable("v");
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setDb_id(db.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(t.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(table.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds.add(1L);
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+    }
+
+    @Test
+    public void testImmutablePartitionApi() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("site_access_auto");
+        List<Long> partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_ids(partitionIds);
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
+
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(5, table.getPhysicalPartitions().size());
     }
 
     @Test
@@ -472,7 +585,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assert.assertEquals(13, result.tables.size());
+        Assert.assertEquals(15, result.tables.size());
     }
 
     @Test

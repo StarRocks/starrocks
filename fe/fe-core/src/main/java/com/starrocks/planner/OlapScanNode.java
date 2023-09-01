@@ -59,6 +59,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -157,7 +158,7 @@ public class OlapScanNode extends ScanNode {
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     private List<Expr> bucketExprs = Lists.newArrayList();
     private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
-    // record the selected partition with the selected tablets belong to it
+    // record the selected physical partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
@@ -438,13 +439,14 @@ public class OlapScanNode extends ScanNode {
     }
 
     public void addScanRangeLocations(Partition partition,
+                                      PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
                                       long localBeId) throws UserException {
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
-        long visibleVersion = partition.getVisibleVersion();
+        long visibleVersion = physicalPartition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache =
                 olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
@@ -462,7 +464,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion(visibleVersionStr);
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
-            internalRange.setPartition_id(partition.getId());
+            internalRange.setPartition_id(physicalPartition.getId());
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
@@ -606,29 +608,31 @@ public class OlapScanNode extends ScanNode {
         Preconditions.checkState(scanTabletIds.size() == 0);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
-            final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
-            final List<Tablet> tablets = Lists.newArrayList();
-            final Collection<Long> tabletIds = distributionPrune(selectedTable, partition.getDistributionInfo());
-            LOG.debug("distribution prune tablets: {}", tabletIds);
 
-            List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
-            if (tabletIds != null) {
-                for (Long id : tabletIds) {
-                    tablets.add(selectedTable.getTablet(id));
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                final List<Tablet> tablets = Lists.newArrayList();
+                final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
+                final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
+                LOG.debug("distribution prune tablets: {}", tabletIds);
+
+                List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
+                if (tabletIds != null) {
+                    for (Long id : tabletIds) {
+                        tablets.add(selectedIndex.getTablet(id));
+                    }
+                    scanTabletIds.addAll(tabletIds);
+                } else {
+                    tablets.addAll(selectedIndex.getTablets());
+                    scanTabletIds.addAll(allTabletIds);
                 }
-                scanTabletIds.addAll(tabletIds);
-            } else {
-                tablets.addAll(selectedTable.getTablets());
-                scanTabletIds.addAll(allTabletIds);
-            }
 
-            for (int i = 0; i < allTabletIds.size(); i++) {
-                tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                for (int i = 0; i < allTabletIds.size(); i++) {
+                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                }
+                totalTabletsNum += selectedIndex.getTablets().size();
+                selectedTabletsNum += tablets.size();
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
             }
-
-            totalTabletsNum += selectedTable.getTablets().size();
-            selectedTabletsNum += tablets.size();
-            addScanRangeLocations(partition, selectedTable, tablets, localBeId);
         }
     }
 
@@ -938,9 +942,8 @@ public class OlapScanNode extends ScanNode {
         int aliveBackendSize = ctx.getAliveBackendNumber();
         int schemaHash = olapTable.getSchemaHashByIndexId(selectedIndexId);
         for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
-            long partitionId = entry.getKey();
-            Partition partition = olapTable.getPartition(entry.getKey());
-            if (olapTable.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
+            PhysicalPartition partition = olapTable.getPhysicalPartition(entry.getKey());
+            if (olapTable.getPartitionInfo().getReplicationNum(partition.getParentId()) < backendSize) {
                 return false;
             }
             long visibleVersion = partition.getVisibleVersion();
@@ -1180,15 +1183,17 @@ public class OlapScanNode extends ScanNode {
     }
 
     private Map<Long, List<Long>> mapTabletsToPartitions() {
-        Map<Long, Long> tabletToPartitionMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size());
-        Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
+        Map<Long, Long> tabletToPartitionMap = Maps.newHashMap();
+        Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMap();
 
         for (Long partitionId : selectedPartitionIds) {
-            partitionToTabletMap.put(partitionId, Lists.newArrayList());
             Partition partition = olapTable.getPartition(partitionId);
-            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
-            for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
-                tabletToPartitionMap.put(tabletId, partitionId);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex materializedIndex = physicalPartition.getIndex(selectedIndexId);
+                for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
+                    tabletToPartitionMap.put(tabletId, physicalPartition.getId());
+                }
+                partitionToTabletMap.put(physicalPartition.getId(), Lists.newArrayList());
             }
         }
         for (Long tabletId : scanTabletIds) {
@@ -1200,6 +1205,8 @@ public class OlapScanNode extends ScanNode {
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
 
+        LOG.debug("mapTabletsToPartitions. tabletToPartitionMap: {}, partitionToTabletMap: {}",
+                tabletToPartitionMap, partitionToTabletMap);
         return partitionToTabletMap;
     }
 }

@@ -105,6 +105,27 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testGetPhysicalPartition() throws Exception {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        Range<PartitionKey> range =
+                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
+                        BoundType.CLOSED,
+                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
+                        BoundType.CLOSED);
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
+        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null);
+
+        PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
+        Assert.assertNull(recycledPart);
+        recycledPart = bin.getPartition(2L);
+        Assert.assertEquals(2L, recycledPart.getId());
+    }
+
+    @Test
     public void testReplayEraseTable() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());

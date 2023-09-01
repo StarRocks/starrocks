@@ -66,6 +66,7 @@ struct DeltaWriterOptions {
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
     POlapTableSchemaParam ptable_schema_param;
+    int64_t min_immutable_tablet_size = 0;
 };
 
 enum State {
@@ -149,6 +150,8 @@ public:
 
     const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
+    bool is_immutable() const { return _is_immutable.load(std::memory_order_relaxed); }
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
@@ -196,6 +199,7 @@ private:
     // initial value is max value
     size_t _memtable_buffer_row = -1;
     bool _partial_schema_with_sort_key = false;
+    std::atomic<bool> _is_immutable = false;
 };
 
 } // namespace starrocks

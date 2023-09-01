@@ -92,6 +92,8 @@ public:
 
     const FlushStatistic& get_flush_stats() const { return _writer->get_flush_stats(); }
 
+    bool is_immutable() const { return _writer->is_immutable(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}

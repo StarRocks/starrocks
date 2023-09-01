@@ -719,6 +719,8 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 break;
             case TTabletMetaType::REPLICATED_STORAGE:
                 break;
+            case TTabletMetaType::BUCKET_SIZE:
+                break;
             case TTabletMetaType::DISABLE_BINLOG:
                 break;
             case TTabletMetaType::BINLOG_CONFIG:
