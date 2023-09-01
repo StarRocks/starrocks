@@ -982,9 +982,17 @@ public class OlapTable extends Table {
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
-                    5, Config.enable_auto_tablet_distribution);
-            info.setBucketNum(numBucket);
+            if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
+                // infer bucket num
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                        5, Config.enable_auto_tablet_distribution);
+                info.setBucketNum(numBucket);
+            } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+                int numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                info.setBucketNum(numBucket);
+            } else {
+                throw new DdlException("Unknown distribution info type: " + info.getType());
+            }
         }
     }
 
@@ -1190,6 +1198,14 @@ public class OlapTable extends Table {
         return idToPartition.values().stream()
                 .flatMap(partition -> partition.getSubPartitions().stream())
                 .collect(Collectors.toList());
+    }
+
+    public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+        List<PhysicalPartition> physicalPartitions = idToPartition.values().stream()
+                .flatMap(partition -> partition.getSubPartitions().stream()).collect(Collectors.toList());
+        physicalPartitions.addAll(tempPartitions.getAllPartitions().stream()
+                .flatMap(partition -> partition.getSubPartitions().stream()).collect(Collectors.toList()));
+        return physicalPartitions;
     }
 
     // get all partitions except temp partitions
@@ -2190,6 +2206,26 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Boolean.valueOf(enableReplicatedStorage).toString());
         tableProperty.buildReplicatedStorage();
+    }
+
+    public Long getAutomaticBucketSize() {
+        if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
+            return (long) 0;
+        }
+        if (tableProperty != null) {
+            return tableProperty.getBucketSize();
+        }
+        return (long) 0;
+    }
+
+    public void setAutomaticBucketSize(long bucketSize) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
+                        String.valueOf(bucketSize));
+        tableProperty.buildBucketSize();
     }
 
     public TWriteQuorumType writeQuorum() {

@@ -1,0 +1,84 @@
+-- name: test_bucket_size
+create table t(k int);
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "1073741824",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t set('bucket_size'='1024');
+-- result:
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "1024",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+-- name: test_automatic_bucket
+create database kkk;
+-- result:
+-- !result
+use kkk;
+-- result:
+-- !result
+create table t(k int);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+9
+-- !result
+alter table t set('bucket_size'='1');
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+18
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+-- result:
+27
+-- !result
