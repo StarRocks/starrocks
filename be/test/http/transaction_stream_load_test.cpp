@@ -27,6 +27,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 
@@ -47,7 +48,6 @@ extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
 extern TLoadTxnRollbackResult k_stream_load_rollback_result;
 extern TStreamLoadPutResult k_stream_load_put_result;
-extern Status k_stream_load_plan_status;
 
 class TransactionStreamLoadActionTest : public testing::Test {
 public:
@@ -60,7 +60,6 @@ public:
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
-        k_stream_load_plan_status = Status::OK();
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
@@ -583,6 +582,9 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
     }
 
     {
+        SyncPoint::GetInstance()->EnableProcessing();
+        SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
+                                              [](void* arg) { *(Status*)arg = Status::InternalError("TestFail"); });
         TransactionStreamLoadAction action(&_env);
 
         HttpRequest request(_evhttp_req);
@@ -594,13 +596,15 @@ TEST_F(TransactionStreamLoadActionTest, txn_plan_fail) {
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
         request._headers.emplace(HTTP_LABEL_KEY, "123");
-        k_stream_load_plan_status = Status::InternalError("TestFail");
         action.on_header(&request);
         action.handle(&request);
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
+
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::execute_plan_fragment:1");
+        SyncPoint::GetInstance()->DisableProcessing();
     }
 }
 
