@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -33,12 +34,17 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MultiRangePartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.parser.ParsingException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -156,6 +162,33 @@ public class CTASAnalyzer {
                 DistributionDesc distributionDesc = new RandomDistributionDesc();
                 createTableStmt.setDistributionDesc(distributionDesc);
             }
+        }
+
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        List<ColumnDef> columnDefs = createTableStmt.getColumnDefs();
+
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
+            AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);
+            String currentGranularity = null;
+            RangePartitionDesc rangePartitionDesc = expressionPartitionDesc.getRangePartitionDesc();
+            if (!rangePartitionDesc.getSingleRangePartitionDescs().isEmpty()) {
+                throw new ParsingException("Automatic partition table creation only supports " +
+                        "batch create partition syntax", rangePartitionDesc.getPos());
+            }
+            List<MultiRangePartitionDesc> multiRangePartitionDescs = rangePartitionDesc.getMultiRangePartitionDescs();
+            for (MultiRangePartitionDesc multiRangePartitionDesc : multiRangePartitionDescs) {
+                String descGranularity = multiRangePartitionDesc.getTimeUnit().toLowerCase();
+                if (currentGranularity == null) {
+                    currentGranularity = descGranularity;
+                } else if (!currentGranularity.equals(descGranularity)) {
+                    throw new ParsingException("The partition granularity of automatic partition table " +
+                            "batch creation in advance should be consistent", rangePartitionDesc.getPos());
+                }
+            }
+            AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
+            rangePartitionDesc.setAutoPartitionTable(true);
         }
 
         Analyzer.analyze(createTableStmt, session);
