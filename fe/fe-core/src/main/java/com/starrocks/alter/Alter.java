@@ -358,7 +358,6 @@ public class Alter {
         }
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
                                               Database db,
                                               MaterializedView materializedView) throws AnalysisException {
@@ -500,22 +499,6 @@ public class Alter {
 
             final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
             GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
-=======
-    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
-        long dbId = log.getDbId();
-        long tableId = log.getTableId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        db.writeLock();
-        MaterializedView mv = null;
-        try {
-            mv = (MaterializedView) db.getTable(tableId);
-            alterMaterializedViewStatus(mv, log.getStatus(), true);
-        } catch (Throwable e) {
-            if (mv != null) {
-                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
-                mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
-            }
->>>>>>> 873c3810a9 (catch exception for mv when replaying journal (#30015)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
         } finally {
             db.writeUnlock();
         }
@@ -543,15 +526,6 @@ public class Alter {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
-        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-        db.dropTable(oldMaterializedView.getName());
-        oldMaterializedView.setName(newMaterializedViewName);
-        db.createTable(oldMaterializedView);
-        updateTaskDefinition(oldMaterializedView);
-        LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                newMaterializedViewName, oldMaterializedView.getId());
-=======
 
         db.writeLock();
         MaterializedView oldMaterializedView = null;
@@ -559,19 +533,18 @@ public class Alter {
             oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
             db.dropTable(oldMaterializedView.getName());
             oldMaterializedView.setName(newMaterializedViewName);
-            db.registerTableUnlocked(oldMaterializedView);
+            db.createTable(oldMaterializedView);
             updateTaskDefinition(oldMaterializedView);
             LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                     newMaterializedViewName, oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
+                oldMaterializedView.setActive(false);
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
         } finally {
             db.writeUnlock();
         }
->>>>>>> 873c3810a9 (catch exception for mv when replaying journal (#30015)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
     }
 
     private void updateTaskDefinition(MaterializedView materializedView) {
@@ -624,7 +597,7 @@ public class Alter {
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());
+                oldMaterializedView.setActive(false);
                 LOG.warn("replay change materialized-view refresh scheme failed: {}",
                         oldMaterializedView.getName(), e);
             }
@@ -653,7 +626,7 @@ public class Alter {
             }
         } catch (Throwable e) {
             if (mv != null) {
-                mv.setInactiveAndReason("replay failed: " + e.getMessage());
+                mv.setActive(false);
                 LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
@@ -666,9 +639,15 @@ public class Alter {
         long tableId = log.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             processChangeMaterializedViewStatus(mv, log.getStatus(), true);
+        } catch (Exception e) {
+            if (mv != null) {
+                mv.setActive(false);
+                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
+            }
         } finally {
             db.writeUnlock();
         }
