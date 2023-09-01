@@ -139,7 +139,6 @@ public:
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
-    int64_t driver_runtime_ns() const { return _driver_sched_entity.unadjusted_runtime_ns(); }
     int64_t mem_consumption_bytes() const { return _mem_tracker == nullptr ? 0L : _mem_tracker->consumption(); }
 
     bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
@@ -198,6 +197,8 @@ public:
     }
     int64_t big_query_cpu_second_limit() const { return _big_query_cpu_nanos_limit / NANOS_PER_SEC; }
     int64_t big_query_scan_rows_limit() const { return _big_query_scan_rows_limit; }
+    void incr_cpu_runtime_ns(int64_t delta_ns) { _cpu_runtime_ns += delta_ns; }
+    int64_t cpu_runtime_ns() const { return _cpu_runtime_ns; }
 
     static constexpr int64 DEFAULT_WG_ID = 0;
     static constexpr int64 DEFAULT_MV_WG_ID = 1;
@@ -239,6 +240,9 @@ private:
     std::atomic<int64_t> _num_total_queries = 0;
     std::atomic<int64_t> _concurrency_overflow_count = 0;
     std::atomic<int64_t> _bigquery_count = 0;
+    /// The total CPU runtime cost in nanos unit, including driver execution time, and the cpu execution time of
+    /// other threads including Source and Sink threads.
+    std::atomic<int64_t> _cpu_runtime_ns = 0;
 };
 
 // WorkGroupManager is a singleton used to manage WorkGroup instances in BE, it has an io queue and a cpu queues for
