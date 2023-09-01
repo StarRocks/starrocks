@@ -193,15 +193,15 @@ public:
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     // [not thread-safe]
     virtual std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
-                                                                 bool without_null) const = 0;
+                                                                 bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket, bool without_null,
+                                            size_t npage_hint, size_t nbucket, bool with_null,
                                             BloomFilter* bf = nullptr) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
@@ -314,19 +314,19 @@ public:
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     std::vector<std::pair<uint32_t, std::vector<std::vector<KVRef>>>> get_kv_refs_by_shard(size_t num_entry,
-                                                                                           bool without_null);
+                                                                                           bool with_null);
 
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys, size_t idx_begin,
                                                          size_t idx_end);
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys,
                                                          const std::vector<size_t>& idxes);
 
-    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false,
-                                    std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
+    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1,
+                                    bool keep_delete, std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -728,6 +728,8 @@ private:
     size_t _get_tmp_l1_count();
 
     bool _l0_is_full();
+
+    bool _need_rebuild_index(const PersistentIndexMetaPB& index_meta);
 
 protected:
     // prevent concurrent operations
