@@ -109,7 +109,7 @@ public class SplitAggregateRule extends TransformationRule {
         }
         // 2 Must do multi stage aggregate when aggregate distinct function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
                 callOperator.isDistinct())) {
             return true;
         }
@@ -317,7 +317,14 @@ public class SplitAggregateRule extends TransformationRule {
                     fnCall.getFunction(), fnCall.getChild(0).getType());
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
+        } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+            return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+            // only support const inputs
+            boolean allConst = fnCall.getChildren().stream().allMatch(ScalarOperator::isConstant);
+            Preconditions.checkState(allConst, "can't rewrite to group_concat_distinct for non-const inputs");
             return fnCall;
         }
         return null;
