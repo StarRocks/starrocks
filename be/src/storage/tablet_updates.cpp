@@ -2710,7 +2710,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
             auto& last = _edit_version_infos.back();
             version = last->version.major_number();
             // tablet maybe doing schema change, set max readable version as max version
-            if (_tablet->state() != TABLET_RUNNING) {
+            if (_tablet.tablet_state() != TABLET_RUNNING) {
                 max_readable_version = version;
             }
             rowsets = last->rowsets;
