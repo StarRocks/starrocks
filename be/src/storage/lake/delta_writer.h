@@ -48,24 +48,26 @@ public:
     // for load
     // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+                      const std::vector<SlotDescriptor*>* slots, int64_t immutable_tablet_size,
+                      MemTracker* mem_tracker);
 
     // for condition update
     // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                      MemTracker* mem_tracker);
+                      int64_t immutable_tablet_size, MemTracker* mem_tracker);
 
     // for auto increment
     // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
-                      bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker);
+                      bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
+                      MemTracker* mem_tracker);
 
     // for schema change
     // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
-                      MemTracker* mem_tracker);
+                      int64_t immutable_tablet_size, MemTracker* mem_tracker);
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -115,6 +117,10 @@ public:
     // The total number of rows have been written.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
     int64_t num_rows() const;
+
+    bool is_immutable() const;
+
+    Status check_immutable();
 
     void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                  const std::vector<int32_t>& referenced_column_ids);

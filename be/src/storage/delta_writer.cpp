@@ -85,6 +85,7 @@ void DeltaWriter::_garbage_collection() {
     if (_tablet != nullptr) {
         rollback_status = _storage_engine->txn_manager()->rollback_txn(_opt.partition_id, _tablet, _opt.txn_id,
                                                                        _with_rollback_log);
+        _tablet->remove_in_writing_data_size(_opt.txn_id);
     }
     // has to check rollback status, because the rowset maybe committed in this thread and
     // published in another thread, then rollback will failed.
@@ -147,6 +148,11 @@ Status DeltaWriter::_init() {
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
         return st;
+    }
+
+    if (_opt.min_immutable_tablet_size > 0 &&
+        _tablet->data_size() + _tablet->in_writing_data_size() > _opt.min_immutable_tablet_size) {
+        _is_immutable.store(true, std::memory_order_relaxed);
     }
 
     // The tablet may have been migrated during delta writer init,
@@ -382,6 +388,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     }
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment " << segment_pb.DebugString();
 
+    _tablet->add_in_writing_data_size(_opt.txn_id, segment_pb.data_size());
     return _rowset_writer->flush_segment(segment_pb, data);
 }
 
@@ -425,22 +432,48 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
         if (_replicate_token != nullptr) {
             // Although there maybe no data, but we still need send eos to seconary replica
             auto replicate_token = _replicate_token.get();
-            return _flush_token->submit(std::move(_mem_table), eos,
-                                        [replicate_token](std::unique_ptr<SegmentPB> seg, bool eos) {
-                                            auto st = replicate_token->submit(std::move(seg), eos);
-                                            if (!st.ok()) {
-                                                LOG(WARNING) << "Failed to submit sync segment err=" << st;
-                                                replicate_token->set_status(st);
-                                            }
-                                        });
+            return _flush_token->submit(
+                    std::move(_mem_table), eos, [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        if (seg) {
+                            _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                        }
+                        auto st = replicate_token->submit(std::move(seg), eos);
+                        if (!st.ok()) {
+                            LOG(WARNING) << "Failed to submit sync segment err=" << st;
+                            replicate_token->set_status(st);
+                        }
+
+                        if (_opt.min_immutable_tablet_size > 0 &&
+                            _tablet->data_size() + _tablet->in_writing_data_size() > _opt.min_immutable_tablet_size) {
+                            _is_immutable.store(true, std::memory_order_relaxed);
+                        }
+                    });
         } else {
             if (_mem_table != nullptr) {
-                return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+                return _flush_token->submit(std::move(_mem_table), eos,
+                                            [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                                if (seg) {
+                                                    _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                                                }
+                                                if (_opt.min_immutable_tablet_size > 0 &&
+                                                    _tablet->data_size() + _tablet->in_writing_data_size() >
+                                                            _opt.min_immutable_tablet_size) {
+                                                    _is_immutable.store(true, std::memory_order_relaxed);
+                                                }
+                                            });
             }
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                if (seg) {
+                    _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                }
+                if (_opt.min_immutable_tablet_size > 0 &&
+                    _tablet->data_size() + _tablet->in_writing_data_size() > _opt.min_immutable_tablet_size) {
+                    _is_immutable.store(true, std::memory_order_relaxed);
+                }
+            });
         }
     }
     return Status::OK();

@@ -358,7 +358,7 @@ public class SystemInfoService implements GsonPostProcessable {
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {
-                            table.getAllPartitions().forEach(partition -> {
+                            table.getAllPhysicalPartitions().forEach(partition -> {
                                 String errMsg = String.format("Tables such as [%s.%s] on the backend[%s:%d]" +
                                                 " have only one replica. To avoid data loss," +
                                                 " please change the replication_num of [%s.%s] to three." +
