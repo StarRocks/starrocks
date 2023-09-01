@@ -285,8 +285,7 @@ build_llvm() {
     mkdir -p llvm-build
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
-    CMAKE_GENERATOR="Unix Makefiles"
-    BUILD_SYSTEM='make'
+
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -S ../${LLVM_SOURCE}/llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
@@ -1226,68 +1225,68 @@ export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
 
-#build_libevent
-#build_zlib
-#build_lz4
-#build_lzo2
-#build_bzip
-#build_openssl
-#build_boost # must before thrift
-#build_protobuf
-#build_gflags
-#build_gtest
-#build_glog
-#build_rapidjson
-#build_simdjson
-#build_snappy
-#build_gperftools
-#build_curl
-#build_re2
-#build_thrift
-#build_leveldb
-#build_brpc
-#build_rocksdb
-#build_sasl
-#build_librdkafka
-#build_flatbuffers
-#build_jemalloc
-#build_brotli
-## must build before arrow
-#build_arrow
-#build_pulsar
-#build_s2
-#build_bitshuffle
-#build_croaringbitmap
-#build_cctz
-#build_fmt
-#build_ryu
-#build_hadoop
-#build_jdk
-#build_ragel
-#build_hyperscan
-#build_mariadb
-#build_aliyun_jindosdk
-#build_gcs_connector
-#build_broker_thirdparty_jars
-#build_aws_cpp_sdk
-#build_vpack
-#build_opentelemetry
-#build_benchmark
-#build_fast_float
-#build_cachelib
-#build_streamvbyte
-#build_jansson
-#build_avro_c
-#build_serdes
-#build_datasketches
-#build_async_profiler
-#build_fiu
+build_libevent
+build_zlib
+build_lz4
+build_lzo2
+build_bzip
+build_openssl
+build_boost # must before thrift
+build_protobuf
+build_gflags
+build_gtest
+build_glog
+build_rapidjson
+build_simdjson
+build_snappy
+build_gperftools
+build_curl
+build_re2
+build_thrift
+build_leveldb
+build_brpc
+build_rocksdb
+build_sasl
+build_librdkafka
+build_flatbuffers
+build_jemalloc
+build_brotli
+# must build before arrow
+build_arrow
+build_pulsar
+build_s2
+build_bitshuffle
+build_croaringbitmap
+build_cctz
+build_fmt
+build_ryu
+build_hadoop
+build_jdk
+build_ragel
+build_hyperscan
+build_mariadb
+build_aliyun_jindosdk
+build_gcs_connector
+build_broker_thirdparty_jars
+build_aws_cpp_sdk
+build_vpack
+build_opentelemetry
+build_benchmark
+build_fast_float
+build_cachelib
+build_streamvbyte
+build_jansson
+build_avro_c
+build_serdes
+build_datasketches
+build_async_profiler
+build_fiu
 build_llvm
 
-#if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-#    build_breakpad
-#    build_libdeflate
-#fi
+if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+    build_breakpad
+    build_libdeflate
+fi
 
 # strip unnecessary debug symbol for binaries in thirdparty
 strip_binary
