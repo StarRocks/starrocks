@@ -4007,17 +4007,21 @@ public abstract class FileSystem extends Configured
             public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
             public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
             public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
-            public static final String STARROCKS_HOME_ENV_KEY = "STARROCKS_HOME";
+            public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
 
             public static void addConfigResourcesToConfiguration(Configuration conf) {
                 if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
                     return;
                 }
                 String configResources = conf.get(HDFS_CONFIG_RESOURCES);
-                if (configResources.isEmpty()) {
+                if (configResources == null || configResources.isEmpty()) {
                     return;
                 }
-                final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV_KEY);
+                final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
+                if (STARROCKS_HOME_DIR == null) {
+                    LOGGER.warn(String.format("[hadoop-ext] env '%s' is not defined", STARROCKS_HOME_ENV));
+                    return;
+                }
                 String[] parts = configResources.split(",");
                 for (String p : parts) {
                     Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
