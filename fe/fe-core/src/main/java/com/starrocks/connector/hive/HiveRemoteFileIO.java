@@ -42,6 +42,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HiveRemoteFileIO implements RemoteFileIO {
@@ -80,7 +81,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             if (!pathKey.isRecursive()) {
                 blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
             } else {
-                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+                blockIterator = listFilesRecursive(fileSystem, new Path(uri.getPath()));
             }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
@@ -107,14 +108,70 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         return resultPartitions.put(pathKey, fileDescs).build();
     }
 
+    private RemoteIterator<LocatedFileStatus> listFilesRecursive(FileSystem fileSystem, Path f)
+        throws FileNotFoundException, IOException {
+        return new RemoteIterator<LocatedFileStatus>() {
+            private Stack<RemoteIterator<LocatedFileStatus>> itors = new Stack<>();
+            private RemoteIterator<LocatedFileStatus> curItor = fileSystem.listLocatedStatus(f);
+            private LocatedFileStatus curFile;
+
+            @Override
+            public boolean hasNext() throws IOException {
+                while (curFile == null) {
+                    if (curItor.hasNext()) {
+                        handleFileStat(curItor.next());
+                    } else if (!itors.empty()) {
+                        curItor = itors.pop();
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Process the input stat.
+            // If it is a file, return the file stat.
+            // If it is a valid directory, traverse it.
+            private void handleFileStat(LocatedFileStatus stat) throws IOException {
+                if (stat.isFile()) {
+                    curFile = stat;
+                } else if (isValidDirectory(stat)) {
+                    try {
+                        RemoteIterator<LocatedFileStatus> newDirItor = fileSystem.listLocatedStatus(stat.getPath());
+                        itors.push(curItor);
+                        curItor = newDirItor;
+                    } catch (FileNotFoundException ignored) {
+                        LOG.debug("Directory {} deleted while attempting for recursive listing", stat.getPath());
+                    }
+                }
+            }
+
+            @Override
+            public LocatedFileStatus next() throws IOException {
+                if (hasNext()) {
+                    LocatedFileStatus result = curFile;
+                    curFile = null;
+                    return result;
+                }
+                throw new java.util.NoSuchElementException("No more entry in " + f);
+            }
+        };
+    }
     private boolean isValidDataFile(FileStatus fileStatus) {
-        if (fileStatus.isDirectory()) {
+        if (!fileStatus.isFile()) {
             return false;
         }
-
         String lcFileName = fileStatus.getPath().getName().toLowerCase();
         return !(lcFileName.startsWith(".") || lcFileName.startsWith("_") ||
                 lcFileName.endsWith(".copying") || lcFileName.endsWith(".tmp"));
+    }
+
+    private boolean isValidDirectory(FileStatus fileStatus) {
+        if (!fileStatus.isDirectory()) {
+            return false;
+        }
+        String dirName = fileStatus.getPath().getName();
+        return !(dirName.startsWith("."));
     }
 
     protected List<RemoteFileBlockDesc> getRemoteFileBlockDesc(BlockLocation[] blockLocations) throws IOException {
