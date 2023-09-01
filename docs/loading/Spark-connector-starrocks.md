@@ -115,10 +115,6 @@ Directly download the corresponding version of the Spark connector JAR from the 
 	| TimestampType   | DATETIME                                                     |
 	| ArrayType       | ARRAY <br> **NOTE:** <br> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
 
-
-    
-
-
 - You can also customize the data type mapping.
 
   For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-typ) and [HLL](#load-data-into-columns-of-HLL-type) types. **BITMAP and HLL are supported since version 1.1.1**.
