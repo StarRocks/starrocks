@@ -24,7 +24,7 @@ class AnalyticSourceOperator : public SourceOperator {
 public:
     AnalyticSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                            AnalytorPtr&& analytor)
-            : SourceOperator(factory, id, "analytic_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "analytic_source", plan_node_id, false, driver_sequence),
               _analytor(std::move(analytor)) {
         _analytor->ref();
     }

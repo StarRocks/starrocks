@@ -31,7 +31,7 @@ class SpillProcessOperator final : public SourceOperator {
 public:
     SpillProcessOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
                          int32_t driver_sequence, SpillProcessChannelPtr channel)
-            : SourceOperator(factory, id, name, plan_node_id, driver_sequence), _channel(std::move(channel)) {}
+            : SourceOperator(factory, id, name, plan_node_id, true, driver_sequence), _channel(std::move(channel)) {}
 
     ~SpillProcessOperator() override = default;
 

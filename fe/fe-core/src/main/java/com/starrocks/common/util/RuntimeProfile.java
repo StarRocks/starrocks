@@ -49,6 +49,7 @@ import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -527,6 +528,10 @@ public class RuntimeProfile {
         return localTimePercent;
     }
 
+    public boolean containsInfoString(String key) {
+        return infoStrings.containsKey(key);
+    }
+
     // Returns the value to which the specified key is mapped;
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
@@ -695,31 +700,35 @@ public class RuntimeProfile {
 
         // merge children
         int maxChildSize = 0;
+        RuntimeProfile profileWithFullChild = null;
         for (RuntimeProfile profile : profiles) {
-            maxChildSize = Math.max(maxChildSize, profile.getChildList().size());
-        }
-        boolean missingParallelism = false;
-        for (int i = 0; i < maxChildSize; i++) {
-            List<RuntimeProfile> subProfiles = Lists.newArrayList();
-            for (RuntimeProfile profile : profiles) {
-                if (i >= profile.childList.size()) {
-                    missingParallelism = true;
-                    LOG.info("find non-isomorphic children, profileName={}, childProfileNames={}" +
-                                    ", another profileName={}, another childProfileNames={}",
-                            mergedProfile.name,
-                            mergedProfile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
-                            profile.name,
-                            profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
-                    continue;
-                }
-                RuntimeProfile child = profile.childList.get(i).first;
-                subProfiles.add(child);
+            if (profile.getChildList().size() > maxChildSize) {
+                maxChildSize = profile.getChildList().size();
+                profileWithFullChild = profile;
             }
-            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
-            mergedProfile.addChild(mergedChild);
         }
-        if (missingParallelism) {
-            mergedProfile.addInfoString("IsIntegrated", "False");
+        if (profileWithFullChild != null) {
+            boolean identical = true;
+            for (int i = 0; i < maxChildSize; i++) {
+                Pair<RuntimeProfile, Boolean> prototypeKv = profileWithFullChild.getChildList().get(i);
+                String childName = prototypeKv.first.getName();
+                List<RuntimeProfile> subProfiles = Lists.newArrayList();
+                for (RuntimeProfile profile : profiles) {
+                    RuntimeProfile child = profile.getChild(childName);
+                    if (child == null) {
+                        identical = false;
+                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                                profile.name, childName);
+                        continue;
+                    }
+                    subProfiles.add(child);
+                }
+                RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
+                mergedProfile.addChild(mergedChild);
+            }
+            if (!identical) {
+                mergedProfile.addInfoString("NotIdentical", "");
+            }
         }
 
         return mergedProfile;
@@ -803,8 +812,12 @@ public class RuntimeProfile {
             // 2. info String
             for (Map.Entry<String, String> infoPair : profile.getInfoStrings().entrySet()) {
                 String key = infoPair.getKey();
-                builder.append(prefix).append("   - ").append(key).append(": ")
-                        .append(profile.getInfoString(key)).append("\n");
+                String value = infoPair.getValue();
+                builder.append(prefix).append("   - ").append(key);
+                if (StringUtils.isNotBlank(value)) {
+                    builder.append(": ").append(profile.getInfoString(key));
+                }
+                builder.append("\n");
             }
 
             // 3. counters

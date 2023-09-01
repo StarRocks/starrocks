@@ -150,7 +150,7 @@ class TestOperator : public Operator {
 public:
     TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
                  int32_t driver_sequence, CounterPtr counter)
-            : Operator(factory, id, name, plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence), _counter(std::move(counter)) {}
     ~TestOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
@@ -185,7 +185,7 @@ class TestSourceOperator : public SourceOperator {
 public:
     TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        size_t chunk_num, size_t chunk_size, CounterPtr counter, int32_t pending_finish_cnt)
-            : SourceOperator(factory, id, "test_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "test_source", plan_node_id, false, driver_sequence),
               _counter(std::move(counter)),
               _pending_finish_cnt(pending_finish_cnt) {
         for (size_t i = 0; i < chunk_num; ++i) {

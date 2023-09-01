@@ -171,7 +171,7 @@ Status MysqlTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& c
 MysqlTableSinkOperatorFactory::MysqlTableSinkOperatorFactory(int32_t id, const TMysqlTableSink& t_mysql_table_sink,
                                                              std::vector<TExpr> t_output_expr, int32_t num_sinkers,
                                                              FragmentContext* fragment_ctx)
-        : OperatorFactory(id, "mysql_table_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+        : OperatorFactory(id, "mysql_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _t_mysql_table_sink(t_mysql_table_sink),
           _num_sinkers(num_sinkers),

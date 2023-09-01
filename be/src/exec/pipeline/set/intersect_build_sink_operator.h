@@ -42,7 +42,7 @@ public:
     IntersectBuildSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                std::shared_ptr<IntersectContext> intersect_ctx,
                                const std::vector<ExprContext*>& dst_exprs)
-            : Operator(factory, id, "intersect_build_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "intersect_build_sink", plan_node_id, false, driver_sequence),
               _intersect_ctx(std::move(intersect_ctx)),
               _dst_exprs(dst_exprs) {
         _intersect_ctx->ref();

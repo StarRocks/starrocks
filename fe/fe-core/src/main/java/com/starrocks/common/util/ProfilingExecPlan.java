@@ -14,8 +14,10 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
@@ -49,11 +51,15 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.glassfish.jersey.internal.guava.Sets;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 // This class is designed to maintain only the necessary information of ExecPlan for profile analysis
@@ -62,6 +68,7 @@ import java.util.stream.Collectors;
 public class ProfilingExecPlan {
 
     private static final int MAX_EXPR_LENGTH = 64;
+    private static final Gson GSON = new Gson();
 
     public static final class ProfilingFragment {
         private final ProfilingElement sink;
@@ -89,6 +96,7 @@ public class ProfilingExecPlan {
         private final List<String> titleAttributes = Lists.newArrayList();
         private final Map<String, String> uniqueInfos = Maps.newLinkedHashMap();
 
+        private String displayName;
         private Statistics statistics;
         private CostEstimate costEstimate;
         private double totalCost;
@@ -134,6 +142,10 @@ public class ProfilingExecPlan {
             return uniqueInfos;
         }
 
+        public String getDisplayName() {
+            return displayName;
+        }
+
         public Statistics getStatistics() {
             return statistics;
         }
@@ -144,6 +156,16 @@ public class ProfilingExecPlan {
 
         public double getTotalCost() {
             return totalCost;
+        }
+
+        public boolean isMemoryConsumingOperator() {
+            return instanceOf(AggregationNode.class) || instanceOf(JoinNode.class)
+                    || instanceOf(SortNode.class) || instanceOf(AnalyticEvalNode.class)
+                    || instanceOf(ExchangeNode.class) || instanceOf(ScanNode.class);
+        }
+
+        private void setDisplayName(String displayName) {
+            this.displayName = displayName;
         }
 
         private void addChild(ProfilingElement node) {
@@ -229,6 +251,8 @@ public class ProfilingExecPlan {
             element.addInfo("Table", olapTableSink.getDstTable().getName());
         }
 
+        buildDisplayName(sink, element);
+
         return element;
     }
 
@@ -242,6 +266,7 @@ public class ProfilingExecPlan {
         buildCostEstimation(execPlan, element);
         buildTitleAttribute(node, element);
         buildUniqueInfos(node, element);
+        buildDisplayName(node, element);
 
         for (PlanNode child : node.getChildren()) {
             element.addChild(visitNode(execPlan, child, visitedElements));
@@ -358,6 +383,43 @@ public class ProfilingExecPlan {
         }
     }
 
+    private static void buildDisplayName(Object node, ProfilingElement element) {
+        String name = normalizeNodeName(node.getClass());
+        if (node instanceof ExchangeNode) {
+            ExchangeNode exchangeNode = (ExchangeNode) node;
+            if (exchangeNode.isMerge()) {
+                name = "MERGE_" + name;
+            }
+        }
+        element.setDisplayName(name);
+    }
+
+    private static String normalizeNodeName(Class<?> clazz) {
+        String name = clazz.getSimpleName();
+        String suffixToRemove = "Node";
+        if (name.endsWith(suffixToRemove)) {
+            name = name.substring(0, name.length() - suffixToRemove.length());
+        }
+
+        StringBuilder normalizedName = new StringBuilder();
+
+        for (int i = 0; i < name.length(); i++) {
+            char currentChar = name.charAt(i);
+            char nextChar = '\0';
+            if (i + 1 < name.length()) {
+                nextChar = name.charAt(i + 1);
+            }
+
+            if (Character.isUpperCase(currentChar) && Character.isLowerCase(nextChar) && i != 0) {
+                normalizedName.append("_");
+            }
+
+            normalizedName.append(Character.toUpperCase(currentChar));
+        }
+
+        return normalizedName.toString();
+    }
+
     private static String exprsToString(List<? extends Expr> exprs) {
         List<String> exprContents = exprs.stream()
                 .map(Expr::toSql)
@@ -383,6 +445,7 @@ public class ProfilingExecPlan {
 
     private int profileLevel;
     private final List<ProfilingFragment> fragments = new ArrayList<>();
+    private volatile String topologyJson;
 
     public int getProfileLevel() {
         return profileLevel;
@@ -392,7 +455,81 @@ public class ProfilingExecPlan {
         return fragments;
     }
 
+    public String toTopologyJson() {
+        if (topologyJson == null) {
+            synchronized (this) {
+                if (topologyJson == null) {
+                    topologyJson = GSON.toJson(Topology.buildFrom(this));
+                }
+            }
+        }
+        return topologyJson;
+    }
+
     private void addFragment(ProfilingFragment fragment) {
         fragments.add(fragment);
+    }
+
+    private static final class Topology {
+        private final int rootId;
+        private final List<Node> nodes = Lists.newArrayList();
+
+        private Topology(int rootId) {
+            this.rootId = rootId;
+        }
+
+        private static Topology buildFrom(ProfilingExecPlan plan) {
+            ProfilingFragment rootFragment = plan.getFragments().get(0);
+            Topology topology = new Topology(rootFragment.root.id);
+
+            Queue<ProfilingElement> queue = Lists.newLinkedList();
+            queue.offer(rootFragment.root);
+
+            Map<Integer, ProfilingFragment> fragmentRootIdToFragment = plan.fragments.stream()
+                    .collect(Collectors.toMap(fragment -> fragment.getRoot().getId(), Function.identity()));
+            Set<Integer> visited = Sets.newHashSet();
+
+            while (!queue.isEmpty()) {
+                int cnt = queue.size();
+                while (--cnt >= 0) {
+                    ProfilingElement peek = queue.poll();
+                    Preconditions.checkNotNull(peek);
+                    if (!visited.add(peek.getId())) {
+                        continue;
+                    }
+                    Node node = new Node(peek.getId(), peek.getDisplayName());
+                    node.children.addAll(peek.getChildren().stream()
+                            .map(ProfilingElement::getId).collect(Collectors.toList()));
+                    if (fragmentRootIdToFragment.containsKey(node.id)) {
+                        ProfilingFragment fragment = fragmentRootIdToFragment.get(node.id);
+                        ProfilingElement sink = fragment.getSink();
+                        List<Integer> sinkIds = Lists.newArrayList();
+                        if (sink.instanceOf(MultiCastDataSink.class)) {
+                            sinkIds.addAll(sink.getMultiSinkIds());
+                        } else if (sink.getId() >= 0) {
+                            sinkIds.add(sink.getId());
+                        }
+                        node.properties.put("sinkIds", sinkIds);
+                    }
+                    node.properties.put("displayMem", peek.isMemoryConsumingOperator());
+                    topology.nodes.add(node);
+                    queue.addAll(peek.getChildren());
+                }
+            }
+
+            return topology;
+        }
+
+        private static final class Node {
+            private final int id;
+            private final String name;
+            private final Map<String, Object> properties = Maps.newHashMap();
+            private final List<Integer> children = Lists.newArrayList();
+
+            public Node(int id, String name) {
+                this.id = id;
+                this.name = name;
+            }
+        }
     }
 }

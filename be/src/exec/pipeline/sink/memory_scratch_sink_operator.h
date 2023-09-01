@@ -38,7 +38,7 @@ public:
     MemoryScratchSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::vector<ExprContext*> output_expr_ctxs, std::shared_ptr<arrow::Schema> arrow_schema,
                               BlockQueueSharedPtr queue)
-            : Operator(factory, id, "memory_scratch_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "memory_scratch_sink", plan_node_id, false, driver_sequence),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _arrow_schema(std::move(arrow_schema)),
               _queue(std::move(queue)) {}

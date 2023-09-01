@@ -57,6 +57,10 @@ FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TSc
     }
 }
 
+std::string FileDataSource::name() const {
+    return "FileDataSource";
+}
+
 Status FileDataSource::open(RuntimeState* state) {
     DCHECK(state != nullptr);
     RETURN_IF_CANCELLED(state);

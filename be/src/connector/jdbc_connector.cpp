@@ -77,6 +77,10 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
 JDBCDataSource::JDBCDataSource(const JDBCDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider) {}
 
+std::string JDBCDataSource::name() const {
+    return "JDBCDataSource";
+}
+
 Status JDBCDataSource::open(RuntimeState* state) {
     const TJDBCScanNode& jdbc_scan_node = _provider->_jdbc_scan_node;
     _runtime_state = state;

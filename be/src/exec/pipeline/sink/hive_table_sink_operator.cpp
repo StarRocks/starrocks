@@ -189,7 +189,7 @@ HiveTableSinkOperatorFactory::HiveTableSinkOperatorFactory(int32_t id, FragmentC
                                                            const THiveTableSink& thrift_sink,
                                                            vector<TExpr> t_output_expr,
                                                            std::vector<ExprContext*> partition_expr_ctxs)
-        : OperatorFactory(id, "hive_table_sink", Operator::s_pseudo_plan_node_id_for_hive_table_sink),
+        : OperatorFactory(id, "hive_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
           _data_column_names(thrift_sink.data_column_names),

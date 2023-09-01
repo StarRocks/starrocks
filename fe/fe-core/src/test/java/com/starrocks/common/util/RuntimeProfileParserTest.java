@@ -76,6 +76,8 @@ public class RuntimeProfileParserTest {
         profile.addInfoString("info4", "content4");
         profile.addInfoString("info5", "content5");
         profile.addInfoString("info6", "100000000");
+        profile.addInfoString("emptyInfo1", "");
+        profile.addInfoString("emptyInfo2", "");
 
         checkParser(profile);
     }

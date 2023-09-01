@@ -44,7 +44,7 @@ public:
     UnionPassthroughOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              SlotMap* dst2src_slot_map, const std::vector<SlotDescriptor*>& slots,
                              const std::vector<SlotDescriptor*>& src_slots)
-            : Operator(factory, id, "union_passthrough", plan_node_id, driver_sequence),
+            : Operator(factory, id, "union_passthrough", plan_node_id, false, driver_sequence),
               _dst2src_slot_map(dst2src_slot_map),
               _dst_slots(slots),
               _src_slots(src_slots) {}

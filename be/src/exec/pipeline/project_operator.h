@@ -26,7 +26,7 @@ public:
                     std::vector<int32_t>& column_ids, const std::vector<ExprContext*>& expr_ctxs,
                     const std::vector<bool>& type_is_nullable, const std::vector<int32_t>& common_sub_column_ids,
                     const std::vector<ExprContext*>& common_sub_expr_ctxs)
-            : Operator(factory, id, "project", plan_node_id, driver_sequence),
+            : Operator(factory, id, "project", plan_node_id, false, driver_sequence),
               _column_ids(column_ids),
               _expr_ctxs(expr_ctxs),
               _type_is_nullable(type_is_nullable),

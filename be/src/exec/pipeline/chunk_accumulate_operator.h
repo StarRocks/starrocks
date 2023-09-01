@@ -27,7 +27,7 @@ namespace pipeline {
 class ChunkAccumulateOperator final : public Operator {
 public:
     ChunkAccumulateOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : Operator(factory, id, "chunk_accumulate", plan_node_id, driver_sequence) {}
+            : Operator(factory, id, "chunk_accumulate", plan_node_id, true, driver_sequence) {}
 
     ~ChunkAccumulateOperator() override = default;
 

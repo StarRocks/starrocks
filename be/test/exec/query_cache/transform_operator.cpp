@@ -17,7 +17,8 @@
 #include <utility>
 namespace starrocks {
 MapOperator::MapOperator(pipeline::OperatorFactory* factory, int driver_sequence, MapFunc map_func)
-        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), false,
+                             driver_sequence),
           _map_func(std::move(map_func)) {}
 bool MapOperator::has_output() const {
     return _cur_chunk != nullptr;
@@ -100,7 +101,7 @@ ReducerPtr ReducerFactory::create(int32_t degree_of_parallelism, int32_t driver_
 
 ReduceSinkOperator::ReduceSinkOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
                                        starrocks::ReducerRawPtr reducer)
-        : pipeline::Operator(factory, factory->id(), "reduce_sink", factory->id(), driver_sequence),
+        : pipeline::Operator(factory, factory->id(), "reduce_sink", factory->id(), false, driver_sequence),
           _result(reducer->init_value()),
           _reducer(reducer) {}
 bool ReduceSinkOperator::is_finished() const {
@@ -154,7 +155,8 @@ pipeline::OperatorPtr ReduceSinkOperatorFactory::create(int32_t degree_of_parall
 
 ReduceSourceOperator::ReduceSourceOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
                                            starrocks::ReducerPtr reducer)
-        : pipeline::SourceOperator(factory, factory->id(), factory->get_raw_name(), factory->id(), driver_sequence),
+        : pipeline::SourceOperator(factory, factory->id(), factory->get_raw_name(), factory->id(), false,
+                                   driver_sequence),
           _reducer(std::move(reducer)) {}
 
 bool ReduceSourceOperator::is_finished() const {

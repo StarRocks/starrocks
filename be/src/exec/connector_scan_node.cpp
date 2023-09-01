@@ -199,8 +199,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(context->fragment_context()->runtime_state(),
-                                                                          operators, context->degree_of_parallelism());
+        operators = context->maybe_interpolate_local_passthrough_exchange(
+                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
     }
     return operators;
 }

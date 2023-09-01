@@ -23,7 +23,7 @@ namespace starrocks::pipeline {
 /// CollectStatsSourceOperator.
 CollectStatsSourceOperator::CollectStatsSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                        const int32_t driver_sequence, CollectStatsContextRawPtr ctx)
-        : SourceOperator(factory, id, "collect_stats_source", plan_node_id, driver_sequence), _ctx(ctx) {}
+        : SourceOperator(factory, id, "collect_stats_source", plan_node_id, true, driver_sequence), _ctx(ctx) {}
 
 void CollectStatsSourceOperator::close(RuntimeState* state) {
     Operator::close(state);
