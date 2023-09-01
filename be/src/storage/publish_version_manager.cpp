@@ -134,7 +134,11 @@ void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_tas
         int64_t tablet_id = tablet_versions[i].tablet_id;
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
         if (tablet != nullptr) {
-            tablet_versions[i].__set_version(tablet->max_readable_version());
+            if (tablet->tablet_state() == TabletState::TABLET_RUNNING) {
+                tablet_versions[i].__set_version(tablet->max_readable_version());
+            } else {
+                tablet_versions[i].__set_version(tablet->max_continuous_version());
+            }
         }
     }
 }

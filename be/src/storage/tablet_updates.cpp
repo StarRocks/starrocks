@@ -2709,6 +2709,10 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
             max_readable_version = _edit_version_infos[_apply_version_idx]->version.major_number();
             auto& last = _edit_version_infos.back();
             version = last->version.major_number();
+            // tablet maybe doing schema change, set max readable version as max version
+            if (_tablet->state() != TABLET_RUNNING) {
+                max_readable_version = version;
+            }
             rowsets = last->rowsets;
             has_pending = _pending_commits.size() > 0;
             // version count in primary key table contains two parts:
