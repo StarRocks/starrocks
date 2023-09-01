@@ -1,6 +1,6 @@
-# Load data using Spark connector
+# Load data using Spark connector (recommended)
 
-StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
+StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
 
 ## Version requirements
 
@@ -65,7 +65,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
       sh build.sh 3.2
       ```
 
-3. Go to the `target/`  directory to find the Spark connector JAR file, such as `starrocks-spark-connector-3.2_2.12-1.1.0-SNAPSHOT.jar` , generated upon compilation.
+3. Go to the `target/` directory to find the Spark connector JAR file, such as `starrocks-spark-connector-3.2_2.12-1.1.0-SNAPSHOT.jar` , generated upon compilation.
 
 > **NOTE**
 >
@@ -81,12 +81,12 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account.              |
 | starrocks.password                             | YES      | None          | The password of your StarRocks cluster account.              |
 | starrocks.write.label.prefix                   | NO       | spark-        | The label prefix used by Stream Load.                        |
-| starrocks.write.enable.transaction-stream-load | NO       | TRUE          | Whether to use [the transactional interface of Stream Load](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface) to load data. This feature is supported in StarRocks v2.4 and later. |
+| starrocks.write.enable.transaction-stream-load | NO       | TRUE          | Whether to use [the transactional interface of Stream Load](../Stream_Load_transaction_interface.md) to load data. This feature is supported in StarRocks v2.4 and later. |
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"col0,col1,col2"`. |
 | starrocks.column.types                         | NO       | None          | Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-HLL-type) type.|
-| starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD). |
+| starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). |
 | starrocks.write.properties.format              | NO       | CSV           | The file format based on which the Spark connector transforms each batch of data before the data is sent to StarRocks. Valid values: CSV and JSON. |
 | starrocks.write.properties.row_delimiter       | NO       | \n            | The row delimiter for CSV-formatted data.                    |
 | starrocks.write.properties.column_separator    | NO       | \t            | The column separator for CSV-formatted data.                 |
@@ -163,17 +163,17 @@ The following two examples explain how to load data with Spark DataFrames Batch 
 
 Construct data in memory and load data into the StarRocks table.
 
-1. You can write the spark job using scala or python
+1. You can write the spark application using Scala or Python.
 
-   For scala, run the following codes in `spark-shell`:
-
+   For Scala, run the following code snippet in `spark-shell`:
+   
     ```Scala
     // 1. Create a DataFrame from a sequence.
     val data = Seq((1, "starrocks", 100), (2, "spark", 100))
     val df = data.toDF("id", "name", "score")
    
-    // 2. Write to starrocks with the format "starrocks",
-    // and replace the options with your own.
+    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    // You need to modify the options according your own environment.
     df.write.format("starrocks")
         .option("starrocks.fe.http.url", "127.0.0.1:8030")
         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
@@ -184,8 +184,8 @@ Construct data in memory and load data into the StarRocks table.
         .save()
     ```
 
-   For python, run the following codes in `pyspark`:
-
+   For Python, run the following code snippet in `pyspark`:
+   
    ```python
    from pyspark.sql import SparkSession
    
@@ -199,11 +199,11 @@ Construct data in memory and load data into the StarRocks table.
     df = spark.sparkContext.parallelize(data) \
             .toDF(["id", "name", "score"])
 
-    # 2. Write to starrocks with the format "starrocks",
-    # and replace the options with your own.
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
     df.write.format("starrocks") \
-        .option("starrocks.fe.http.url", "127.0.0.1:8038") \
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+        .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
         .option("starrocks.table.identifier", "test.score_board") \
         .option("starrocks.user", "root") \
         .option("starrocks.password", "") \
@@ -211,7 +211,7 @@ Construct data in memory and load data into the StarRocks table.
         .save()
     ```
 
-2. Query data in the StarRocks table.
+3. Query data in the StarRocks table.
 
     ```sql
     MySQL [test]> SELECT * FROM `score_board`;
@@ -235,9 +235,9 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
     4,spark,100
     ```
 
-2. You can write the spark job using scala or python 
+2. You can write the Spark application using Scala or Python.
 
-   For scala, run the following codes in `spark-shell`:
+   For Scala, run the following code snippet in `spark-shell`:
 
     ```Scala
     import org.apache.spark.sql.types.StructType
@@ -255,8 +255,9 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
             // Replace it with your path to the directory "csv-data".
             .load("/path/to/csv-data")
         )
-
-    // 2. Write to starrocks with the format "starrocks", and replace the options with your own.
+    
+    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    // You need to modify the options according your own environment.
     val query = (df.writeStream.format("starrocks")
             .option("starrocks.fe.http.url", "127.0.0.1:8030")
             .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
@@ -270,8 +271,8 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
         )
     ```
 
-   For python, run the following codes in `pyspark`:
-
+   For Python, run the following code snippet in `pyspark`:
+   
    ```python
    from pyspark.sql import SparkSession
    from pyspark.sql.types import IntegerType, StringType, StructType, StructField
@@ -294,10 +295,11 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
             # Replace it with your path to the directory "csv-data".
             .load("/path/to/csv-data")
 
-    # 2. Write to starrocks with the format "starrocks", and replace the options with your own.
+    # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+    # You need to modify the options according your own environment.
     query = df.writeStream.format("starrocks") \
-            .option("starrocks.fe.http.url", "127.0.0.1:8038") \
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9038") \
+            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
+            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
             .option("starrocks.table.identifier", "test.score_board") \
             .option("starrocks.user", "root") \
             .option("starrocks.password", "") \
@@ -308,7 +310,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
         )
     ```
 
-3. Query data in the StarRocks table.
+4. Query data in the StarRocks table.
 
     ```SQL
     MySQL [test]> select * from score_board;
@@ -328,7 +330,8 @@ The following example explains how to load data with Spark SQL by using the `INS
 1. Execute the following SQL statement in the `spark-sql`:
 
     ```SQL
-    -- 1. create a table using datasource "starrocks", and replace the options with your own
+    -- 1. Create a table by configuring the data source as  `starrocks` and the following options. 
+    -- You need to modify the options according your own environment.
     CREATE TABLE `score_board`
     USING starrocks
     OPTIONS(
@@ -339,7 +342,7 @@ The following example explains how to load data with Spark SQL by using the `INS
     "starrocks.password"=""
     );
 
-    -- 2. insert two rows into the table
+    -- 2. Insert two rows into the table.
     INSERT INTO `score_board` VALUES (5, "starrocks", 100), (6, "spark", 100);
     ```
 
