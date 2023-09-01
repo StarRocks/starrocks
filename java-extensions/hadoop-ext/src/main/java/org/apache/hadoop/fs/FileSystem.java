@@ -595,7 +595,7 @@ public abstract class FileSystem extends Configured
             return createFileSystem(uri, conf);
         }
 
-        LOGGER.warn("[XXX] FileSystem.Cache from hadoop-ext package");
+        LOGGER.warn("[hadoop-ext] FileSystem.Cache from hadoop-ext package");
         return CACHE.get(uri, conf);
     }
 
@@ -3726,6 +3726,7 @@ public abstract class FileSystem extends Configured
      */
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
+        Cache.StarRocksUtils.addConfigResourcesToConfiguration(conf);
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
                 DurationInfo ignored =
@@ -4001,14 +4002,46 @@ public abstract class FileSystem extends Configured
             }
         }
 
+        static class StarRocksUtils {
+            public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
+            public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
+            public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
+            public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
+            public static final String STARROCKS_HOME_ENV_KEY = "STARROCKS_HOME";
+
+            public static void addConfigResourcesToConfiguration(Configuration conf) {
+                if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
+                    return;
+                }
+                String configResources = conf.get(HDFS_CONFIG_RESOURCES);
+                if (configResources.isEmpty()) {
+                    return;
+                }
+                final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV_KEY);
+                String[] parts = configResources.split(",");
+                for (String p : parts) {
+                    Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
+                    LOGGER.debug(String.format("[hadoop-ext] Add path '%s' to configuration", path.toString()));
+                    conf.addResource(path);
+                }
+            }
+
+            public static String getFSCredential(Configuration conf) {
+                return conf.get(HDFS_FS_CACHE_KEY, "");
+            }
+        }
+
         /**
          * FileSystem.Cache.Key
          */
         static class Key {
+
             final String scheme;
             final String authority;
             final UserGroupInformation ugi;
             final long unique;   // an artificial way to make a key unique
+
+            final String cred;
 
             Key(URI uri, Configuration conf) throws IOException {
                 this(uri, conf, 0);
@@ -4022,11 +4055,13 @@ public abstract class FileSystem extends Configured
                 this.unique = unique;
 
                 this.ugi = UserGroupInformation.getCurrentUser();
+
+                this.cred = StarRocksUtils.getFSCredential(conf);
             }
 
             @Override
             public int hashCode() {
-                return (scheme + authority).hashCode() + ugi.hashCode() + (int) unique;
+                return (scheme + authority + cred).hashCode() + ugi.hashCode() + (int) unique;
             }
 
             static boolean isEqual(Object a, Object b) {
@@ -4042,6 +4077,7 @@ public abstract class FileSystem extends Configured
                     Key that = (Key) obj;
                     return isEqual(this.scheme, that.scheme)
                             && isEqual(this.authority, that.authority)
+                            && isEqual(this.cred, that.cred)
                             && isEqual(this.ugi, that.ugi)
                             && (this.unique == that.unique);
                 }
@@ -4050,8 +4086,9 @@ public abstract class FileSystem extends Configured
 
             @Override
             public String toString() {
-                return "(" + ugi.toString() + ")@" + scheme + "://" + authority;
+                return "(ugi = " + ugi.toString() + ", cred = " + cred + ")@" + scheme + "://" + authority;
             }
+
         }
     }
 
