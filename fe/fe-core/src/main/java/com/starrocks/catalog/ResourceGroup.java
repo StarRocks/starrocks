@@ -48,8 +48,21 @@ public class ResourceGroup implements Writable {
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
+
+    public static final long DEFAULT_WG_ID = 0;
     public static final long DEFAULT_MV_WG_ID = 1;
     public static final long DEFAULT_MV_VERSION = 1;
+
+    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
+    public static final ResourceGroup DEFAULT_MV_WG = new ResourceGroup();
+
+    static {
+        DEFAULT_WG.setId(DEFAULT_WG_ID);
+        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
+
+        DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
+        DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
+    }
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()

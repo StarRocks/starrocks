@@ -1404,10 +1404,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Test
     public void testShowResourceGroupUsage() throws Exception {
-        TWorkGroup group0 = new TWorkGroup().setId(0L).setName("wg0");
-        TWorkGroup group1 = new TWorkGroup().setId(1L).setName("wg1");
-        TWorkGroup group2 = new TWorkGroup().setId(2L).setName("wg2");
-        TWorkGroup group3 = new TWorkGroup().setId(3L).setName("wg3");
+        TWorkGroup group0 = new TWorkGroup().setId(10L).setName("wg0");
+        TWorkGroup group1 = new TWorkGroup().setId(11L).setName("wg1");
+        TWorkGroup group2 = new TWorkGroup().setId(12L).setName("wg2");
+        TWorkGroup group3 = new TWorkGroup().setId(13L).setName("wg3");
         TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
         List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
         groups.forEach(this::mockResourceGroup);
@@ -1424,57 +1424,62 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
 
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(112).setMem_used_bytes(9)
+                new TResourceGroupUsage().setGroup_id(ResourceGroup.DEFAULT_WG_ID).setCpu_core_used_permille(3112)
+                        .setMem_used_bytes(39).setNum_running_queries(38),
+                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(112).setMem_used_bytes(9)
                         .setNum_running_queries(8),
-                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(100),
-                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(120).setMem_used_bytes(7)
+                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(100),
+                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(120).setMem_used_bytes(7)
                         .setNum_running_queries(6),
-                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(30)
+                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(30)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(1110).setMem_used_bytes(19)
+                new TResourceGroupUsage().setGroup_id(ResourceGroup.DEFAULT_MV_WG_ID).setCpu_core_used_permille(4110)
+                        .setMem_used_bytes(49).setNum_running_queries(48),
+                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(1110).setMem_used_bytes(19)
                         .setNum_running_queries(18),
-                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(1100),
-                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(1120).setMem_used_bytes(17)
+                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(1100),
+                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(1120).setMem_used_bytes(17)
                         .setNum_running_queries(16),
-                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(130)
+                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(130)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
-            assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
-                    "wg0|0|be0-host|0.112|9|8\n" +
-                    "wg0|0|be1-host|1.11|19|18\n" +
-                    "wg1|1|be0-host|0.1|0|0\n" +
-                    "wg1|1|be1-host|1.1|0|0\n" +
-                    "wg2|2|be0-host|0.12|7|6\n" +
-                    "wg2|2|be1-host|1.12|17|16\n" +
-                    "wg3|3|be0-host|0.03|0|0\n" +
-                    "wg3|3|be1-host|0.13|0|0");
+            assertThat(res).isEqualTo("default_wg|0|be0-host|3.112|39|38\n" +
+                    "default_mv_wg|1|be1-host|4.11|49|48\n" +
+                    "wg0|10|be0-host|0.112|9|8\n" +
+                    "wg0|10|be1-host|1.11|19|18\n" +
+                    "wg1|11|be0-host|0.1|0|0\n" +
+                    "wg1|11|be1-host|1.1|0|0\n" +
+                    "wg2|12|be0-host|0.12|7|6\n" +
+                    "wg2|12|be1-host|1.12|17|16\n" +
+                    "wg3|13|be0-host|0.03|0|0\n" +
+                    "wg3|13|be1-host|0.13|0|0");
         }
 
         groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(210).setMem_used_bytes(29)
+                new TResourceGroupUsage().setGroup_id(10L).setCpu_core_used_permille(210).setMem_used_bytes(29)
                         .setNum_running_queries(28),
-                new TResourceGroupUsage().setGroup_id(1L).setCpu_core_used_permille(200)
+                new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(200)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(1220).setMem_used_bytes(27)
+                new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(1220).setMem_used_bytes(27)
                         .setNum_running_queries(26),
-                new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(230)
+                new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(230)
         );
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
             assertThat(res).isEqualTo("Name|Id|Backend|BEInUseCpuCores|BEInUseMemBytes|BERunningQueries\n" +
-                    "wg0|0|be0-host|0.21|29|28\n" +
-                    "wg1|1|be0-host|0.2|0|0\n" +
-                    "wg2|2|be1-host|1.22|27|26\n" +
-                    "wg3|3|be1-host|0.23|0|0");
+                    "wg0|10|be0-host|0.21|29|28\n" +
+                    "wg1|11|be0-host|0.2|0|0\n" +
+                    "wg2|12|be1-host|1.22|27|26\n" +
+                    "wg3|13|be1-host|0.23|0|0\n");
         }
     }
 

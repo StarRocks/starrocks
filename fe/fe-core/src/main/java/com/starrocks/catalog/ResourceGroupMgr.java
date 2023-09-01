@@ -308,6 +308,23 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+    public ResourceGroup getResourceGroupIncludingDefault(long id) {
+        ResourceGroup group = getResourceGroup(id);
+        if (group != null) {
+            return group;
+        }
+
+        if (id == ResourceGroup.DEFAULT_WG_ID) {
+            return ResourceGroup.DEFAULT_WG;
+        }
+
+        if (id == ResourceGroup.DEFAULT_MV_WG_ID) {
+            return ResourceGroup.DEFAULT_MV_WG;
+        }
+
+        return null;
+    }
+
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
