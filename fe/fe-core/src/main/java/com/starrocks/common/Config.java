@@ -2337,4 +2337,20 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+<<<<<<< HEAD
+=======
+
+    /**
+     * Loading or compaction must be stopped for primary_key_disk_schedule_time
+     * seconds before it can be scheduled
+     */
+    @ConfField(mutable = true)
+    public static int primary_key_disk_schedule_time = 3600; // 1h
+
+    @ConfField(mutable = true)
+    public static String access_control = "native";
+
+    @ConfField(mutable = true)
+    public static int catalog_metadata_cache_size = 500;
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 }

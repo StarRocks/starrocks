@@ -16,9 +16,17 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,7 +41,16 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 
 public class MetadataMgrTest {
     @BeforeClass
@@ -164,4 +181,96 @@ public class MetadataMgrTest {
         com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
         Assert.assertNull(tbl4);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateIcebergTable() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+            }
+        };
+
+        String stmt = "create external table iceberg_catalog.iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)";
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Unknown database"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.listTableNames("iceberg_catalog", "iceberg_db");
+                result = Lists.newArrayList("iceberg_table");
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable(createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Table 'iceberg_table' already exists"));
+        }
+
+        createTableStmt.setIfNotExists();
+        Assert.assertFalse(metadataMgr.createTable(createTableStmt));
+    }
+
+    @Test
+    public void testGetOptionalMetadata() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata("hive_catalog");
+        Assert.assertTrue(metadata.isPresent());
+        metadata = metadataMgr.getOptionalMetadata("hive_catalog_not_exist");
+        Assert.assertFalse(metadata.isPresent());
+    }
+
+    @Test
+    public void testRemoveCache() {
+        MetadataMgr mgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Map<UUID, ConnectorMetadata> queryIdSet = new HashMap<>();
+        for (int i = 0; i < Config.catalog_metadata_cache_size; i++) {
+            UUID queryId = UUIDUtil.genUUID();
+            ConnectContext.get().setQueryId(queryId);
+            Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
+            Assert.assertTrue(metadata.isPresent());
+            queryIdSet.put(queryId, metadata.get());
+        }
+
+        // cache evicted
+        UUID queryId = UUIDUtil.genUUID();
+        ConnectContext.get().setQueryId(queryId);
+        Optional<ConnectorMetadata> metadata = mgr.getOptionalMetadata("hive_catalog");
+        Assert.assertTrue(metadata.isPresent());
+        Assert.assertFalse(queryIdSet.containsValue(metadata.get()));
+        mgr.removeQueryMetadata();
+    }
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 }

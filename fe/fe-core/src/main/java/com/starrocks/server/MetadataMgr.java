@@ -16,6 +16,12 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
@@ -23,6 +29,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.View;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
@@ -39,20 +51,78 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.jetbrains.annotations.NotNull;
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
+=======
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+public class MetadataMgr {
+    private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
+
+    public class QueryMetadatas {
+        private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
+
+        public QueryMetadatas() {}
+
+        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
+            if (metadatas.containsKey(catalogName)) {
+                return metadatas.get(catalogName);
+            }
+
+            CatalogConnector connector = connectorMgr.getConnector(catalogName);
+            if (connector == null) {
+                LOG.error("Connector [{}] doesn't exist", catalogName);
+                return null;
+            }
+            ConnectorMetadata connectorMetadata = connector.getMetadata();
+            metadatas.put(catalogName, connectorMetadata);
+            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
+            return connectorMetadata;
+        }
+    }
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
 
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
-    private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
+
+    private static final RemovalListener<String, QueryMetadatas> CACHE_REMOVAL_LISTENER = (notification) -> {
+        String queryId = notification.getKey();
+        QueryMetadatas meta = notification.getValue();
+        if (meta != null) {
+            meta.metadatas.values().forEach(ConnectorMetadata::clear);
+            if (notification.getCause() != RemovalCause.EXPLICIT) {
+                LOG.info("Evict cache due to {} and deregister query-level " +
+                        "connector metadata on query id: {}", notification.getCause(), queryId);
+            }
+        }
+    };
+
+    private final LoadingCache<String, QueryMetadatas> metadataCacheByQueryId =
+            CacheBuilder.newBuilder()
+                    .maximumSize(Config.catalog_metadata_cache_size)
+                    .expireAfterAccess(300, TimeUnit.SECONDS)
+                    .removalListener(CACHE_REMOVAL_LISTENER)
+                    .build(new CacheLoader<String, QueryMetadatas>() {
+                        @NotNull
+                        @Override
+                        public QueryMetadatas load(String key) throws Exception {
+                            return new QueryMetadatas();
+                        }
+                    });
 
     public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
@@ -81,6 +151,7 @@ public class MetadataMgr {
                 }
             }
         }
+<<<<<<< HEAD
     }
 
     public void removeQueryMetadata() {
@@ -91,6 +162,31 @@ public class MetadataMgr {
             if (queryMetadatas != null) {
                 queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
                 metadataByQueryId.remove(queryId);
+=======
+
+        CatalogConnector connector = connectorMgr.getConnector(catalogName);
+        if (connector == null) {
+            LOG.error("Failed to get {} catalog", catalogName);
+            return Optional.empty();
+        }
+
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) { // use query-level cache if from query
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId.get());
+            return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
+        }
+
+        return Optional.ofNullable(connector.getMetadata());
+    }
+
+    public void removeQueryMetadata() {
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) {
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getIfPresent(queryId.get());
+            if (queryMetadatas != null) {
+                queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
+                metadataCacheByQueryId.invalidate(queryId.get());
+>>>>>>> dd71573cbf ([Enhancement] turn the MetadataMgr into a cache from map (#30293))
                 LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
