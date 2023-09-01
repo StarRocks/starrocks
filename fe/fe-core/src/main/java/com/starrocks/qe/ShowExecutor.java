@@ -2838,7 +2838,7 @@ public class ShowExecutor {
         }
         PatternMatcher finalMatcher = matcher;
         List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                .filter(row -> finalMatcher == null || finalMatcher.match(row.get(0)))
+                .filter(row -> finalMatcher == null || finalMatcher.match(row.get(1)))
                 .filter(row -> {
                     try {
                         AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
