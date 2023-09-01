@@ -70,6 +70,7 @@ import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1013,6 +1014,7 @@ public class TabletScheduler extends FrontendDaemon {
      * 8. replica not in right cluster
      * 9. replica is the src replica of a rebalance task, we can try to get it from rebalancer
      * 10. replica on higher load backend
+     * 11. replica not in correct storage medium
      */
     private void handleRedundantReplica(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         stat.counterReplicaRedundantErr.incrementAndGet();
@@ -1032,7 +1034,8 @@ public class TabletScheduler extends FrontendDaemon {
                     || deleteReplicaWithLowerVersion(tabletCtx, force)
                     || deleteReplicaOnSameHost(tabletCtx, force)
                     || deleteReplicaChosenByRebalancer(tabletCtx, force)
-                    || deleteReplicaOnHighLoadBackend(tabletCtx, force)) {
+                    || deleteReplicaOnHighLoadBackend(tabletCtx, force)
+                    || deleteReplicaStorageMediumInconsistent(tabletCtx, force)) {
                 // if we delete at least one redundant replica, we still throw a SchedException with status FINISHED
                 // to remove this tablet from the pendingTablets(consider it as finished)
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
@@ -1200,6 +1203,25 @@ public class TabletScheduler extends FrontendDaemon {
         return false;
     }
 
+    private boolean deleteReplicaStorageMediumInconsistent(TabletSchedCtx tabletCtx, boolean force)
+            throws SchedException {
+        if (!Config.enable_strict_storage_medium_check) {
+            return false;
+        }
+
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+
+        for (Replica replica : tabletCtx.getReplicas()) {
+            Optional<DiskInfo> diskInfoOp = systemInfoService.getDiskInfoByPathHash(replica.getPathHash());
+
+            if (diskInfoOp.isPresent() && diskInfoOp.get().getStorageMedium() != tabletCtx.getStorageMedium()) {
+                deleteReplicaInternal(tabletCtx, replica, "replica storage medium inconsistent", force);
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Just delete replica which does not locate in colocate backends set.
      * return true if delete one replica, otherwise, return false.
@@ -1356,7 +1378,7 @@ public class TabletScheduler extends FrontendDaemon {
      * 4. For the primary key tablet, get the max rowset creation time
      *    of all replica which updated in tablets reported.
      * 5. Check (now - maxRowsetCreationTime) is greater than Config.primary_key_disk_schedule_time
-    */
+     */
     private List<TabletSchedCtx> filterUnschedulableTablets(List<TabletSchedCtx> alternativeTablets) {
         List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
         for (TabletSchedCtx schedCtx : alternativeTablets) {
@@ -1475,8 +1497,12 @@ public class TabletScheduler extends FrontendDaemon {
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
-        List<BackendLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
-
+        List<BackendLoadStatistic> beStatistics = Lists.newArrayList();
+        if (Config.enable_strict_storage_medium_check) {
+            beStatistics.addAll(statistic.getSortedBeLoadStats(tabletCtx.getStorageMedium()));
+        } else {
+            beStatistics.addAll(statistic.getSortedBeLoadStats(null /* sorted ignore medium */));
+        }
         // get all available paths which this tablet can fit in.
         // beStatistics is sorted by mix load score in ascend order, so select from first to last.
         List<RootPathLoadStatistic> allFitPaths = Lists.newArrayList();

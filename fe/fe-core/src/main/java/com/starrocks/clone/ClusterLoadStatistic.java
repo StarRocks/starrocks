@@ -47,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -164,13 +165,15 @@ public class ClusterLoadStatistic {
                 medium, avgLoadScore, lowCounter, midCounter, highCounter);
     }
 
-    private static void sortBeStats(List<BackendLoadStatistic> beStats, TStorageMedium medium) {
+    private static Comparator<BackendLoadStatistic> getSortComparator(TStorageMedium medium) {
         if (medium == null) {
-            Collections.sort(beStats, BackendLoadStatistic.MIX_COMPARATOR);
-        } else if (medium == TStorageMedium.HDD) {
-            Collections.sort(beStats, BackendLoadStatistic.HDD_COMPARATOR);
+            return BackendLoadStatistic.MIX_COMPARATOR;
+        }
+
+        if (medium == TStorageMedium.HDD) {
+            return BackendLoadStatistic.HDD_COMPARATOR;
         } else {
-            Collections.sort(beStats, BackendLoadStatistic.SSD_COMPARATOR);
+            return BackendLoadStatistic.SSD_COMPARATOR;
         }
     }
 
@@ -211,15 +214,15 @@ public class ClusterLoadStatistic {
     }
 
     public List<BackendLoadStatistic> getSortedBeLoadStats(TStorageMedium medium) {
-        if (medium != null) {
-            List<BackendLoadStatistic> beStatsWithMedium = beLoadStatistics.stream().filter(
-                    b -> b.hasMedium(medium)).collect(Collectors.toList());
-            sortBeStats(beStatsWithMedium, medium);
-            return beStatsWithMedium;
-        } else {
+        if (medium == null) {
             // be stats are already sorted by mix load score in init()
             return beLoadStatistics;
         }
+
+      return beLoadStatistics.stream()
+                .filter(b -> b.hasMedium(medium))
+                .sorted(getSortComparator(medium))
+                .collect(Collectors.toList());
     }
 
     public String getBrief() {

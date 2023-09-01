@@ -88,6 +88,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -1127,6 +1128,10 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return Status.OK;
+    }
+
+    public Optional<DiskInfo> getDiskInfoByPathHash(long pathHash) {
+        return Optional.ofNullable(pathHashToDishInfoRef.get(pathHash));
     }
 
     // update the path info when disk report
