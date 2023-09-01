@@ -695,6 +695,7 @@ public class DefaultCoordinator extends Coordinator {
 
         RowBatch resultBatch;
         Status status = new Status();
+        receiver.setVariable(connectContext.sessionVariable);
 
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {

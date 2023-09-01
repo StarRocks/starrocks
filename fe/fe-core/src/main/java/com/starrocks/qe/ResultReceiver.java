@@ -67,6 +67,14 @@ public class ResultReceiver {
     private final Long backendId;
     private Thread currentThread;
 
+    public void setVariable(SessionVariable variable) {
+        this.variable = variable;
+    }
+
+    SessionVariable variable = null;
+
+    private long callTimes = 0;
+
     public ResultReceiver(TUniqueId tid, Long backendId, TNetworkAddress address, int timeoutMs) {
         this.finstId = new PUniqueId();
         this.finstId.hi = tid.hi;
@@ -76,10 +84,52 @@ public class ResultReceiver {
         this.timeoutTs = System.currentTimeMillis() + timeoutMs;
     }
 
+    class MyThread extends Thread {
+        public void run() {
+            System.out.println(finstId.hi + "  " + finstId.lo + " " + id + " thread starts to run.");
+            while (true) {
+                PFetchDataRequest request = new PFetchDataRequest(finstId);
+                currentThread = Thread.currentThread();
+                Future<PFetchDataResult> future = null;
+                try {
+                    future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
+                } catch (RpcException e) {
+                    throw new RuntimeException(e);
+                }
+                PFetchDataResult pResult = null;
+                while (pResult == null) {
+                    long currentTs = System.currentTimeMillis();
+                    if (currentTs >= timeoutTs) {
+                        return;
+                    }
+                    try {
+                        pResult = future.get(timeoutTs - currentTs, TimeUnit.MILLISECONDS);
+                    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                        // continue to get result
+                        LOG.info("future get interrupted Exception");
+                        if (isCancel) {
+                            return;
+                        }
+                    }
+                }
+                if (pResult.eos || isCancel || isDone) {
+                    return;
+                }
+            }
+        }
+
+        MyThread(int id) {
+            this.id = id;
+        }
+
+        int id;
+    }
+
     public RowBatch getNext(Status status) throws TException {
         if (isDone) {
             return null;
         }
+        callTimes++;
         final RowBatch rowBatch = new RowBatch();
         try {
             while (!isDone && !isCancel) {
@@ -104,6 +154,22 @@ public class ResultReceiver {
                         }
                     }
                 }
+                if (variable != null && variable.getSpillEncodeLevel() > 0) {
+                    int threadCount = variable.getSpillEncodeLevel();
+                    MyThread[] threads = new MyThread[threadCount];
+                    for (int i = 0; i < threadCount; ++i) {
+                        threads[i] = new MyThread(i);
+                    }
+                    for (int i = 0; i < threadCount; ++i) {
+                        System.out.println(finstId.hi + "  " + finstId.lo + " - " + i + " thread starts " + callTimes);
+                        threads[i].start();
+                    }
+                    for (int i = 0; i < threadCount; ++i) {
+                        threads[i].join();
+                        System.out.println(finstId.hi + "  " + finstId.lo + " - " + i + " thread emd " + callTimes);
+                    }
+                }
+
                 TStatusCode code = TStatusCode.findByValue(pResult.status.statusCode);
                 if (code != TStatusCode.OK) {
                     status.setPstatus(pResult.status);
@@ -153,6 +219,8 @@ public class ResultReceiver {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
             }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         } finally {
             synchronized (this) {
                 currentThread = null;
