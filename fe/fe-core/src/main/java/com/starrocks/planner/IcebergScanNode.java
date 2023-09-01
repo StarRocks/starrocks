@@ -386,11 +386,6 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public boolean canUsePipeLine() {
-        return true;
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
