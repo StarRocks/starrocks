@@ -41,8 +41,7 @@ public class JDBCTable extends Table {
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
 
-    public static final String ORIGINAL_TABLENAME = "original_tablename";
-    public static final String ORIGINAL_DBNAME = "original_dbname";
+    public static final String JDBC_TABLENAME = "jdbc_tablename";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
@@ -99,7 +98,11 @@ public class JDBCTable extends Table {
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {
                 throw new DdlException("all catalog properties must be set");
             }
-            jdbcTable = name;
+            if (properties.get(JDBCTable.JDBC_TABLENAME) == null) {
+                jdbcTable = name;
+            } else {
+                jdbcTable = properties.get(JDBCTable.JDBC_TABLENAME);
+            }
             this.properties = properties;
             return;
         }
@@ -122,9 +125,6 @@ public class JDBCTable extends Table {
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {
-            if (!Strings.isNullOrEmpty(properties.get(ORIGINAL_DBNAME))) {
-                return String.join(".", catalogName, properties.get(ORIGINAL_DBNAME), properties.get(ORIGINAL_TABLENAME));
-            }
             return String.join(".", catalogName, dbName, name);
         } else {
             return Long.toString(id);
@@ -154,7 +154,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
 
-            if (dbName.isEmpty()) {
+            if (properties.get(JDBC_TABLENAME) != null) {
                 tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
             } else {
                 tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);

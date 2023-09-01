@@ -28,6 +28,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -67,9 +68,9 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     @Override
     public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
-        properties.putIfAbsent(JDBCTable.ORIGINAL_DBNAME, dbName);
-        properties.putIfAbsent(JDBCTable.ORIGINAL_TABLENAME, name);
-        return new JDBCTable(id, "\"" + dbName + "\"" + "." + "\"" + name + "\"", schema, "", catalogName, properties);
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "\"" + dbName + "\"" + "." + "\"" + name + "\"");
+        return new JDBCTable(id, name, schema, dbName, catalogName, newProp);
     }
 
     @Override
