@@ -69,6 +69,10 @@ public class RangePartitionDesc extends PartitionDesc {
         return this.singleRangePartitionDescs;
     }
 
+    public List<MultiRangePartitionDesc> getMultiRangePartitionDescs() {
+        return multiRangePartitionDescs;
+    }
+
     public List<String> getPartitionColNames() {
         return partitionColNames;
     }
