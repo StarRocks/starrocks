@@ -796,13 +796,11 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
 
         // === create sink op ====
-        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
         auto* upstream_pipeline = fragment_ctx->pipelines().back().get();
-        {
-            OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, mcast_local_exchanger);
-            upstream_pipeline->add_op_factory(sink_op);
-        }
+        int32_t upstream_plan_node_id = upstream_pipeline->get_op_factories().back()->plan_node_id();
+        OpFactoryPtr sink_op = std::make_shared<MultiCastLocalExchangeSinkOperatorFactory>(
+                context->next_operator_id(), upstream_plan_node_id, mcast_local_exchanger);
+        upstream_pipeline->add_op_factory(sink_op);
 
         // ==== create source/sink pipelines ====
         for (size_t i = 0; i < sinks.size(); i++) {
@@ -814,7 +812,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
             // source op
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, i, mcast_local_exchanger);
+                    context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
             source_op->set_group_leader(upstream_pipeline->source_operator_factory());
 
@@ -865,8 +863,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
             max_input_dop += source_operator->degree_of_parallelism();
 
-            context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, tablet_sink_op, max_input_dop,
-                                                                           desired_tablet_sink_dop);
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, tablet_sink_op, max_input_dop,
+                    desired_tablet_sink_dop);
         } else {
             fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
@@ -923,14 +922,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
             if (desired_iceberg_sink_dop != source_operator_dop) {
                 context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
+                        source_operator_dop, desired_iceberg_sink_dop);
             } else {
                 fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
             }
         } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
-                                                                             partition_expr_ctxs, source_operator_dop,
-                                                                             desired_iceberg_sink_dop);
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
+                    partition_expr_ctxs, source_operator_dop, desired_iceberg_sink_dop);
         }
     }
 

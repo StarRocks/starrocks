@@ -33,7 +33,7 @@ public:
                        TResultSinkType::type sink_type, std::vector<ExprContext*> output_expr_ctxs,
                        const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_result_sinks,
                        std::atomic<int64_t>& num_written_rows, FragmentContext* const fragment_ctx)
-            : Operator(factory, id, "result_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "result_sink", plan_node_id, false, driver_sequence),
               _sink_type(sink_type),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _sender(sender),
@@ -91,7 +91,7 @@ class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, std::vector<TExpr> t_output_expr,
                               FragmentContext* const fragment_ctx)
-            : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+            : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
               _sink_type(sink_type),
               _t_output_expr(std::move(t_output_expr)),
               _fragment_ctx(fragment_ctx) {}

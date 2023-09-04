@@ -89,7 +89,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
 public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : SourceOperator(factory, id, "local_exchange_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "local_exchange_source", plan_node_id, true, driver_sequence),
               _memory_manager(memory_manager) {}
 
     Status add_chunk(ChunkPtr chunk);

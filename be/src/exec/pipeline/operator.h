@@ -43,7 +43,8 @@ class Operator {
     friend class StreamPipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
+             int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -174,16 +175,8 @@ public:
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(Chunk* chunk);
 
-    // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
-    // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
-    // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
-    // for example, ResultSink
-    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
-    static const int32_t s_pseudo_plan_node_id_for_export_sink;
-    static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
-    static const int32_t s_pseudo_plan_node_id_for_result_sink;
-    static const int32_t s_pseudo_plan_node_id_for_iceberg_table_sink;
-    static const int32_t s_pseudo_plan_node_id_upper_bound;
+    // Pseudo plan_node_id for final sink, such as result_sink, table_sink
+    static const int32_t s_pseudo_plan_node_id_for_final_sink;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
     RuntimeProfile* common_metrics() { return _common_metrics.get(); }

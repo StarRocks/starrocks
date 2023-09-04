@@ -34,7 +34,7 @@ namespace starrocks::pipeline {
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                            ScanNode* scan_node)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), false, driver_sequence),
           _scan_node(scan_node),
           _dop(dop),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
@@ -515,7 +515,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
 
-    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles);
+    RuntimeProfile* merged_profile =
+            RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
@@ -582,7 +583,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
         ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
-    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), ops);
+    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);
 
     return ops;
 }
