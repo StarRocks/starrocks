@@ -87,11 +87,6 @@ public class MultiCastDataSink extends DataSink {
     }
 
     @Override
-    public boolean canUsePipeLine() {
-        return true;
-    }
-
-    @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

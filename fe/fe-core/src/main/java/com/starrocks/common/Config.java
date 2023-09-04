@@ -2495,4 +2495,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String access_control = "native";
+
+    @ConfField(mutable = true)
+    public static int catalog_metadata_cache_size = 500;
 }

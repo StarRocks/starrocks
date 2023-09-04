@@ -104,7 +104,7 @@ public abstract class DataSink {
     }
 
     public boolean canUsePipeLine() {
-        return false;
+        return true;
     }
 
     public boolean canUseRuntimeAdaptiveDop() {

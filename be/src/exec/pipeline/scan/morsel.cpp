@@ -196,9 +196,10 @@ StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
     int64_t next_owner_id = -1;
     if (!_morsel_queue->empty()) {
         ASSIGN_OR_RETURN(auto next_morsel, _morsel_queue->try_get());
-        auto* next_scan_morsel = down_cast<ScanMorsel*>(next_morsel.get());
-        next_owner_id = next_scan_morsel->owner_id();
-        _morsel_queue->unget(std::move(next_morsel));
+        if (auto* next_scan_morsel = down_cast<ScanMorsel*>(next_morsel.get())) {
+            next_owner_id = next_scan_morsel->owner_id();
+            _morsel_queue->unget(std::move(next_morsel));
+        }
     }
     return next_owner_id;
 }
