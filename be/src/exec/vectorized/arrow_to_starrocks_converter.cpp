@@ -706,7 +706,6 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             }
         } else if constexpr (at_is_datetime<AT>) {
             cctz::time_zone ctz;
-            int64_t divisor;
             if (!TimezoneUtils::find_cctz_time_zone(concrete_type->timezone(), ctz)) {
                 return Status::InternalError(strings::Substitute("Not found TimeZone($0)", concrete_type->timezone()));
             }

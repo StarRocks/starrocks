@@ -581,7 +581,7 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
 TEST_F(ParquetScannerTest, int96_timestamp) {
     const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
-            {"col_datetime", {"9999-12-31 23:59:59", "2006-01-02 15:04:05"}}};
+            {"col_datetime", {"9999-12-31 23:59:59.009999", "2006-01-02 15:04:05"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
