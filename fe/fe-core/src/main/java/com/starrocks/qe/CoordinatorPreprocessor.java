@@ -2173,4 +2173,7 @@ public class CoordinatorPreprocessor {
         }
     }
 
+    public void clearFragmentExecParamsMap() {
+        fragmentExecParamsMap.clear();
+    }
 }

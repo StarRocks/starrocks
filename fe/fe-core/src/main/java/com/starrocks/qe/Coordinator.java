@@ -2014,6 +2014,10 @@ public class Coordinator {
         return this.thriftServerHighLoad;
     }
 
+    public void clearPreprocessorFragmentExecParams() {
+        this.coordinatorPreprocessor.clearFragmentExecParamsMap();
+    }
+
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {

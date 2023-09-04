@@ -885,6 +885,7 @@ public class StmtExecutor {
         coord.exec();
         coord.setTopProfileSupplier(this::buildTopLevelProfile);
         coord.setExecPlanSupplier(() -> execPlan);
+        coord.clearPreprocessorFragmentExecParams();
 
         // send result
         // 1. If this is a query with OUTFILE clause, eg: select * from tbl1 into outfile xxx,
