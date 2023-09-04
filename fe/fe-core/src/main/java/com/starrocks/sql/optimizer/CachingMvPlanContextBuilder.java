@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -34,7 +35,7 @@ public class CachingMvPlanContextBuilder {
 
     private Cache<MvId, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
             .expireAfterWrite(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(10000)
+            .maximumSize(1000)
             .executor(mvPlanCacheExecutor)
             .build();
 
@@ -59,6 +60,11 @@ public class CachingMvPlanContextBuilder {
         }
 
         return result;
+    }
+
+    @VisibleForTesting
+    public boolean contains(MaterializedView mv) {
+        return mvPlanContextCache.asMap().containsKey(new MvId(mv.getDbId(), mv.getId()));
     }
 
     public void invalidateFromCache(MaterializedView mv) {
