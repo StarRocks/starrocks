@@ -211,7 +211,6 @@ import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -1887,14 +1886,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
+    /**
+     * This RPC method does nothing. It is just for compatibility.
+     * From the version 3.2, the resource usage is only maintained in the master FE, and isn't synchronized between FEs anymore.
+     */
     @Override
+    @Deprecated
     public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws
             TException {
-        TResourceUsage usage = request.getResource_usage();
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(request.getBackend_id(),
-                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
-                usage.getCpu_used_permille());
-
         TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
         TStatus status = new TStatus(TStatusCode.OK);
         res.setStatus(status);

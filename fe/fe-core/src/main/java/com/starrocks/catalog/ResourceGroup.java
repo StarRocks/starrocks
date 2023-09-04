@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
@@ -40,6 +39,7 @@ public class ResourceGroup implements Writable {
     public static final String SOURCE_IP = "source_ip";
     public static final String DATABASES = "db";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
+    public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
@@ -48,12 +48,22 @@ public class ResourceGroup implements Writable {
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
 
+    public static final long DEFAULT_WG_ID = 0;
+
+    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
+
+    static {
+        DEFAULT_WG.setId(DEFAULT_WG_ID);
+        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
+    }
+
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("name", ScalarType.createVarchar(100)))
                     .addColumn(new Column("id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
@@ -69,6 +79,10 @@ public class ResourceGroup implements Writable {
     private long id;
     @SerializedName(value = "cpuCoreLimit")
     private Integer cpuCoreLimit;
+
+    @SerializedName(value = "maxCpuCores")
+    private Integer maxCpuCores;
+
     @SerializedName(value = "memLimit")
     private Double memLimit;
     @SerializedName(value = "bigQueryMemLimit")
@@ -98,6 +112,7 @@ public class ResourceGroup implements Writable {
         row.add("" + this.id);
         row.add("" + cpuCoreLimit);
         row.add("" + (memLimit * 100) + "%");
+        row.add("" + maxCpuCores);
         if (bigQueryCpuSecondLimit != null) {
             row.add("" + bigQueryCpuSecondLimit);
         } else {
@@ -171,6 +186,10 @@ public class ResourceGroup implements Writable {
             twg.setMem_limit(memLimit);
         }
 
+        if (maxCpuCores != null) {
+            twg.setMax_cpu_cores(maxCpuCores);
+        }
+
         if (bigQueryMemLimit != null) {
             twg.setBig_query_mem_limit(bigQueryMemLimit);
         }
@@ -199,6 +218,18 @@ public class ResourceGroup implements Writable {
 
     public void setCpuCoreLimit(int cpuCoreLimit) {
         this.cpuCoreLimit = cpuCoreLimit;
+    }
+
+    public boolean isMaxCpuCoresEffective() {
+        return maxCpuCores != null && maxCpuCores > 0;
+    }
+
+    public void setMaxCpuCores(int maxCpuCores) {
+        this.maxCpuCores = maxCpuCores;
+    }
+
+    public Integer getMaxCpuCores() {
+        return maxCpuCores;
     }
 
     public Double getMemLimit() {
@@ -231,6 +262,10 @@ public class ResourceGroup implements Writable {
 
     public void setBigQueryCpuSecondLimit(long limit) {
         bigQueryCpuSecondLimit = limit;
+    }
+
+    public boolean isConcurrencyLimitEffective() {
+        return concurrencyLimit != null && concurrencyLimit > 0;
     }
 
     public Integer getConcurrencyLimit() {
@@ -273,4 +308,5 @@ public class ResourceGroup implements Writable {
     public int hashCode() {
         return Objects.hash(id, version);
     }
+
 }

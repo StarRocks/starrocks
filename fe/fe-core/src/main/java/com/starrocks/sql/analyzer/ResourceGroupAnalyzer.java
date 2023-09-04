@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
@@ -145,6 +144,15 @@ public class ResourceGroupAnalyzer {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
                 resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
+                continue;
+            }
+            if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
+                int maxCpuCores = Integer.parseInt(value);
+                int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+                if (maxCpuCores > avgCoreNum) {
+                    throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
+                }
+                resourceGroup.setMaxCpuCores(Integer.parseInt(value));
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {

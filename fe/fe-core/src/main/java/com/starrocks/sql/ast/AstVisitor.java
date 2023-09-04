@@ -555,6 +555,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitShowColumnStatement(ShowColumnStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

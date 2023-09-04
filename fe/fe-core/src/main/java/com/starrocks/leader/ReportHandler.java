@@ -532,7 +532,7 @@ public class ReportHandler extends Daemon {
         long start = System.currentTimeMillis();
         GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(
                 backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
-                usage.getCpu_used_permille());
+                usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
     }
