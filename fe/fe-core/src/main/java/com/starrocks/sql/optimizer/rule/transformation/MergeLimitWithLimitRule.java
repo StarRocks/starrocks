@@ -73,11 +73,14 @@ public class MergeLimitWithLimitRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator l1 = (LogicalLimitOperator) input.getOp();
+        // l2 must global
         LogicalLimitOperator l2 = (LogicalLimitOperator) input.getInputs().get(0).getOp();
 
         Operator result;
-        if (l1.hasOffset() && l2.hasOffset()) {
-            Preconditions.checkState(!l1.isLocal());
+        if (l1.hasOffset() || l2.hasOffset()) {
+            if (l1.hasOffset()) {
+                Preconditions.checkState(!l1.isLocal());
+            }
 
             // l2 range
             long l2Min = l2.hasOffset() ? l2.getOffset() : Operator.DEFAULT_OFFSET;
@@ -100,13 +103,9 @@ public class MergeLimitWithLimitRule extends TransformationRule {
             }
 
             result = LogicalLimitOperator.init(limit, offset);
-        } else if (l1.hasOffset() || l2.hasOffset()) {
-            long limit = Math.min(l1.getLimit(), l2.getLimit());
-            long offset = Math.max(l1.getOffset(), l2.getOffset());
-            result = LogicalLimitOperator.init(limit, offset);
         } else {
             if (l1.getLimit() <= l2.getLimit()) {
-                result = LogicalLimitOperator.local(l1.getLimit());
+                result = LogicalLimitOperator.init(l1.getLimit());
             } else {
                 result = l2;
             }

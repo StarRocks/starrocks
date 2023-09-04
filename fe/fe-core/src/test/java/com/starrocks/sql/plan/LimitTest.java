@@ -849,4 +849,12 @@ public class LimitTest extends PlanTestBase {
                 "     offset: 50000\n" +
                 "     limit: 10");
     }
+
+    @Test
+    public void testLimitValues2() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String sql = "select count(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EMPTYSET");
+    }
 }
