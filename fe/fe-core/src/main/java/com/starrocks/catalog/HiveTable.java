@@ -165,7 +165,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public String getTableName() {
         return hiveTableName;
     }
-  
+
     public HiveStorageFormat getStorageFormat() {
         return storageFormat;
     }
