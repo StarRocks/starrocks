@@ -66,7 +66,7 @@ static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths
         std::this_thread::sleep_for(std::chrono::milliseconds(wait_duration));
     }
     for (auto&& path : paths) {
-        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << path;
+        LOG_IF(INFO, config::lake_print_delete_log) << "Deleting " << path;
     }
     auto t0 = butil::gettimeofday_us();
     auto st = fs->delete_files(paths);
@@ -126,6 +126,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         std::sort(versions.begin(), versions.end());
 
         // Find metadata files that has garbage data files and delete all those files
+        std::vector<std::string> paths;
         for (int64_t garbage_version = versions.back().first; garbage_version >= versions[0].first; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
@@ -136,20 +137,18 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 return res.status();
             } else {
                 auto metadata = std::move(res).value();
-                std::vector<std::string> paths;
                 for (const auto& rowset : metadata->compaction_inputs()) {
                     for (const auto& segment : rowset.segments()) {
-                        paths.emplace_back(std::move(join_path(data_dir, segment)));
+                        paths.emplace_back(join_path(data_dir, segment));
                     }
                     *vacuumed_files += rowset.segments_size();
                     *vacuumed_file_size += rowset.data_size();
                 }
                 for (const auto& file : metadata->orphan_files()) {
-                    paths.emplace_back(std::move(join_path(data_dir, file.name())));
+                    paths.emplace_back(join_path(data_dir, file.name()));
                     *vacuumed_files += 1;
                     *vacuumed_file_size += file.size();
                 }
-                RETURN_IF_ERROR(delete_files(fs.get(), paths));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
@@ -157,13 +156,14 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 }
             }
         }
+        RETURN_IF_ERROR(delete_files(fs.get(), paths));
 
         // Do not delete the last version created before grace_timestamp.
         // Assuming grace_timestamp is the earliest possible initiation time of queries still in process, then the
         // earliest version to be accessed is the last version created before grace_timestamp. So retain this version.
         versions.pop_back();
 
-        std::vector<std::string> paths;
+        paths.clear();
         paths.reserve(versions.size());
         for (auto version : versions) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version.first));
@@ -290,6 +290,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         return true;
     })));
 
+    std::vector<std::string> paths;
     for (const auto& log_name : txn_logs) {
         auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
         if (res.status().is_not_found()) {
@@ -298,34 +299,33 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             return res.status();
         } else {
             auto log = std::move(res).value();
-            std::vector<std::string> paths;
             if (log->has_op_write()) {
                 const auto& op = log->op_write();
                 for (const auto& segment : op.rowset().segments()) {
-                    paths.emplace_back(std::move(join_path(data_dir, segment)));
+                    paths.emplace_back(join_path(data_dir, segment));
                 }
                 for (const auto& f : op.dels()) {
-                    paths.emplace_back(std::move(join_path(data_dir, f)));
+                    paths.emplace_back((join_path(data_dir, f)));
                 }
             }
             if (log->has_op_compaction()) {
                 const auto& op = log->op_compaction();
                 for (const auto& segment : op.output_rowset().segments()) {
-                    paths.emplace_back(std::move(join_path(data_dir, segment)));
+                    paths.emplace_back((join_path(data_dir, segment)));
                 }
             }
             if (log->has_op_schema_change()) {
                 const auto& op = log->op_schema_change();
                 for (const auto& rowset : op.rowsets()) {
                     for (const auto& segment : rowset.segments()) {
-                        paths.emplace_back(std::move(join_path(data_dir, segment)));
+                        paths.emplace_back((join_path(data_dir, segment)));
                     }
                 }
             }
-            paths.emplace_back(std::move(join_path(log_dir, log_name)));
-            RETURN_IF_ERROR(delete_files(fs.get(), paths));
+            paths.emplace_back((join_path(log_dir, log_name)));
         }
     }
+    RETURN_IF_ERROR(delete_files(fs.get(), paths));
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
@@ -346,6 +346,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         TabletMetadataPtr latest_metadata = nullptr;
 
         // Find metadata files that has garbage data files and delete all those files
+        paths.clear();
         for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
@@ -359,16 +360,14 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 if (latest_metadata == nullptr) {
                     latest_metadata = metadata;
                 }
-                std::vector<std::string> paths;
                 for (const auto& rowset : metadata->compaction_inputs()) {
                     for (const auto& segment : rowset.segments()) {
-                        paths.emplace_back(std::move(join_path(data_dir, segment)));
+                        paths.emplace_back(join_path(data_dir, segment));
                     }
                 }
                 for (const auto& file : metadata->orphan_files()) {
                     paths.emplace_back(join_path(data_dir, file.name()));
                 }
-                RETURN_IF_ERROR(delete_files(fs.get(), paths));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
@@ -376,13 +375,14 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 }
             }
         }
+        RETURN_IF_ERROR(delete_files(fs.get(), paths));
 
         // Delete all data files referenced in the latest version
+        paths.clear();
         if (latest_metadata != nullptr) {
-            std::vector<std::string> paths;
             for (const auto& rowset : latest_metadata->rowsets()) {
                 for (const auto& segment : rowset.segments()) {
-                    paths.emplace_back(std::move(join_path(data_dir, segment)));
+                    paths.emplace_back(join_path(data_dir, segment));
                 }
             }
             if (latest_metadata->has_delvec_meta()) {
@@ -390,11 +390,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     paths.emplace_back(join_path(data_dir, f.name()));
                 }
             }
-            RETURN_IF_ERROR(delete_files(fs.get(), paths));
         }
 
-        std::vector<std::string> paths;
-        paths.reserve(versions.size());
         for (auto version : versions) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
             paths.emplace_back(std::move(path));
