@@ -32,7 +32,7 @@ import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES_LOADED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CACHE_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CREDENTIAL_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 
 public class HDFSCloudConfiguration implements CloudConfiguration {
@@ -78,7 +78,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         hdfsCloudCredential.toThrift(properties);
         properties.put(HDFS_CONFIG_RESOURCES, configResources);
         properties.put(HDFS_RUNTIME_JARS, runtimeJars);
-        properties.put(HDFS_FS_CACHE_KEY, getCredentialString());
+        properties.put(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
         if (!properties.isEmpty()) {
             tCloudConfiguration.setCloud_properties_v2(properties);
         }
@@ -91,7 +91,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         configuration.set(HDFS_RUNTIME_JARS, runtimeJars);
         addConfigResourcesToConfiguration(configResources, configuration);
         configuration.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
-        configuration.set(HDFS_FS_CACHE_KEY, getCredentialString());
+        configuration.set(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
     }
 
     // NOTE(yanz): hdfs credential is quite special. In most cases, people write auth/username/password etc.

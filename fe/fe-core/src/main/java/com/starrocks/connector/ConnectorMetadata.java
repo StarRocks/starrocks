@@ -75,7 +75,7 @@ public interface ConnectorMetadata {
      */
     default List<String> listTableNames(String dbName) {
         return Lists.newArrayList();
-    }
+    }h
 
     /**
      * Return all partition names of the table.

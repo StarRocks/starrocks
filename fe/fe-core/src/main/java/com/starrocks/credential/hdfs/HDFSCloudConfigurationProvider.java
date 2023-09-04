@@ -25,9 +25,9 @@ import java.util.Map;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DATA;
+import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_FILE;
+import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
@@ -56,8 +56,8 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         String[] keys = {
                 HDFS_AUTHENTICATION, HDFS_USERNAME_DEPRECATED, HDFS_USERNAME, HDFS_PASSWORD_DEPRECATED, HDFS_PASSWORD,
                 HDFS_KERBEROS_PRINCIPAL_DEPRECATED, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_KEYTAB_DEPRECATED,
-                HDFS_KERBEROS_KEYTAB_FILE,
-                HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, HDFS_KERBEROS_KEYTAB_DATA
+                HADOOP_KERBEROS_KEYTAB,
+                HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, HADOOP_KERBEROS_KEYTAB_CONTENT
         };
         for (String k : keys) {
             prop.remove(k);
@@ -68,8 +68,8 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
                 getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
                 getOrDefault(properties, HDFS_PASSWORD, HDFS_PASSWORD_DEPRECATED),
                 getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_PRINCIPAL_DEPRECATED),
-                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_FILE, HDFS_KERBEROS_KEYTAB_DEPRECATED),
-                getOrDefault(properties, HDFS_KERBEROS_KEYTAB_DATA, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
+                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB, HDFS_KERBEROS_KEYTAB_DEPRECATED),
+                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB_CONTENT, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
                 prop
         );
         String configResources = getOrDefault(properties, HDFS_CONFIG_RESOURCES);
