@@ -569,10 +569,10 @@ public class FunctionSet {
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
             (Type itemType) -> {
-                List<StructField> fields = Lists.newArrayList();
+                ArrayList<StructField> fields = Lists.newArrayList();
                 fields.add(new StructField("item", itemType));
                 fields.add(new StructField("count", Type.BIGINT));
-                return new ArrayType(new StructType(fields, true));
+                return new ArrayType(new StructType(fields));
             };
 
     public FunctionSet() {

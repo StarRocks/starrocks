@@ -370,7 +370,7 @@ public class FunctionAnalyzer {
                 if (!ExprUtil.isPositiveConstantInteger(kExpr)) {
                     throw new SemanticException(
                             "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    functionCallExpr.toSql());
                 }
                 k = ExprUtil.getIntegerConstant(kExpr);
             }
@@ -379,24 +379,24 @@ public class FunctionAnalyzer {
                 if (!ExprUtil.isPositiveConstantInteger(counterNumExpr)) {
                     throw new SemanticException(
                             "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
-                                    functionCallExpr.toSql(), counterNumExpr.getPos());
+                                    functionCallExpr.toSql());
                 }
                 counterNum = ExprUtil.getIntegerConstant(counterNumExpr);
             }
             if (k != null && k > 10000) {
                 throw new SemanticException("The maximum number of the second parameter is 10000" +
-                        functionCallExpr.toSql(), kExpr.getPos());
+                        functionCallExpr.toSql());
             }
             if (counterNum != null) {
                 Preconditions.checkNotNull(k);
                 if (counterNum > 10000) {
                     throw new SemanticException("The maximum number of the third parameter is 10000" +
-                            functionCallExpr.toSql(), counterNumExpr.getPos());
+                            functionCallExpr.toSql());
                 }
                 if (k > counterNum) {
                     throw new SemanticException(
                             "The second parameter must be smaller than or equal to the third parameter" +
-                                    functionCallExpr.toSql(), kExpr.getPos());
+                                    functionCallExpr.toSql());
                 }
             }
         }
