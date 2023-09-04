@@ -73,9 +73,15 @@ public class WarehouseManagerEpack extends WarehouseManager {
 
         String warehouseName = stmt.getWarehouseName();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' doesn't exist", warehouseName);
+
             Warehouse warehouse = nameToWh.get(warehouseName);
+            if (warehouse == null) {
+                if (stmt.isSetIfExists()) {
+                    return;
+                }
+                throw new DdlException("Warehouse " + warehouseName + " doesn't exist");
+            }
+
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
             warehouse.dropSelf();
