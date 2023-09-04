@@ -185,7 +185,7 @@ FailPointRegistry::FailPointRegistry() {
 }
 
 FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
-    CHECK(FailPointRegistry::GetInstance()->add(fp).ok());
+    FailPointRegistry::GetInstance()->add(fp);
 }
 
 DEFINE_FAIL_POINT(random_error);
