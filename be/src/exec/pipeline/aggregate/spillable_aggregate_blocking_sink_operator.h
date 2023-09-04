@@ -70,14 +70,14 @@ private:
 
     Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
 
-    void _add_non_agg_chunk(ChunkPtr chunk);
+    void _add_streaming_chunk(ChunkPtr chunk);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
-    std::queue<ChunkPtr> _non_agg_chunks;
-    size_t _non_agg_rows = 0;
-    size_t _non_agg_bytes = 0;
+    std::queue<ChunkPtr> _streaming_chunks;
+    size_t _streaming_rows = 0;
+    size_t _streaming_bytes = 0;
 
     double _ht_low_reduction_threshold = 0;
     int32_t _ht_low_reduction_chunk_limit = 0;

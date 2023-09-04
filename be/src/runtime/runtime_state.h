@@ -330,8 +330,6 @@ public:
 
     int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
 
-    int32_t spill_join_mem_table_size() const { return _query_options.spill_join_mem_table_size; }
-
     int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
 
     bool enable_agg_spill_preaggregation() const { return _query_options.enable_agg_spill_preaggregation; }
