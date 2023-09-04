@@ -14,6 +14,7 @@
 
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "types/hll.h"
@@ -41,9 +42,22 @@ struct HLLUnionBuilder {
     }
 };
 
+struct ApproxTopKBuilder {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_integer<lt> || lt_is_decimal<lt> || lt_is_float<lt> || lt_is_string<lt> ||
+                      lt_is_date_or_datetime<lt> || lt_is_boolean<lt>) {
+            using ApproxTopKState = ApproxTopKState<lt>;
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, ApproxTopKState, AggregateFunctionPtr, false>(
+                    "approx_top_k", true, AggregateFactory::MakeApproxTopKAggregateFunction<lt>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_approx() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, HLLUnionBuilder(), this);
+        type_dispatch_all(type, ApproxTopKBuilder(), this);
     }
     add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_union", false,
                                                            AggregateFactory::MakeHllUnionAggregateFunction());

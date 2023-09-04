@@ -18,6 +18,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 public class WindowTest extends PlanTestBase {
 
@@ -1107,6 +1108,94 @@ public class WindowTest extends PlanTestBase {
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("HAVING clause cannot contain window function");
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testApproxTopK() throws Exception {
+        {
+            String sql = "select approx_top_k(L_LINENUMBER) over() from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000) over() from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 100, 10000) over() from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000, 10000) over() from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 1, 1) over() from lineitem";
+            getFragmentPlan(sql);
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, '10001') over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, '11111') over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 10001) over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the second parameter is 10000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 0) over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the third parameter is 10000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, -1) over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 100, 99) over() from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter must be smaller than or equal to the third parameter";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(IllegalStateException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 10000, 10000) over(order by L_LINESTATUS) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "Unexpected order by clause for approx_top_k()";
+            String actualMessage = exception.getMessage();
+            Assert.assertEquals(expectedMessage, actualMessage);
+        }
     }
 }

@@ -1,0 +1,1531 @@
+-- name: test_approx_top_k_without_null
+CREATE TABLE `t_without_null` (
+  `c_id` INT(11) NOT NULL,
+  `c_int` INT(11) NOT NULL,
+  `c_tinyint` TINYINT NOT NULL,
+  `c_smallint` SMALLINT NOT NULL,
+  `c_bigint` BIGINT NOT NULL,
+  `c_largeint` LARGEINT NOT NULL,
+  `c_float` FLOAT NOT NULL,
+  `c_double` DOUBLE NOT NULL,
+  `c_char` CHAR(10) NOT NULL,
+  `c_varchar` VARCHAR(100) NOT NULL,
+  `c_date` DATE NOT NULL,
+  `c_datetime` DATETIME NOT NULL,
+  `c_decimal` DECIMAL64(9,3) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t_without_null` (
+  `c_id`, `c_tinyint`, `c_smallint`, `c_int`, `c_bigint`, `c_largeint`, `c_float`, `c_double`, `c_char`, `c_varchar`, `c_date`, `c_datetime`, `c_decimal`) 
+VALUES 
+  (1, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (3, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (4, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (5, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (6, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (7, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (8, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (9, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (10, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+
+  (11, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (12, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (13, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (14, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (15, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (16, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (17, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (18, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (19, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+
+  (21, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (22, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (23, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (24, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (25, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (26, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (27, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (28, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+
+  (31, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (32, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (33, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (34, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (35, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (36, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (37, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+
+  (41, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (42, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (43, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (44, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (45, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (46, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+
+  (51, 6, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+  (52, 6, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+  (53, 6, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+  (54, 6, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+  (55, 6, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+
+  (61, 7, 77, 777, 7777, 77777, 7.7, 77.77, 'char7', 'varchar7', '2021-01-07', '2021-01-07 00:00:00', 777.77),
+  (62, 7, 77, 777, 7777, 77777, 7.7, 77.77, 'char7', 'varchar7', '2021-01-07', '2021-01-07 00:00:00', 777.77),
+  (63, 7, 77, 777, 7777, 77777, 7.7, 77.77, 'char7', 'varchar7', '2021-01-07', '2021-01-07 00:00:00', 777.77),
+  (64, 7, 77, 777, 7777, 77777, 7.7, 77.77, 'char7', 'varchar7', '2021-01-07', '2021-01-07 00:00:00', 777.77),
+
+  (71, 8, 88, 888, 8888, 88888, 8.8, 88.88, 'char8', 'varchar8', '2021-01-08', '2021-01-08 00:00:00', 888.88),
+  (72, 8, 88, 888, 8888, 88888, 8.8, 88.88, 'char8', 'varchar8', '2021-01-08', '2021-01-08 00:00:00', 888.88),
+  (73, 8, 88, 888, 8888, 88888, 8.8, 88.88, 'char8', 'varchar8', '2021-01-08', '2021-01-08 00:00:00', 888.88),
+
+  (81, 9, 99, 999, 9999, 99999, 9.9, 99.99, 'char9', 'varchar9', '2021-01-09', '2021-01-09 00:00:00', 999.99),
+  (82, 9, 99, 999, 9999, 99999, 9.9, 99.99, 'char9', 'varchar9', '2021-01-09', '2021-01-09 00:00:00', 999.99),
+
+  (91, 10, 100, 1000, 10000, 100000, 1.01, 100.01, 'char10', 'varchar10', '2021-01-10', '2021-01-10 00:00:00', 1000.01);
+-- result:
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_tinyint) FROM t_without_null;
+-- result:
+[{"item":1,"count":10},{"item":2,"count":9},{"item":3,"count":8},{"item":4,"count":7},{"item":5,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_smallint) FROM t_without_null;
+-- result:
+[{"item":11,"count":10},{"item":22,"count":9},{"item":33,"count":8},{"item":44,"count":7},{"item":55,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_int) FROM t_without_null;
+-- result:
+[{"item":111,"count":10},{"item":222,"count":9},{"item":333,"count":8},{"item":444,"count":7},{"item":555,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_bigint) FROM t_without_null;
+-- result:
+[{"item":1111,"count":10},{"item":2222,"count":9},{"item":3333,"count":8},{"item":4444,"count":7},{"item":5555,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_largeint) FROM t_without_null;
+-- result:
+[{"item":11111,"count":10},{"item":22222,"count":9},{"item":33333,"count":8},{"item":44444,"count":7},{"item":55555,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_float) FROM t_without_null;
+-- result:
+[{"item":1.1,"count":10},{"item":2.2,"count":9},{"item":3.3,"count":8},{"item":4.4,"count":7},{"item":5.5,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_double) FROM t_without_null;
+-- result:
+[{"item":11.11,"count":10},{"item":22.22,"count":9},{"item":33.33,"count":8},{"item":44.44,"count":7},{"item":55.55,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_char) FROM t_without_null;
+-- result:
+[{"item":"char1","count":10},{"item":"char2","count":9},{"item":"char3","count":8},{"item":"char4","count":7},{"item":"char5","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_varchar) FROM t_without_null;
+-- result:
+[{"item":"varchar1","count":10},{"item":"varchar2","count":9},{"item":"varchar3","count":8},{"item":"varchar4","count":7},{"item":"varchar5","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_date) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01","count":10},{"item":"2021-01-02","count":9},{"item":"2021-01-03","count":8},{"item":"2021-01-04","count":7},{"item":"2021-01-05","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_datetime) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01 00:00:00","count":10},{"item":"2021-01-02 00:00:00","count":9},{"item":"2021-01-03 00:00:00","count":8},{"item":"2021-01-04 00:00:00","count":7},{"item":"2021-01-05 00:00:00","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_decimal) FROM t_without_null;
+-- result:
+[{"item":111.110,"count":10},{"item":222.220,"count":9},{"item":333.330,"count":8},{"item":444.440,"count":7},{"item":555.550,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_tinyint, 3) FROM t_without_null;
+-- result:
+[{"item":1,"count":10},{"item":2,"count":9},{"item":3,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_smallint, 3) FROM t_without_null;
+-- result:
+[{"item":11,"count":10},{"item":22,"count":9},{"item":33,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_int, 3) FROM t_without_null;
+-- result:
+[{"item":111,"count":10},{"item":222,"count":9},{"item":333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_bigint, 3) FROM t_without_null;
+-- result:
+[{"item":1111,"count":10},{"item":2222,"count":9},{"item":3333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_largeint, 3) FROM t_without_null;
+-- result:
+[{"item":11111,"count":10},{"item":22222,"count":9},{"item":33333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_float, 3) FROM t_without_null;
+-- result:
+[{"item":1.1,"count":10},{"item":2.2,"count":9},{"item":3.3,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_double, 3) FROM t_without_null;
+-- result:
+[{"item":11.11,"count":10},{"item":22.22,"count":9},{"item":33.33,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_char, 3) FROM t_without_null;
+-- result:
+[{"item":"char1","count":10},{"item":"char2","count":9},{"item":"char3","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_varchar, 3) FROM t_without_null;
+-- result:
+[{"item":"varchar1","count":10},{"item":"varchar2","count":9},{"item":"varchar3","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_date, 3) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01","count":10},{"item":"2021-01-02","count":9},{"item":"2021-01-03","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_datetime, 3) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01 00:00:00","count":10},{"item":"2021-01-02 00:00:00","count":9},{"item":"2021-01-03 00:00:00","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_decimal, 3) FROM t_without_null;
+-- result:
+[{"item":111.110,"count":10},{"item":222.220,"count":9},{"item":333.330,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_tinyint, 3, 10) FROM t_without_null;
+-- result:
+[{"item":1,"count":10},{"item":2,"count":9},{"item":3,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_smallint, 3, 10) FROM t_without_null;
+-- result:
+[{"item":11,"count":10},{"item":22,"count":9},{"item":33,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_int, 3, 10) FROM t_without_null;
+-- result:
+[{"item":111,"count":10},{"item":222,"count":9},{"item":333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_bigint, 3, 10) FROM t_without_null;
+-- result:
+[{"item":1111,"count":10},{"item":2222,"count":9},{"item":3333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_largeint, 3, 10) FROM t_without_null;
+-- result:
+[{"item":11111,"count":10},{"item":22222,"count":9},{"item":33333,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_float, 3, 10) FROM t_without_null;
+-- result:
+[{"item":1.1,"count":10},{"item":2.2,"count":9},{"item":3.3,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_double, 3, 10) FROM t_without_null;
+-- result:
+[{"item":11.11,"count":10},{"item":22.22,"count":9},{"item":33.33,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_char, 3, 10) FROM t_without_null;
+-- result:
+[{"item":"char1","count":10},{"item":"char2","count":9},{"item":"char3","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_varchar, 3, 10) FROM t_without_null;
+-- result:
+[{"item":"varchar1","count":10},{"item":"varchar2","count":9},{"item":"varchar3","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_date, 3, 10) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01","count":10},{"item":"2021-01-02","count":9},{"item":"2021-01-03","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_datetime, 3, 10) FROM t_without_null;
+-- result:
+[{"item":"2021-01-01 00:00:00","count":10},{"item":"2021-01-02 00:00:00","count":9},{"item":"2021-01-03 00:00:00","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_decimal, 3, 10) FROM t_without_null;
+-- result:
+[{"item":111.110,"count":10},{"item":222.220,"count":9},{"item":333.330,"count":8}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_tinyint) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":8,"count":3},{"item":9,"count":2}]
+72	[{"item":8,"count":3},{"item":9,"count":2}]
+73	[{"item":8,"count":3},{"item":9,"count":2}]
+81	[{"item":8,"count":3},{"item":9,"count":2}]
+82	[{"item":8,"count":3},{"item":9,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_smallint) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":88,"count":3},{"item":99,"count":2}]
+72	[{"item":88,"count":3},{"item":99,"count":2}]
+73	[{"item":88,"count":3},{"item":99,"count":2}]
+81	[{"item":88,"count":3},{"item":99,"count":2}]
+82	[{"item":88,"count":3},{"item":99,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_int) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":888,"count":3},{"item":999,"count":2}]
+72	[{"item":888,"count":3},{"item":999,"count":2}]
+73	[{"item":888,"count":3},{"item":999,"count":2}]
+81	[{"item":888,"count":3},{"item":999,"count":2}]
+82	[{"item":888,"count":3},{"item":999,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bigint) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":8888,"count":3},{"item":9999,"count":2}]
+72	[{"item":8888,"count":3},{"item":9999,"count":2}]
+73	[{"item":8888,"count":3},{"item":9999,"count":2}]
+81	[{"item":8888,"count":3},{"item":9999,"count":2}]
+82	[{"item":8888,"count":3},{"item":9999,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_largeint) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":88888,"count":3},{"item":99999,"count":2}]
+72	[{"item":88888,"count":3},{"item":99999,"count":2}]
+73	[{"item":88888,"count":3},{"item":99999,"count":2}]
+81	[{"item":88888,"count":3},{"item":99999,"count":2}]
+82	[{"item":88888,"count":3},{"item":99999,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_float) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":8.8,"count":3},{"item":9.9,"count":2}]
+72	[{"item":8.8,"count":3},{"item":9.9,"count":2}]
+73	[{"item":8.8,"count":3},{"item":9.9,"count":2}]
+81	[{"item":8.8,"count":3},{"item":9.9,"count":2}]
+82	[{"item":8.8,"count":3},{"item":9.9,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_double) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":88.88,"count":3},{"item":99.99,"count":2}]
+72	[{"item":88.88,"count":3},{"item":99.99,"count":2}]
+73	[{"item":88.88,"count":3},{"item":99.99,"count":2}]
+81	[{"item":88.88,"count":3},{"item":99.99,"count":2}]
+82	[{"item":88.88,"count":3},{"item":99.99,"count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_char) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":"char8","count":3},{"item":"char9","count":2}]
+72	[{"item":"char8","count":3},{"item":"char9","count":2}]
+73	[{"item":"char8","count":3},{"item":"char9","count":2}]
+81	[{"item":"char8","count":3},{"item":"char9","count":2}]
+82	[{"item":"char8","count":3},{"item":"char9","count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_varchar) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":"varchar8","count":3},{"item":"varchar9","count":2}]
+72	[{"item":"varchar8","count":3},{"item":"varchar9","count":2}]
+73	[{"item":"varchar8","count":3},{"item":"varchar9","count":2}]
+81	[{"item":"varchar8","count":3},{"item":"varchar9","count":2}]
+82	[{"item":"varchar8","count":3},{"item":"varchar9","count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_date) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":"2021-01-08","count":3},{"item":"2021-01-09","count":2}]
+72	[{"item":"2021-01-08","count":3},{"item":"2021-01-09","count":2}]
+73	[{"item":"2021-01-08","count":3},{"item":"2021-01-09","count":2}]
+81	[{"item":"2021-01-08","count":3},{"item":"2021-01-09","count":2}]
+82	[{"item":"2021-01-08","count":3},{"item":"2021-01-09","count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_datetime) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":"2021-01-08 00:00:00","count":3},{"item":"2021-01-09 00:00:00","count":2}]
+72	[{"item":"2021-01-08 00:00:00","count":3},{"item":"2021-01-09 00:00:00","count":2}]
+73	[{"item":"2021-01-08 00:00:00","count":3},{"item":"2021-01-09 00:00:00","count":2}]
+81	[{"item":"2021-01-08 00:00:00","count":3},{"item":"2021-01-09 00:00:00","count":2}]
+82	[{"item":"2021-01-08 00:00:00","count":3},{"item":"2021-01-09 00:00:00","count":2}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_decimal) over() FROM t_without_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":888.880,"count":3},{"item":999.990,"count":2}]
+72	[{"item":888.880,"count":3},{"item":999.990,"count":2}]
+73	[{"item":888.880,"count":3},{"item":999.990,"count":2}]
+81	[{"item":888.880,"count":3},{"item":999.990,"count":2}]
+82	[{"item":888.880,"count":3},{"item":999.990,"count":2}]
+-- !result
+-- name: test_approx_top_k_with_null
+CREATE TABLE `t_with_null` (
+  `c_id` INT(11) NULL,
+  `c_int` INT(11) NULL,
+  `c_tinyint` TINYINT NULL,
+  `c_smallint` SMALLINT NULL,
+  `c_bigint` BIGINT NULL,
+  `c_largeint` LARGEINT NULL,
+  `c_float` FLOAT NULL,
+  `c_double` DOUBLE NULL,
+  `c_char` CHAR(10) NULL,
+  `c_varchar` VARCHAR(100) NULL,
+  `c_date` DATE NULL,
+  `c_datetime` DATETIME NULL,
+  `c_decimal` DECIMAL64(9,3) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t_with_null` (
+  `c_id`, `c_tinyint`, `c_smallint`, `c_int`, `c_bigint`, `c_largeint`, `c_float`, `c_double`, `c_char`, `c_varchar`, `c_date`, `c_datetime`, `c_decimal`) 
+VALUES 
+  (1, NULL, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (2, 1, NULL, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (3, 1, 11, NULL, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (4, 1, 11, 111, NULL, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (5, 1, 11, 111, 1111, NULL, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (6, 1, 11, 111, 1111, 11111, NULL, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (7, 1, 11, 111, 1111, 11111, 1.1, NULL, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (8, 1, 11, 111, 1111, 11111, 1.1, 11.11, NULL, 'varchar1', '2021-01-01', '2021-01-01 00:00:00', NULL),
+  (9, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', NULL, '2021-01-01', NULL, 111.11),
+  (10, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', NULL, '2021-01-01 00:00:00', 111.11),
+
+  (11, NULL, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (12, 2, NULL, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (13, 2, 22, NULL, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (14, 2, 22, 222, NULL, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (15, 2, 22, 222, 2222, NULL, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (16, 2, 22, 222, 2222, 22222, NULL, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', NULL),
+  (17, 2, 22, 222, 2222, 22222, 2.2, NULL, 'char2', 'varchar2', '2021-01-02', NULL, 222.22),
+  (18, 2, 22, 222, 2222, 22222, 2.2, 22.22, NULL, 'varchar2', NULL, '2021-01-02 00:00:00', 222.22),
+  (19, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', NULL, '2021-01-02', '2021-01-02 00:00:00', 222.22),
+
+  (21, NULL, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (22, 3, NULL, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (23, 3, 33, NULL, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (24, 3, 33, 333, NULL, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', NULL),
+  (25, 3, 33, 333, 3333, NULL, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', NULL, 333.33),
+  (26, 3, 33, 333, 3333, 33333, NULL, 33.33, 'char3', 'varchar3', NULL, '2021-01-03 00:00:00', 333.33),
+  (27, 3, 33, 333, 3333, 33333, 3.3, NULL, 'char3', NULL, '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (28, 3, 33, 333, 3333, 33333, 3.3, 33.33, NULL, 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+
+  (31, NULL, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (32, 4, NULL, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', NULL),
+  (33, 4, 44, NULL, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', NULL, 444.44),
+  (34, 4, 44, 444, NULL, 44444, 4.4, 44.44, 'char4', 'varchar4', NULL, '2021-01-04 00:00:00', 444.44),
+  (35, 4, 44, 444, 4444, NULL, 4.4, 44.44, 'char4', NULL, '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (36, 4, 44, 444, 4444, 44444, NULL, 44.44, NULL, 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (37, 4, 44, 444, 4444, 44444, 4.4, NULL, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+
+  (41, NULL, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', NULL, 555.55),
+  (42, 5, NULL, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', NULL, '2021-01-05 00:00:00', NULL),
+  (43, 5, 55, NULL, 5555, 55555, 5.5, 55.55, 'char5', NULL, '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (44, 5, 55, 555, NULL, 55555, 5.5, 55.55, NULL, 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (45, 5, 55, 555, 5555, NULL, 5.5, NULL, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+  (46, 5, 55, 555, 5555, 55555, NULL, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+
+  (51, NULL, 66, 666, 6666, 66666, 6.6, 66.66, 'char6', NULL, '2021-01-06', '2021-01-06 00:00:00', 666.66),
+  (52, 6, NULL, 666, 6666, 66666, 6.6, 66.66, NULL, 'varchar6', NULL, '2021-01-06 00:00:00', 666.66),
+  (53, 6, 66, NULL, 6666, 66666, 6.6, NULL, 'char6', 'varchar6', '2021-01-06', NULL, 666.66),
+  (54, 6, 66, 666, NULL, 66666, NULL, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', NULL),
+  (55, 6, 66, 666, 6666, NULL, 6.6, 66.66, 'char6', 'varchar6', '2021-01-06', '2021-01-06 00:00:00', 666.66),
+
+  (61, NULL, 77, 777, 7777, 77777, 7.7, NULL, 'char7', 'varchar7', '2021-01-07', '2021-01-07 00:00:00', 777.77),
+  (62, 7, NULL, 777, 7777, 77777, NULL, 77.77, NULL, 'varchar7', '2021-01-07', '2021-01-07 00:00:00', NULL),
+  (63, 7, 77, NULL, 7777, NULL, 7.7, 77.77, 'char7', NULL, '2021-01-07', NULL, 777.77),
+  (64, 7, 77, 777, NULL, 77777, 7.7, 77.77, 'char7', 'varchar7', NULL, '2021-01-07 00:00:00', 777.77),
+
+  (71, NULL, 88, 888, 8888, NULL, 8.8, 88.88, 'char8', NULL, '2021-01-08', '2021-01-08 00:00:00', 888.88),
+  (72, 8, NULL, 888, NULL, 88888, NULL, 88.88, NULL, 'varchar8', NULL, '2021-01-08 00:00:00', NULL),
+  (73, 8, 88, NULL, 8888, 88888, 8.8, NULL, 'char8', 'varchar8', '2021-01-08', NULL, 888.88),
+
+  (81, NULL, 99, NULL, 9999, NULL, 9.9, NULL, 'char9', NULL, '2021-01-09', NULL, 999.99),
+  (82, 9, NULL, 999, NULL, 99999, NULL, 99.99, NULL, 'varchar9', NULL, '2021-01-09 00:00:00', NULL),
+
+  (91, 10, 100, 1000, 10000, 100000, 1.01, 100.01, 'char10', 'varchar10', '2021-01-10', '2021-01-10 00:00:00', 1000.01),
+
+  (101, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (102, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (103, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_tinyint) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1,"count":9},{"item":2,"count":8},{"item":3,"count":7},{"item":4,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_smallint) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11,"count":9},{"item":22,"count":8},{"item":33,"count":7},{"item":44,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_int) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111,"count":9},{"item":222,"count":8},{"item":333,"count":7},{"item":444,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_bigint) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1111,"count":9},{"item":2222,"count":8},{"item":3333,"count":7},{"item":4444,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_largeint) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11111,"count":9},{"item":22222,"count":8},{"item":33333,"count":7},{"item":44444,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_float) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1.1,"count":9},{"item":2.2,"count":8},{"item":3.3,"count":7},{"item":4.4,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_double) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11.11,"count":9},{"item":22.22,"count":8},{"item":33.33,"count":7},{"item":44.44,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_char) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"char1","count":9},{"item":"char2","count":8},{"item":"char3","count":7},{"item":"char4","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_varchar) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"varchar1","count":9},{"item":"varchar2","count":8},{"item":"varchar3","count":7},{"item":"varchar4","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_date) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01","count":9},{"item":"2021-01-02","count":8},{"item":"2021-01-03","count":7},{"item":"2021-01-04","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_datetime) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01 00:00:00","count":9},{"item":"2021-01-02 00:00:00","count":8},{"item":"2021-01-03 00:00:00","count":7},{"item":"2021-01-04 00:00:00","count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_decimal) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111.110,"count":9},{"item":222.220,"count":8},{"item":333.330,"count":7},{"item":444.440,"count":6}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_tinyint, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1,"count":9},{"item":2,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_smallint, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11,"count":9},{"item":22,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_int, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111,"count":9},{"item":222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_bigint, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1111,"count":9},{"item":2222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_largeint, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11111,"count":9},{"item":22222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_float, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1.1,"count":9},{"item":2.2,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_double, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11.11,"count":9},{"item":22.22,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_char, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"char1","count":9},{"item":"char2","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_varchar, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"varchar1","count":9},{"item":"varchar2","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_date, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01","count":9},{"item":"2021-01-02","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_datetime, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01 00:00:00","count":9},{"item":"2021-01-02 00:00:00","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_decimal, 3) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111.110,"count":9},{"item":222.220,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_tinyint, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1,"count":9},{"item":2,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_smallint, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11,"count":9},{"item":22,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_int, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111,"count":9},{"item":222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_bigint, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1111,"count":9},{"item":2222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_largeint, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11111,"count":9},{"item":22222,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_float, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":1.1,"count":9},{"item":2.2,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_double, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":11.11,"count":9},{"item":22.22,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_char, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"char1","count":9},{"item":"char2","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_varchar, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"varchar1","count":9},{"item":"varchar2","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_date, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01","count":9},{"item":"2021-01-02","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_datetime, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":"2021-01-01 00:00:00","count":9},{"item":"2021-01-02 00:00:00","count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_decimal, 3, 10) FROM t_with_null;
+-- result:
+[{"item":null,"count":12},{"item":111.110,"count":9},{"item":222.220,"count":8}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_int) FROM t_with_null WHERE c_id > 100;
+-- result:
+[{"item":null,"count":3}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_varchar, 3) FROM t_with_null WHERE c_id > 100;
+-- result:
+[{"item":null,"count":3}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_decimal, 3, 10) FROM t_with_null WHERE c_id > 100;
+-- result:
+[{"item":null,"count":3}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_date, 1) FROM t_with_null WHERE c_id > 100;
+-- result:
+[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_tinyint) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":8,"count":2},{"item":9,"count":1}]
+72	[{"item":null,"count":2},{"item":8,"count":2},{"item":9,"count":1}]
+73	[{"item":null,"count":2},{"item":8,"count":2},{"item":9,"count":1}]
+81	[{"item":null,"count":2},{"item":8,"count":2},{"item":9,"count":1}]
+82	[{"item":null,"count":2},{"item":8,"count":2},{"item":9,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_smallint) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":88,"count":2},{"item":99,"count":1}]
+72	[{"item":null,"count":2},{"item":88,"count":2},{"item":99,"count":1}]
+73	[{"item":null,"count":2},{"item":88,"count":2},{"item":99,"count":1}]
+81	[{"item":null,"count":2},{"item":88,"count":2},{"item":99,"count":1}]
+82	[{"item":null,"count":2},{"item":88,"count":2},{"item":99,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_int) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":888,"count":2},{"item":999,"count":1}]
+72	[{"item":null,"count":2},{"item":888,"count":2},{"item":999,"count":1}]
+73	[{"item":null,"count":2},{"item":888,"count":2},{"item":999,"count":1}]
+81	[{"item":null,"count":2},{"item":888,"count":2},{"item":999,"count":1}]
+82	[{"item":null,"count":2},{"item":888,"count":2},{"item":999,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bigint) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":8888,"count":2},{"item":9999,"count":1}]
+72	[{"item":null,"count":2},{"item":8888,"count":2},{"item":9999,"count":1}]
+73	[{"item":null,"count":2},{"item":8888,"count":2},{"item":9999,"count":1}]
+81	[{"item":null,"count":2},{"item":8888,"count":2},{"item":9999,"count":1}]
+82	[{"item":null,"count":2},{"item":8888,"count":2},{"item":9999,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_largeint) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":88888,"count":2},{"item":99999,"count":1}]
+72	[{"item":null,"count":2},{"item":88888,"count":2},{"item":99999,"count":1}]
+73	[{"item":null,"count":2},{"item":88888,"count":2},{"item":99999,"count":1}]
+81	[{"item":null,"count":2},{"item":88888,"count":2},{"item":99999,"count":1}]
+82	[{"item":null,"count":2},{"item":88888,"count":2},{"item":99999,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_float) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":8.8,"count":2},{"item":9.9,"count":1}]
+72	[{"item":null,"count":2},{"item":8.8,"count":2},{"item":9.9,"count":1}]
+73	[{"item":null,"count":2},{"item":8.8,"count":2},{"item":9.9,"count":1}]
+81	[{"item":null,"count":2},{"item":8.8,"count":2},{"item":9.9,"count":1}]
+82	[{"item":null,"count":2},{"item":8.8,"count":2},{"item":9.9,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_double) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":88.88,"count":2},{"item":99.99,"count":1}]
+72	[{"item":null,"count":2},{"item":88.88,"count":2},{"item":99.99,"count":1}]
+73	[{"item":null,"count":2},{"item":88.88,"count":2},{"item":99.99,"count":1}]
+81	[{"item":null,"count":2},{"item":88.88,"count":2},{"item":99.99,"count":1}]
+82	[{"item":null,"count":2},{"item":88.88,"count":2},{"item":99.99,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_char) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":"char8","count":2},{"item":"char9","count":1}]
+72	[{"item":null,"count":2},{"item":"char8","count":2},{"item":"char9","count":1}]
+73	[{"item":null,"count":2},{"item":"char8","count":2},{"item":"char9","count":1}]
+81	[{"item":null,"count":2},{"item":"char8","count":2},{"item":"char9","count":1}]
+82	[{"item":null,"count":2},{"item":"char8","count":2},{"item":"char9","count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_varchar) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":"varchar8","count":2},{"item":"varchar9","count":1}]
+72	[{"item":null,"count":2},{"item":"varchar8","count":2},{"item":"varchar9","count":1}]
+73	[{"item":null,"count":2},{"item":"varchar8","count":2},{"item":"varchar9","count":1}]
+81	[{"item":null,"count":2},{"item":"varchar8","count":2},{"item":"varchar9","count":1}]
+82	[{"item":null,"count":2},{"item":"varchar8","count":2},{"item":"varchar9","count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_date) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":"2021-01-08","count":2},{"item":"2021-01-09","count":1}]
+72	[{"item":null,"count":2},{"item":"2021-01-08","count":2},{"item":"2021-01-09","count":1}]
+73	[{"item":null,"count":2},{"item":"2021-01-08","count":2},{"item":"2021-01-09","count":1}]
+81	[{"item":null,"count":2},{"item":"2021-01-08","count":2},{"item":"2021-01-09","count":1}]
+82	[{"item":null,"count":2},{"item":"2021-01-08","count":2},{"item":"2021-01-09","count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_datetime) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":"2021-01-08 00:00:00","count":2},{"item":"2021-01-09 00:00:00","count":1}]
+72	[{"item":null,"count":2},{"item":"2021-01-08 00:00:00","count":2},{"item":"2021-01-09 00:00:00","count":1}]
+73	[{"item":null,"count":2},{"item":"2021-01-08 00:00:00","count":2},{"item":"2021-01-09 00:00:00","count":1}]
+81	[{"item":null,"count":2},{"item":"2021-01-08 00:00:00","count":2},{"item":"2021-01-09 00:00:00","count":1}]
+82	[{"item":null,"count":2},{"item":"2021-01-08 00:00:00","count":2},{"item":"2021-01-09 00:00:00","count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_decimal) over() FROM t_with_null WHERE c_id >= 71 AND c_id <= 90 ORDER BY c_id;
+-- result:
+71	[{"item":null,"count":2},{"item":888.880,"count":2},{"item":999.990,"count":1}]
+72	[{"item":null,"count":2},{"item":888.880,"count":2},{"item":999.990,"count":1}]
+73	[{"item":null,"count":2},{"item":888.880,"count":2},{"item":999.990,"count":1}]
+81	[{"item":null,"count":2},{"item":888.880,"count":2},{"item":999.990,"count":1}]
+82	[{"item":null,"count":2},{"item":888.880,"count":2},{"item":999.990,"count":1}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_tinyint) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_smallint) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_int) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bigint) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_largeint) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_float) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_double) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_char) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_varchar) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_date) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_datetime) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_decimal) over() FROM t_with_null WHERE c_id > 100 ORDER BY c_id;
+-- result:
+101	[{"item":null,"count":3}]
+102	[{"item":null,"count":3}]
+103	[{"item":null,"count":3}]
+-- !result
+-- name: test_approx_top_k_with_partition
+CREATE TABLE `t_partition` (
+  `c_id` INT(11) NULL,
+  `c_partition` INT(11) NULL,
+  `c_int` INT(11) NULL,
+  `c_tinyint` TINYINT NULL,
+  `c_smallint` SMALLINT NULL,
+  `c_bigint` BIGINT NULL,
+  `c_largeint` LARGEINT NULL,
+  `c_float` FLOAT NULL,
+  `c_double` DOUBLE NULL,
+  `c_char` CHAR(10) NULL,
+  `c_varchar` VARCHAR(100) NULL,
+  `c_date` DATE NULL,
+  `c_datetime` DATETIME NULL,
+  `c_decimal` DECIMAL64(9,3) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t_partition` (
+  `c_id`, `c_partition`, `c_tinyint`, `c_smallint`, `c_int`, `c_bigint`, `c_largeint`, `c_float`, `c_double`, `c_char`, `c_varchar`, `c_date`, `c_datetime`, `c_decimal`) 
+VALUES 
+  -- Partition 1
+  (1, 1, NULL, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', NULL, 111.11),
+  (2, 1, 1, NULL, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', NULL, '2021-01-01 00:00:00', NULL),
+  (3, 1, 1, 11, NULL, 1111, 11111, 1.1, 11.11, 'char1', NULL, '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (4, 1, 1, 11, 111, NULL, 11111, 1.1, 11.11, NULL, 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (5, 1, 1, 11, 111, 1111, NULL, 1.1, NULL, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (6, 1, 1, 11, 111, 1111, 11111, NULL, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+
+  (7, 1, NULL, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', NULL, '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (8, 1, 2, NULL, 222, 2222, 22222, 2.2, 22.22, NULL, 'varchar2', NULL, '2021-01-02 00:00:00', 222.22),
+  (9, 1, 2, 22, NULL, 2222, 22222, 2.2, NULL, 'char2', 'varchar2', '2021-01-02', NULL, 222.22),
+  (10, 1, 2, 22, 222, NULL, 22222, NULL, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', NULL),
+  (11, 1, 2, 22, 222, 2222, NULL, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+
+  (12, 1, NULL, 33, 333, 3333, 33333, 3.3, NULL, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (13, 1, 3, NULL, 333, 3333, 33333, NULL, 33.33, NULL, 'varchar3', '2021-01-03', '2021-01-03 00:00:00', NULL),
+  (14, 1, 3, 33, NULL, 3333, NULL, 3.3, 33.33, 'char3', NULL, '2021-01-03', NULL, 333.33),
+  (15, 1, 3, 33, 333, NULL, 33333, 3.3, 33.33, 'char3', 'varchar3', NULL, '2021-01-03 00:00:00', 333.33),
+
+  (16, 1, NULL, 44, 444, 4444, NULL, 4.4, 44.44, 'char4', NULL, '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (17, 1, 4, NULL, 444, NULL, 44444, NULL, 44.44, NULL, 'varchar4', NULL, '2021-01-04 00:00:00', NULL),
+  (18, 1, 4, 44, NULL, 4444, 44444, 4.4, NULL, 'char4', 'varchar4', '2021-01-04', NULL, 444.44),
+
+  (19, 1, NULL, 55, NULL, 5555, NULL, 5.5, NULL, 'char5', NULL, '2021-01-05', NULL, 555.55),
+  (20, 1, 5, NULL, 555, NULL, 55555, NULL, 55.55, NULL, 'varchar5', NULL, '2021-01-05 00:00:00', NULL),
+
+  (21, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+
+  -- Partition 2
+  (31, 2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (32, 2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (33, 2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (34, 2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (35, 2, 1, 11, 111, 1111, 11111, 1.1, 11.11, 'char1', 'varchar1', '2021-01-01', '2021-01-01 00:00:00', 111.11),
+  (36, 2, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (37, 2, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (38, 2, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (39, 2, 2, 22, 222, 2222, 22222, 2.2, 22.22, 'char2', 'varchar2', '2021-01-02', '2021-01-02 00:00:00', 222.22),
+  (40, 2, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (41, 2, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (42, 2, 3, 33, 333, 3333, 33333, 3.3, 33.33, 'char3', 'varchar3', '2021-01-03', '2021-01-03 00:00:00', 333.33),
+  (43, 2, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (44, 2, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
+  (45, 2, 5, 55, 555, 5555, 55555, 5.5, 55.55, 'char5', 'varchar5', '2021-01-05', '2021-01-05 00:00:00', 555.55),
+
+  (51, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (52, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (53, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (54, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+  (55, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+-- result:
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_tinyint) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1,"count":5},{"item":2,"count":4},{"item":3,"count":3},{"item":4,"count":2}]
+2	[{"item":1,"count":5},{"item":2,"count":4},{"item":3,"count":3},{"item":4,"count":2},{"item":5,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_smallint) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11,"count":5},{"item":22,"count":4},{"item":33,"count":3},{"item":44,"count":2}]
+2	[{"item":11,"count":5},{"item":22,"count":4},{"item":33,"count":3},{"item":44,"count":2},{"item":55,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_int) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_bigint) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1111,"count":5},{"item":2222,"count":4},{"item":3333,"count":3},{"item":4444,"count":2}]
+2	[{"item":1111,"count":5},{"item":2222,"count":4},{"item":3333,"count":3},{"item":4444,"count":2},{"item":5555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_largeint) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11111,"count":5},{"item":22222,"count":4},{"item":33333,"count":3},{"item":44444,"count":2}]
+2	[{"item":11111,"count":5},{"item":22222,"count":4},{"item":33333,"count":3},{"item":44444,"count":2},{"item":55555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_float) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1.1,"count":5},{"item":2.2,"count":4},{"item":3.3,"count":3},{"item":4.4,"count":2}]
+2	[{"item":1.1,"count":5},{"item":2.2,"count":4},{"item":3.3,"count":3},{"item":4.4,"count":2},{"item":5.5,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_double) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11.11,"count":5},{"item":22.22,"count":4},{"item":33.33,"count":3},{"item":44.44,"count":2}]
+2	[{"item":11.11,"count":5},{"item":22.22,"count":4},{"item":33.33,"count":3},{"item":44.44,"count":2},{"item":55.55,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_char) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"char1","count":5},{"item":"char2","count":4},{"item":"char3","count":3},{"item":"char4","count":2}]
+2	[{"item":"char1","count":5},{"item":"char2","count":4},{"item":"char3","count":3},{"item":"char4","count":2},{"item":"char5","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_varchar) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_date) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4},{"item":"2021-01-03","count":3},{"item":"2021-01-04","count":2}]
+2	[{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4},{"item":"2021-01-03","count":3},{"item":"2021-01-04","count":2},{"item":"2021-01-05","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_datetime) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3},{"item":"2021-01-04 00:00:00","count":2}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3},{"item":"2021-01-04 00:00:00","count":2},{"item":"2021-01-05 00:00:00","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_decimal) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111.110,"count":5},{"item":222.220,"count":4},{"item":333.330,"count":3},{"item":444.440,"count":2}]
+2	[{"item":111.110,"count":5},{"item":222.220,"count":4},{"item":333.330,"count":3},{"item":444.440,"count":2},{"item":555.550,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_tinyint, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1,"count":5},{"item":2,"count":4},{"item":3,"count":3},{"item":4,"count":2},{"item":5,"count":1}]
+2	[{"item":1,"count":5},{"item":2,"count":4},{"item":3,"count":3},{"item":4,"count":2},{"item":5,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_smallint, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11,"count":5},{"item":22,"count":4},{"item":33,"count":3},{"item":44,"count":2},{"item":55,"count":1}]
+2	[{"item":11,"count":5},{"item":22,"count":4},{"item":33,"count":3},{"item":44,"count":2},{"item":55,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_int, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_bigint, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1111,"count":5},{"item":2222,"count":4},{"item":3333,"count":3},{"item":4444,"count":2},{"item":5555,"count":1}]
+2	[{"item":1111,"count":5},{"item":2222,"count":4},{"item":3333,"count":3},{"item":4444,"count":2},{"item":5555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_largeint, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11111,"count":5},{"item":22222,"count":4},{"item":33333,"count":3},{"item":44444,"count":2},{"item":55555,"count":1}]
+2	[{"item":11111,"count":5},{"item":22222,"count":4},{"item":33333,"count":3},{"item":44444,"count":2},{"item":55555,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_float, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1.1,"count":5},{"item":2.2,"count":4},{"item":3.3,"count":3},{"item":4.4,"count":2},{"item":5.5,"count":1}]
+2	[{"item":1.1,"count":5},{"item":2.2,"count":4},{"item":3.3,"count":3},{"item":4.4,"count":2},{"item":5.5,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_double, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11.11,"count":5},{"item":22.22,"count":4},{"item":33.33,"count":3},{"item":44.44,"count":2},{"item":55.55,"count":1}]
+2	[{"item":11.11,"count":5},{"item":22.22,"count":4},{"item":33.33,"count":3},{"item":44.44,"count":2},{"item":55.55,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_char, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"char1","count":5},{"item":"char2","count":4},{"item":"char3","count":3},{"item":"char4","count":2},{"item":"char5","count":1}]
+2	[{"item":"char1","count":5},{"item":"char2","count":4},{"item":"char3","count":3},{"item":"char4","count":2},{"item":"char5","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_varchar, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_date, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4},{"item":"2021-01-03","count":3},{"item":"2021-01-04","count":2},{"item":"2021-01-05","count":1}]
+2	[{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4},{"item":"2021-01-03","count":3},{"item":"2021-01-04","count":2},{"item":"2021-01-05","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_datetime, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3},{"item":"2021-01-04 00:00:00","count":2},{"item":"2021-01-05 00:00:00","count":1}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3},{"item":"2021-01-04 00:00:00","count":2},{"item":"2021-01-05 00:00:00","count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_decimal, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111.110,"count":5},{"item":222.220,"count":4},{"item":333.330,"count":3},{"item":444.440,"count":2},{"item":555.550,"count":1}]
+2	[{"item":111.110,"count":5},{"item":222.220,"count":4},{"item":333.330,"count":3},{"item":444.440,"count":2},{"item":555.550,"count":1}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_tinyint, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1,"count":5},{"item":2,"count":4}]
+2	[{"item":1,"count":5},{"item":2,"count":4},{"item":3,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_smallint, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11,"count":5},{"item":22,"count":4}]
+2	[{"item":11,"count":5},{"item":22,"count":4},{"item":33,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_int, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_bigint, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1111,"count":5},{"item":2222,"count":4}]
+2	[{"item":1111,"count":5},{"item":2222,"count":4},{"item":3333,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_largeint, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11111,"count":5},{"item":22222,"count":4}]
+2	[{"item":11111,"count":5},{"item":22222,"count":4},{"item":33333,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_float, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":1.1,"count":5},{"item":2.2,"count":4}]
+2	[{"item":1.1,"count":5},{"item":2.2,"count":4},{"item":3.3,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_double, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":11.11,"count":5},{"item":22.22,"count":4}]
+2	[{"item":11.11,"count":5},{"item":22.22,"count":4},{"item":33.33,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_char, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"char1","count":5},{"item":"char2","count":4}]
+2	[{"item":"char1","count":5},{"item":"char2","count":4},{"item":"char3","count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_varchar, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_date, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4}]
+2	[{"item":"2021-01-01","count":5},{"item":"2021-01-02","count":4},{"item":"2021-01-03","count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_datetime, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_decimal, 3, 10) FROM t_partition GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111.110,"count":5},{"item":222.220,"count":4}]
+2	[{"item":111.110,"count":5},{"item":222.220,"count":4},{"item":333.330,"count":3}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_int) OVER(PARTITION BY c_partition) FROM t_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+1	[{"item":null,"count":6},{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+2	[{"item":111,"count":5},{"item":222,"count":4},{"item":333,"count":3},{"item":444,"count":2},{"item":555,"count":1}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_varchar, 10) OVER(PARTITION BY c_partition) FROM t_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+1	[{"item":null,"count":6},{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+2	[{"item":"varchar1","count":5},{"item":"varchar2","count":4},{"item":"varchar3","count":3},{"item":"varchar4","count":2},{"item":"varchar5","count":1}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_datetime, 3, 10) OVER(PARTITION BY c_partition) FROM t_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+1	[{"item":null,"count":6},{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+2	[{"item":"2021-01-01 00:00:00","count":5},{"item":"2021-01-02 00:00:00","count":4},{"item":"2021-01-03 00:00:00","count":3}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_decimal, 1) OVER(PARTITION BY c_partition) FROM t_partition ORDER BY c_partition;
+-- result:
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+1	[{"item":null,"count":6}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+2	[{"item":111.110,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT APPROX_TOP_K(c_decimal) FROM t_partition WHERE c_id > 10000;
+-- result:
+[]
+-- !result
+SELECT APPROX_TOP_K(c_decimal) FROM t_partition WHERE c_id > 10000 GROUP BY c_partition;
+-- result:
+-- !result
+SELECT APPROX_TOP_K(c_decimal) over() FROM t_partition WHERE c_id > 10000;
+-- result:
+-- !result
+-- name: test_approx_top_k_for_boolean
+CREATE TABLE `t_bool` (
+  `c_id` INT(11) NOT NULL,
+  `c_partition` INT(11) NOT NULL,
+  `c_bool` BOOLEAN NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t_bool` (
+  `c_id`, `c_partition`, `c_bool`) 
+VALUES 
+  -- Partition 1
+  (1, 1, true),
+  (2, 1, true),
+  (3, 1, true),
+  (4, 1, true),
+  (5, 1, NULL),
+  (6, 1, true),
+  (7, 1, false),
+  (8, 1, false),
+  (9, 1, NULL),
+  (10, 1, false),
+  (11, 1, false),
+
+  -- Partition 2
+  (21, 2, true),
+  (22, 2, true),
+  (23, 2, true),
+  (24, 2, true),
+  (25, 2, true),
+  (26, 2, false),
+  (27, 2, false),
+  (28, 2, false),
+  (29, 2, false),
+
+  -- Partition 3
+  (31, 3, NULL),
+  (32, 3, NULL),
+  (33, 3, NULL),
+  (34, 3, NULL),
+  (35, 3, NULL);
+-- result:
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ APPROX_TOP_K(c_bool) FROM t_bool;
+-- result:
+[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ APPROX_TOP_K(c_bool, 1) FROM t_bool;
+-- result:
+[{"item":1,"count":10}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ APPROX_TOP_K(c_bool, 3, 100) FROM t_bool;
+-- result:
+[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_partition, APPROX_TOP_K(c_bool) FROM t_bool GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_partition, APPROX_TOP_K(c_bool, 1) FROM t_bool GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5}]
+2	[{"item":1,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_partition, APPROX_TOP_K(c_bool, 3, 100) FROM t_bool GROUP BY c_partition ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bool) OVER() FROM t_bool ORDER BY c_id;
+-- result:
+1	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+2	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+3	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+4	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+5	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+6	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+7	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+8	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+9	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+10	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+11	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+21	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+22	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+23	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+24	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+25	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+26	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+27	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+28	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+29	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+31	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+32	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+33	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+34	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+35	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bool, 10) OVER() FROM t_bool ORDER BY c_id;
+-- result:
+1	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+2	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+3	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+4	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+5	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+6	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+7	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+8	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+9	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+10	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+11	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+21	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+22	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+23	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+24	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+25	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+26	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+27	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+28	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+29	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+31	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+32	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+33	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+34	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+35	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+-- !result
+SELECT c_id, APPROX_TOP_K(c_bool, 3, 10) OVER() FROM t_bool ORDER BY c_id;
+-- result:
+1	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+2	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+3	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+4	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+5	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+6	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+7	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+8	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+9	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+10	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+11	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+21	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+22	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+23	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+24	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+25	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+26	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+27	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+28	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+29	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+31	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+32	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+33	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+34	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+35	[{"item":1,"count":10},{"item":0,"count":8},{"item":null,"count":7}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_bool) OVER(PARTITION BY c_partition) FROM t_bool ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_bool, 10) OVER(PARTITION BY c_partition) FROM t_bool ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+SELECT c_partition, APPROX_TOP_K(c_bool, 3, 10) OVER(PARTITION BY c_partition) FROM t_bool ORDER BY c_partition;
+-- result:
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+1	[{"item":1,"count":5},{"item":0,"count":4},{"item":null,"count":2}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+2	[{"item":1,"count":5},{"item":0,"count":4}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+3	[{"item":null,"count":5}]
+-- !result
+-- name: test_approx_top_k_tpch
+function: prepare_data("tpch", "${db[0]}")
+-- result:
+None
+-- !result
+SELECT APPROX_TOP_K(L_LINENUMBER) FROM lineitem;
+-- result:
+[{"item":1,"count":1500000},{"item":2,"count":1285828},{"item":3,"count":1071394},{"item":4,"count":857015},{"item":5,"count":643287}]
+-- !result
+SELECT APPROX_TOP_K(L_LINENUMBER, 1) FROM lineitem;
+-- result:
+[{"item":1,"count":1500000}]
+-- !result
+SELECT APPROX_TOP_K(L_LINENUMBER, 10) FROM lineitem;
+-- result:
+[{"item":1,"count":1500000},{"item":2,"count":1285828},{"item":3,"count":1071394},{"item":4,"count":857015},{"item":5,"count":643287},{"item":6,"count":429070},{"item":7,"count":214621}]
+-- !result
+SELECT L_RETURNFLAG, APPROX_TOP_K(L_LINENUMBER) FROM lineitem GROUP BY L_RETURNFLAG ORDER BY L_RETURNFLAG;
+-- result:
+A	[{"item":1,"count":368853},{"item":2,"count":316830},{"item":3,"count":263950},{"item":4,"count":211270},{"item":5,"count":158495}]
+N	[{"item":1,"count":761151},{"item":2,"count":652280},{"item":3,"count":543265},{"item":4,"count":434834},{"item":5,"count":326135}]
+R	[{"item":1,"count":369996},{"item":2,"count":316718},{"item":3,"count":264179},{"item":4,"count":210911},{"item":5,"count":158657}]
+-- !result
+SELECT L_RETURNFLAG, APPROX_TOP_K(L_LINENUMBER, 2) FROM lineitem GROUP BY L_RETURNFLAG ORDER BY L_RETURNFLAG;
+-- result:
+A	[{"item":1,"count":368853},{"item":2,"count":316830}]
+N	[{"item":1,"count":761151},{"item":2,"count":652280}]
+R	[{"item":1,"count":369996},{"item":2,"count":316718}]
+-- !result
+SELECT L_RETURNFLAG, APPROX_TOP_K(L_LINENUMBER, 20) FROM lineitem GROUP BY L_RETURNFLAG ORDER BY L_RETURNFLAG;
+-- result:
+A	[{"item":1,"count":368853},{"item":2,"count":316830},{"item":3,"count":263950},{"item":4,"count":211270},{"item":5,"count":158495},{"item":6,"count":105900},{"item":7,"count":53195}]
+N	[{"item":1,"count":761151},{"item":2,"count":652280},{"item":3,"count":543265},{"item":4,"count":434834},{"item":5,"count":326135},{"item":6,"count":217374},{"item":7,"count":108813}]
+R	[{"item":1,"count":369996},{"item":2,"count":316718},{"item":3,"count":264179},{"item":4,"count":210911},{"item":5,"count":158657},{"item":6,"count":105796},{"item":7,"count":52613}]
+-- !result
+-- name: test_approx_top_k_const
+SELECT approx_top_k(col1) FROM (VALUES (1)) AS tmp(col1);
+-- result:
+[{"item":1,"count":1}]
+-- !result
+SELECT approx_top_k(col1) FROM (VALUES (1),(1),(1),(1),(1),(1)) AS tmp(col1);
+-- result:
+[{"item":1,"count":6}]
+-- !result
+SELECT approx_top_k(1);
+-- result:
+[{"item":1,"count":1}]
+-- !result

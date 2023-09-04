@@ -17,7 +17,7 @@ create table customer_address
 duplicate key(ca_address_sk)
 distributed by hash(ca_address_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table customer_demographics
@@ -35,7 +35,7 @@ create table customer_demographics
 duplicate key (cd_demo_sk)
 distributed by hash(cd_demo_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table date_dim
@@ -72,7 +72,7 @@ create table date_dim
 duplicate key (d_date_sk)
 distributed by hash(d_date_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table warehouse
@@ -95,7 +95,7 @@ create table warehouse
 duplicate key (w_warehouse_sk)
 distributed by hash(w_warehouse_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table ship_mode
@@ -110,7 +110,7 @@ create table ship_mode
 duplicate key (sm_ship_mode_sk)
 distributed by hash(sm_ship_mode_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table time_dim
@@ -129,7 +129,7 @@ create table time_dim
 duplicate key (t_time_sk)
 distributed by hash(t_time_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table reason
@@ -141,7 +141,7 @@ create table reason
 duplicate key (r_reason_sk)
 distributed by hash(r_reason_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table income_band
@@ -153,7 +153,7 @@ create table income_band
 duplicate key (ib_income_band_sk)
 distributed by hash(ib_income_band_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table item
@@ -184,7 +184,7 @@ create table item
 duplicate key (i_item_sk)
 distributed by hash(i_item_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table store
@@ -222,7 +222,7 @@ create table store
 duplicate key (s_store_sk)
 distributed by hash(s_store_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table call_center
@@ -262,7 +262,7 @@ create table call_center
 duplicate key (cc_call_center_sk)
 distributed by hash(cc_call_center_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table customer
@@ -289,7 +289,7 @@ create table customer
 duplicate key (c_customer_sk)
 distributed by hash(c_customer_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table web_site
@@ -324,7 +324,7 @@ create table web_site
 duplicate key (web_site_sk)
 distributed by hash(web_site_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table store_returns
@@ -353,7 +353,7 @@ create table store_returns
 duplicate key (sr_item_sk, sr_ticket_number)
 distributed by hash(sr_item_sk, sr_ticket_number) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table household_demographics
@@ -367,7 +367,7 @@ create table household_demographics
 duplicate key (hd_demo_sk)
 distributed by hash(hd_demo_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table web_page
@@ -390,7 +390,7 @@ create table web_page
 duplicate key (wp_web_page_sk)
 distributed by hash(wp_web_page_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table promotion
@@ -418,7 +418,7 @@ create table promotion
 duplicate key (p_promo_sk)
 distributed by hash(p_promo_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table catalog_page
@@ -436,7 +436,7 @@ create table catalog_page
 duplicate key (cp_catalog_page_sk)
 distributed by hash(cp_catalog_page_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table inventory
@@ -449,7 +449,7 @@ create table inventory
 duplicate key (inv_date_sk, inv_item_sk, inv_warehouse_sk)
 distributed by hash(inv_date_sk, inv_item_sk, inv_warehouse_sk) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table catalog_returns
@@ -485,7 +485,7 @@ create table catalog_returns
 duplicate key (cr_item_sk, cr_order_number)
 distributed by hash(cr_item_sk, cr_order_number) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table web_returns
@@ -518,7 +518,7 @@ create table web_returns
 duplicate key (wr_item_sk, wr_order_number)
 distributed by hash(wr_item_sk, wr_order_number) buckets 5
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table web_sales
@@ -561,7 +561,7 @@ create table web_sales
 duplicate key (ws_item_sk, ws_order_number)
 distributed by hash(ws_item_sk, ws_order_number) buckets 192
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table catalog_sales
@@ -604,7 +604,7 @@ create table catalog_sales
 duplicate key (cs_item_sk, cs_order_number)
 distributed by hash(cs_item_sk, cs_order_number) buckets 192
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 
 create table store_sales
@@ -636,6 +636,6 @@ create table store_sales
 duplicate key (ss_item_sk, ss_ticket_number)
 distributed by hash(ss_item_sk, ss_ticket_number) buckets 192
 properties(
-    "replication_num" = "3"
+    "replication_num" = "1"
 );
 

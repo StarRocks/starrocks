@@ -57,6 +57,8 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
                     .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).add(FunctionSet.ARRAY_AGG_DISTINCT)
+                    .add(FunctionSet.ANY_VALUE)
+                    .add(FunctionSet.APPROX_TOP_K)
                     .add(FunctionSet.HISTOGRAM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
@@ -197,6 +199,8 @@ public class DecimalV3FunctionAnalyzer {
                         ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType,
                                 DECIMAL128P38S0);
                 returnType = triple.returnType;
+            } else if (fn.functionName().equals(FunctionSet.APPROX_TOP_K)) {
+                returnType = FunctionSet.APPROX_TOP_N_RET_TYPE_BUILDER.apply(argType);
             } else if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fn.functionName())) {
                 returnType = argType;
             } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {

@@ -24,6 +24,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
@@ -32,13 +33,22 @@
 namespace starrocks {
 
 template <typename T>
-constexpr bool IsWindowFunctionSliceState = false;
+constexpr bool IsUnresizableWindowFunctionState = false;
 
 template <>
-inline constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsUnresizableWindowFunctionState<MaxAggregateData<TYPE_VARCHAR>> = true;
 
 template <>
-inline constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsUnresizableWindowFunctionState<MinAggregateData<TYPE_VARCHAR>> = true;
+
+template <LogicalType LT>
+inline constexpr bool IsUnresizableWindowFunctionState<ApproxTopKState<LT>> = true;
+
+template <typename T>
+constexpr bool IsNeverNullFunctionState = false;
+
+template <LogicalType LT>
+inline constexpr bool IsNeverNullFunctionState<ApproxTopKState<LT>> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"
@@ -150,11 +160,18 @@ public:
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {
-                dst_nullable_column->set_has_null(true);
+                if constexpr (!IsNeverNullFunctionState<State>) {
+                    dst_nullable_column->set_has_null(true);
+                }
                 const NullData& src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
-                    dst_nullable_column->append_nulls(chunk_size);
+                    if constexpr (IsNeverNullFunctionState<NestedState>) {
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
+                                                                     &dst_nullable_column->data_column());
+                    } else {
+                        dst_nullable_column->append_nulls(chunk_size);
+                    }
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
                     dst_null_data = src_null_data;
@@ -191,16 +208,16 @@ public:
         // binary column couldn't call resize method like Numeric Column
         // for non-slice type, null column data has been reset to zero in AnalyticNode
         // for slice type, we need to emplace back null data
-        if (!this->data(state).is_null) {
+        if (IsNeverNullFunctionState<NestedState> || !this->data(state).is_null) {
             nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
                                         start, end);
-            if constexpr (IsWindowFunctionSliceState<NestedState>) {
+            if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
                 NullData& null_data = nullable_column->null_column_data();
                 null_data.insert(null_data.end(), end - start, 0);
             }
         } else {
             NullData& null_data = nullable_column->null_column_data();
-            if constexpr (IsWindowFunctionSliceState<NestedState>) {
+            if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
                 nullable_column->append_nulls(end - start);
             } else {
                 for (size_t i = start; i < end; ++i) {
