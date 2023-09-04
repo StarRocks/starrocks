@@ -21,14 +21,14 @@
 
 package com.starrocks.external.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.codehaus.jackson.JsonParser;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 
 import java.util.ArrayList;

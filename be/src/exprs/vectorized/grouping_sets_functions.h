@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exprs/vectorized/function_helper.h"
 #include "geo/geo_common.h"
 #include "udf/udf.h"
 
@@ -16,13 +17,13 @@ public:
      * @param: [bigint]
      * Returns the grouping_id of columns
      */
-    static ColumnPtr grouping_id(FunctionContext* context, const Columns& columns);
+    DEFINE_VECTORIZED_FN(grouping_id);
 
     /**
      * @param: [bigint]
      * Returns the grouping_id
      */
-    static ColumnPtr grouping(FunctionContext* context, const Columns& columns);
+    DEFINE_VECTORIZED_FN(grouping);
 };
 
 } // namespace vectorized

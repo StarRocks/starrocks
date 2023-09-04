@@ -42,7 +42,6 @@ public class Replica implements Writable {
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
 
     public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
-    public static final int DEPRECATED_PROP_PATH_HASH = 0;
 
     public enum ReplicaState {
         NORMAL,
@@ -91,6 +90,12 @@ public class Replica implements Writable {
     //      causing `version not found` error
     @SerializedName(value = "minReadableVersion")
     private volatile long minReadableVersion = 0;
+
+    // The last version reported from BE, this version should be increased monotonically.
+    // Use this version to detect data lose on BE.
+    // This version is only accessed by ReportHandler, so lock is unnecessary when updating.
+    private volatile long lastReportVersion = 0;
+
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -522,6 +527,10 @@ public class Replica implements Writable {
         strBuffer.append(version);
         strBuffer.append(", versionHash=");
         strBuffer.append(0);
+        strBuffer.append(", minReadableVersion=");
+        strBuffer.append(minReadableVersion);
+        strBuffer.append(", lastReportVersion=");
+        strBuffer.append(lastReportVersion);
         strBuffer.append(", dataSize=");
         strBuffer.append(dataSize);
         strBuffer.append(", rowCount=");
@@ -627,5 +636,13 @@ public class Replica implements Writable {
 
     public long getWatermarkTxnId() {
         return watermarkTxnId;
+    }
+
+    public void setLastReportVersion(long lastReportVersion) {
+        this.lastReportVersion = lastReportVersion;
+    }
+
+    public long getLastReportVersion() {
+        return this.lastReportVersion;
     }
 }

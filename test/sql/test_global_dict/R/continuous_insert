@@ -1,0 +1,40 @@
+-- name: test_continuous_insert
+CREATE TABLE `allstring` (
+  `v1` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
+-- result:
+-- !result
+analyze full table allstring;
+-- result:
+-- !result
+function: wait_global_dict_ready('v1', 'allstring')
+-- result:
+
+-- !result
+insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
+-- result:
+-- !result
+function: assert_has_global_dict('v1', 'allstring')
+-- result:
+None
+-- !result
+insert into allstring select * from (select 'C8' union select 'A10' union select 1 ) tb;
+-- result:
+-- !result
+function: assert_no_global_dict('v1', 'allstring')
+-- result:
+None
+-- !result

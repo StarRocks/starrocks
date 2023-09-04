@@ -27,6 +27,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TStatus;
@@ -148,6 +150,36 @@ public final class QeProcessorImpl implements QeProcessor {
     }
 
     @Override
+    public TReportAuditStatisticsResult reportAuditStatistics(TReportAuditStatisticsParams params, TNetworkAddress beAddr) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("reportAuditStatistics(): fragment_instance_id={}, query_id={}, ip: {}",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id), beAddr);
+            LOG.debug("params: {}", params);
+        }
+        final TReportAuditStatisticsResult result = new TReportAuditStatisticsResult();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.info("reportAuditStatistics() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
+            result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
+            return result;
+        }
+        try {
+            info.getCoord().updateAuditStatistics(params);
+        } catch (Exception e) {
+            LOG.warn("reportAuditStatistics() failed, fragment_instance_id={}, query_id={}, error: {}",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id), e.getMessage(),
+                    e);
+            result.setStatus(new TStatus(TStatusCode.INTERNAL_ERROR));
+            result.status.addToError_msgs(e.getMessage());
+            return result;
+        }
+        result.setStatus(new TStatus(TStatusCode.OK));
+        return result;
+    }
+
+    @Override
     public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams paramsList, TNetworkAddress beAddr) {
         TBatchReportExecStatusResult resultList = new TBatchReportExecStatusResult();
         Iterator<TReportExecStatusParams> iters = paramsList.getParams_listIterator();
@@ -186,6 +218,11 @@ public final class QeProcessorImpl implements QeProcessor {
         }
 
         return resultList;
+    }
+
+    @Override
+    public long getCoordinatorCount() {
+        return coordinatorMap.size();
     }
 
     public static final class QueryInfo {

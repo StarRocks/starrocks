@@ -188,6 +188,7 @@ ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_t
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
         _replicate_channels.emplace_back(std::make_unique<ReplicateChannel>(
                 opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id()));
+        _replica_node_ids.emplace_back(opt->replicas[i].node_id());
     }
     if (opt->write_quorum == WriteQuorumTypePB::ONE) {
         _max_fail_replica_num = opt->replicas.size();

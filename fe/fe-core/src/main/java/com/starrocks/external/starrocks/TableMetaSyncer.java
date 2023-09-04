@@ -4,6 +4,7 @@ package com.starrocks.external.starrocks;
 
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -17,7 +18,7 @@ import org.apache.logging.log4j.Logger;
 public class TableMetaSyncer {
     private static final Logger LOG = LogManager.getLogger(TableMetaSyncer.class);
 
-    public void syncTable(ExternalOlapTable table) {
+    public void syncTable(ExternalOlapTable table) throws MetaNotFoundException {
         String host = table.getSourceTableHost();
         int port = table.getSourceTablePort();
         TNetworkAddress addr = new TNetworkAddress(host, port);
@@ -37,11 +38,13 @@ public class TableMetaSyncer {
                     errMsg = "";
                 }
                 LOG.warn("get TableMeta failed: {}", errMsg);
+                throw new MetaNotFoundException(errMsg);
             } else {
                 table.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
             }
         } catch (Exception e) {
             LOG.warn("call fe {} refreshTable rpc method failed", addr, e);
+            throw new MetaNotFoundException("get TableMeta failed from " + addr + ", error: " + e.getMessage());
         }
     }
-};
+}

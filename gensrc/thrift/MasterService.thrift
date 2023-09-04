@@ -50,6 +50,7 @@ struct TTabletInfo {
     // skip num 17 because num 17 is used in later version, so we skip it in 
     // order to support degrade
     18: optional bool is_error_state
+    19: optional Types.TVersion max_readable_version
 }
 
 struct TTabletVersionPair {
@@ -75,6 +76,7 @@ struct TFinishTaskRequest {
     15: optional i64 copy_size
     16: optional i64 copy_time_ms
     17: optional list<TTabletVersionPair> tablet_versions;
+    18: optional list<TTabletVersionPair> tablet_publish_versions;
 }
 
 struct TTablet {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.SchemaTable;
+import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -53,6 +54,25 @@ public class InformationSchemaBeFeTableTest {
             Assert.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
             Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_metrics").getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testOnlyScanTargetedBE() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            for (int i = 0; i < 3; i++) {
+                long beId = 10001 + i;
+                PseudoBackend be = PseudoCluster.getInstance().getBackend(beId);
+                long oldCnt = be.getNumSchemaScan();
+                Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
+                long newCnt = be.getNumSchemaScan();
+                Assert.assertEquals(1, newCnt - oldCnt);
+            }
         } finally {
             stmt.close();
             connection.close();

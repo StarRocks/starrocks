@@ -156,4 +156,16 @@ public class JoinHelper {
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || JoinOperator.HINT_BROADCAST.equals(hint);
     }
+
+    public static boolean validateJoinExpr(OptExpression joinExpr) {
+        ColumnRefSet requiredCols = ((LogicalJoinOperator) joinExpr.getOp()).getRequiredChildInputColumns();
+        joinExpr.inputAt(0).deriveLogicalPropertyItself();
+        joinExpr.inputAt(1).deriveLogicalPropertyItself();
+
+        ColumnRefSet left = joinExpr.inputAt(0).getOutputColumns();
+        ColumnRefSet right = joinExpr.inputAt(1).getOutputColumns();
+        requiredCols.except(left);
+        requiredCols.except(right);
+        return requiredCols.isEmpty();
+    }
 }

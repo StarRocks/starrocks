@@ -231,9 +231,16 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
-            Analyzer.analyze(queryStatement, context);
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
+                QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+                Analyzer.analyze(queryStatement, context);
+            } else if (statement.getInsertStmt() != null) {
+                InsertStmt insertStmt = statement.getInsertStmt();
+                InsertAnalyzer.analyze(insertStmt, context);
+            } else {
+                throw new SemanticException("Submit task statement is not supported");
+            }
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);

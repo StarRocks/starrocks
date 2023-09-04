@@ -84,6 +84,8 @@ public class DataProperty implements Writable {
 
         Preconditions.checkState(mediumSet.size() <= 2, "current medium set: " + mediumSet);
         TStorageMedium m = TStorageMedium.SSD;
+        long cooldownTimeMs = MAX_COOLDOWN_TIME_MS;
+
         // When storage_medium property is not explicitly specified on creating table, we infer the storage medium type
         // based on the types of storage paths reported by backends. Here is the rules,
         //   1. If the storage paths reported by all the backends all have storage medium type HDD,
@@ -97,7 +99,20 @@ public class DataProperty implements Writable {
             m = TStorageMedium.HDD;
         }
 
-        return new DataProperty(m);
+        if (mediumSet.size() == 2) {
+            cooldownTimeMs = getSsdCooldownTimeMs();
+        }
+
+        return new DataProperty(m, cooldownTimeMs);
+    }
+
+    public static long getSsdCooldownTimeMs() {
+        long currentTimeMs = System.currentTimeMillis();
+        return ((Config.tablet_sched_storage_cooldown_second <= 0) ||
+                ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L <
+                        Config.tablet_sched_storage_cooldown_second)) ?
+                DataProperty.MAX_COOLDOWN_TIME_MS :
+                currentTimeMs + Config.tablet_sched_storage_cooldown_second * 1000L;
     }
 
     public TStorageMedium getStorageMedium() {

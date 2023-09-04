@@ -41,9 +41,10 @@ Optional. The properties of the data. Syntax:
 ```SQL
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
-[COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
+[COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>,...])]
+[PARTITION (<partition1_name>[, <partition2_name>, ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
 ```
 
 `COLUMNS TERMINATED BY`
@@ -83,6 +84,10 @@ If a StarRocks table is distributed on partitions p0, p1, p2 and p3, and you wan
 ```SQL
 PARTITION (p1, p2, p3)
 ```
+
+`TEMPORARY PARTITION`
+
+The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 ### `job_properties`
 
@@ -127,8 +132,9 @@ The properties of the data source.
 | ----------------- | -------- | ------------------------------------------------------------ |
 | kafka_broker_list | Yes      | Kafka's broker connection information. The format is `<kafka_broker_ip>:<broker_ port>`. Multiple brokers are separated by commas (,). The default port used by Kafka brokers is `9092`. Example:`"kafka_broker_list" = ""xxx.xx.xxx.xx:9092,xxx.xx.xxx.xx:9092"`. |
 | kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
-| kafka_partitions  | No       | The Kafka partitions to be consumed. If this property is not specified, all partitions are consumed by default. |
-| kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`:  consumes data starting from the latest offset.</li></ul> |
+| kafka_partitions  | No       | The Kafka partitions to be consumed, for example, `"kafka_partitions" = "0, 1, 2, 3"`. If this property is not specified, all partitions are consumed by default. |
+| kafka_offsets     | No       | The starting offset from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`: consumes data starting from the latest offset.</li></ul> Multiple starting offsets are separated by commas (,), for example, `"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"`.|
+| property.kafka_default_offsets| No| The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.|
 
 **More data source-related properties**
 
@@ -253,7 +259,7 @@ CREATE TABLE example_db.example_tbl1 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `gender` varchar(26) NULL COMMENT "Gender", 
     `price` double NULL COMMENT "Price") 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -327,7 +333,7 @@ CREATE TABLE example_db.example_tbl2 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `price` double NULL COMMENT "Price"
 ) 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(order_id) BUCKETS 5; 
 ```
 

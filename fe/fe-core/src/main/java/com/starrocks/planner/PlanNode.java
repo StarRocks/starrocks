@@ -45,6 +45,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -453,6 +454,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     protected String getColumnStatistics(String prefix) {
+        if (MapUtils.isEmpty(columnStatistics)) {
+            return "";
+        }
         StringBuilder outputBuilder = new StringBuilder();
         TreeMap<ColumnRefOperator, ColumnStatistic> sortMap =
                 new TreeMap<>(Comparator.comparingInt(ColumnRefOperator::getId));

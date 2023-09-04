@@ -238,6 +238,7 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
+    public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -283,6 +284,7 @@ public class OperationType {
 
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+    public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;

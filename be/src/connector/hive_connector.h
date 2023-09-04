@@ -58,12 +58,14 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
+    void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;

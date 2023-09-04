@@ -22,7 +22,7 @@ TEST_F(HashFunctionsTest, hashTest) {
         columns.emplace_back(tc1);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns);
+        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
 
@@ -41,7 +41,7 @@ TEST_F(HashFunctionsTest, hashTest) {
         columns.emplace_back(tc2);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns);
+        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
 
@@ -63,7 +63,7 @@ TEST_F(HashFunctionsTest, hashTest) {
         columns.emplace_back(tc3);
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns);
+        ColumnPtr result = HashFunctions::murmur_hash3_32(ctx.get(), columns).value();
 
         ASSERT_TRUE(result->is_null(0));
     }

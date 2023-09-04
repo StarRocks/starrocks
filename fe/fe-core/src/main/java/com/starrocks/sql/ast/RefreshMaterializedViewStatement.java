@@ -7,9 +7,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
+
     private final TableName mvName;
     private final PartitionRangeDesc partitionRangeDesc;
     private final boolean forceRefresh;
+    private final boolean isSync;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -18,10 +20,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh) {
+                                            boolean forceRefresh, boolean isSync) {
         this.mvName = mvName;
         this.partitionRangeDesc = partitionRangeDesc;
         this.forceRefresh = forceRefresh;
+        this.isSync = isSync;
     }
 
     public TableName getMvName() {
@@ -39,5 +42,9 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public boolean isForceRefresh() {
         return forceRefresh;
+    }
+
+    public boolean isSync() {
+        return isSync;
     }
 }

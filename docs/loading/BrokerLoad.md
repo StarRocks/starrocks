@@ -67,53 +67,57 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 #### Data examples
 
-1. In your StarRocks database `test_db`, create StarRocks tables.
-
-   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table1`
-   (
-       `id` int(11) NOT NULL COMMENT "user ID",
-       `name` varchar(65533) NULL DEFAULT "" COMMENT "user name",
-       `score` int(11) NOT NULL DEFAULT "0" COMMENT "user score"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
-
-   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
-
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table2`
-   (
-       `id` int(11) NOT NULL COMMENT "city ID",
-       `city` varchar(65533) NULL DEFAULT "" COMMENT "city name"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
-
-2. In your local file system, create CSV files.
+1. Create CSV files in your local file system.
 
    a. Create a CSV file named `file1.csv`. The file consists of three columns, which represent user ID, user name, and user score in sequence.
 
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
-   ```
+      ```Plain
+      1,Lily,23
+      2,Rose,23
+      3,Alice,24
+      4,Julia,25
+      ```
 
    b. Create a CSV file named `file2.csv`. The file consists of two columns, which represent city ID and city name in sequence.
 
-   ```Plain
-   200,'Beijing'
-   ```
+      ```Plain
+      200,'Beijing'
+      ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+2. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, to the `input` folder of your Google GCS bucket `bucket_gcs`, and to the `input` folder of your MinIO bucket `bucket_minio`.
+
+3. Create StarRocks tables in your StarRocks database `test_db`.
+
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+   a. Create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table1`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NULL DEFAULT "" COMMENT "user name",
+          `score` int(11) NOT NULL DEFAULT "0" COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+   b. Create a Primary Key table named `table2`. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table2`
+      (
+          `id` int(11) NOT NULL COMMENT "city ID",
+          `city` varchar(65533) NULL DEFAULT "" COMMENT "city name"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
 
 #### Load data from HDFS
 
@@ -375,8 +379,8 @@ In most cases, only one `data_desc` is declared for each load job, each load job
 
 ## Usage notes
 
-The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size` specifies the task pool size, namely, the maximum number of tasks that can be concurrently run for Broker Load within a specific time period in your StarRocks cluster.
+The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
-In StarRocks v2.4 and earlier, if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
+In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
 
-Since StarRocks v2.5,  if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.

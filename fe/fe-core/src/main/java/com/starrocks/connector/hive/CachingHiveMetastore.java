@@ -19,11 +19,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -51,8 +53,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public static final long NEVER_REFRESH = -1;
     private final boolean enableListNameCache;
     protected final IHiveMetastore metastore;
-
-    private Map<HiveTableName, Long> lastAccessTimeMap;
+    private final Map<HiveTableName, Long> lastAccessTimeMap;
+    // Used to synchronize the refreshTable process
+    protected final Map<HiveTableName, String> tableNameLockMap;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
@@ -89,6 +92,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+        this.tableNameLockMap = Maps.newConcurrentMap();
 
         databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -314,10 +318,33 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+    public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
                                                              boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
-        Table updatedTable = loadTable(hiveTableName);
+        tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
+        String lockStr = tableNameLockMap.get(hiveTableName);
+        synchronized (lockStr) {
+            return refreshTableWithoutSync(hiveDbName, hiveTblName, hiveTableName, onlyCachedPartitions);
+        }
+    }
+
+    public List<HivePartitionName> refreshTableWithoutSync(String hiveDbName, String hiveTblName,
+                                                           HiveTableName hiveTableName,
+                                                           boolean onlyCachedPartitions) {
+        Table updatedTable;
+        try {
+            updatedTable = loadTable(hiveTableName);
+        } catch (StarRocksConnectorException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof InvocationTargetException &&
+                    ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
+                invalidateTable(hiveDbName, hiveTblName);
+                throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+            } else {
+                throw e;
+            }
+        }
+
         tableCache.put(hiveTableName, updatedTable);
 
         List<String> updatedPartitionKeys = loadPartitionKeys(hiveTableName);

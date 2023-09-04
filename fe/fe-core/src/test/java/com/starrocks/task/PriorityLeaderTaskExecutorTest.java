@@ -2,6 +2,8 @@
 
 package com.starrocks.task;
 
+import com.starrocks.common.PriorityThreadPoolExecutor;
+import com.starrocks.common.jmockit.Deencapsulation;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -74,6 +76,24 @@ public class PriorityLeaderTaskExecutorTest {
         Assert.assertEquals(4L, SEQ.get(1).longValue());
         Assert.assertEquals(3L, SEQ.get(2).longValue());
         Assert.assertEquals(2L, SEQ.get(3).longValue());
+    }
+
+    @Test
+    public void testUpdatePoolSize() {
+        PriorityThreadPoolExecutor priorityExecutor = Deencapsulation.getField(executor, "executor");
+        Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
+        Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
+
+        // set from 1 to 2
+        int newThreadNum = THREAD_NUM + 1;
+        executor.setPoolSize(newThreadNum);
+        Assert.assertEquals(newThreadNum, executor.getCorePoolSize());
+        Assert.assertEquals(newThreadNum, priorityExecutor.getMaximumPoolSize());
+
+        // set from 2 to 1
+        executor.setPoolSize(THREAD_NUM);
+        Assert.assertEquals(THREAD_NUM, executor.getCorePoolSize());
+        Assert.assertEquals(THREAD_NUM, priorityExecutor.getMaximumPoolSize());
     }
 
     private class TestLeaderTask extends PriorityLeaderTask {

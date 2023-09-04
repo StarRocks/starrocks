@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <tuple>
 
@@ -27,10 +28,12 @@ class Column;
 enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
-    PERSISTENT_INDEX_VERSION_2
+    PERSISTENT_INDEX_VERSION_2,
+    PERSISTENT_INDEX_VERSION_3
 };
 
 static constexpr uint64_t NullIndexValue = -1;
+static std::string MergeSuffix = ".merged";
 
 enum CommitType {
     kFlush = 0,
@@ -157,15 +160,15 @@ public:
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     // [not thread-safe]
     virtual std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
-                                                                 bool without_null) const = 0;
+                                                                 bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket, bool without_null,
+                                            size_t npage_hint, size_t nbucket, bool with_null,
                                             BloomFilter* bf = nullptr) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
@@ -278,19 +281,19 @@ public:
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     std::vector<std::pair<uint32_t, std::vector<std::vector<KVRef>>>> get_kv_refs_by_shard(size_t num_entry,
-                                                                                           bool without_null);
+                                                                                           bool with_null);
 
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys, size_t idx_begin,
                                                          size_t idx_end);
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys,
                                                          const std::vector<size_t>& idxes);
 
-    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false,
-                                    std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
+    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1,
+                                    bool keep_delete, std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -369,6 +372,7 @@ public:
         return usage;
     }
 
+    // return total kv count of this immutable index
     size_t total_size() {
         size_t size = 0;
         for (const auto& shard : _shards) {
@@ -384,6 +388,16 @@ public:
         }
         return mem_usage;
     }
+
+    std::string filename() const {
+        if (_file != nullptr) {
+            return _file->filename();
+        } else {
+            return "";
+        }
+    }
+
+    EditVersion version() const { return _version; }
 
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
 
@@ -430,7 +444,7 @@ private:
         uint64_t offset;
         uint64_t bytes;
         uint32_t npage;
-        uint32_t size;
+        uint32_t size; // kv count
         uint32_t key_size;
         uint32_t value_size;
         uint32_t nbucket;
@@ -455,7 +469,10 @@ public:
 
     Status finish();
 
+    // return total kv count of this immutable index
     size_t total_kv_size() { return _total_kv_size; }
+
+    size_t file_size() { return _total_bytes; }
 
 private:
     EditVersion _version;
@@ -502,9 +519,16 @@ public:
     size_t size() const { return _size; }
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
     size_t memory_usage() const {
+        // commit thread will update primary index memory usage and get index memory usage
+        // apply thread maybe clear or modify _l1_vec
+        // add lock to avoid read/write conflicts
+        std::shared_lock rdlock(_lock);
         size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
         for (int i = 0; i < _l1_vec.size(); i++) {
             memory_usage += _l1_vec[i]->memory_usage();
+        }
+        for (int i = 0; i < _l2_vec.size(); i++) {
+            memory_usage += _l2_vec[i]->memory_usage();
         }
         return memory_usage;
     }
@@ -540,8 +564,8 @@ public:
     // |values|: value array for return values
     Status get(size_t n, const Slice* keys, IndexValue* values);
 
-    Status get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values, KeysInfo* keys_info,
-                                        KeysInfo* found_keys_info, size_t idx, size_t key_size);
+    Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
+                                        std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
 
     // batch upsert
     // |n|: size of key/value array
@@ -591,6 +615,19 @@ public:
 
     bool is_error() { return _error; }
 
+    Status major_compaction(Tablet* tablet);
+
+    Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
+
+    double get_write_amp_score() const;
+
+    void meta_lock() { _meta_lock.lock(); }
+    void meta_unlock() { _meta_lock.unlock(); }
+
+protected:
+    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
+                                      const EditVersion& min_l2_version);
+
 private:
     size_t _dump_bound();
 
@@ -634,6 +671,34 @@ private:
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
+    void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
+                                        size_t& total_usage);
+
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
+
+    uint64_t _l1_l2_file_size() const;
+
+    void _get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                      std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
+
+    StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
+                                                 const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
+
+    bool _enable_minor_compaction();
+
+    void _calc_write_amp_score();
+
+    size_t _get_tmp_l1_count();
+
+    bool _l0_is_full();
+
+    bool _need_rebuild_index(const PersistentIndexMetaPB& index_meta);
+
+protected:
+    // prevent concurrent operations
+    // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
+    mutable std::shared_mutex _lock;
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -653,18 +718,46 @@ private:
     std::vector<int> _l1_merged_num;
     bool _has_l1 = false;
     std::shared_ptr<FileSystem> _fs;
+    // l2 files's version
+    std::vector<EditVersion> _l2_versions;
+    // record if this version is generated by bg merge compaction
+    std::vector<bool> _l2_version_merged;
+    // all l2
+    std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
 
     bool _dump_snapshot = false;
     bool _flushed = false;
     bool _need_bloom_filter = false;
 
-    mutable std::mutex _lock;
-    std::unique_ptr<ThreadPool> _get_thread_pool;
+    mutable std::mutex _get_lock;
     std::condition_variable _get_task_finished;
     size_t _running_get_task = 0;
     std::atomic<bool> _error{false};
     std::string _error_msg;
     std::vector<KeysInfo> _found_keys_info;
+    // make update index and compaction l2 concurrently safe.
+    mutable std::mutex _meta_lock;
+    // set if major compaction is running
+    std::atomic<bool> _major_compaction_running{false};
+    // write amplification score, 0.0 means this index doesn't need major compaction
+    std::atomic<double> _write_amp_score{0.0};
+};
+
+struct PersistentIndexMetaLockGuard {
+public:
+    explicit PersistentIndexMetaLockGuard() {}
+    ~PersistentIndexMetaLockGuard() {
+        if (nullptr != _pindex) {
+            _pindex->meta_unlock();
+        }
+    }
+    void acquire_meta_lock(PersistentIndex* pindex) {
+        pindex->meta_lock();
+        _pindex = pindex;
+    }
+
+private:
+    PersistentIndex* _pindex = nullptr;
 };
 
 } // namespace starrocks

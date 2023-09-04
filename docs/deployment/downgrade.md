@@ -35,105 +35,35 @@ During preparation, you must perform the compatibility configuration if you are 
 
 ### Perform compatibility configuration
 
-If you want to downgrade your StarRocks cluster to an earlier minor or major version, you must perform the compatibility configuration. Compatibility configuration varies from the version of the StarRocks cluster you downgrade from.
+If you want to downgrade your StarRocks cluster to an earlier minor or major version, you must perform the compatibility configuration. In addition to the universal compatibility configuration, detailed configurations vary depending on the version of the StarRocks cluster you downgrade from.
 
-#### From v2.2 and later versions
+- **Universal compatibility configuration**
+
+Before downgrading your StarRocks cluster, you must disable tablet clone.
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
+```
+
+After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
+ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
+ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
+```
+
+- **If you downgrade from v2.2 and later versions**
 
 Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a static parameter, you must modify it in the FE configuration file **fe.conf** and restart the node to allow the modification to take effect. After the downgrade and the first checkpoint are completed, you can reset it to `false` and restart the node.
 
-#### From v2.4 and later versions
+- **If you have enabled FQDN access**
 
-If you have enabled FQDN access, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
-
-### Perform downgrade availability test
-
-Before downgrading all nodes in your cluster in production, you are strongly advised to perform a downgrade availability test on one of the BE and FE nodes to see if the downgrade affects your current data.
-
-#### FE downgrade availability test
-
-Follow these steps to perform the FE downgrade availability test:
-
-1. In your development environment, deploy a test FE node of the version you want to downgrade to. See [Deploy StarRocks - Start FE service](../deployment/deploy_manually.md#step-1-start-the-fe-service) for detailed instructions.
-2. Modify the FE configuration file **fe.conf** of the test FE node:
-
-   - Assign different `http_port`, `rpc_port`, `query_port`, and `edit_log_port` from those of the production cluster.
-   - Add `cluster_id = 123456`.
-   - Add `metadata_failure_recovery = true`.
-
-3. Copy the **meta** directory of the Leader FE node of the production cluster and paste it into the deployment directory of the test FE node.
-4. Modify **meta/image/VERSION** of the test FE node. Set `cluster_id` to `123456`.
-5. Start the test FE node.
-
-   ```Bash
-   sh bin/start_fe.sh --daemon
-   ```
-
-6. Check if it is started successfully.
-
-   ```Bash
-   ps aux | grep StarRocksFE
-   ```
-
-   - If the test FE node starts successfully, it is safe to downgrade the FE nodes in the production environment.
-   - If the test FE node fails to start, you must check the cause of the failure in the FE log file **fe.log** and solve the problem. If the problem is irresolvable, you can simply remove this FE node.
-
-#### BE/CN downgrade availability test
-
-> **CAUTION**
->
-> The BE downgrade availability test causes the loss of a data replica. Make sure you have at least three complete data replicas before performing the test.
-
-Follow these steps to perform the BE/CN downgrade availability test:
-
-1. Choose a random BE/CN node, navigate to its working directory, and stop it.
-
-   - BE node:
-
-     ```Bash
-     # Replace <be_dir> with the deployment directory of the BE node.
-     cd <be_dir>/be
-     ./bin/stop_be.sh
-     ```
-
-   - CN node:
-
-     ```Bash
-     # Replace <cn_dir> with the deployment directory of the CN node.
-     cd <cn_dir>/be
-     ./bin/stop_cn.sh
-     ```
-
-2. Replace the original deployment files under **bin** and **lib** with the ones of the earlier version.
-
-   ```Bash
-   mv lib lib.bak 
-   mv bin bin.bak
-   cp -r /tmp/StarRocks-x.x.x/be/lib  .
-   cp -r /tmp/StarRocks-x.x.x/be/bin  .
-   ```
-
-3. Start the BE/CN node.
-
-   - BE node:
-
-     ```Bash
-     sh bin/start_be.sh --daemon
-     ```
-
-   - CN node:
-
-     ```Bash
-     sh bin/start_cn.sh --daemon
-     ```
-
-4. Check if it is started successfully.
-
-   ```Bash
-   ps aux | grep starrocks_be
-   ```
-
-   - If the BE/CN node starts successfully, it is safe to downgrade the other BE/CN nodes.
-   - If the BE/CN node fails to start, you must check the cause of the failure in the log files and solve the problem. If the problem is irresolvable, you can drop this BE/CN node, clean the data, restart the BE/CN node with deployment files of the earlier version, and add the BE/CN node back to the cluster.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
 
 ## Downgrade FE
 
@@ -251,7 +181,7 @@ Having downgraded the FE nodes, you can then downgrade the BE nodes in the clust
 4. Check if the CN node is started successfully.
 
    ```Bash
-   ps aux | grep 
+   ps aux | grep  starrocks_be
    ```
 
 5. Repeat the above procedures to downgrade other CN nodes.

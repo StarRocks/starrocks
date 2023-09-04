@@ -14,7 +14,7 @@ namespace vectorized {
 class PlaceHolderRef final : public Expr {
 public:
     PlaceHolderRef(const TExprNode& node);
-    vectorized::ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
     bool is_constant() const override { return false; }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new PlaceHolderRef(*this)); }
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {

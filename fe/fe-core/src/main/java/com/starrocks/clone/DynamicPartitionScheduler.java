@@ -235,18 +235,21 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                             dynamicPartitionProperty.getTimeUnit());
             SingleRangePartitionDesc rangePartitionDesc =
                     new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
+            if (dynamicPartitionProperty.getBuckets() == 0) {
+                addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
+            } else {
+                // construct distribution desc
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
+                List<String> distColumnNames = new ArrayList<>();
+                for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
+                    distColumnNames.add(distributionColumn.getName());
+                }
+                DistributionDesc distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
+                                                                             distColumnNames);
 
-            // construct distribution desc
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
-            List<String> distColumnNames = new ArrayList<>();
-            for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                distColumnNames.add(distributionColumn.getName());
+                // add partition according to partition desc and distribution desc
+                addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
             }
-            DistributionDesc distributionDesc =
-                    new HashDistributionDesc(dynamicPartitionProperty.getBuckets(), distColumnNames);
-
-            // add partition according to partition desc and distribution desc
-            addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
         }
         return addPartitionClauses;
     }
@@ -313,6 +316,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             Long tableId = tableInfo.second;
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
+                LOG.warn("Automatically removes the schedule because database does not exist, dbId: {}", dbId);
                 iterator.remove();
                 continue;
             }
@@ -328,6 +332,16 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 // Only OlapTable has DynamicPartitionProperty
                 if (olapTable == null || !olapTable.dynamicPartitionExists() ||
                         !olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+                    if (olapTable == null) {
+                        LOG.warn("Automatically removes the schedule because table does not exist, " +
+                                "tableId: {}", tableId);
+                    } else if (!olapTable.dynamicPartitionExists()) {
+                        LOG.warn("Automatically removes the schedule because " +
+                                "table[{}] does not have dynamic partition", olapTable.getName());
+                    } else {
+                        LOG.warn("Automatically removes the schedule because table[{}] " +
+                                "does not enable dynamic partition", olapTable.getName());
+                    }
                     iterator.remove();
                     continue;
                 }
@@ -347,6 +361,8 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
                 if (rangePartitionInfo.getPartitionColumns().size() != 1) {
                     // currently only support partition with single column.
+                    LOG.warn("Automatically removes the schedule because " +
+                            "table[{}] has more than one partition column", olapTable.getName());
                     iterator.remove();
                     continue;
                 }

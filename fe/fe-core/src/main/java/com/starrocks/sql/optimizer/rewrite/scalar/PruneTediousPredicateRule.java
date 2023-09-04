@@ -36,6 +36,7 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
     // as follows:
     // 1. p OR if(q, NULL, FALSE) => p
     // 2. p AND p is NOT NULL => p
+    // 3. if(p, TRUE, NULL) => q
     // NOTICE!!! this pruning operations can only be applied to predicates in top-down style, it can not be applied
     // common expressions, for examples:
     // 1. select p or if (q, NULL, FALSE) from t;
@@ -47,7 +48,7 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
             return Optional.empty();
         }
 
-        public static boolean outputOnlyNullOrFalse(ScalarOperator p) {
+        private static boolean outputOnlyNullOrFalse(ScalarOperator p) {
             if (!(p instanceof CallOperator)) {
                 return false;
             }
@@ -62,6 +63,13 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
         public Optional<ScalarOperator> visitCall(CallOperator call, Void context) {
             if (outputOnlyNullOrFalse(call)) {
                 return Optional.of(ConstantOperator.FALSE);
+            }
+
+            if (call.getFnName().equals(FunctionSet.IF)
+                    && call.getChild(1).equals(ConstantOperator.TRUE)
+                    && (call.getChild(2).equals(ConstantOperator.NULL) ||
+                    call.getChild(2).equals(ConstantOperator.FALSE))) {
+                return Optional.of(call.getChild(0));
             } else {
                 return Optional.empty();
             }
@@ -74,6 +82,8 @@ public class PruneTediousPredicateRule extends OnlyOnceScalarOperatorRewriteRule
                 if (conjuncts.stream().anyMatch(Visitor::outputOnlyNullOrFalse)) {
                     return Optional.of(ConstantOperator.FALSE);
                 }
+                conjuncts = conjuncts.stream().map(p -> p.accept(this, context).orElse(p))
+                        .collect(Collectors.toList());
                 return Optional.of(Utils.compoundAnd(conjuncts));
             } else if (predicate.isOr()) {
                 List<ScalarOperator> disjuncts = predicate.getChildren().stream()

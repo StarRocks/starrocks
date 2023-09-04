@@ -2,7 +2,7 @@
 
 ## Description
 
-Calculates the intersection of two input bitmaps and return the new bitmap.
+Calculates the intersection of two input bitmaps and returns the new bitmap.
 
 ## Syntax
 

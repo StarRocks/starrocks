@@ -15,6 +15,7 @@ namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class PersistentIndexMetaLockGuard;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -53,10 +54,10 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
-    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
 
-    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
-                uint32_t idx_end, DeletesMap* deletes);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                  uint32_t idx_end, DeletesMap* deletes);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -69,8 +70,8 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
-    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
@@ -82,22 +83,28 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
-                     vector<uint32_t>* failed);
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                       const uint32_t max_src_rssid, vector<uint32_t>* failed);
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
     // [not thread-safe]
-    void erase(const vectorized::Column& pks, DeletesMap* deletes);
+    Status erase(const vectorized::Column& pks, DeletesMap* deletes);
 
-    void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
+    Status get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
     Status prepare(const EditVersion& version, size_t n);
 
     Status commit(PersistentIndexMetaPB* index_meta);
 
     Status on_commited();
+
+    void get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard);
+
+    double get_write_amp_score();
+
+    Status major_compaction(Tablet* tablet);
 
     Status abort();
 
@@ -135,18 +142,19 @@ private:
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
-    void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                       uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes);
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                         uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes);
 
-    void _erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes);
+    Status _erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes);
 
-    void _get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const;
+    Status _get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const;
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
-    [[maybe_unused]] void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                                    const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
-    void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                   const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+    [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start,
+                                                      const vectorized::Column& pks, const vector<uint32_t>& src_rssid,
+                                                      vector<uint32_t>* deletes);
+    Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
     std::mutex _lock;
     std::atomic<bool> _loaded{false};

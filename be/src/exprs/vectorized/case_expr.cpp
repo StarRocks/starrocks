@@ -55,7 +55,7 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
         if (_has_case_expr) {
             return evaluate_case(context, chunk);
         } else {
@@ -84,15 +84,15 @@ private:
     //   If ALL `WHEN` is null, return NULL
     //   If `CASE` equals `WHEN`, return `THEN`
     //   If `CASE` can't match ANY `WHEN`, return NULL
-    ColumnPtr evaluate_case(ExprContext* context, vectorized::Chunk* chunk) {
+    StatusOr<ColumnPtr> evaluate_case(ExprContext* context, vectorized::Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
         } else {
-            else_column = _children[_children.size() - 1]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
 
-        ColumnPtr case_column = _children[0]->evaluate(context, chunk);
+        ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
         if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
             return else_column->clone();
         }
@@ -112,14 +112,14 @@ private:
         then_viewers.reserve(loop_end);
 
         for (int i = 1; i < loop_end; i += 2) {
-            ColumnPtr when_column = _children[i]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
             // skip if all null
             if (ColumnHelper::count_nulls(when_column) == when_column->size()) {
                 continue;
             }
 
-            ColumnPtr then_column = _children[i + 1]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
 
             when_viewers.emplace_back(when_column);
             then_viewers.emplace_back(then_column);
@@ -195,12 +195,12 @@ private:
     //  Special CASE-WHEN statment, and `WHEN` clause must be boolean.
     //  If all `WHEN` is null/false, return NULL
     //  If `WHEN` is not null and true, return `THEN`
-    ColumnPtr evaluate_no_case(ExprContext* context, vectorized::Chunk* chunk) {
+    StatusOr<ColumnPtr> evaluate_no_case(ExprContext* context, vectorized::Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
         } else {
-            else_column = _children[_children.size() - 1]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
 
         int loop_end = _children.size() - 1;
@@ -218,7 +218,7 @@ private:
         then_viewers.reserve(loop_end);
 
         for (int i = 0; i < loop_end; i += 2) {
-            ColumnPtr when_column = _children[i]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
             size_t trues_count = ColumnHelper::count_true_with_notnull(when_column);
 
@@ -227,7 +227,7 @@ private:
                 continue;
             }
 
-            ColumnPtr then_column = _children[i + 1]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
 
             // direct return if first when is all true
             if (when_viewers.empty() && trues_count == when_column->size()) {

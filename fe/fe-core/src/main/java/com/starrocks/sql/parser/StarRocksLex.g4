@@ -267,6 +267,7 @@ RANK: 'RANK';
 READ: 'READ';
 RECOVER: 'RECOVER';
 REFRESH: 'REFRESH';
+REWRITE: 'REWRITE';
 REGEXP: 'REGEXP';
 RELEASE: 'RELEASE';
 RENAME: 'RENAME';
@@ -436,10 +437,6 @@ DIGIT_IDENTIFIER
     : DIGIT (LETTER | DIGIT | '_')+
     ;
 
-QUOTED_IDENTIFIER
-    : '"' ( ~'"' | '""' )* '"'
-    ;
-
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
@@ -461,7 +458,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ~'+' .*? '*/' -> channel(HIDDEN)
+    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
     ;
 
 SEMICOLON: ';';

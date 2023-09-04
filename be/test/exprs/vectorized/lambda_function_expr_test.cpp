@@ -26,7 +26,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
@@ -41,9 +41,7 @@ ColumnPtr build_int_column(const std::vector<int>& values) {
 
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
-    void SetUp() override {
-        create_array_expr();
-    }
+    void SetUp() override { create_array_expr(); }
 
     static TExprNode create_expr_node();
 

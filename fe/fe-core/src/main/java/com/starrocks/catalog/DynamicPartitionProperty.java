@@ -46,6 +46,7 @@ public class DynamicPartitionProperty {
     public static final int DEFAULT_END_OFFSET = 0;
     public static final int NOT_SET_REPLICATION_NUM = -1;
     public static final int NOT_SET_HISTORY_PARTITION_NUM = 0;
+    public static final String NOT_SET_PREFIX = "p";
 
     private boolean exist;
 
@@ -69,7 +70,7 @@ public class DynamicPartitionProperty {
             // In order to compatible dynamic add partition version
             this.start = Integer.parseInt(properties.getOrDefault(START, String.valueOf(MIN_START_OFFSET)));
             this.end = Integer.parseInt(properties.get(END));
-            this.prefix = properties.get(PREFIX);
+            this.prefix = properties.getOrDefault(PREFIX, NOT_SET_PREFIX);
             this.buckets = Integer.parseInt(properties.getOrDefault(BUCKETS, "0"));
             this.replicationNum =
                     Integer.parseInt(properties.getOrDefault(REPLICATION_NUM, String.valueOf(NOT_SET_REPLICATION_NUM)));

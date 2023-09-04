@@ -25,7 +25,12 @@ public class EquivalenceClasses implements Cloneable {
         final EquivalenceClasses ec = new EquivalenceClasses();
         for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry :
                 this.columnToEquivalenceClass.entrySet()) {
-            ec.columnToEquivalenceClass.put(entry.getKey(), Sets.newLinkedHashSet(entry.getValue()));
+            if (!ec.columnToEquivalenceClass.containsKey(entry.getKey())) {
+                Set<ColumnRefOperator> columnEcs = Sets.newLinkedHashSet(entry.getValue());
+                for (ColumnRefOperator column : columnEcs) {
+                    ec.columnToEquivalenceClass.put(column, columnEcs);
+                }
+            }
         }
         ec.cacheColumnToEquivalenceClass = null;
         return ec;

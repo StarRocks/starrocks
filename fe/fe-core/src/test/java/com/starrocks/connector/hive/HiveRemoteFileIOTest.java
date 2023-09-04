@@ -34,6 +34,7 @@ public class HiveRemoteFileIOTest {
         Assert.assertEquals("000000_0", fileDesc.getFileName());
         Assert.assertEquals("", fileDesc.getCompression());
         Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
         Assert.assertFalse(fileDesc.isSplittable());
         Assert.assertNull(fileDesc.getTextFileFormatDesc());
 

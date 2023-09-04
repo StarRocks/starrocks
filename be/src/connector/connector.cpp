@@ -49,6 +49,16 @@ public:
 
 static ConnectorManagerInit _init;
 
+void DataSource::update_has_any_predicate() {
+    auto f = [&]() {
+        if (_conjunct_ctxs.size() > 0) return true;
+        if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
+        return false;
+    };
+    _has_any_predicate = f();
+    return;
+}
+
 Status DataSource::parse_runtime_filters(RuntimeState* state) {
     if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
     for (const auto& item : _runtime_filters->descriptors()) {
@@ -70,4 +80,5 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
     }
     return Status::OK();
 }
+
 } // namespace starrocks::connector

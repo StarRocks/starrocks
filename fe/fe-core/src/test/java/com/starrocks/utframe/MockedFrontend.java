@@ -37,7 +37,6 @@ import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 
@@ -102,7 +101,6 @@ public class MockedFrontend {
 
         // UT don't need log
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
-        context.getConfiguration().getRootLogger().setLevel(Level.WARN);
         context.start();
     }
 

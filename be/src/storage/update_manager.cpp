@@ -10,6 +10,8 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
+#include "storage/persistent_index_compaction_manager.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/pretty_printer.h"
@@ -41,6 +43,9 @@ UpdateManager::~UpdateManager() {
         // should be shutdown.
         _apply_thread_pool->shutdown();
     }
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -57,8 +62,22 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
-    auto st = ThreadPoolBuilder("update_apply").build(&_apply_thread_pool);
-    return st;
+    int max_thread_cnt = CpuInfo::num_cores();
+    if (config::transaction_apply_worker_count > 0) {
+        max_thread_cnt = config::transaction_apply_worker_count;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+    REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
+                                    [this]() { return _apply_thread_pool->num_queued_tasks(); });
+    max_thread_cnt = CpuInfo::num_cores();
+    int max_get_thread_cnt =
+            config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
+
+    _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
+    RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
+    return Status::OK();
 }
 
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,

@@ -1,8 +1,13 @@
-# Bulk load using Apache Spark™
+# Load data in bulk using Spark Load
 
 This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
+
+> **NOTICE**
+>
+> - Spark Load can not be used to load data into a Primary Key table.
+> -  In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
 
 ## Terminology explanation
 

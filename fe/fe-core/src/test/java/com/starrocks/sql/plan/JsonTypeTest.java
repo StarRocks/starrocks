@@ -40,14 +40,14 @@ public class JsonTypeTest extends PlanTestBase {
     @Test
     public void testJoin() {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 using(v_json)"));
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json = t2.v_json"));
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json > t2.v_json"));
 
         ExceptionChecker.expectThrowsNoException(
@@ -62,7 +62,7 @@ public class JsonTypeTest extends PlanTestBase {
                         " cast(t1.v_json->'a' as int) = cast(t2.v_json->'a' as int) and t1.v_id = t2.v_id"));
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
+                "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on" +
                         " t1.v_id = t2.v_id and t1.v_json = t2.v_json"));
     }

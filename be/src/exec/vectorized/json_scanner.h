@@ -39,7 +39,7 @@ private:
     static Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
-    ChunkPtr _cast_chunk(const ChunkPtr& src_chunk);
+    StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
 
     friend class JsonReader;

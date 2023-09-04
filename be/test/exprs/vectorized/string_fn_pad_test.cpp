@@ -87,8 +87,8 @@ void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_col
         ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
     }
 
-    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
 
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
@@ -230,8 +230,8 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     ctx->impl()->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    auto rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
@@ -312,8 +312,8 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    auto rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     if (lpad_result->is_constant()) {
         ASSERT_EQ(lpad_result->size(), 1);
@@ -414,7 +414,7 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
     columns.emplace_back(len);
     columns.emplace_back(NullableColumn::create(fill, null));
 
-    ColumnPtr result = StringFunctions::lpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -445,7 +445,7 @@ TEST_F(StringFunctionPadTest, rpadTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -473,7 +473,7 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -500,7 +500,7 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     columns.emplace_back(len);
     columns.emplace_back(ConstColumn::create(fill));
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -574,7 +574,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     columns.emplace_back(fill);
 
     // Check rpad result.
-    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, rpad_result->size());
     ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> rpad_v;
@@ -592,7 +592,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     }
 
     // Check lpad result.
-    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
+    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, lpad_result->size());
     ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> lpad_v;

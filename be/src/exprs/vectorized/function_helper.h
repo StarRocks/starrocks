@@ -9,8 +9,7 @@
 namespace starrocks_udf {
 class FunctionContext;
 }
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class FunctionHelper {
 public:
@@ -59,13 +58,12 @@ public:
 };
 
 #define DEFINE_VECTORIZED_FN(NAME) \
-    static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
 #define DEFINE_VECTORIZED_FN_TEMPLATE(NAME) \
     template <PrimitiveType Type>           \
-    static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
-#define VECTORIZED_FN_CTX() context
 #define VECTORIZED_FN_ARGS(IDX) columns[IDX]
 
 #define RETURN_IF_COLUMNS_ONLY_NULL(COLUMNS) \
@@ -77,5 +75,4 @@ public:
         }                                    \
     } while (false)
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
