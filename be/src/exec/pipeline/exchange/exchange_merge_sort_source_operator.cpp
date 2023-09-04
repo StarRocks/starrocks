@@ -84,6 +84,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(&empty_chunk, &_is_finished, &should_exit));
 
             if (empty_chunk) {
+                LOG(INFO) << "hk recvr chunk size[" << empty_chunk->num_rows() << "] rows[" << _num_rows_input << "]";
                 _num_rows_input += empty_chunk->num_rows();
                 std::swap(empty_chunk, tmp_chunk);
             } else {
@@ -112,6 +113,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             _num_rows_input = _offset;
             _num_rows_returned += rewind_size;
 
+            LOG(INFO) << "hk return rewind chunk size[" << (*chunk)->num_rows() << "] rows[" << _num_rows_input << "]";
             // the first Chunk will have a size less than state->chunk_size().
             return Status::OK();
         }
@@ -128,6 +130,8 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
 
     if ((*chunk) != nullptr) {
         size_t size_in_chunk = (*chunk)->num_rows();
+        LOG(INFO) << "hk return next chunk size[" << size_in_chunk << "] rows[" << _num_rows_input << "]"
+                  << "_limit";
         if (_limit > 0 && size_in_chunk + _num_rows_returned > _limit) {
             size_in_chunk -= (size_in_chunk + _num_rows_returned - _limit);
             (*chunk)->set_num_rows(size_in_chunk);

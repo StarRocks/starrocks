@@ -101,11 +101,11 @@ select COUNT(*) from (select * from (select * from t0 limit 30, 2) x limit 5) xx
 -- result:
 2
 -- !result
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 40) xx;
+select COUNT(*) from (select * from (select * from t0 limit 20) x limit 10, 40) xx;
 -- result:
-23
+20
 -- !result
-select COUNT(*) from (select * from (select * from t0 limit 30) x limit 10, 10) xx;
+select COUNT(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;
 -- result:
 10
 -- !result

@@ -367,6 +367,10 @@ Status ConstChunkMerger::init(const std::vector<ChunkProvider>& providers, const
 }
 
 bool ConstChunkMerger::is_data_ready() {
+    if (_providers.empty()) {
+        return true;
+    }
+
     for (const auto& p : _providers) {
         if (p(nullptr, nullptr)) {
             return true;
@@ -375,20 +379,49 @@ bool ConstChunkMerger::is_data_ready() {
     return false;
 }
 
+/*
+    std::vector<ChunkProvider> providers;
+    for (SenderQueue* q : _sender_queues) {
+        ChunkProvider provider = [q](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+            // data ready
+            if (out_chunk == nullptr || eos == nullptr) {
+                return q->has_chunk();
+            }
+            if (!q->has_chunk()) {
+                return false;
+            }
+            Chunk* chunk;
+            if (q->try_get_chunk(&chunk)) {
+                out_chunk->reset(chunk);
+                return true;
+            }
+            *eos = true;
+            return false;
+        };
+        providers.push_back(std::move(provider));
+    }
+*/
+
 Status ConstChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* eos, bool* should_exit) {
-    bool all = true;
-    bool c = false;
-    for (const auto& p : _providers) {
-        c = false;
-        if (p(output, &c)) {
+    bool ceos = false;
+    for (auto iter = _providers.begin(); iter != _providers.end();) {
+        ceos = false;
+        bool has_data = (*iter)(output, &ceos);
+
+        if (has_data) {
             *eos = false;
             return Status::OK();
         }
-        all &= c;
+
+        if (ceos) {
+            iter = _providers.erase(iter);
+        } else {
+            ++iter;
+        }
     }
 
-    *eos = all;
-    if (*eos) {
+    if (_providers.empty()) {
+        *eos = true;
         *should_exit = true;
     }
     return Status::OK();

@@ -627,7 +627,6 @@ void ExchangeSinkOperator::update_metrics(RuntimeState* state) {
 
 Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
-
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
