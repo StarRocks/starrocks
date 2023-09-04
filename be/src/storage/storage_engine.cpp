@@ -349,7 +349,7 @@ std::vector<DataDir*> StorageEngine::get_stores() {
 template std::vector<DataDir*> StorageEngine::get_stores<false>();
 template std::vector<DataDir*> StorageEngine::get_stores<true>();
 
-Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
+void StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, bool need_update) {
     data_dir_infos->clear();
 
     // 1. update available capacity of each data dir
@@ -374,8 +374,6 @@ Status StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos,
     for (auto& entry : path_map) {
         data_dir_infos->emplace_back(entry.second);
     }
-
-    return Status::OK();
 }
 
 void StorageEngine::_start_disk_stat_monitor() {
@@ -575,7 +573,8 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
         exit(0);
     }
 
-    (void)_tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
+    auto st = _tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
+    st.permit_unchecked_error();
     // If tablet_info_vec is not empty, means we have dropped some tablets.
     return !tablet_info_vec.empty();
 }
@@ -984,7 +983,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     const int32_t trash_expire = config::trash_file_expire_time_sec;
     const double guard_space = config::storage_flood_stage_usage_percent / 100.0;
     std::vector<DataDirInfo> data_dir_infos;
-    RETURN_IF_ERROR(get_all_data_dir_info(&data_dir_infos, false));
+    get_all_data_dir_info(&data_dir_infos, false);
 
     time_t now = time(nullptr);
     tm local_tm_now;
