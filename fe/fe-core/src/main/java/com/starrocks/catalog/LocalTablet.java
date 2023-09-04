@@ -87,6 +87,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // no need to persist
     private long lastStatusCheckTime = -1;
 
+    private long lastFullCloneFinishedTimeMs = -1;
+
     public LocalTablet() {
         this(0L, new ArrayList<>());
     }
@@ -333,22 +335,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 }
             }
             return false;
-        }
-    }
-
-    @Deprecated
-    public Replica deleteReplicaById(long replicaId) {
-        synchronized (replicas) {
-            Iterator<Replica> iterator = replicas.iterator();
-            while (iterator.hasNext()) {
-                Replica replica = iterator.next();
-                if (replica.getId() == replicaId) {
-                    LOG.info("delete replica[" + replica.getId() + "]");
-                    iterator.remove();
-                    return replica;
-                }
-            }
-            return null;
         }
     }
 
@@ -765,8 +751,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
         for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
+            sb.append(String.format("%d:%d/%d/%d/%d:%s,", replica.getBackendId(), replica.getVersion(),
+                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
+                    replica.getState()));
         }
         return sb.toString();
     }
@@ -819,5 +806,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 sb.append("}");
             }
         }
+    }
+
+    public long getLastFullCloneFinishedTimeMs() {
+        return lastFullCloneFinishedTimeMs;
+    }
+
+    public void setLastFullCloneFinishedTimeMs(long lastFullCloneFinishedTimeMs) {
+        this.lastFullCloneFinishedTimeMs = lastFullCloneFinishedTimeMs;
     }
 }

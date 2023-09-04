@@ -377,6 +377,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
             result.add(globalDict);

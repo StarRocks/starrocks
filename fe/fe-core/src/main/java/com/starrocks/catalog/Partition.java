@@ -93,6 +93,11 @@ public class Partition extends MetaObject implements Writable {
     private long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
     private long visibleVersionTime;
+    /**
+     * ID of the transaction that has committed current visible version.
+     * Just for tracing the txn log, no need to persist.
+     */
+    private long visibleTxnId = -1;
     @SerializedName(value = "nextVersion")
     private long nextVersion;
     @SerializedName(value = "distributionInfo")
@@ -115,6 +120,21 @@ public class Partition extends MetaObject implements Writable {
         this.nextVersion = PARTITION_INIT_VERSION + 1;
 
         this.distributionInfo = distributionInfo;
+    }
+
+    public Partition shallowCopy() {
+        Partition partition = new Partition();
+        partition.id = this.id;
+        partition.name = this.name;
+        partition.state = this.state;
+        partition.baseIndex = this.baseIndex;
+        partition.idToVisibleRollupIndex = Maps.newHashMap(this.idToVisibleRollupIndex);
+        partition.idToShadowIndex = Maps.newHashMap(this.idToShadowIndex);
+        partition.visibleVersion = this.visibleVersion;
+        partition.visibleVersionTime = this.visibleVersionTime;
+        partition.nextVersion = this.nextVersion;
+        partition.distributionInfo = this.distributionInfo;
+        return partition;
     }
 
     public void setIdForRestore(long id) {
@@ -168,6 +188,11 @@ public class Partition extends MetaObject implements Writable {
         }
     }
 
+    public void updateVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        updateVisibleVersion(visibleVersion, visibleVersionTime);
+        this.visibleTxnId = visibleTxnId;
+    }
+
     public long getVisibleVersion() {
         return visibleVersion;
     }
@@ -185,6 +210,16 @@ public class Partition extends MetaObject implements Writable {
     public void setVisibleVersion(long visibleVersion, long visibleVersionTime) {
         this.visibleVersion = visibleVersion;
         this.visibleVersionTime = visibleVersionTime;
+    }
+
+    public void setVisibleVersion(long visibleVersion, long visibleVersionTime, long visibleTxnId) {
+        this.visibleVersion = visibleVersion;
+        this.visibleVersionTime = visibleVersionTime;
+        this.visibleTxnId = visibleTxnId;
+    }
+
+    public long getVisibleTxnId() {
+        return visibleTxnId;
     }
 
     public PartitionState getState() {

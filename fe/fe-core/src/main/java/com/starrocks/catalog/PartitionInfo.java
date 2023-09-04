@@ -47,7 +47,7 @@ import java.util.Map;
 /*
  * Repository of a partition's related infos
  */
-public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProcessable {
+public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
     @SerializedName(value = "type")
@@ -270,5 +270,22 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         }
 
         return buff.toString();
+    }
+
+    protected Object clone()  {
+        try {
+            // shallow clone on base partition info
+            PartitionInfo p = (PartitionInfo) super.clone();
+            p.type = this.type;
+            p.idToDataProperty = this.idToDataProperty;
+            p.idToReplicationNum = this.idToReplicationNum;
+            p.isMultiColumnPartition = this.isMultiColumnPartition;
+            p.idToInMemory = this.idToInMemory;
+            p.idToTabletType = this.idToTabletType;
+            p.idToStorageCacheInfo = this.idToStorageCacheInfo;
+            return p;
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

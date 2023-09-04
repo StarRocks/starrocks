@@ -271,8 +271,9 @@ public class ScalarOperatorToIcebergExpr {
                 case DATE:
                     return operator.getDate().toLocalDate().toEpochDay();
                 case DATETIME:
-                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
-                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.SECONDS);
+                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset()) * 1000
+                            * 1000 * 1000 + operator.getDatetime().getNano();
+                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
                 default:
                     return null;
             }

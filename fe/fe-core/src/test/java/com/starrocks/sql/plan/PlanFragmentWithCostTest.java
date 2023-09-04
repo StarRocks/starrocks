@@ -2120,6 +2120,27 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         AuditEvent event = connectContext.getAuditEventBuilder().build();
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
-
     }
+
+    @Test
+    public void testSemiJoinConstantProjection() throws Exception {
+        String sql = "select t.t1a, t.xx from (select t0.*, 1920 as xx from test_all_type t0 " +
+                "where not exists (select v10 from t3 where t3.v11 =t0.t1c)) t " +
+                "where not exists(select v7 from t2 where v9  = 10 and t2.v8 = t.t1d);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: t1d = 17: v8\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: t1a\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 15> : 1920\n" +
+                "  |  \n" +
+                "  4:HASH JOIN");
+    }
+
 }

@@ -350,7 +350,7 @@ TEST(BitmapValueTest, bitmap_max) {
     auto s = BitmapColumn::create();
     s->append(&bitmap);
     columns.push_back(s);
-    auto column = BitmapFunctions::bitmap_max(ctx, columns);
+    auto column = BitmapFunctions::bitmap_max(ctx, columns).value();
     ASSERT_TRUE(column->is_null(0));
 
     bitmap.add(0);
@@ -374,7 +374,7 @@ TEST(BitmapValueTest, bitmap_min) {
     auto s = BitmapColumn::create();
     s->append(&bitmap);
     columns.push_back(s);
-    auto column = BitmapFunctions::bitmap_min(ctx, columns);
+    auto column = BitmapFunctions::bitmap_min(ctx, columns).value();
     ASSERT_TRUE(column->is_null(0));
 
     bitmap.add(std::numeric_limits<uint64_t>::max());

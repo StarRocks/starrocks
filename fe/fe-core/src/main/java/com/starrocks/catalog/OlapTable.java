@@ -98,6 +98,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -187,6 +188,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    // Record the alter, schema change, MV update time
+    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+    // Record the start and end time for data load version update phase
+    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
+    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -248,6 +255,41 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.tableProperty = null;
     }
 
+    // Only Copy necessary metadata for query.
+    // We don't do deep copy, because which is very expensive;
+    public void copyOnlyForQuery(OlapTable olapTable) {
+        olapTable.id = this.id;
+        olapTable.name = this.name;
+        olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
+        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        olapTable.state = this.state;
+        olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
+        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
+        olapTable.keysType = this.keysType;
+        if (this.partitionInfo != null) {
+            olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
+        }
+        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
+        Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
+            Partition copiedPartition = kv.getValue().shallowCopy();
+            idToPartitions.put(kv.getKey(), copiedPartition);
+            nameToPartitions.put(kv.getValue().getName(), copiedPartition);
+        }
+        olapTable.idToPartition = idToPartitions;
+        olapTable.nameToPartition = nameToPartitions;
+        olapTable.tempPartitions = new TempPartitions();
+        for (Partition tempPartition : this.getTempPartitions()) {
+            olapTable.tempPartitions.addPartition(tempPartition.shallowCopy());
+        }
+        olapTable.baseIndexId = this.baseIndexId;
+        if (this.tableProperty != null) {
+            olapTable.tableProperty = this.tableProperty.copy();
+        }
+    }
+
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
     }
@@ -287,10 +329,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             return Lists.newArrayList();
         }
         return indexes.getIndexes();
-    }
-
-    public TableIndexes getTableIndexes() {
-        return indexes;
     }
 
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
@@ -502,6 +540,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 baseIndexId = newIdxId;
             }
             indexIdToMeta.put(newIdxId, indexIdToMeta.remove(entry.getKey()));
+            indexIdToMeta.get(newIdxId).setIndexIdForRestore(newIdxId);
             indexNameToId.put(entry.getValue(), newIdxId);
         }
 
@@ -568,6 +607,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
             // reset partition id
             partition.setIdForRestore(entry.getKey());
         }
+
+        // reset replication number for olaptable
+        setReplicationNum((short) restoreReplicationNum);
 
         return Status.OK;
     }
@@ -1192,6 +1234,78 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return Math.abs((int) adler32.getValue());
     }
 
+    // This function is only used for getting the err msg for restore job
+    public List<Pair<Integer, String>> getSignatureSequence(int signatureVersion, List<String> partNames) {
+        List<Pair<Integer, String>> checkSumList = Lists.newArrayList();
+        Adler32 adler32 = new Adler32();
+        adler32.update(signatureVersion);
+
+        // table name
+        adler32.update(name.getBytes(StandardCharsets.UTF_8));
+        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "Table name is inconsistent"));
+        // type
+        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
+        LOG.info("test getBytes", type.name().getBytes(StandardCharsets.UTF_8));
+        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "Table type is inconsistent"));
+
+        // all indices(should be in order)
+        Set<String> indexNames = Sets.newTreeSet();
+        indexNames.addAll(indexNameToId.keySet());
+        for (String indexName : indexNames) {
+            long indexId = indexNameToId.get(indexName);
+            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "indexName is inconsistent"));
+            MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
+            // short key column count
+            adler32.update(indexMeta.getShortKeyColumnCount());
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "short key column count is inconsistent"));
+            // storage type
+            adler32.update(indexMeta.getStorageType().name().getBytes(StandardCharsets.UTF_8));
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "storage type is inconsistent"));
+        }
+
+        // bloom filter
+        if (bfColumns != null && !bfColumns.isEmpty()) {
+            for (String bfCol : bfColumns) {
+                adler32.update(bfCol.getBytes());
+                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bloom filter is inconsistent"));
+            }
+            adler32.update(String.valueOf(bfFpp).getBytes());
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bloom filter is inconsistent"));
+        }
+
+        // partition type
+        adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
+        checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition type is inconsistent"));
+        // partition columns
+        if (partitionInfo.getType() == PartitionType.RANGE) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition columns is inconsistent"));
+        }
+
+        // partition and distribution
+        Collections.sort(partNames, String.CASE_INSENSITIVE_ORDER);
+        for (String partName : partNames) {
+            Partition partition = getPartition(partName);
+            Preconditions.checkNotNull(partition, partName);
+            adler32.update(partName.getBytes(StandardCharsets.UTF_8));
+            checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition name is inconsistent"));
+            DistributionInfo distributionInfo = partition.getDistributionInfo();
+            adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
+            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                adler32.update(Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition distribution col hash is inconsistent"));
+                adler32.update(hashDistributionInfo.getBucketNum());
+                checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bucket num is inconsistent"));
+            }
+        }
+
+        return checkSumList;
+    }
+
     // get intersect partition names with the given table "anotherTbl". not including temp partitions
     public Status getIntersectPartNamesWith(OlapTable anotherTbl, List<String> intersectPartNames) {
         if (this.getPartitionInfo().getType() != anotherTbl.getPartitionInfo().getType()) {
@@ -1451,6 +1565,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
         // The table may be restored from another cluster, it should be set to current cluster id.
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+
+        lastSchemaUpdateTime = new AtomicLong(-1);
+        // Record the start and end time for data load version update phase
+        lastVersionUpdateStartTime = new AtomicLong(-1);
+        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1774,7 +1893,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setHasDelete() {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasDelete(true);
     }
@@ -1788,7 +1907,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         if (tableProperty == null) {
-            return;
+            tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasForbitGlobalDict(hasForbitGlobalDict);
     }

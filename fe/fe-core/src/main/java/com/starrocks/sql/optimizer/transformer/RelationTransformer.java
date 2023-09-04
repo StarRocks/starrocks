@@ -454,7 +454,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         node.getPartitionNames(),
                         node.getHasHintsPartitionNames(),
                         Lists.newArrayList(),
-                        node.getTabletIds());
+                        node.getTabletIds(),
+                        node.isUsePkIndex());
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),

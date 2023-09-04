@@ -96,13 +96,14 @@ public:
     }
 
     Status get_dict_values(vectorized::Column* column) override { return _reader->get_dict_values(column); }
-
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
-        return _reader->get_dict_values(dict_codes, column);
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                           vectorized::Column* column) override {
+        return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        return _reader->get_dict_codes(dict_values, dict_codes);
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                          std::vector<int32_t>* dict_codes) override {
+        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
@@ -471,6 +472,32 @@ private:
     const ColumnReaderOptions& _opts;
 };
 
+void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                     bool case_sensitive, std::vector<int32_t>& pos) {
+    DCHECK(field.type.type == PrimitiveType::TYPE_STRUCT);
+
+    // build tmp mapping for ParquetField
+    std::unordered_map<std::string, size_t> field_name_2_pos;
+    for (size_t i = 0; i < field.children.size(); i++) {
+        const std::string format_field_name =
+                case_sensitive ? field.children[i].name : boost::algorithm::to_lower_copy(field.children[i].name);
+        field_name_2_pos.emplace(format_field_name, i);
+    }
+
+    for (size_t i = 0; i < col_type.children.size(); i++) {
+        const std::string formatted_subfield_name =
+                case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
+
+        auto it = field_name_2_pos.find(formatted_subfield_name);
+        if (it == field_name_2_pos.end()) {
+            LOG(WARNING) << "Struct subfield name: " + formatted_subfield_name + " not found.";
+            pos[i] = -1;
+            continue;
+        }
+        pos[i] = it->second;
+    }
+}
+
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
     RETURN_IF_ERROR(do_create(opts, field, col_type, output));
@@ -509,35 +536,19 @@ Status ColumnReader::do_create(const ColumnReaderOptions& opts, const ParquetFie
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
-        // build tmp mapping for ParquetField
-        std::unordered_map<std::string, size_t> field_name_2_pos;
-        for (size_t i = 0; i < field->children.size(); i++) {
-            if (opts.case_sensitive) {
-                field_name_2_pos.emplace(field->children[i].name, i);
-            } else {
-                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children[i].name), i);
-            }
-        }
+        std::vector<int32_t> subfield_pos(col_type.children.size());
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            const std::string& subfield_name = col_type.field_names[i];
-
-            std::string required_subfield_name =
-                    opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
-
-            auto it = field_name_2_pos.find(required_subfield_name);
-            if (it == field_name_2_pos.end()) {
-                LOG(WARNING) << "Struct subfield name: " + required_subfield_name + " not found.";
+            if (subfield_pos[i] == -1) {
+                // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
                 continue;
             }
-
-            size_t parquet_pos = it->second;
-
             std::unique_ptr<ColumnReader> child_reader;
             RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
+                    ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
             children_readers.emplace_back(std::move(child_reader));
         }
 

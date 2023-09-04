@@ -184,6 +184,16 @@ Status Rowset::reload_segment(int32_t segment_id) {
     return Status::OK();
 }
 
+int64_t Rowset::total_segment_data_size() {
+    int64_t res = 0;
+    for (auto& seg : _segments) {
+        if (seg != nullptr) {
+            res += seg->get_data_size();
+        }
+    }
+    return res;
+}
+
 StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
     if (num_segments() == 0) {
         return 0;
@@ -472,6 +482,14 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterator
         seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
+}
+
+Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
+    RETURN_IF_ERROR(load());
+    for (auto& segment : _segments) {
+        RETURN_IF_ERROR(segment->get_short_key_index(sk_index_values));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

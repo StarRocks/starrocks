@@ -4,21 +4,21 @@
 
 ### Instance profile-based authentication
 
-The instance profile-based authentication method allows you to directly grant privileges on AWS resources to your StarRocks cluster. In theory, any cluster user who can log in to the cluster can perform permitted actions on your AWS resources according to the AWS IAM policies you have configured. The typical scenario for this use case is that you do not need any AWS resource access control between multiple cluster users in the cluster. This authentication method means no isolation is required within the same cluster.
+The instance profile-based authentication method allows your StarRocks cluster to inherit the privileges specified in the instance profile of the EC2 instance on which the cluster runs. In theory, any cluster user who can log in to the cluster can perform permitted actions on your AWS resources according to the AWS IAM policies you have configured. The typical scenario for this use case is that you do not need any AWS resource access control between multiple cluster users in the cluster. This authentication method means no isolation is required within the same cluster.
 
 However, this authentication method still can be seen as a cluster-level safe access control solution, because whoever can log in to the cluster is controlled by the cluster administrator.
 
 ### Assumed role-based authentication
 
-Unlike the instance profile-based authentication method, which is a cluster-level access control solution, the assumed role-based authentication method is a catalog-level data source access control solution that works based on the mechanism of assuming a role in AWS IAM. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
+Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to gain access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
 
-Specifically, you can create different catalogs which can access different AWS S3 resources, such as S3 buckets `S3-BUCKET-1` and `S3-BUCKET-2`. This means you can access a different data source by changing the catalog of the current SQL session.
-
-Further, if the cluster administrator grants privileges on different catalogs to different users, this will achieve an access control solution just like allowing different users within the same cluster to access different data sources.
+<!--Specifically, you can bind multiple catalogs each to a specific assumed role, so that these catalogs each can connect to specific AWS resources (for example, a specific S3 bucket). This means you can access a different data source by changing the catalog of the current SQL session. Further, if the cluster administrator grants privileges on different catalogs to different users, this will achieve an access control solution just like allowing different users within the same cluster to access different data sources.-->
 
 ### IAM user-based authentication
 
-The IAM user-based authentication method is also a catalog-level data source access control solution, which works based on the mechanism of IAM user. You can configure different catalogs to assume different IAM users.
+The IAM user-based authentication method supports using IAM user credentials to gain access to your AWS resources. For more information, see [IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users.html).
+
+<!--You can bind multiple catalogs each to the credentials (Access Key and Secret Key) of a specific IAM user, so that different users within the same cluster can access different data sources.-->
 
 ## Preparation for authentication in AWS IAM
 
@@ -96,7 +96,7 @@ After you finish this, you need to configure a trust relationship between the as
 
 #### Configure a trust relationship
 
-First, create and attach a new IAM policy as shown below to your assumed role `s3_role_test`:
+First, edit the trust relationship as shown below to your assumed role `s3_role_test`:
 
 > **NOTICE**
 >
@@ -159,6 +159,15 @@ In various scenarios in which StarRocks needs to integrate with AWS S3, for exam
 - If you use the assumed role-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3.
 - If you use the IAM user-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
 
+The following table describes the parameters.
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter.  |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+
 ### Authentication parameters for accessing AWS Glue
 
 In various scenarios in which StarRocks needs to integrate with AWS Glue, for example, when you create external catalogs, configure the authentication parameters for accessing AWS Glue as follows:
@@ -166,6 +175,15 @@ In various scenarios in which StarRocks needs to integrate with AWS Glue, for ex
 - If you use the instance profile-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true`.
 - If you use the assumed role-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue.
 - If you use the IAM user-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
+
+The following table describes the parameters.
+
+| Parameter                     | Required | Description                                                  |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
 ## Integration examples
 

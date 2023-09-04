@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/string_functions.h"
+#include "util/utf8.h"
 
 namespace starrocks::vectorized {
 
@@ -27,6 +28,16 @@ struct SplitState {
     const void* (*find_delimiter)(const void* big, size_t big_len, const void* little, size_t little_len);
 };
 
+static inline std::vector<std::string> split_utf8_characters(const Slice& str) {
+    std::vector<std::string> chars;
+    for (int i = 0; i < str.size;) {
+        auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
+        chars.emplace_back(str.data + i, char_size);
+        i += char_size;
+    }
+    return chars;
+}
+
 Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
@@ -39,11 +50,12 @@ Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
     if (context->is_notnull_constant_column(0) && context->is_notnull_constant_column(1)) {
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
-        std::vector<std::string> const_split_strings =
-                strings::Split(StringPiece(haystack.get_data(), haystack.get_size()),
-                               StringPiece(delimiter.get_data(), delimiter.get_size()));
-
-        state->const_split_strings = const_split_strings;
+        if (delimiter.empty() && !validate_ascii_fast(haystack.data, haystack.size)) {
+            state->const_split_strings = split_utf8_characters(haystack);
+        } else {
+            state->const_split_strings = strings::Split(StringPiece(haystack.get_data(), haystack.get_size()),
+                                                        StringPiece(delimiter.get_data(), delimiter.get_size()));
+        }
     } else if (context->is_notnull_constant_column(1)) {
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
 
@@ -71,7 +83,7 @@ Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
 * @paramType: [BinaryColumn, BinaryColumn]
 * @return: ArrayColumn
 */
-ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

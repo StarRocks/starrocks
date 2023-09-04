@@ -27,6 +27,8 @@ import java.util.Map;
 public class CreateMaterializedViewStatement extends DdlStmt {
 
     private TableName tableName;
+    private final List<ColWithComment> colWithComments;
+
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeDesc refreshSchemeDesc;
@@ -34,6 +36,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
+
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
 
@@ -46,11 +49,13 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+                                           List<ColWithComment> colWithComments, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
                                            DistributionDesc distributionDesc, Map<String, String> properties,
                                            QueryStatement queryStatement) {
         this.tableName = tableName;
+        this.colWithComments = colWithComments;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
@@ -66,6 +71,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setTableName(TableName tableName) {
         this.tableName = tableName;
+    }
+
+    public List<ColWithComment> getColWithComments() {
+        return colWithComments;
     }
 
     public boolean isIfNotExists() {

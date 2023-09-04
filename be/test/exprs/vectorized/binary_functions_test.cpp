@@ -31,7 +31,7 @@ TEST_F(VectorizedBinaryNullableTest, arg1Null) {
     arg1->append_nulls(1);
     arg2->append_datum((double)1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
 
@@ -47,7 +47,7 @@ TEST_F(VectorizedBinaryNullableTest, arg2Null) {
     arg1->append_datum((double)1);
     arg2->append_nulls(1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
 
@@ -63,7 +63,7 @@ TEST_F(VectorizedBinaryNullableTest, allArgsNull) {
     arg1->append_nulls(1);
     arg2->append_nulls(1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
 } // namespace starrocks::vectorized

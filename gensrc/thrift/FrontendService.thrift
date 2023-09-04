@@ -57,11 +57,13 @@ struct TColumnDesc {
   3: optional i32 columnLength
   4: optional i32 columnPrecision
   5: optional i32 columnScale
+  6: optional bool allowNull
   20: optional string columnKey
   21: optional bool key
   22: optional string aggregationType
   23: optional string dbName
   24: optional string tableName
+  25: optional string columnDefault
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -369,6 +371,7 @@ struct TTaskRunInfo {
     9: optional i32 error_code
     10: optional string error_message
     11: optional string progress
+
 }
 
 struct TGetTaskRunInfoResult {
@@ -386,6 +389,11 @@ struct TBatchReportExecStatusResult {
 }
 
 struct TReportExecStatusResult {
+  // required in V1
+  1: optional Status.TStatus status
+}
+
+struct TReportAuditStatisticsResult {
   // required in V1
   1: optional Status.TStatus status
 }
@@ -454,6 +462,24 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+}
+
+struct TReportAuditStatisticsParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    3: optional i64 scan_rows
+    4: optional i64 scan_bytes
+    5: optional i64 returned_rows
+    6: optional i64 cpu_cost_ns
+    7: optional i64 mem_cost_bytes
+    8: optional i64 spill_bytes
+    9: optional list<TAuditStatisticsItem> stats_items
+}
+
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
 }
 
 struct TFeResult {
@@ -554,6 +580,7 @@ struct TLoadTxnBeginResult {
     1: required Status.TStatus status
     2: optional i64 txnId
     3: optional string job_status // if label already used, set status of existing job
+    4: optional i64 timeout
 }
 
 // StreamLoad request, used to load a streaming to engine
@@ -686,6 +713,21 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+}
+
+struct TGetLoadTxnStatusResult {
+    1: required Status.TTransactionStatus status
+}
+
+struct TGetLoadTxnStatusRequest {
+    1: optional string cluster
+    2: required string user
+    3: required string passwd
+    4: required string db
+    5: required string tbl
+    6: optional string user_ip
+    7: optional i64 auth_code
+    8: required i64 txnId
 }
 
 struct TLoadTxnRollbackResult {
@@ -876,6 +918,7 @@ struct TRange {
     2: optional TBasePartitionDesc base_desc
     3: optional binary start_key
     4: optional binary end_key
+    5: optional bool is_temp
 }
 
 struct TRangePartitionDesc {
@@ -901,6 +944,7 @@ struct TPartitionMeta {
     7: optional i64 visible_time
     8: optional i64 next_version
     9: optional i64 next_version_hash // Deprecated
+    10: optional bool is_temp
 }
 
 struct THashDistributionInfo {
@@ -1021,6 +1065,7 @@ struct TTableConfigInfo {
     9: optional i32 distribute_bucket
     10: optional string sort_key
     11: optional string properties
+    12: optional i64 table_id
 }
 
 struct TGetTablesInfoRequest {
@@ -1110,6 +1155,7 @@ service FrontendService {
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)
+    TReportAuditStatisticsResult reportAuditStatistics(1:TReportAuditStatisticsParams params)
     TBatchReportExecStatusResult batchReportExecStatus(1:TBatchReportExecStatusParams params)
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
@@ -1153,5 +1199,7 @@ service FrontendService {
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+    
+    TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
 }
 

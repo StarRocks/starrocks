@@ -2,6 +2,7 @@
 
 #pragma once
 #include "formats/parquet/column_converter.h"
+#include "io/shared_buffered_input_stream.h"
 
 namespace starrocks {
 class RandomAccessFile;
@@ -26,7 +27,6 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     vectorized::HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
-    SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
 };
@@ -37,6 +37,10 @@ public:
     // create a column reader
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          std::unique_ptr<ColumnReader>* reader);
+
+    // for struct type without schema change
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
 
     virtual ~ColumnReader() = default;
 
@@ -56,11 +60,13 @@ public:
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                                   vectorized::Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 
-    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+    virtual Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                                  std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
 

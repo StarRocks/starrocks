@@ -287,6 +287,12 @@ public class Column implements Writable {
         return comment;
     }
 
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        return CatalogUtils.addEscapeCharacter(comment);
+    }
+
     public int getOlapColumnIndexSize() {
         PrimitiveType type = this.getPrimitiveType();
         if (type == PrimitiveType.CHAR) {
@@ -445,7 +451,7 @@ public class Column implements Writable {
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
-        sb.append("COMMENT \"").append(comment).append("\"");
+        sb.append("COMMENT \"").append(getDisplayComment()).append("\"");
 
         return sb.toString();
     }
@@ -515,8 +521,15 @@ public class Column implements Writable {
             return defaultValue;
         } else if (defaultExpr != null) {
             if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-                extras.add("DEFAULT_GENERATED");
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
                 return "CURRENT_TIMESTAMP";
+            } else {
+                if (extras != null) {
+                    extras.add("DEFAULT_GENERATED");
+                }
+                return defaultExpr.getExpr();
             }
         }
         return FeConstants.null_string;
@@ -555,7 +568,7 @@ public class Column implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.name, this.type);
+        return Objects.hash(this.name.toLowerCase(), this.type);
     }
 
     @Override

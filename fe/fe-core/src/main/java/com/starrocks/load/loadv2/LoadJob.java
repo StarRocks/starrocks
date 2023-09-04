@@ -1066,6 +1066,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         transactionId = info.getTransactionId();
         loadStartTimestamp = info.getLoadStartTimestamp();
     }
+    
+    public boolean hasTxn() {
+        return true;
+    }
 
     public static class LoadJobStateUpdateInfo implements Writable {
         @SerializedName(value = "jobId")

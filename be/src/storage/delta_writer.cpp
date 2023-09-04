@@ -90,7 +90,9 @@ Status DeltaWriter::_init() {
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
-        ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
+        ss << "Fail to get tablet, perhaps this table is doing schema change, or it has already been deleted. Please "
+              "try again. tablet_id="
+           << _opt.tablet_id;
         LOG(WARNING) << ss.str();
         Status st = Status::InternalError(ss.str());
         _set_state(kUninitialized, st);
@@ -121,8 +123,12 @@ Status DeltaWriter::_init() {
         if (config::enable_event_based_compaction_framework) {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
-                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+        auto msg = fmt::format(
+                "Failed to load data into tablet {}, because of too many versions, current/limit: {}/{}. You can "
+                "reduce the loading job concurrency, or increase loading data batch size. If you are loading data with "
+                "Routine Load, you can increase FE configs routine_load_task_consume_second and "
+                "max_routine_load_batch_size,",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -202,8 +208,7 @@ Status DeltaWriter::_init() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
@@ -265,8 +270,25 @@ void DeltaWriter::_set_state(State state, const Status& st) {
     }
 }
 
+Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
+        _opt.slots->back()->col_name() == "__op") {
+        size_t op_column_id = chunk.num_columns() - 1;
+        auto op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT) {
+                LOG(WARNING) << "table with sort key do not support partial update";
+                return Status::NotSupported("table with sort key do not support partial update");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -402,6 +424,7 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
+    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {

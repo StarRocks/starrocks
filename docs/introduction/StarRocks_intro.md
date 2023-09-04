@@ -21,7 +21,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Deploy with Docker](../quick_start/deploy_with_docker.md)
-- [Create a table](../quick_start/create_table.md)
+- [Create a table](../quick_start/Create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
 </NavBoxPartItem>
@@ -47,7 +47,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md)
 - [Load data from HDFS or cloud storage](../loading/BrokerLoad.md)
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
-- [Bulk load using Apache Spark™](../loading/SparkLoad.md)
+- [Load data using Apache Spark™](../loading/Spark-connector-starrocks.md)
 - [Load data using INSERT](../loading/InsertInto.md)
 - [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md)
 - [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)

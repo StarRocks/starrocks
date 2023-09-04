@@ -1,8 +1,12 @@
-# External tables
+# (To be deprecated) External table
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, Elasticsearch, Hive, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
 From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
+
+> **NOTICE**
+>
+> Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and JDBC catalog.
 
 ## MySQL external table
 
@@ -705,7 +709,7 @@ select count(*) from profile_wos_p7;
 
 * The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: If the HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with ViewFs, you need to put the `core-site.xml` under `fe/conf`.
 * The path of the BE configuration file is `be/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example, if the HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with ViewFs, you need to put `core-site.xml` under `be/conf`.
-* On the machine where BE is located, configure JAVA_HOME as a JDK environment rather than a JRE environment in `bin/start_be.sh`, for example, `export JAVA_HOME = <JDK path>`.
+* On the machine where BE is located, configure JAVA_HOME as a JDK environment rather than a JRE environment in the BE **startup script** `bin/start_be.sh`, for example, `export JAVA_HOME = <JDK path>`. You must add this configuration at the beginning of the script and restart the BE for the configuration to take effect.
 * Configure Kerberos support:
   1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.

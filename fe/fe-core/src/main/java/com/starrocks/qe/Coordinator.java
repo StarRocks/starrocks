@@ -76,6 +76,8 @@ import com.starrocks.planner.UnionNode;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
 import com.starrocks.rpc.BackendServiceClient;
@@ -90,6 +92,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TAuditStatisticsItem;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
@@ -105,6 +108,7 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
@@ -118,6 +122,7 @@ import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -240,6 +245,8 @@ public class Coordinator {
     private EtlJobType etlJobType;
 
     private final boolean usePipeline;
+
+    private PQueryStatistics auditStatistics;
 
     // Resource group
     TWorkGroup resourceGroup = null;
@@ -807,8 +814,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -887,7 +892,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
+                            params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
                                     accTabletSinkDop, tabletSinkTotalDop);
                     if (enablePipelineTableSinkDop) {
                         for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
@@ -1085,8 +1090,6 @@ public class Coordinator {
             int backendNum = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
             emptyDescTable.setIs_cached(true);
@@ -1179,7 +1182,7 @@ public class Coordinator {
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine,
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
                                         accTabletSinkDop, tabletSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (FInstanceExecParam request : requests) {
@@ -1617,7 +1620,17 @@ public class Coordinator {
             LOG.warn("cancel execution of query, this is outside invoke");
             cancelInternal(cancelReason);
         } finally {
-            unlock();
+            try {
+                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
+                if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
+                        && cancelledMessage.contains("Backend not found")) {
+                    profileDoneSignal.countDownToZero(new Status());
+                    LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
+                }
+            } finally {
+                unlock();
+            }
         }
     }
 
@@ -1626,7 +1639,9 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
-        connectContext.getState().setError(cancelReason.toString());
+        if (connectContext.getState().getErrorMessage().isEmpty()) {
+            connectContext.getState().setError(cancelReason.toString());
+        }
         if (null != receiver) {
             receiver.cancel();
         }
@@ -2534,6 +2549,25 @@ public class Coordinator {
         }
     }
 
+    public void updateAuditStatistics(TReportAuditStatisticsParams params) {
+        auditStatistics = new PQueryStatistics();
+        auditStatistics.scanRows = params.scan_rows;
+        auditStatistics.scanBytes = params.scan_bytes;
+        auditStatistics.returnedRows = params.returned_rows;
+        auditStatistics.cpuCostNs = params.cpu_cost_ns;
+        auditStatistics.memCostBytes = params.mem_cost_bytes;
+        if (CollectionUtils.isNotEmpty(params.stats_items)) {
+            auditStatistics.statsItems = Lists.newArrayList();
+            for (TAuditStatisticsItem item : params.stats_items) {
+                QueryStatisticsItemPB itemPB = new QueryStatisticsItemPB();
+                itemPB.scanBytes = item.scan_bytes;
+                itemPB.scanRows = item.scan_rows;
+                itemPB.tableId = item.table_id;
+                auditStatistics.statsItems.add(itemPB);
+            }
+        }
+    }
+
     public void endProfile() {
         if (backendExecStates.isEmpty()) {
             return;
@@ -2656,6 +2690,8 @@ public class Coordinator {
                 instanceProfile.removeInfoString("Address");
             });
             fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT);
+            backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
@@ -2680,20 +2716,6 @@ public class Coordinator {
         // Remove redundant MIN/MAX metrics if MIN and MAX are identical
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
             RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
-        }
-
-        // Set backend number
-        for (int i = 0; i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            RuntimeProfile profile = fragmentProfiles.get(i);
-
-            Set<TNetworkAddress> networkAddresses =
-                    fragmentExecParamsMap.get(fragment.getFragmentId()).instanceExecParams.stream()
-                            .map(param -> param.host)
-                            .collect(Collectors.toSet());
-
-            Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT);
-            backendNum.setValue(networkAddresses.size());
         }
 
         // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
@@ -2889,6 +2911,10 @@ public class Coordinator {
 
     private int getFragmentBucketNum(PlanFragmentId fragmentId) {
         return fragmentIdToBucketNumMap.get(fragmentId);
+    }
+
+    public PQueryStatistics getAuditStatistics() {
+        return auditStatistics;
     }
 
     public boolean isThriftServerHighLoad() {
@@ -3344,7 +3370,7 @@ public class Coordinator {
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable, Set<Long> dbIds,
+                                               TDescriptorTable descTable,
                                                boolean enablePipelineEngine, int accTabletSinkDop,
                                                int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
@@ -3377,7 +3403,7 @@ public class Coordinator {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop,
+                boolean enablePipelineEngine, int accTabletSinkDop,
                 int tabletSinkTotalDop) throws Exception {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();

@@ -325,6 +325,7 @@ int main(int argc, char** argv) {
     starrocks::fs::create_directories(root_path_2);
 
     starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
+    starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
 
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();

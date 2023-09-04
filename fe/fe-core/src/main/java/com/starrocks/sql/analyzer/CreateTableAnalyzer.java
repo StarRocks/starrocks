@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -63,7 +64,18 @@ public class CreateTableAnalyzer {
         HUDI,
         JDBC,
         STARROCKS,
-        FILE
+        FILE;
+
+        public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(
+                OLAP,
+                MYSQL,
+                BROKER,
+                STARROCKS
+        );
+
+        public static boolean supportNotNullColumn(String engineName) {
+            return SUPPORT_NOT_NULL_SET.contains(EngineType.valueOf(engineName.toUpperCase()));
+        }
     }
 
     public enum CharsetType {
@@ -239,7 +251,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapOrLakeEngine());
+                columnDef.analyze(statement.isOlapOrLakeEngine(), EngineType.supportNotNullColumn(engineName));
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());

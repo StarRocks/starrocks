@@ -18,4 +18,3 @@ AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] gro
         AGGREGATE ([LOCAL] aggregate [{28: sum=sum(26: case), 29: sum=sum(27: expr)}] group by [[]] having [null]
             SCAN (mv[lineitem_mv] columns[55: l_shipdate, 69: p_type, 73: l_saleprice] predicate[55: l_shipdate >= 1997-02-01 AND 55: l_shipdate < 1997-03-01])
 [end]
-

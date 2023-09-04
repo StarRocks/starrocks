@@ -36,7 +36,7 @@ For more information, see [Preparation for authentication in AWS IAM](../../inte
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by using the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
 - When you query Hudi data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
@@ -75,8 +75,8 @@ PROPERTIES
 
 The name of the Hudi catalog. The naming conventions are as follows:
 
-- The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
 #### comment
 
@@ -95,6 +95,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
+"hive.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -106,6 +107,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type | Yes      | The type of metastore that you use for your Hudi cluster. Set the value to `hive`. |
 | hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
@@ -132,6 +134,7 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
 - To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
+  "hive.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -201,6 +204,8 @@ For information about how to choose an authentication method for accessing AWS S
 
 ##### S3-compatible storage system
 
+Hudi catalogs support S3-compatible storage systems from v2.5 onwards.
+
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Hudi cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
@@ -225,7 +230,7 @@ The following table describes the parameters you need to configure in `StorageCr
 
 A set of parameters about how StarRocks updates the cached metadata of Hudi. This parameter set is optional.
 
-StarRocks implements the automatic asynchronous update policy by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -244,8 +249,6 @@ However, if the frequency of data updates in Hudi is high, you can tune these pa
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
-For more information, see the "[Understand automatic asynchronous update](../catalog/hudi_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
-
 ### Examples
 
 The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_catalog_glue`, depending on the type of metastore you use, to query data from your Hudi cluster.
@@ -261,9 +264,10 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -274,11 +278,11 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -291,10 +295,11 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -305,13 +310,13 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -324,11 +329,12 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -339,15 +345,15 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   PROPERTIES
   (
       "type" = "hudi",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -359,7 +365,8 @@ Use MinIO as an example. Run a command like below:
 CREATE EXTERNAL CATALOG hudi_catalog_hms
 PROPERTIES
 (
-    "type" = "hudi", 
+    "type" = "hudi",
+    "hive.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",

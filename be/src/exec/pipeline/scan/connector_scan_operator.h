@@ -15,7 +15,7 @@ class ScanNode;
 
 namespace pipeline {
 
-class ConnectorScanOperatorIOTasksMemLimiter;
+struct ConnectorScanOperatorIOTasksMemLimiter;
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -48,7 +48,7 @@ public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
-class ConnectorScanOperatorAdaptiveProcessor;
+struct ConnectorScanOperatorAdaptiveProcessor;
 
 class ConnectorScanOperator final : public ScanOperator {
 public:
@@ -93,6 +93,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+
+    bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;

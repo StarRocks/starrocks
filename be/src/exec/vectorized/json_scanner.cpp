@@ -102,7 +102,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         }
     }
     _materialize_src_chunk_adaptive_nullable_column(src_chunk);
-    auto cast_chunk = _cast_chunk(src_chunk);
+    ASSIGN_OR_RETURN(auto cast_chunk, _cast_chunk(src_chunk));
     return materialize(src_chunk, cast_chunk);
 }
 
@@ -302,7 +302,7 @@ Status JsonScanner::_open_next_reader() {
     return Status::OK();
 }
 
-ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
+StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
 
@@ -313,7 +313,7 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
             continue;
         }
 
-        ColumnPtr col = _cast_exprs[column_pos]->evaluate(nullptr, src_chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
     }

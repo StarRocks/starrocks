@@ -239,13 +239,6 @@ public class DeleteHandlerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
-            }
-        };
-
         try {
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
@@ -292,13 +285,6 @@ public class DeleteHandlerTest {
                 TransactionState transactionState = new TransactionState();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 return transactionState;
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
             }
         };
 
@@ -420,13 +406,6 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
-            }
-        };
-
-        new Expectations() {
-            {
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 minTimes = 0;
             }
@@ -469,13 +448,6 @@ public class DeleteHandlerTest {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
-                minTimes = 0;
             }
         };
 

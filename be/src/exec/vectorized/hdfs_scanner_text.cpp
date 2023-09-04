@@ -41,6 +41,8 @@ public:
 protected:
     Status _fill_buffer() override;
 
+    void _trim_row_delimeter(Record* record);
+
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -74,6 +76,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     } else {
         _remain_length -= consume;
     }
+    _trim_row_delimeter(record);
     return Status::OK();
 }
 
@@ -115,6 +118,16 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     }
 
     return Status::OK();
+}
+
+void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
+    // For default row delemiter which is line break, we need to trim the windows line break
+    // if the file was written in windows platfom.
+    if (_row_delimiter == "\n") {
+        while (record->size > 0 && record->data[record->size - 1] == '\r') {
+            record->size--;
+        }
+    }
 }
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
@@ -240,7 +253,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
             RETURN_IF_ERROR(_create_or_reinit_reader());
             continue;
         } else if (!status.ok()) {
-            LOG(WARNING) << "Status is not ok " << status.get_error_msg();
+            LOG(WARNING) << "Status is not ok: " << status.to_string();
             return status;
         }
 

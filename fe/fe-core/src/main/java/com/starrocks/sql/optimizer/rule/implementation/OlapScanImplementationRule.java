@@ -31,7 +31,8 @@ public class OlapScanImplementationRule extends ImplementationRule {
                 scan.getSelectedIndexId(),
                 scan.getSelectedPartitionId(),
                 scan.getSelectedTabletId(),
-                scan.getProjection());
+                scan.getProjection(),
+                scan.isUsePkIndex());
 
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

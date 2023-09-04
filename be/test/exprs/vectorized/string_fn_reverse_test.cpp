@@ -37,7 +37,7 @@ TEST_F(StringFunctionReverseTest, reverseASCIITest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::reverse(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -66,7 +66,7 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::reverse(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(str->size(), result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);

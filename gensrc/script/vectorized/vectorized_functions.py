@@ -40,6 +40,8 @@ vectorized_functions = [
     [10080, "acos", "DOUBLE", ["DOUBLE"], "MathFunctions::acos"],
     [10090, "tan", "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
+    [10102, "cosine_similarity", "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
+    [10103, "cosine_similarity_norm", "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
 
     [10110, "ceil", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -487,13 +489,13 @@ vectorized_functions = [
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
     # hyperloglog function
-    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunction::hll_cardinality'],
-    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunction::hll_cardinality_from_string'],
-    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
-    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
+    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
+    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
+    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
+    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
 
-    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunction::hll_serialize'],
-    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_deserialize'],
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],

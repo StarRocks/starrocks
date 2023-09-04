@@ -26,9 +26,11 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 ### Terminology
 
 - **Load job**
-   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks to consume the messages in a topic of a Kafka cluster, and load the data into StarRocks.
+
+   A Routine Load job is a long-running job. As long as its status is RUNNING, a load job continuously generates one or multiple concurrent load tasks which consume the messages in a topic of a Kafka cluster and load the data into StarRocks.
 
 - **Load task**
+
   A load job is split into multiple load tasks by certain rules. A load task is the basic unit of data loading. As an individual event, a load task implements the load mechanism based on [Stream Load](../loading/StreamLoad.md). Multiple load tasks concurrently consume the messages from different partitions of a topic, and load the data into StarRocks.
 
 ### Workflow
@@ -56,7 +58,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
          > **NOTE**
          >
-         > StarRocks supports access to Kafka with authentication via SSL or SASL, or without authentication.
+         > StarRocks supports access to Kafka via a security authentication mechanism SASL_SSL, SASL or SSL, or without authentication. This topic takes connection to Kafka without authentication as an example. If you need to connect to Kafka via a security authentication mechanism, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 4. **The FE generates new load tasks to load data continuously.**
    After the Executor BEs has written the data to disks, the Coordinator BE reports the result of the load task to the FE. Based on the result, the FE then generates new load tasks to load the data continuously. Or the FE retries the failed tasks to make sure the data loaded into StarRocks is neither lost nor duplicated.
@@ -95,7 +97,7 @@ CREATE TABLE example_db.example_tbl1 (
     `price`double NULL COMMENT "Price"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -132,11 +134,11 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Kafka topic partition and offset**
 
-  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows:
+  You can specify the properties `kafka_partitions` and `kafka_offsets` to specify the partitions and offsets to consume the messages. For example, if you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"` of the topic `ordertest1` all with the initial offsets, you can specify the properties as follows: If you want the load job to consume messages from the Kafka partitions `"0,1,2,3,4"`and you need to specify a separate starting offset for each partition, you can configure as follows:
 
     ```SQL
     "kafka_partitions" ="0,1,2,3,4",
-    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END"
+    "kafka_offsets" = "OFFSET_BEGINNING, OFFSET_END, 1000, 2000, 3000"
     ```
 
   You can also set the default offsets of all partitions with the property `property.kafka_default_offsets`.

@@ -46,10 +46,13 @@ Broker Load supports loading multiple data files at a time. In one load job, you
 
 ```SQL
 DATA INFILE ("<file_path>"[, "<file_path>" ...])
-[NEGATIVE]INTO TABLE <table_name>
-[PARTITION (<partition_name>[, <partition_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
+[NEGATIVE]
+INTO TABLE <table_name>
+[PARTITION (<partition1_name>[, <partition2_name> ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
 [COLUMNS TERMINATED BY "<column_separator>"]
+[ROWS TERMINATED BY "<row_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -77,7 +80,8 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
 
   > **NOTICE**
-  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
+  >
+  > Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path.
 
 - `INTO TABLE`
 
@@ -91,19 +95,19 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   > **NOTE**
   >
-  > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
+  > This parameter is valid only when the StarRocks table is an Aggregate table and all its value columns are computed by the `sum` function.
 
 - `PARTITION`
 
    Specifies the partitions into which you want to load data. By default, if you do not specify this parameter, the source data will be loaded into all partitions of the StarRocks table.
 
-- `FORMAT AS`
+- `TEMPORARY_PARTITION`
 
-  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+  Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 - `COLUMNS TERMINATED BY`
 
-  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify must be the same as the column separator used in the data file. Otherwise, the load job fails due to inadequate data quality, and its `State` is displayed as `CANCELLED`.
+  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`.
 
   Broker Load jobs are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (\) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
 
@@ -111,6 +115,16 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   >
   > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
   > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+
+- `ROWS TERMINATED BY`
+
+  Specifies the row separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\n`, indicating line break. The row separator you specify using this parameter must be the same as the row separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`. This parameter is supported from v2.5.4 onwards.
+
+  For the usage notes about the row separator, see the usage notes for the preceding `COLUMNS TERMINATED BY` parameter.
+
+- `FORMAT AS`
+
+  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
 
 - `column_list`
 
@@ -124,7 +138,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 - `COLUMNS FROM PATH AS`
 
-  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields. 
+  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields.
 
   For example, if the data file is stored in the path `/path/col_name=col_value/file1` in which `col_name` is a partition field and can be mapped onto a column of the StarRocks table, you can specify this parameter as `col_name`. As such, StarRocks extracts `col_value` values from the path and loads them into the StarRocks table column onto which `col_name` is mapped.
 
@@ -405,7 +419,7 @@ The following parameters are supported:
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs in the task pool will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -550,7 +564,6 @@ If you want to load all data from `example5.csv` into `table5` with Kerberos aut
 LOAD LABEL test_db.label5
 (
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv")
-    NEGATIVE
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
 )

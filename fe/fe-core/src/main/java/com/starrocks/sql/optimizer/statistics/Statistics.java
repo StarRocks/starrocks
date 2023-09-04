@@ -2,8 +2,9 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatsConstants;
@@ -54,9 +55,13 @@ public class Statistics {
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
-        ColumnStatistic result = columnStatistics.get(column);
-        Preconditions.checkState(result != null);
-        return result;
+        if (columnStatistics.get(column) == null) {
+            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                    "only found column statistics: %s, but missing statistic of col: %s.",
+                    ColumnRefOperator.toString(columnStatistics.keySet()), column);
+        } else {
+            return columnStatistics.get(column);
+        }
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> getColumnStatistics() {

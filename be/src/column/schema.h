@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <numeric>
 #include <string_view>
 #include <utility>
 
@@ -77,6 +78,12 @@ public:
 
 private:
     void _build_index_map(const Fields& fields);
+    void _init_sort_key_idxes() {
+        if (_sort_key_idxes.empty()) {
+            _sort_key_idxes.resize(num_key_fields());
+            std::iota(_sort_key_idxes.begin(), _sort_key_idxes.end(), 0);
+        }
+    }
 
     Fields _fields;
     size_t _num_keys = 0;

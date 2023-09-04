@@ -27,7 +27,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         std::shared_lock<std::shared_mutex> L(lock);
 
         int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
-        int64_t avail_count = (max_count - running_chunk_source_count) / dop;
+        int64_t avail_count = (max_count - running_chunk_source_count) / static_cast<int64_t>(dop);
         avail_count = std::max<int64_t>(avail_count, 0);
         if (avail_count == 0 && running_chunk_source_count == 0) {
             avail_count = 1;
@@ -445,6 +445,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
+    _data_source->update_has_any_predicate();
     _op = down_cast<ConnectorScanOperator*>(op);
 }
 
@@ -463,8 +464,7 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
 }
 
 ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_limiter() const {
-    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
-    ConnectorScanOperatorFactory* f = down_cast<ConnectorScanOperatorFactory*>(op->get_factory());
+    auto* f = down_cast<ConnectorScanOperatorFactory*>(_scan_op->get_factory());
     return f->_io_tasks_mem_limiter;
 }
 
@@ -495,7 +495,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         if (!_opened) {
             RETURN_IF_ERROR(_data_source->open(state));
-            if (_data_source->skip_predicate() && _limit != -1 && _limit < state->chunk_size()) {
+            if (_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
                 _ck_acc.set_max_size(_limit);
             } else {
                 _ck_acc.set_max_size(state->chunk_size());
@@ -511,6 +511,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         // Improve for select * from table limit x, x is small
         if (_limit != -1 && _rows_read >= _limit) {
+            _reach_limit.store(true);
             return Status::EndOfFile("limit reach");
         }
 

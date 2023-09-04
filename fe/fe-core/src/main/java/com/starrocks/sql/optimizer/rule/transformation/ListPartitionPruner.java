@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -176,9 +177,42 @@ public class ListPartitionPruner implements PartitionPruner {
         return false;
     }
 
+    // generate new partition value map using cast operator' type.
+    // eg. string partition value cast to int
+    // string_col = '01'  1
+    // string_col = '1'   2
+    // string_col = '001' 3
+    // will generate new partition value map
+    // int_col = 1  [1, 2, 3]
+    private TreeMap<LiteralExpr, Set<Long>> getCastPartitionValueMap(CastOperator castOperator,
+                                                                     TreeMap<LiteralExpr, Set<Long>> partitionValueMap) {
+        TreeMap<LiteralExpr, Set<Long>> newPartitionValueMap = new TreeMap<>();
+
+        for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
+            LiteralExpr literalExpr = null;
+            LiteralExpr key = entry.getKey();
+            try {
+                literalExpr = LiteralExpr.create(key.getStringValue(), castOperator.getType());
+            } catch (Exception e) {
+                // ignore
+            }
+            if (literalExpr == null) {
+                try {
+                    literalExpr = (LiteralExpr) key.uncheckedCastTo(castOperator.getType());
+                } catch (Exception e) {
+                    LOG.error(e);
+                    throw new StarRocksConnectorException("can not cast partition value" + key.getStringValue() +
+                            "to target type " + castOperator.getType().prettyPrint());
+                }
+            }
+            Set<Long> partitions = newPartitionValueMap.computeIfAbsent(literalExpr, k -> Sets.newHashSet());
+            partitions.addAll(entry.getValue());
+        }
+        return newPartitionValueMap;
+    }
+
     private Set<Long> evalBinaryPredicate(BinaryPredicateOperator binaryPredicate) {
         Preconditions.checkNotNull(binaryPredicate);
-        ScalarOperator left = binaryPredicate.getChild(0);
         ScalarOperator right = binaryPredicate.getChild(1);
 
         if (!(right.isConstantRef())) {
@@ -194,6 +228,13 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> matches = Sets.newHashSet();
         TreeMap<LiteralExpr, Set<Long>> partitionValueMap = columnToPartitionValuesMap.get(leftChild);
         Set<Long> nullPartitions = columnToNullPartitions.get(leftChild);
+
+        if (binaryPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
+            // partitionValueMap need cast to target type
+            partitionValueMap = getCastPartitionValueMap((CastOperator) binaryPredicate.getChild(0),
+                    partitionValueMap);
+        }
+
         if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
             return null;
         }
@@ -378,16 +419,22 @@ public class ListPartitionPruner implements PartitionPruner {
         Set<Long> rights = evalPartitionPruneFilter(compoundPredicate.getChild(1));
         if (lefts == null && rights == null) {
             return null;
-        } else if (lefts == null) {
-            return rights;
-        } else if (rights == null) {
-            return lefts;
         }
 
         if (compoundPredicate.getCompoundType() == CompoundPredicateOperator.CompoundType.AND) {
-            lefts.retainAll(rights);
+            if (lefts == null) {
+                return rights;
+            } else if (rights == null) {
+                return lefts;
+            } else {
+                lefts.retainAll(rights);
+            }
         } else if (compoundPredicate.getCompoundType() == CompoundPredicateOperator.CompoundType.OR) {
-            lefts.addAll(rights);
+            if (lefts == null || rights == null) {
+                return null;
+            } else {
+                lefts.addAll(rights);
+            }
         }
         return lefts;
     }

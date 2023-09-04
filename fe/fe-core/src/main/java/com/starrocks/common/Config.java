@@ -504,10 +504,18 @@ public class Config extends ConfigBase {
     public static int http_max_initial_line_length = 4096;
 
     @ConfField
-    public static int http_max_header_size = 8192;
+    public static int http_max_header_size = 32768;
 
     @ConfField
     public static int http_max_chunk_size = 8192;
+
+    /**
+     * When obtaining hardware information, some sensitive commands will be executed indirectly through
+     * the oshi library, such as: getent passwd
+     * If you have higher requirements for security, you can turn off the acquisition of this information
+     */
+    @ConfField(mutable = true)
+    public static boolean http_web_page_display_hardware = true;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -548,6 +556,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int thrift_rpc_retry_times = 3;
+
+    @ConfField
+    public static boolean thrift_rpc_strict_mode = true;
+
+    // thrift rpc max body limit size. -1 means unlimited
+    @ConfField
+    public static int thrift_rpc_max_body_size = -1;
 
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
@@ -631,7 +646,7 @@ public class Config extends ConfigBase {
      * the create table request will run at most (m * n * tablet_create_timeout_second) before timeout.
      */
     @ConfField(mutable = true)
-    public static int tablet_create_timeout_second = 1;
+    public static int tablet_create_timeout_second = 10;
 
     /**
      * minimal intervals between two publish version action
@@ -803,15 +818,15 @@ public class Config extends ConfigBase {
      * txn manager will reject coming txns
      */
     @ConfField(mutable = true)
-    public static int max_running_txn_num_per_db = 100;
+    public static int max_running_txn_num_per_db = 1000;
 
     /**
      * The load task executor pool size. This pool size limits the max running load tasks.
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField
-    public static int async_load_task_pool_size = 2;
+    @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
+    public static int max_broker_load_job_concurrency = 5;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -922,6 +937,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long check_consistency_default_timeout_second = 600; // 10 min
+    @ConfField(mutable = true)
+    public static long consistency_tablet_meta_check_interval_ms = 2 * 3600 * 1000L; // every 2 hours
 
     // Configurations for query engine
     /**
@@ -947,6 +964,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
+
+    /**
+     * When the materialized view fails to start FE due to metadata problems,
+     * you can try to open this configuration,
+     * and he can ignore some metadata exceptions.
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_materialized_view_error = false;
 
     @ConfField(mutable = true)
     public static boolean enable_udf = false;
@@ -982,6 +1007,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_create_table_timeout_second = 600;
+
+    @ConfField(mutable = true, comment = "The maximum number of replicas to create serially." +
+            "If actual replica count exceeds this, replicas will be created concurrently.")
+    public static int create_table_max_serial_replicas = 128;
 
     // Configurations for backup and restore
     /**
@@ -1068,7 +1097,7 @@ public class Config extends ConfigBase {
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
-    public static int tablet_sched_max_scheduling_tablets = 2000;
+    public static int tablet_sched_max_scheduling_tablets = 10000;
 
     /**
      * if set to true, TabletScheduler will not do balance.
@@ -1093,7 +1122,7 @@ public class Config extends ConfigBase {
      * balance behavior.
      */
     @ConfField(mutable = true)
-    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+    public static boolean tablet_sched_disable_colocate_overall_balance = true;
 
     @ConfField(mutable = true)
     public static long[] tablet_sched_colocate_balance_high_prio_backends = {};
@@ -1141,7 +1170,7 @@ public class Config extends ConfigBase {
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
-    public static int tablet_sched_max_balancing_tablets = 100;
+    public static int tablet_sched_max_balancing_tablets = 500;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
@@ -1207,6 +1236,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
 
+    @ConfField(mutable = true)
+    public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
@@ -1229,6 +1261,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_routine_load_job_num = 100;
+
+    /**
+     * enable replicated storage as default table engine
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
      * the max concurrent routine load task num of a single routine load job
@@ -1478,6 +1516,12 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long statistic_cache_columns = 100000;
+
+    /**
+     * The size of the thread-pool which will be used to refresh statistic caches
+     */
+    @ConfField
+    public static int statistic_cache_thread_pool_size = 10;
 
     @ConfField
     public static long statistic_dict_columns = 100000;
@@ -1952,6 +1996,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
+    @ConfField(mutable = true)
+    public static boolean enable_sync_publish = false;
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2033,4 +2079,25 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_upload_task_per_be = 0;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_download_task_per_be = 0;
+
+    /**
+     * timeout for external table commit
+     */
+    @ConfField(mutable = true)
+    public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = true)
+    public static int catalog_metadata_cache_size = 500;
 }

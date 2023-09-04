@@ -64,15 +64,15 @@ class VectorizedIfNullExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfNullExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto lhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
 
         int null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
             return lhs->clone();
         }
 
-        auto rhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (null_count == lhs->size()) {
             return rhs->clone();
         }
@@ -107,13 +107,13 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedNullIfExpr);
 
     // NullIF: return null if lhs == rhs else return lhs
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto lhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
 
-        auto rhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
             return lhs->clone();
         }
@@ -152,16 +152,16 @@ class VectorizedIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto bhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
         int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
-        auto lhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
             return lhs->clone();
         }
 
-        auto rhs = _children[2]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[2]->evaluate_checked(context, ptr));
         if (true_count == 0) {
             return rhs->clone();
         }
@@ -274,11 +274,11 @@ class VectorizedCoalesceExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         std::vector<ColumnViewer<Type>> viewers;
         std::vector<ColumnPtr> columns;
         for (int i = 0; i < _children.size(); ++i) {
-            auto value = _children[i]->evaluate(context, ptr);
+            ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
 
             // 1.return if first column is all not null.

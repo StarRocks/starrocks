@@ -16,6 +16,8 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -25,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -36,18 +39,22 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -58,6 +65,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AnalyzerUtils {
 
@@ -273,7 +281,10 @@ public class AnalyzerUtils {
     }
 
     private static class TableCollector extends AstVisitor<Void, Void> {
-        protected final Map<TableName, Table> tables;
+        protected Map<TableName, Table> tables;
+
+        public TableCollector() {
+        }
 
         public TableCollector(Map<TableName, Table> dbs) {
             this.tables = dbs;
@@ -369,6 +380,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
+        List<ViewRelation> viewRelations = Lists.newArrayList();
+        new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
+        return viewRelations;
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -385,6 +402,16 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
+    }
+
+    public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
+        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
+        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        return nonOlapTables.isEmpty();
+    }
+
+    public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
+        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
     private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
@@ -433,10 +460,51 @@ public class AnalyzerUtils {
             if (node.hasWithClause()) {
                 node.getCteRelations().forEach(this::visit);
             }
-            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
-                node.getPredicate().getChildren().forEach(this::visit);
+
+            if (node.getOrderBy() != null) {
+                for (OrderByElement orderByElement : node.getOrderBy()) {
+                    visit(orderByElement.getExpr());
+                }
             }
+
+            if (node.getOutputExpression() != null) {
+                node.getOutputExpression().forEach(this::visit);
+            }
+
+            if (node.getPredicate() != null) {
+                visit(node.getPredicate());
+            }
+
+            if (node.getGroupBy() != null) {
+                node.getGroupBy().forEach(this::visit);
+            }
+
+            if (node.getAggregate() != null) {
+                node.getAggregate().forEach(this::visit);
+            }
+
+            if (node.getHaving() != null) {
+                visit(node.getHaving());
+            }
+
             return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitExpression(Expr node, Void context) {
+            node.getChildren().forEach(this::visit);
+            return null;
+        }
+
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            if (node.getOnPredicate() != null) {
+                visit(node.getOnPredicate());
+            }
+
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
         }
 
         @Override
@@ -447,8 +515,49 @@ public class AnalyzerUtils {
             return null;
         }
 
+        @Override
         public Void visitSubquery(Subquery node, Void context) {
             return visit(node.getQueryStatement());
+        }
+    }
+
+    private static class NonOlapTableCollector extends TableCollector {
+        public NonOlapTableCollector(Map<TableName, Table> tables) {
+            super(tables);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+    }
+
+    private static class OlapTableCollector extends TableCollector {
+        Set<OlapTable> olapTables;
+
+        public OlapTableCollector(Set<OlapTable> tables) {
+            this.olapTables = tables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                olapTables.add(table);
+                // Only copy the necessary olap table meta to avoid the lock when plan query
+                OlapTable copied = new OlapTable();
+                table.copyOnlyForQuery(copied);
+                node.setTable(copied);
+            }
+            return null;
         }
     }
 
@@ -490,6 +599,21 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
             tableRelations.put(tblName, node);
+            return null;
+        }
+    }
+
+    private static class ViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<ViewRelation> viewRelations;
+
+        public ViewRelationsCollector(List<ViewRelation> viewRelations) {
+            this.viewRelations = viewRelations;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            viewRelations.add(node);
             return null;
         }
     }
@@ -629,4 +753,56 @@ public class AnalyzerUtils {
         }
     }
 
+    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
+        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
+            @Override
+            public Expr visitSelect(SelectRelation node, Void context) {
+                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
+                    if (selectListItem.getAlias() == null) {
+                        if (selectListItem.getExpr() instanceof SlotRef) {
+                            SlotRef slot = (SlotRef) selectListItem.getExpr();
+                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return slot;
+                            }
+                        }
+                    } else {
+                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                            return selectListItem.getExpr();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public Expr visitSetOp(SetOperationRelation node, Void context) {
+                for (Relation relation : node.getRelations()) {
+                    Expr resolved = relation.accept(this, null);
+                    if (resolved != null) {
+                        return resolved;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public SlotRef visitValues(ValuesRelation node, Void context) {
+                return null;
+            }
+        };
+        return queryStatement.getQueryRelation().accept(slotRefResolver, null);
+    }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function.");
+                }
+                return null;
+            }
+        }.visit(node);
+    }
 }

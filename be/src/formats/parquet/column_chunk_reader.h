@@ -13,7 +13,6 @@
 #include "formats/parquet/level_codec.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/buffered_stream.h"
 #include "util/compression/block_compression.h"
 
 namespace starrocks {
@@ -90,14 +89,16 @@ public:
         return _cur_decoder->get_dict_values(column);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                           vectorized::Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
-        return _cur_decoder->get_dict_values(dict_codes, column);
+        return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                          std::vector<int32_t>* dict_codes) {
         RETURN_IF_ERROR(_try_load_dictionary());
-        return _cur_decoder->get_dict_codes(dict_values, dict_codes);
+        return _cur_decoder->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
 private:
@@ -109,7 +110,6 @@ private:
     Status _parse_data_page();
     Status _parse_dict_page();
 
-    void _reserve_uncompress_buf(size_t size);
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
 
 private:
@@ -126,8 +126,6 @@ private:
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
-    std::unique_ptr<DefaultBufferedInputStream> _default_stream;
-
     const BlockCompressionCodec* _compress_codec = nullptr;
 
     LevelDecoder _def_level_decoder;
@@ -136,8 +134,8 @@ private:
     int _chunk_size = 0;
     size_t _num_values = 0;
 
-    std::unique_ptr<uint8_t[]> _uncompressed_buf;
-    size_t _uncompressed_buf_capacity = 0;
+    std::vector<uint8_t> _compressed_buf;
+    std::vector<uint8_t> _uncompressed_buf;
 
     PageParseState _page_parse_state = INITIALIZED;
     Slice _data;

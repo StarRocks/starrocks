@@ -16,6 +16,8 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include <regex>
+
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
@@ -73,6 +75,10 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
+    return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
+}
+
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
     return tablet.tablet_schema();
 }
@@ -119,6 +125,41 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
+static std::string exec(const std::string& cmd) {
+    std::string ret;
+
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (fp == NULL) {
+        ret = strings::Substitute("popen failed: $0 cmd: $1", strerror(errno), cmd);
+        return ret;
+    }
+
+    char buff[4096];
+    while (true) {
+        size_t r = fread(buff, 1, 4096, fp);
+        if (r == 0) {
+            break;
+        }
+        ret.append(buff, r);
+    }
+    int status = pclose(fp);
+    if (status == -1) {
+        ret.append(strings::Substitute("pclose failed: $0", strerror(errno)));
+    } else if (status != 0) {
+        ret.append(strings::Substitute("exit: $0", status));
+    }
+    return ret;
+}
+
+static std::string exec_whitelist(const std::string& cmd) {
+    static std::regex legal_cmd("(ls|cat|head|tail|grep|free|echo)[^<>\\|;`\\\\]*");
+    std::cmatch m;
+    if (!std::regex_match(cmd.c_str(), m, legal_cmd)) {
+        return "illegal cmd";
+    }
+    return exec(cmd);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -147,6 +188,8 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
+        // uncomment this to enable executing shell commands
+        // cls.funcStaticExt<&exec_whitelist>("exec");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -250,6 +293,14 @@ public:
         return StorageEngine::instance()->get_manual_compaction_status();
     }
 
+    static std::string ls_tablet_dir(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
     static void bind(ForeignModule& m) {
         {
             auto& cls = m.klass<TabletBasicInfo>("TabletBasicInfo");
@@ -266,6 +317,9 @@ public:
             REG_VAR(TabletBasicInfo, create_time);
             REG_VAR(TabletBasicInfo, state);
             REG_VAR(TabletBasicInfo, type);
+            REG_VAR(TabletBasicInfo, data_dir);
+            REG_VAR(TabletBasicInfo, shard_id);
+            REG_VAR(TabletBasicInfo, schema_hash);
         }
         {
             auto& cls = m.klass<TabletSchema>("TabletSchema");
@@ -283,6 +337,7 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+            cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
@@ -398,6 +453,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
+            REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
         }
     }
 };

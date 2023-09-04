@@ -375,12 +375,13 @@ private:
                                                        NullColumnPtr* null_result, bool* is_nullable, bool* has_null,
                                                        int* null_index) {
         for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
+            auto col = ColumnHelper::unpack_and_duplicate_const_column(columns[i]->size(), columns[i]);
+            if (col->is_nullable()) {
                 (*is_nullable) = true;
-                (*has_null) = (columns[i]->has_null() || (*has_null));
+                (*has_null) = (col->has_null() || (*has_null));
                 (*null_index) = i;
 
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(col.get());
                 src_columns->emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
                 if ((*null_result)) {
                     (*null_result) =
@@ -389,7 +390,7 @@ private:
                     (*null_result) = NullColumn::create(*src_nullable_column->null_column());
                 }
             } else {
-                src_columns->emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+                src_columns->emplace_back(down_cast<ArrayColumn*>(col.get()));
             }
         }
     }
@@ -475,9 +476,13 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_overlap(const Columns& columns) {
-        size_t chunk_size = columns[0]->size();
+    static ColumnPtr _array_overlap(const Columns& original_columns) {
+        size_t chunk_size = original_columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(chunk_size, col));
+        }
 
         bool is_nullable = false;
         bool has_null = false;
@@ -604,12 +609,17 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_intersect(const Columns& columns) {
-        if (columns.size() == 1) {
-            return columns[0];
+    static ColumnPtr _array_intersect(const Columns& original_columns) {
+        if (original_columns.size() == 1) {
+            return original_columns[0];
         }
 
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        RETURN_IF_COLUMNS_ONLY_NULL(original_columns);
+
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(col->size(), col));
+        }
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;

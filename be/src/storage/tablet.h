@@ -183,6 +183,7 @@ public:
 
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
+    int64_t max_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
@@ -228,7 +229,7 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
 
     // if there is _compaction_task running
     // do not do compaction
@@ -260,6 +261,8 @@ public:
     Status contains_version(const Version& version);
 
     void get_basic_info(TabletBasicInfo& info);
+
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
 protected:
     void on_shutdown() override;

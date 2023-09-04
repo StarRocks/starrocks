@@ -261,6 +261,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             total_cnt -= 1;
             continue;
         }
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+            return Status::OK();
+        }
         if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
             total_cnt -= 1;
@@ -533,15 +536,15 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     ops.emplace_back(std::move(scan_operator));
 
-    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
-        ops.emplace_back(
-                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
-    }
-
     size_t limit = scan_node->limit();
     if (limit != -1) {
         ops.emplace_back(
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+
+    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
+        ops.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
     }
 
     return ops;
