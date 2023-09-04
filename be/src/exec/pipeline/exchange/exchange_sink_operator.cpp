@@ -152,6 +152,7 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through() {
+    // @TODO init metrics
     _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }
@@ -344,6 +345,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _output_columns(output_columns) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
+
     PassThroughChunkBuffer* pass_through_chunk_buffer =
             state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
@@ -439,6 +441,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
+    _pass_through_buffer_peak_mem_bytes = _unique_metrics->AddHighWaterMarkCounter("PassThroughBufferPeakMemoryBytes", TUnit::BYTES,
+        RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");

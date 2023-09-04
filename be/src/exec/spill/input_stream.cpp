@@ -312,7 +312,7 @@ Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs,
                 chunk_buffer_max_size, std::make_shared<UnorderedInputStream>(blocks, serde), spiller);
         _input_streams.emplace_back(std::move(stream));
         auto input_stream = _input_streams.back();
-        auto chunk_provider = [input_stream, this](ChunkUniquePtr* output, bool* eos) {
+        auto chunk_provider = [input_stream, this, spiller](ChunkUniquePtr* output, bool* eos) {
             if (output == nullptr || eos == nullptr) {
                 return input_stream->is_ready();
             }
@@ -328,6 +328,7 @@ Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs,
                 }
                 input_stream->mark_is_eof();
                 *eos = true;
+                LOG(INFO) << "get data error: " << res.status().to_string() << ", " << spiller;
                 return false;
             }
             *output = std::move(res.value());

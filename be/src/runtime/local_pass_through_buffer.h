@@ -53,6 +53,7 @@ private:
     const TUniqueId _query_id;
     std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
     int _ref_count;
+    // @TODO pass counter?
 };
 
 class PassThroughContext {
@@ -62,6 +63,8 @@ public:
     void init();
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
+    int64_t total_bytes() const;
+
     int64_t total_bytes() const;
 
 private:

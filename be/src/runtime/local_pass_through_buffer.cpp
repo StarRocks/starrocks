@@ -24,7 +24,11 @@ namespace starrocks {
 // channel per [sender_id]
 class PassThroughSenderChannel {
 public:
+<<<<<<< HEAD
     PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
+=======
+    PassThroughSenderChannel(std::atomic_int64_t& total_bytes): _total_bytes(total_bytes) {}
+>>>>>>> 66c00061ac (preaggregate data before spilling)
 
     ~PassThroughSenderChannel() {
         if (_physical_bytes > 0) {
@@ -118,7 +122,10 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
 }
 
 void PassThroughContext::init() {
+    // @TODO pass metrics
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
+    // @TODO add a interface to channel, update channel?
+
 }
 
 void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {

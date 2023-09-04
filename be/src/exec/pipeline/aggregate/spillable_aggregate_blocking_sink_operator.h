@@ -44,7 +44,8 @@ public:
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
-        TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
+        LOG(INFO) << "AggregateBlockingSink, mark spill " << (void*)this << ", " << _aggregator->spiller().get()
+            << ", hash map bytes: " << _aggregator->hash_map_memory_usage();
     }
 
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
@@ -63,11 +64,28 @@ private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
-    Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
+    Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
+
+    Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+
+    Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
+
+    void _add_non_agg_chunk(ChunkPtr chunk);
+
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
+    std::queue<ChunkPtr> _non_agg_chunks;
+    size_t _non_agg_rows = 0;
+    size_t _non_agg_bytes = 0;
+
+    double _ht_low_reduction_threshold = 0;
+    int32_t _ht_low_reduction_chunk_limit = 0;
+    int32_t _continuous_low_reduction_chunk_num = 0;
+
     bool _is_finished = false;
+
+    RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
 };
 
 class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
