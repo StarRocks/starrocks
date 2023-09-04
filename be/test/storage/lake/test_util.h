@@ -64,4 +64,8 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
 };
 
+struct PrimaryKeyParam {
+    bool enable_persistent_index = false;
+};
+
 } // namespace starrocks::lake

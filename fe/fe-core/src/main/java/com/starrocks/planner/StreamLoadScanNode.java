@@ -434,6 +434,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     @Override
     public boolean canUsePipeLine() {
+        // @TODO(silverbullet233): remove this config and always return true
         return Config.enable_pipeline_load;
     }
 }

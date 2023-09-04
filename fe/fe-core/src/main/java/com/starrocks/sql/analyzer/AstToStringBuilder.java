@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -182,7 +183,7 @@ public class AstToStringBuilder {
             sb.append(Joiner.on(", ").join(privList));
             sb.append(" ON ");
 
-            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+            if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
                 sb.append(stmt.getObjectType().name());
             } else {
                 if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
@@ -917,11 +918,24 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
-            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-                sb.append(visit(node.getChild(0)));
+            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                int end = 1;
+                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                    end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
+                }
+                for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
+                    if (i != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(visit(node.getChild(i)));
+                }
                 List<OrderByElement> sortClause = fnParams.getOrderByElements();
                 if (sortClause != null) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
+                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
+                    sb.append(" SEPARATOR ");
+                    sb.append(visit(node.getChild(end)));
                 }
                 sb.append(")");
             } else {
@@ -1162,6 +1176,11 @@ public class AstToStringBuilder {
                     break;
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return visitFunctionCall(node, context);
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {

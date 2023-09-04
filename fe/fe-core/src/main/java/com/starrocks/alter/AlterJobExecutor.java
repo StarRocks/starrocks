@@ -14,37 +14,42 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.BackendClause;
-import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
-import com.starrocks.sql.ast.ComputeNodeClause;
-import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
-import com.starrocks.sql.ast.FrontendClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
-import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
@@ -62,7 +67,7 @@ import org.apache.logging.log4j.Logger;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
-    private static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
+    protected static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
     protected Database db;
     protected Table table;
 
@@ -77,51 +82,8 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
     //Alter system clause
 
     @Override
-    public Void visitFrontendClause(FrontendClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitCreateImageClause(CreateImageClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitBackendClause(BackendClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitModifyBackendHostClause(ModifyBackendAddressClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitModifyBrokerClause(ModifyBrokerClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
-    }
-
-    @Override
-    public Void visitComputeNodeClause(ComputeNodeClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
+    public Void visitNode(ParseNode node, ConnectContext context) {
+        throw new AlterJobException("Not support alter table operation : " + node.getClass().getName());
     }
 
     //Alter table clause
@@ -152,8 +114,51 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitSwapTableClause(SwapTableClause clause, ConnectContext context) {
-        unsupportedException("Not support");
-        return null;
+        // must hold db write lock
+        Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
+
+        OlapTable origTable = (OlapTable) table;
+
+        String origTblName = origTable.getName();
+        String newTblName = clause.getTblName();
+        Table newTbl = db.getTable(newTblName);
+        if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
+            throw new AlterJobException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
+        }
+        OlapTable olapNewTbl = (OlapTable) newTbl;
+
+        // First, we need to check whether the table to be operated on can be renamed
+        try {
+            olapNewTbl.checkAndSetName(origTblName, true);
+            origTable.checkAndSetName(newTblName, true);
+
+            if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
+                if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
+                    throw new AlterJobException("Materialized view can only SWAP WITH materialized view");
+                }
+            }
+
+            // inactive the related MVs
+            LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                    String.format("based table %s swapped", origTblName));
+            LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                    String.format("based table %s swapped", newTblName));
+
+            MetadataMgr.inactiveViews(
+                    Lists.newArrayList(new TableName(db.getOriginName(), newTblName),
+                            new TableName(db.getOriginName(), origTblName)),
+                    "table [" + origTblName + "] swapped with table [" + newTblName + "]");
+
+            SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
+
+            LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
+                    newTblName);
+            return null;
+        } catch (DdlException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
     }
 
     @Override
@@ -260,6 +265,37 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    // Alter View
+    @Override
+    public Void visitAlterViewClause(AlterViewClause alterViewClause, ConnectContext ctx) {
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
+                alterViewClause.getInlineViewDef(),
+                alterViewClause.getColumns(),
+                ctx.getSessionVariable().getSqlMode());
+
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
+        TableName tableName = statement.getTbl();
+        Database db = MetaUtils.getDatabase(context, tableName);
+        Table table = MetaUtils.getTable(tableName);
+
+        if (table.getType() == Table.TableType.VIEW || table.getType() == Table.TableType.MATERIALIZED_VIEW) {
+            throw new SemanticException("The specified table [" + tableName + "] is not a table");
+        }
+
+        this.db = db;
+        this.table = table;
+        for (AlterClause alterClause : statement.getOps()) {
+            visit(alterClause, context);
+        }
+        return null;
+    }
+
     @Override
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableName();
@@ -277,16 +313,37 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
-    // Alter View
     @Override
-    public Void visitAlterViewClause(AlterViewClause alterViewClause, ConnectContext ctx) {
-        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
-                alterViewClause.getInlineViewDef(),
-                alterViewClause.getColumns(),
-                ctx.getSessionVariable().getSqlMode());
+    public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
+        // check db
+        final TableName mvName = stmt.getMvName();
+        Database db = MetaUtils.getDatabase(context, mvName);
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-        return null;
+        if (!db.writeLockAndCheckExist()) {
+            throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
+        }
+
+        try {
+            Table table = MetaUtils.getTable(mvName);
+            if (!table.isMaterializedView()) {
+                throw new SemanticException("The specified table [" + mvName + "] is not a view");
+            }
+            this.db = db;
+            this.table = table;
+
+            MaterializedView materializedView = (MaterializedView) table;
+            // check materialized view state
+            if (materializedView.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new AlterJobException("Materialized view [" + materializedView.getName() + "]'s state is not NORMAL. "
+                        + "Do not allow to do ALTER ops");
+            }
+
+            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
+            visit(stmt.getAlterTableClause());
+            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
+            return null;
+        } finally {
+            db.writeUnlock();
+        }
     }
 }

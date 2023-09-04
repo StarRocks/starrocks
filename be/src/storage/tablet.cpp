@@ -83,6 +83,19 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
+
+    // if !_tablet_meta->all_rs_metas()[0]->tablet_schema(),
+    // that mean the tablet_meta is still no upgrade to support-light-schema-change versions.
+    // Before support-light-schema-change version, rowset metas don't have tablet schema.
+    // And when upgrade to starrocks support-light-schema-change version,
+    // all rowset metas will be set the tablet schema from tablet meta.
+    if (_tablet_meta->all_rs_metas().empty() || !_tablet_meta->all_rs_metas()[0]->tablet_schema()) {
+        _max_version_schema = BaseTablet::tablet_schema();
+    } else {
+        _max_version_schema =
+                TabletMeta::rowset_meta_with_max_rowset_version(_tablet_meta->all_rs_metas())->tablet_schema();
+    }
+
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
@@ -114,7 +127,7 @@ Status Tablet::_init_once_action() {
     for (const auto& rs_meta : _tablet_meta->all_rs_metas()) {
         Version version = rs_meta->version();
         RowsetSharedPtr rowset;
-        auto st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, rs_meta, &rowset);
+        auto st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. tablet_id=" << tablet_id() << ", schema_hash=" << schema_hash()
                          << ", version=" << version << ", res=" << st;
@@ -128,7 +141,8 @@ Status Tablet::_init_once_action() {
         Version version = inc_rs_meta->version();
         RowsetSharedPtr rowset = get_rowset_by_version(version);
         if (rowset == nullptr) {
-            auto st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, inc_rs_meta, &rowset);
+            auto st =
+                    RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, inc_rs_meta, &rowset);
             if (!st.ok()) {
                 LOG(WARNING) << "fail to init incremental rowset. tablet_id:" << tablet_id()
                              << ", schema_hash:" << schema_hash() << ", version=" << version << ", res=" << st;
@@ -142,7 +156,7 @@ Status Tablet::_init_once_action() {
         std::shared_ptr<DupKeyRowsetFetcher> row_fetcher = std::make_shared<DupKeyRowsetFetcher>(*this);
         _binlog_manager = std::make_unique<BinlogManager>(tablet_id(), schema_hash_path(), config::binlog_file_max_size,
                                                           config::binlog_page_max_size,
-                                                          tablet_schema().compression_type(), row_fetcher);
+                                                          tablet_schema()->compression_type(), row_fetcher);
     }
     return Status::OK();
 }
@@ -216,7 +230,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     for (auto& rs_meta : rowsets_to_clone) {
         Version version = {rs_meta->start_version(), rs_meta->end_version()};
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, rs_meta, &rowset);
+        st = RowsetFactory::create_rowset(_tablet_meta->tablet_schema_ptr(), _tablet_path, rs_meta, &rowset);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. version=" << version;
             return st;
@@ -1621,6 +1635,39 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+int64_t Tablet::data_size() {
+    std::shared_lock rdlock(_meta_lock);
+    if (_updates) {
+        return _updates->data_size();
+    } else {
+        return _tablet_meta->tablet_footprint();
+    }
+}
+
+int64_t Tablet::in_writing_data_size() {
+    int64_t size = 0;
+    std::shared_lock rdlock(_meta_lock);
+    for (auto& [k, v] : _in_writing_txn_size) {
+        size += v;
+    }
+    VLOG(1) << "tablet " << tablet_id() << " in writing data size: " << size;
+    return size;
+}
+
+void Tablet::add_in_writing_data_size(int64_t txn_id, int64_t delta) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "tablet " << tablet_id() << " add in writing data size: " << _in_writing_txn_size[txn_id]
+            << " delta: " << delta << " txn_id: " << txn_id;
+    _in_writing_txn_size[txn_id] += delta;
+}
+
+void Tablet::remove_in_writing_data_size(int64_t txn_id) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "remove tablet " << tablet_id() << "in writing data size: " << _in_writing_txn_size[txn_id]
+            << " txn_id: " << txn_id;
+    _in_writing_txn_size.erase(txn_id);
+}
+
 Status Tablet::verify() {
     int64_t version = max_continuous_version();
     std::vector<RowsetSharedPtr> rowsets;
@@ -1652,4 +1699,25 @@ std::string Tablet::debug_string() const {
     return {};
 }
 
+const TabletSchemaCSPtr Tablet::tablet_schema() const {
+    std::shared_lock rdlock(_schema_lock);
+    return _max_version_schema;
+}
+
+const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
+    return _max_version_schema;
+}
+
+void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
+    std::lock_guard wrlock(_schema_lock);
+    // Double Check for concurrent update
+    if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
+        _max_version_schema = tablet_schema;
+    }
+}
+
+const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
+    std::shared_lock rdlock(_schema_lock);
+    return *_max_version_schema;
+}
 } // namespace starrocks

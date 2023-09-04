@@ -110,6 +110,7 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+    | showCreateRoutineLoadStatement
 
     // StreamLoad Statement
     | showStreamLoadStatement
@@ -372,7 +373,7 @@ createTableStatement
 
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
-    (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)?
+    (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     (withMaskingPolicy)?
     comment?
     ;
@@ -387,7 +388,7 @@ defaultDesc
     : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
     ;
 
-materializedColumnDesc
+generatedColumnDesc
     : AS expression
     ;
 
@@ -1098,6 +1099,10 @@ showRoutineLoadTaskStatement
         WHERE expression
     ;
 
+showCreateRoutineLoadStatement
+    : SHOW CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier
+    ;
+
 showStreamLoadStatement
     : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
         (FROM db=qualifiedName)?
@@ -1766,7 +1771,8 @@ alterPipeClause
     : SUSPEND |
         RESUME |
         RETRY ALL |
-        RETRY FILE fileName=string
+        RETRY FILE fileName=string |
+        SET propertyList
     ;
 
 alterPipeStatement
@@ -2186,7 +2192,8 @@ aggregationFunction
     | MAX '(' setQuantifier? expression ')'
     | MIN '(' setQuantifier? expression ')'
     | SUM '(' setQuantifier? expression ')'
-    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
 userVariable
@@ -2297,7 +2304,7 @@ restoreTableDesc
     ;
 
 explainDesc
-    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE |VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | ANALYZE | VERBOSE | COSTS | SCHEDULER)?
     ;
 
 optimizerTrace
@@ -2575,6 +2582,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2584,7 +2592,7 @@ nonReserved
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
-    | GLOBAL | GRANTS
+    | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
@@ -2599,7 +2607,7 @@ nonReserved
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
-    | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
+    | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE

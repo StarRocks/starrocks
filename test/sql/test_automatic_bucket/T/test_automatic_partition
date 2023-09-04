@@ -1,0 +1,21 @@
+-- name: test_bucket_size
+create table t(k int);
+show create table t;
+alter table t set('bucket_size'='1024');
+show create table t;
+
+-- name: test_automatic_bucket
+create database kkk;
+use kkk;
+create table t(k int);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+insert into t values(1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+insert into t values(1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+alter table t set('bucket_size'='1');
+insert into t values(1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+insert into t values(1);
+select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
+

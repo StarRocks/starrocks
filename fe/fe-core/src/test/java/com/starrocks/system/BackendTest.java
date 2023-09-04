@@ -37,6 +37,16 @@ public class BackendTest {
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 16);
         Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
+
+        // add new backend 2
+        BackendCoreStat.setNumOfHardwareCoresOfBe(2, 8);
+        Assert.assertEquals(12, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(6, BackendCoreStat.getDefaultDOP());
+
+        // remove new backend 2
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(2);
+        Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
     }
 
     @Test

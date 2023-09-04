@@ -91,8 +91,10 @@ private:
     // merge rows from vectorized reader and write into `_output_rs_writer`.
     // return Status::OK() and set statistics into `*stats_output`.
     // return others on error
-    Status _merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output);
-    Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output);
+    Status _merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output,
+                                       const TabletSchemaCSPtr& tablet_schema);
+    Status _merge_rowsets_vertically(size_t segment_iterator_num, Statistics* stats_output,
+                                     const TabletSchemaCSPtr& tablet_schema);
 };
 
 } // namespace starrocks

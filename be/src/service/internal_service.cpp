@@ -302,7 +302,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
         return;
     }
 
-    auto st = _exec_plan_fragment(cntl);
+    auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
     }
@@ -395,13 +395,14 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) {
+Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
+                                                        const PExecPlanFragmentRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
@@ -410,7 +411,15 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
-        return _exec_plan_fragment_by_non_pipeline(t_request);
+        bool has_schema_table_sink = t_request.__isset.fragment && t_request.fragment.__isset.output_sink &&
+                                     t_request.fragment.output_sink.type == TDataSinkType::SCHEMA_TABLE_SINK;
+        // SchemaTableSink is not supported on the Pipeline engine, we have to allow it to be executed on non-pipeline engine temporarily,
+        // this will be removed in the future.
+        if (has_schema_table_sink) {
+            return _exec_plan_fragment_by_non_pipeline(t_request);
+        }
+        return Status::InvalidArgument(
+                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.");
     }
 }
 

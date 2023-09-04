@@ -56,6 +56,7 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -82,15 +83,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-/**
- * External hive table
- * At the very beginning, hive table is only designed for spark load, and property hive.metastore.uris is used to
- * record hive metastore uris.
- * But when hive table supports query and there is a lot of hive tables,
- * using hive.resource property is more convenient to change hive config.
- * So we still remains the hive.metastore.uris property for compatible, but hive table only set hive.metastore.uris
- * dose not support query.
- */
 public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HiveTable.class);
 
@@ -128,13 +120,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     // This error will happen when appending files to an existed partition on user side.
     private boolean useMetadataCache = true;
 
+    private HiveStorageFormat storageFormat;
+
     public HiveTable() {
         super(TableType.HIVE);
     }
 
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
                      String hiveDbName, String hiveTableName, String tableLocation, long createTime,
-                     List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties) {
+                     List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
+                     HiveStorageFormat storageFormat) {
         super(id, name, TableType.HIVE, fullSchema);
         this.resourceName = resourceName;
         this.catalogName = catalog;
@@ -145,6 +140,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
         this.hiveProperties = properties;
+        this.storageFormat = storageFormat;
     }
 
     public String getHiveDbTable() {
@@ -173,6 +169,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public Map<String, String> getProperties() {
         return hiveProperties;
+    }
+  
+    public HiveStorageFormat getStorageFormat() {
+        return storageFormat;
     }
 
     public boolean isUseMetadataCache() {
@@ -491,6 +491,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+    public boolean supportInsert() {
+        return true;
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
     }
@@ -527,6 +532,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private List<String> partitionColNames = Lists.newArrayList();
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> properties = Maps.newHashMap();
+        private HiveStorageFormat storageFormat;
 
         public Builder() {
         }
@@ -591,9 +597,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setStorageFormat(HiveStorageFormat storageFormat) {
+            this.storageFormat = storageFormat;
+            return this;
+        }
+
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
-                    tableLocation, createTime, partitionColNames, dataColNames, properties);
+                    tableLocation, createTime, partitionColNames, dataColNames, properties, storageFormat);
         }
     }
 }

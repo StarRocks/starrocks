@@ -59,6 +59,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 
 public class HiveTableTest {
@@ -88,6 +89,7 @@ public class HiveTableTest {
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";
         StorageDescriptor sd = new StorageDescriptor();
+        sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
         Table msTable = new Table();
@@ -100,6 +102,7 @@ public class HiveTableTest {
         msTable.setCreateTime(createTime);
 
         HiveTable oTable = HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
+        Assert.assertTrue(oTable.supportInsert());
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getMetadataMgr();

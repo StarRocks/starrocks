@@ -20,10 +20,13 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -62,8 +65,8 @@ public class AstToSQLBuilder {
 
     public static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
-        private final boolean simple;
-        private final boolean withoutTbl;
+        protected final boolean simple;
+        protected final boolean withoutTbl;
 
         public AST2SQLBuilderVisitor(boolean simple, boolean withoutTbl) {
             this.simple = simple;
@@ -363,7 +366,33 @@ public class AstToSQLBuilder {
             if (insert.getQueryStatement() != null) {
                 sb.append(visit(insert.getQueryStatement()));
             }
+            return sb.toString();
+        }
 
+        @Override
+        public String visitArrayExpr(ArrayExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append('[');
+            sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
+            sb.append(']');
+            return sb.toString();
+        }
+
+        @Override
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
+            sb.append(type.toString());
+            sb.append("{");
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append("}");
             return sb.toString();
         }
     }

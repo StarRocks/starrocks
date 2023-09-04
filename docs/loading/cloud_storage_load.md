@@ -1,5 +1,7 @@
 # Load data from cloud storage
 
+import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+
 StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
@@ -8,9 +10,7 @@ Broker Load ensures the transactional atomicity of each load job that is run to 
 
 Additionally, Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-> **NOTICE**
->
-> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
+<InsertPrivNote />
 
 From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
@@ -132,7 +132,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -176,7 +176,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -229,7 +229,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
@@ -295,7 +295,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -338,7 +338,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -390,7 +390,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
@@ -465,7 +465,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -509,7 +509,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -562,7 +562,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
@@ -616,8 +616,8 @@ LOAD LABEL test_db.label_brokerloadtest_401
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -630,7 +630,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -663,8 +663,8 @@ LOAD LABEL test_db.label_brokerloadtest_402
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -677,7 +677,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
@@ -719,8 +719,8 @@ LOAD LABEL test_db.label_brokerloadtest_403
 )
 WITH BROKER
 (
-    "aws.s3.enable_ssl" = "{true | false}",
-    "aws.s3.enable_path_style_access" = "{true | false}",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -733,7 +733,7 @@ PROPERTIES
 
 #### Query data
 
-After you submit the load job, you need to use [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to view the result of the load job. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
+After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
@@ -903,10 +903,6 @@ Additionally, each task can be further split into one or more instances, which a
 
 In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.
 
-## Related configuration items
+## Troubleshooting
 
-The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of tasks that can be concurrently run for Broker Load within your StarRocks cluster.
-
-In StarRocks v2.4 and earlier, if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
-
-Since StarRocks v2.5,  if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+See [Broker Load FAQ](../faq/loading/Broker_load_faq.md).

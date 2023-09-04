@@ -38,6 +38,7 @@
 
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
@@ -166,8 +167,7 @@ void ResultBufferMgr::cancel_thread() {
         for (auto& i : query_to_cancel) {
             cancel(i);
         }
-
-        sleep(1);
+        nap_sleep(1, [this] { return _is_stop; });
     }
 
     LOG(INFO) << "result buffer manager cancel thread finish.";

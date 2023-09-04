@@ -183,10 +183,11 @@ set(EXEC_FILES
     pipeline/scan/meta_scan_prepare_operator.cpp
     pipeline/scan/olap_meta_scan_prepare_operator.cpp
     pipeline/scan/lake_meta_scan_prepare_operator.cpp
-    pipeline/scan/olap_schema_chunk_source.cpp
-    pipeline/scan/olap_schema_scan_operator.cpp
-    pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/scan/schema_chunk_source.cpp
+    pipeline/scan/schema_scan_operator.cpp
+    pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/hive_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
@@ -211,6 +212,7 @@ set(EXEC_FILES
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
+    pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
@@ -221,6 +223,7 @@ set(EXEC_FILES
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/bucket_process_operator.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp

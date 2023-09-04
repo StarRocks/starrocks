@@ -297,6 +297,15 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                 "QueryCumulativeCpuTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
         query_cumulative_cpu->set(query_ctx->cpu_cost());
+        auto* query_spill_bytes = profile->add_counter(
+                "QuerySpillBytes", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_spill_bytes->set(query_ctx->get_spill_bytes());
+        // Add execution wall time
+        auto* query_exec_wall_time = profile->add_counter(
+                "QueryExecutionWallTime", TUnit::TIME_NS,
+                RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
+        query_exec_wall_time->set(query_ctx->lifetime());
     }
 
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, profile, status, done);
@@ -326,6 +335,38 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
+    auto query_statistics = query_ctx->final_query_statistic();
+
+    TReportAuditStatisticsParams params;
+    params.__set_query_id(fragment_ctx->query_id());
+    params.__set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+    query_statistics->to_params(&params);
+
+    auto fe_addr = fragment_ctx->fe_addr();
+    if (fe_addr.hostname.empty()) {
+        // query executed by external connectors, like spark and flink connector,
+        // does not need to report exec state to FE, so return if fe addr is empty.
+        return;
+    }
+
+    auto exec_env = fragment_ctx->runtime_state()->exec_env();
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
+    auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+    if (!status.ok()) {
+        if (status.is_not_found()) {
+            LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
+                      << print_id(fragment_id);
+        } else {
+            LOG(WARNING) << "[Driver] Fail to report audit statistics fragment_instance_id=" << print_id(fragment_id)
+                         << ", status: " << status.to_string();
+        }
+    } else {
+        LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+    }
 }
 
 size_t GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
@@ -383,6 +424,16 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
         return instance_profile;
     }
 
+    RuntimeProfile* new_instance_profile = nullptr;
+    int64_t process_raw_timer = 0;
+    DeferOp defer([&new_instance_profile, &process_raw_timer]() {
+        if (new_instance_profile != nullptr) {
+            auto* process_timer = ADD_TIMER(new_instance_profile, "BackendProfileMergeTime");
+            COUNTER_SET(process_timer, process_raw_timer);
+        }
+    });
+
+    SCOPED_RAW_TIMER(&process_raw_timer);
     std::vector<RuntimeProfile*> pipeline_profiles;
     instance_profile->get_children(&pipeline_profiles);
 
@@ -411,7 +462,7 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
         merged_driver_profiles.push_back(merged_driver_profile);
     }
 
-    auto* new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
+    new_instance_profile = query_ctx->object_pool()->add(new RuntimeProfile(instance_profile->name()));
     new_instance_profile->copy_all_info_strings_from(instance_profile);
     new_instance_profile->copy_all_counters_from(instance_profile);
     for (auto* merged_driver_profile : merged_driver_profiles) {

@@ -54,6 +54,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
+#include "exprs/dict_query_expr.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/in_predicate.h"
@@ -387,6 +388,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new CloneExpr(texpr_node));
         break;
+    case TExprNodeType::DICT_QUERY_EXPR:
+        *expr = pool->add(new DictQueryExpr(texpr_node));
+        break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
     case TExprNodeType::TABLE_FUNCTION_EXPR:
@@ -580,6 +584,16 @@ int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
 
     for (auto i : _children) {
         n += i->get_slot_ids(slot_ids);
+    }
+
+    return n;
+}
+
+int Expr::get_subfields(std::vector<std::vector<std::string>>* subfields) const {
+    int n = 0;
+
+    for (auto i : _children) {
+        n += i->get_subfields(subfields);
     }
 
     return n;

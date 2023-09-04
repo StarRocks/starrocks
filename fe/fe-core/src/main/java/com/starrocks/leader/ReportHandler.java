@@ -44,6 +44,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -956,6 +957,7 @@ public class ReportHandler extends Daemon {
                 --maxTaskSendPerBe;
             }
         } // end for backendTabletIds
+
         AgentTaskExecutor.submit(batchTask);
 
         if (deleteFromBackendCounter != 0 || addToMetaCounter != 0) {
@@ -975,16 +977,80 @@ public class ReportHandler extends Daemon {
         return true;
     }
 
-    private static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
-                                        long backendId) {
+    public static boolean migratableTablet(Database db, OlapTable tbl, long partitionId, long indexId, long tabletId) {
+        if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return true;
+        }
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        List<Backend> backends = currentSystemInfo.getBackends();
+        long maxLastSuccessReportTabletsTime = -1L;
+
+        for (Backend be : backends) {
+            long lastSuccessReportTabletsTime = TimeUtils.timeStringToLong(be.getBackendStatus().lastSuccessReportTabletsTime);
+            maxLastSuccessReportTabletsTime = Math.max(maxLastSuccessReportTabletsTime, lastSuccessReportTabletsTime);
+        }
+
+        db.readLock();
+        try {
+            Partition partition = tbl.getPartition(partitionId);
+            if (partition == null || partition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
+                // partition is null or tablet report has not been updated, unmigratable
+                return false;
+            }
+            MaterializedIndex idx = partition.getIndex(indexId);
+            if (idx == null) {
+                // index is null, unmigratable
+                return false;
+            }
+
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+            // get max rowset creation time for all replica of the tablet
+            long maxRowsetCreationTime = -1L;
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
+            }
+
+            // get negative max rowset creation time or too close to the max rowset creation time, unmigratable
+            if (maxRowsetCreationTime < 0 || System.currentTimeMillis() - maxRowsetCreationTime * 1000 <=
+                    Config.primary_key_disk_schedule_time * 1000) {
+                return false;
+            }
+
+            return true;
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    protected static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
+                                          long backendId) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         AgentBatchTask batchTask = new AgentBatchTask();
+
         for (TStorageMedium storageMedium : tabletMetaMigrationMap.keySet()) {
             List<Long> tabletIds = tabletMetaMigrationMap.get(storageMedium);
             List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+                if (db == null) {
+                    continue;
+                }
+                OlapTable table = null;
+                db.readLock();
+                try {
+                    table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                } finally {
+                    db.readUnlock();
+                }
+
+                if (!migratableTablet(db, table, tabletMeta.getPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                    continue;
+                }
+
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,

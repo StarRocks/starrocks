@@ -21,12 +21,14 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -54,8 +56,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _overhead_timer = ADD_TIMER(_runtime_profile, "OverheadTime");
 
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
-    _global_schedule_counter = ADD_COUNTER(_runtime_profile, "GlobalScheduleCount", TUnit::UNIT);
-    _global_schedule_timer = ADD_TIMER(_runtime_profile, "GlobalScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
@@ -78,19 +78,21 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     DCHECK(_state == DriverState::NOT_READY);
 
     auto* source_op = source_operator();
+    const auto use_cache = _fragment_ctx->enable_cache();
+
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
-    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
-                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
-                                        _fragment_ctx->enable_cache();
+    auto should_attach_ticket_checker =
+            (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
+            _morsel_queue->could_attch_ticket_checker() &&
+            (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
+
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
-        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
         scan_op->set_ticket_checker(ticket_checker);
-        split_morsel_queue->set_ticket_checker(ticket_checker);
+        _morsel_queue->set_ticket_checker(ticket_checker);
     }
 
-    const auto use_cache = _fragment_ctx->enable_cache();
     source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
@@ -221,7 +223,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             scan->end_driver_process(this);
         }
 
-        _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+        _update_statistics(runtime_state, total_chunks_moved, total_rows_moved, time_spent);
     });
 
     if (ScanOperator* scan = source_scan_operator()) {
@@ -260,7 +262,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         // We rely on the exchange operator to pass query statistics,
                         // so when the scan operator finishes,
                         // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
-                        _update_scan_statistics();
+                        _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
@@ -303,7 +305,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 if (return_status.ok()) {
                     if (maybe_chunk.value() &&
                         (maybe_chunk.value()->num_rows() > 0 ||
-                         (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
+                         (maybe_chunk.value()->owner_info().is_last_chunk() && !next_op->ignore_empty_eos()))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         if (UNLIKELY(row_num > runtime_state->chunk_size())) {
                             return Status::InternalError(
@@ -348,7 +350,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         // We rely on the exchange operator to pass query statistics,
                         // so when the scan operator finishes,
                         // we need to update the scan stats immediately to ensure that the exchange operator can send all the data before the end
-                        _update_scan_statistics();
+                        _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
@@ -483,9 +485,6 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::start_schedule(int64_t start_count, int64_t start_time) {
-    _global_schedule_counter->set(start_count);
-    _global_schedule_timer->set(start_time);
-
     // start timers
     _total_timer_sw->start();
     _pending_timer_sw->start();
@@ -577,16 +576,6 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
-    if (schedule_count > 0) {
-        _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
-    } else {
-        _global_schedule_counter->set((int64_t)-1);
-    }
-    if (execution_time > 0) {
-        _global_schedule_timer->set(execution_time - _global_schedule_timer->value());
-    } else {
-        _global_schedule_timer->set((int64_t)-1);
-    }
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
@@ -778,11 +767,12 @@ void PipelineDriver::_update_driver_acct(size_t total_chunks_moved, size_t total
     driver_acct().update_last_time_spent(time_spent);
 }
 
-void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+void PipelineDriver::_update_statistics(RuntimeState* state, size_t total_chunks_moved, size_t total_rows_moved,
+                                        size_t time_spent) {
     _update_driver_acct(total_chunks_moved, total_rows_moved, time_spent);
 
     // Update statistics of scan operator
-    _update_scan_statistics();
+    _update_scan_statistics(state);
 
     // Update cpu cost of this query
     int64_t runtime_ns = driver_acct().get_last_time_spent();
@@ -792,7 +782,7 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
 }
 
-void PipelineDriver::_update_scan_statistics() {
+void PipelineDriver::_update_scan_statistics(RuntimeState* state) {
     if (ScanOperator* scan = source_scan_operator()) {
         int64_t scan_rows = scan->get_last_scan_rows_num();
         int64_t scan_bytes = scan->get_last_scan_bytes();
@@ -800,7 +790,9 @@ void PipelineDriver::_update_scan_statistics() {
         if (scan_rows > 0 || scan_bytes > 0) {
             query_ctx()->incr_cur_scan_rows_num(scan_rows);
             query_ctx()->incr_cur_scan_bytes(scan_bytes);
-            query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);
+            if (state->enable_collect_table_level_scan_stats()) {
+                query_ctx()->update_scan_stats(table_id, scan_rows, scan_bytes);
+            }
         }
     }
 }

@@ -52,6 +52,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    public void testMock_MV_JoinAgg1() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
+        // Table and mv have no stats, mv rewrite is ok.
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
+        Assert.assertTrue(replayPair.second.contains("table: tbl_mock_013, rollup: tbl_mock_013"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
@@ -96,11 +106,20 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    public void testMock_MV_MVOnMV1() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_mv_on_mv1"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
     public void testMV_AggWithHaving1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
     }
 
@@ -109,7 +128,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_2"));
     }
 
@@ -118,7 +136,15 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("TEST_MV_3"));
+    }
+
+    @Test
+    public void testMock_MV_AggWithHaving3() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("tbl_mock_023"));
     }
 }

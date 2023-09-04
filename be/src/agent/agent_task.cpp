@@ -144,7 +144,9 @@ static void unify_finish_agent_task(TStatusCode::type status_code, const std::ve
     finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
-    remove_task_info(task_type, signature);
+    size_t task_queue_size = remove_task_info(task_type, signature);
+    LOG(INFO) << "Remove task success. type=" << task_type << ", signature=" << signature
+              << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
@@ -435,8 +437,8 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
         LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
         status_code = TStatusCode::MEM_LIMIT_EXCEEDED;
     } else {
-        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.schema_hash,
-                                       check_consistency_req.version, &checksum);
+        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.version,
+                                       &checksum);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req->signature;
@@ -716,6 +718,8 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
             case TTabletMetaType::WRITE_QUORUM:
                 break;
             case TTabletMetaType::REPLICATED_STORAGE:
+                break;
+            case TTabletMetaType::BUCKET_SIZE:
                 break;
             case TTabletMetaType::DISABLE_BINLOG:
                 break;

@@ -200,6 +200,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return Long.hashCode(indexId);
     }
 
+    public void setSchema(List<Column> newSchema) {
+        this.schema = newSchema;
+    }
+
+    public void setSchemaVersion(int newSchemaVersion) {
+        this.schemaVersion = newSchemaVersion;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MaterializedIndexMeta)) {

@@ -391,6 +391,7 @@ void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high
         int64_t target_memory = std::max((size * 9 / 10), memory_high);
         _index_cache.try_evict(target_memory);
     }
+    _keep_pindex_bf = _index_cache.size() > memory_high ? false : true;
     return;
 }
 

@@ -37,13 +37,14 @@
 
 namespace starrocks::lake {
 
-class ConditionUpdateTest : public TestBase {
+class ConditionUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     ConditionUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
 
         //
         //  | column | type | KEY | NULL |
@@ -75,7 +76,7 @@ public:
         _referenced_column_ids.push_back(0);
         _referenced_column_ids.push_back(1);
         _partial_tablet_schema = TabletSchema::create(*schema);
-        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_partial_tablet_schema));
+        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
 
         auto c2 = schema->add_column();
         {
@@ -88,7 +89,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
     void SetUp() override {
@@ -166,7 +167,7 @@ protected:
     int64_t _partition_id = 4561;
 };
 
-TEST_F(ConditionUpdateTest, test_condition_update) {
+TEST_P(ConditionUpdateTest, test_condition_update) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -178,8 +179,8 @@ TEST_F(ConditionUpdateTest, test_condition_update) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -205,7 +206,7 @@ TEST_F(ConditionUpdateTest, test_condition_update) {
     result[3] = std::make_pair(5, 6);
     for (int i = 0; i < 4; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1",
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1", 0,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -222,7 +223,7 @@ TEST_F(ConditionUpdateTest, test_condition_update) {
     }
 }
 
-TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
+TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -234,8 +235,8 @@ TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -255,7 +256,7 @@ TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
     config::write_buffer_size = 1;
     for (int i = 0; i < 2; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1",
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1", 0,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
@@ -271,7 +272,7 @@ TEST_F(ConditionUpdateTest, test_condition_update_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
 }
 
-TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
+TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     // condition update
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -285,8 +286,8 @@ TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
     auto version = 1;
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer =
-            DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1", _mem_tracker.get());
+    auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, "c1", 0,
+                                            _mem_tracker.get());
     ASSERT_OK(delta_writer->open());
     // finish condition merge in one memtable
     ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
@@ -302,5 +303,8 @@ TEST_F(ConditionUpdateTest, test_condition_update_in_memtable) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
 }
+
+INSTANTIATE_TEST_SUITE_P(ConditionUpdateTest, ConditionUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
 } // namespace starrocks::lake

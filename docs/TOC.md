@@ -301,6 +301,7 @@
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
+      + [Data type list](./sql-reference/sql-statements/data-types/data-type-list.md)
       + Numeric
         + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
         + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)
@@ -328,8 +329,6 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-    + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
-    + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + Function Reference
     + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
@@ -587,6 +586,8 @@
       + [conv](/sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [cosine_similarity](./sql-reference/sql-functions/math-functions/cos_similarity.md)
+      + [cosine_similarity_norm](./sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)
@@ -700,6 +701,8 @@
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+  + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
+  + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)

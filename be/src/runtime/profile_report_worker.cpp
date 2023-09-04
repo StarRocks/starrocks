@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
+#include "util/misc.h"
 
 namespace starrocks {
 
@@ -119,11 +120,7 @@ void ProfileReportWorker::execute() {
             LOG(WARNING) << "profile_report_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
-        int32_t left_seconds = interval;
-        while (!_stop.load(std::memory_order_consume) && left_seconds > 0) {
-            sleep(1);
-            --left_seconds;
-        }
+        nap_sleep(interval, [this] { return _stop.load(std::memory_order_consume); });
     }
     LOG(INFO) << "ProfileReportWorker going to exit.";
 }

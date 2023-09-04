@@ -14,7 +14,9 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -51,5 +53,22 @@ public class AWSCloudConfigurationTest {
         Assert.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
         Assert.assertEquals("smith", configuration.get("fs.s3a.assumed.role.arn"));
+    }
+
+    @Test
+    public void testBuildGlueCloudCredential() {
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set("aws.glue.access_key", "ak");
+        hiveConf.set("aws.glue.secret_key", "sk");
+        hiveConf.set("aws.glue.region", "us-west-1");
+        AWSCloudCredential awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+        Assert.assertNotNull(awsCloudCredential);
+        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
+                "accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', externalId='', " +
+                "region='us-west-1', endpoint=''}", awsCloudCredential.getCredentialString());
+
+        hiveConf = new HiveConf();
+        awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+        Assert.assertNull(awsCloudCredential);
     }
 }

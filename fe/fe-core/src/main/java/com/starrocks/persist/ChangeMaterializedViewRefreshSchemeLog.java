@@ -42,7 +42,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         this.id = materializedView.getId();
         this.dbId = materializedView.getDbId();
         this.refreshType = materializedView.getRefreshScheme().getType();
-        this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext();
+        this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext().copy();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {

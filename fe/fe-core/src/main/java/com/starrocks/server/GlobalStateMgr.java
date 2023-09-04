@@ -141,7 +141,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -201,6 +201,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -306,7 +307,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -786,7 +786,7 @@ public class GlobalStateMgr {
         getConfigRefreshDaemon().registerListener(() -> {
             try {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
-                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                    loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
@@ -1001,10 +1001,6 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
-    }
-
-    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
-        return nodeMgr.getWarehouseInfosFromOtherFEs();
     }
 
     public StorageVolumeMgr getStorageVolumeMgr() {
@@ -2450,6 +2446,14 @@ public class GlobalStateMgr {
         localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
+    public void addSubPartitions(Database db, String tableName, Partition partition, int num) throws DdlException {
+        localMetastore.addSubPartitions(db, tableName, partition, num);
+    }
+
+    public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
+        localMetastore.replayAddSubPartition(info);
+    }
+
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
         localMetastore.addPartitions(db, tableName, addPartitionClause);
@@ -2655,6 +2659,13 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
+                        .append("\" = \"")
+                        .append(olapTable.getAutomaticBucketSize()).append("\"");
+            }
+
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2731,6 +2742,12 @@ public class GlobalStateMgr {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
                             .append("\" = \"");
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // show lightSchemaChange only when it is set true
+                if (olapTable.getUseLightSchemaChange()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
+                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
                 }
 
                 // storage media
@@ -2887,7 +2904,7 @@ public class GlobalStateMgr {
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
-            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+            CredentialUtil.maskCredential(clonedFileProperties);
             addTableComment(sb, table);
 
             sb.append("\nPROPERTIES (\n");

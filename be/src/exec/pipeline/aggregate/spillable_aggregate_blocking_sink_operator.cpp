@@ -110,6 +110,14 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     return Status::OK();
 }
 
+Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
+    return Status::OK();
+}
+
 Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     // spill all data
     DCHECK(!_aggregator->is_none_group_by_exprs());

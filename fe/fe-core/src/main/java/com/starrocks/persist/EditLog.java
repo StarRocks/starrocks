@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
@@ -93,12 +94,14 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -280,6 +283,13 @@ public class EditLog {
                     AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
                     for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
                         globalStateMgr.replayAddPartition(info);
+                    }
+                    break;
+                }
+                case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
+                    AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
+                    for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
+                        globalStateMgr.replayAddSubPartition(info);
                     }
                     break;
                 }
@@ -827,6 +837,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                case OperationType.OP_MODIFY_BUCKET_SIZE:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
@@ -909,6 +920,16 @@ public class EditLog {
                 }
                 case OperationType.OP_REMOVE_ANALYZE_STATUS: {
                     NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS: {
+                    ExternalAnalyzeStatus analyzeStatus = (ExternalAnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
+                    ExternalAnalyzeStatus analyzeStatus = (ExternalAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
@@ -1053,6 +1074,11 @@ public class EditLog {
                     MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
+                    final TableAddOrDropColumnsInfo info = (TableAddOrDropColumnsInfo) journal.getData();
+                    globalStateMgr.getSchemaChangeHandler().replayModifyTableAddOrDropColumns(info);
+                    break;
+                }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
                     SetDefaultStorageVolumeLog log = (SetDefaultStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
@@ -1107,6 +1133,12 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        // do not check whether global state mgr is leader in non shared nothing mode,
+        // because starmgr state change happens before global state mgr state change,
+        // it will write log before global state mgr becomes leader
+        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
+                                 GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1257,6 +1289,10 @@ public class EditLog {
 
     public void logAddPartitions(AddPartitionsInfoV2 info) {
         logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+    }
+
+    public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
     public void logDropPartition(DropPartitionInfo info) {
@@ -1818,6 +1854,10 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
     }
 
+    public void logModifyBucketSize(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
+    }
+
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
         logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
@@ -1865,12 +1905,16 @@ public class EditLog {
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
             logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        } else {
+            logEdit(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
         if (status.isNative()) {
             logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        } else {
+            logEdit(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS, (ExternalAnalyzeStatus) status);
         }
     }
 
@@ -2028,6 +2072,10 @@ public class EditLog {
 
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
+    }
+
+    public void logModifyTableAddOrDropColumns(TableAddOrDropColumnsInfo info) {
+        logEdit(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, info);
     }
 
     public void logAlterTask(Task changedTask) {

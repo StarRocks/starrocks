@@ -80,6 +80,7 @@ private:
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     int64_t _version = 0;
 
     RuntimeState* _runtime_state = nullptr;
@@ -126,6 +127,7 @@ private:
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rows_key_range_counter = nullptr;
     RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;

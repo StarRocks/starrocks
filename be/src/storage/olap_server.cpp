@@ -80,7 +80,7 @@ Status StorageEngine::start_bg_threads() {
     Thread::set_thread_name(_update_cache_expire_thread, "cache_expire");
 
     _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
-    Thread::set_thread_name(_update_cache_expire_thread, "evict_update_cache");
+    Thread::set_thread_name(_update_cache_evict_thread, "evict_update_cache");
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
@@ -749,6 +749,8 @@ void* StorageEngine::_path_gc_thread_callback(void* arg) {
         LOG(INFO) << "try to perform path gc by rowsetid!";
         // perform path gc by rowset id
         ((DataDir*)arg)->perform_path_gc_by_rowsetid();
+        // perform dcg files gc
+        ((DataDir*)arg)->perform_delta_column_files_gc();
 
         int32_t interval = config::path_gc_check_interval_second;
         if (interval <= 0) {

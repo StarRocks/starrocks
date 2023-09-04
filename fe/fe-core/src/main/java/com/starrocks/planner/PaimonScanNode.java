@@ -21,6 +21,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -84,7 +85,7 @@ public class PaimonScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
@@ -246,11 +247,6 @@ public class PaimonScanNode extends ScanNode {
 
         msg.hdfs_scan_node.setCan_use_any_column(canUseAnyColumn);
         msg.hdfs_scan_node.setCan_use_min_max_count_opt(canUseMinMaxCountOpt);
-    }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return true;
     }
 
     @Override

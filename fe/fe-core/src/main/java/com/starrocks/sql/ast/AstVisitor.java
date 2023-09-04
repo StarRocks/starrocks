@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -339,6 +340,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -969,6 +974,15 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    // Alter Materialized View
+    public R visitRefreshSchemeClause(RefreshSchemeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     // ------------------------------------------- Relation ----------------------------------==------------------------
 
     public R visitRelation(Relation node, C context) {
@@ -1181,5 +1195,9 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
+    }
+
+    public R visitDictQueryExpr(DictQueryExpr node, C context) {
+        return visitExpression(node, context);
     }
 }

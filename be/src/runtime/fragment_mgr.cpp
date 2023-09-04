@@ -59,6 +59,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -556,9 +557,7 @@ void FragmentMgr::cancel_worker() {
             cancel(id, PPlanFragmentCancelReason::TIMEOUT);
             LOG(INFO) << "FragmentMgr cancel worker going to cancel timeout fragment " << print_id(id);
         }
-
-        // check every 1 seconds
-        sleep(1);
+        nap_sleep(1, [this] { return _stop; });
     }
     LOG(INFO) << "FragmentMgr cancel worker is going to exit.";
 }

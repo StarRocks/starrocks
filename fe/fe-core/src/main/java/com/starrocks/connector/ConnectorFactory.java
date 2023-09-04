@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,7 +30,7 @@ public class ConnectorFactory {
      * @param context - encapsulate all information needed to create a connector
      * @return a connector instance
      */
-    public static Connector createConnector(ConnectorContext context) {
+    public static CatalogConnector createConnector(ConnectorContext context) {
         if (null == context || !ConnectorType.isSupport(context.getType())) {
             return null;
         }
@@ -48,7 +49,9 @@ public class ConnectorFactory {
                 connector.bindConfig(connectorConfig);
             }
 
-            return connector;
+            InformationSchemaConnector informationSchemaConnector =
+                    new InformationSchemaConnector(context.getCatalogName());
+            return new CatalogConnector(connector, informationSchemaConnector);
         } catch (Exception e) {
             LOG.error("can't create connector for type: " + context.getType(), e);
             return null;

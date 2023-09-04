@@ -8,13 +8,12 @@ Also, you can directly transform and load data from Paimon by using [INSERT INTO
 
 To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster needs to integrate with two important components:
 
-- istributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or or other S3-compatible storage system (for example, MinIO)
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or or other S3-compatible storage system (for example, MinIO)
 - Metastore like your file system or Hive metastore
 
 ## Usage notes
 
-- The data types of Paimon that StarRocks does not support are MAP, STRUCT, and ARRAY.
-- You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
 
 ## Integration preparations
 
@@ -155,8 +154,8 @@ For information about how to choose an authentication method for accessing AWS S
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Paimon cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -166,8 +165,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                       | Required | Description                                                  |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access. Valid values: `true` and `false`. Default value: `false`. Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br>Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br> Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                 | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key               | Yes      | The access key of your IAM user.                             |
 | aws.s3.secret_key               | Yes      | The secret key of your IAM user.                             |

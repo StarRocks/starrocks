@@ -17,12 +17,19 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TPlanFragmentDestination;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 
@@ -31,6 +38,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The {@code FragmentInstance} represents a parallel instance of a {@link PlanFragment}.
@@ -79,6 +87,98 @@ public class FragmentInstance {
         return "FragmentInstance{" + "fragmentId=" + getFragmentId() + ", instanceId=" + DebugUtil.printId(instanceId) +
                 ", indexInJob=" + indexInJob + ", indexInFragment=" + indexInFragment + ", workerId=" + getWorkerId() +
                 ", execution=" + execution + '}';
+    }
+
+    public String getReadableId() {
+        return indexInJob + "-" + getFragmentId() + "#" + indexInFragment;
+    }
+
+    public void buildExplainString(ExplainBuilder builder) {
+        builder.addValue("INSTANCE(" + getReadableId() + ")", () -> {
+            if (execution != null) {
+                List<TPlanFragmentDestination> destinations = execution.getDestinations();
+                if (!destinations.isEmpty()) {
+                    ExecutionDAG executionDAG = execFragment.getExecutionDAG();
+                    String destInstanceIds = destinations.stream().map(destination -> {
+                        TUniqueId destInstanceId = destination.getFragment_instance_id();
+                        return executionDAG.getInstanceByInstanceId(destInstanceId).getReadableId();
+                    }).collect(Collectors.joining(","));
+
+                    builder.addValue("DESTINATIONS", destInstanceIds);
+                }
+            }
+
+            builder.addValue("BE", worker.getId());
+
+            if (isSetPipelineDop()) {
+                builder.addValue("DOP", pipelineDop);
+            }
+
+            if (!node2ScanRanges.isEmpty()) {
+                explainScanRangesWithoutDriverSeq(builder);
+            }
+            if (!node2DriverSeqToScanRanges.isEmpty()) {
+                explainScanRangesWithDriverSeq(builder);
+            }
+        });
+    }
+
+    private void explainScanRangesWithoutDriverSeq(ExplainBuilder builder) {
+        builder.addValue("SCAN RANGES", () -> {
+            if (!bucketSeqToDriverSeq.isEmpty()) {
+                builder.addValue("BUCKET SEQUENCES", bucketSeqToDriverSeq.keySet());
+            }
+
+            node2ScanRanges.forEach((scanId, scanRanges) -> {
+                ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
+                builder.addValue(scanId + ":" + scanNode.getPlanNodeName(),
+                        () -> explainScanRanges(builder, scanRanges, 0));
+            });
+        });
+    }
+
+    private void explainScanRangesWithDriverSeq(ExplainBuilder builder) {
+        builder.addValue("SCAN RANGES (per driver sequence)", () -> {
+            if (!bucketSeqToDriverSeq.isEmpty()) {
+                builder.addValue("BUCKET SEQUENCE TO DRIVER SEQUENCE", bucketSeqToDriverSeq.entrySet().stream()
+                        .map(e -> e.getKey() + ":" + e.getValue())
+                        .collect(Collectors.toList()));
+            }
+
+            node2DriverSeqToScanRanges.forEach((scanId, driverSeqToScanRanges) -> {
+                ScanNode scanNode = execFragment.getScanNode(new PlanNodeId(scanId));
+                builder.addValue(scanId + ":" + scanNode.getPlanNodeName(), () -> {
+                    int offset = 0;
+                    for (Map.Entry<Integer, List<TScanRangeParams>> entry : driverSeqToScanRanges.entrySet()) {
+                        Integer driverSeq = entry.getKey();
+                        List<TScanRangeParams> scanRanges = entry.getValue();
+                        int localOffset = offset;
+                        builder.addValue("DriverSequence#" + driverSeq,
+                                () -> explainScanRanges(builder, scanRanges, localOffset));
+
+                        offset += scanRanges.size();
+                    }
+                });
+            });
+        });
+    }
+
+    private void explainScanRanges(ExplainBuilder builder, List<TScanRangeParams> scanRanges, int offset) {
+        for (int i = 0; i < scanRanges.size(); i++) {
+            builder.addOrderedItem(offset + i + 1, explainScanRange(scanRanges.get(i).getScan_range()));
+        }
+    }
+
+    private String explainScanRange(TScanRange scanRange) {
+        StringBuilder builder = new StringBuilder();
+        if (scanRange.isSetInternal_scan_range()) {
+            TInternalScanRange olapScanRange = scanRange.getInternal_scan_range();
+            builder.append("partitionID=").append(olapScanRange.getPartition_id())
+                    .append(",tabletID=").append(olapScanRange.getTablet_id());
+        } else {
+            builder.append("<PLACEHOLDER>");
+        }
+        return builder.toString();
     }
 
     public ExecutionFragment getExecFragment() {
@@ -198,7 +298,7 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink)) {
+        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink)) {
             return dop;
         } else {
             int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();

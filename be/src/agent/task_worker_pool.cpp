@@ -71,6 +71,7 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -173,7 +174,8 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
 
-    if (register_task_info(task_type, signature)) {
+    std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);
+    if (register_pair.first) {
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
@@ -599,7 +601,8 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
 
-        sleep(config::report_task_interval_seconds);
+        nap_sleep(config::report_task_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -739,7 +742,8 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (result.__isset.workgroup_ops) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
         }
-        sleep(config::report_workgroup_interval_seconds);
+        nap_sleep(config::report_workgroup_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;

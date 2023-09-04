@@ -35,6 +35,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -57,10 +58,12 @@ public class JobSpec {
      */
     private final TDescriptorTable descTable;
 
+    private final ConnectContext connectContext;
     private final boolean enablePipeline;
     private final boolean enableStreamPipeline;
     private final boolean isBlockQuery;
-    private final boolean isStatisticsJob;
+
+    private final boolean needReport;
 
     /**
      * Why we use query global?
@@ -71,6 +74,8 @@ public class JobSpec {
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
     private final TWorkGroup resourceGroup;
+
+    private final String planProtocol;
 
     public static class Factory {
         private Factory() {
@@ -97,9 +102,11 @@ public class JobSpec {
                     .descTable(descTable)
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
+                    .needReport(context.getSessionVariable().isEnableProfile())
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+                    .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
 
@@ -122,6 +129,7 @@ public class JobSpec {
                     .descTable(descTable)
                     .enableStreamPipeline(true)
                     .isBlockQuery(false)
+                    .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -147,6 +155,7 @@ public class JobSpec {
                     .descTable(loadPlanner.getDescTable().toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
+                    .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -181,6 +190,7 @@ public class JobSpec {
                     .descTable(descTable.toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
+                    .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -219,6 +229,7 @@ public class JobSpec {
                     .descTable(descTable.toThrift())
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
+                    .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -236,6 +247,7 @@ public class JobSpec {
                     .descTable(null)
                     .enableStreamPipeline(false)
                     .isBlockQuery(true)
+                    .needReport(true)
                     .queryGlobals(null)
                     .queryOptions(null)
                     .enablePipeline(false)
@@ -261,6 +273,7 @@ public class JobSpec {
                     .descTable(null)
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
+                    .needReport(false)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .enablePipeline(true)
@@ -321,11 +334,13 @@ public class JobSpec {
         this.enablePipeline = builder.enablePipeline;
         this.enableStreamPipeline = builder.enableStreamPipeline;
         this.isBlockQuery = builder.isBlockQuery;
-        this.isStatisticsJob = builder.isStatisticsJob;
+        this.needReport = builder.needReport;
+        this.connectContext = builder.connectContext;
 
         this.queryGlobals = builder.queryGlobals;
         this.queryOptions = builder.queryOptions;
         this.resourceGroup = builder.resourceGroup;
+        this.planProtocol = builder.planProtocol;
     }
 
     @Override
@@ -412,12 +427,24 @@ public class JobSpec {
         return isBlockQuery;
     }
 
+    public boolean isNeedReport() {
+        return needReport;
+    }
+
     public boolean isStatisticsJob() {
-        return isStatisticsJob;
+        return connectContext.isStatisticsJob();
+    }
+
+    public boolean isNeedQueued() {
+        return connectContext.isNeedQueued();
     }
 
     public boolean isStreamLoad() {
         return queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD;
+    }
+
+    public String getPlanProtocol() {
+        return planProtocol;
     }
 
     public void reset() {
@@ -435,11 +462,13 @@ public class JobSpec {
         private boolean enablePipeline;
         private boolean enableStreamPipeline;
         private boolean isBlockQuery;
-        private boolean isStatisticsJob;
+        private boolean needReport;
+        private ConnectContext connectContext;
 
         private TQueryGlobals queryGlobals;
         private TQueryOptions queryOptions;
         private TWorkGroup resourceGroup;
+        private String planProtocol;
 
         public JobSpec build() {
             return new JobSpec(this);
@@ -451,7 +480,7 @@ public class JobSpec {
             this.resourceGroup(newResourceGroup);
 
             this.enablePipeline(isEnablePipeline(context, fragments));
-            this.isStatisticsJob = context.isStatisticsJob();
+            this.connectContext = context;
 
             return this;
         }
@@ -511,6 +540,16 @@ public class JobSpec {
 
         private Builder resourceGroup(TWorkGroup resourceGroup) {
             this.resourceGroup = resourceGroup;
+            return this;
+        }
+
+        private Builder needReport(boolean needReport) {
+            this.needReport = needReport;
+            return this;
+        }
+
+        private Builder setPlanProtocol(String planProtocol) {
+            this.planProtocol = StringUtils.lowerCase(planProtocol);
             return this;
         }
 

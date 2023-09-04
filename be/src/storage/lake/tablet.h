@@ -143,6 +143,8 @@ public:
 
     int64_t version_hint() const { return _version_hint; }
 
+    int64_t data_size();
+
 private:
     TabletManager* _mgr;
     int64_t _id;

@@ -48,6 +48,7 @@ import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -513,10 +514,9 @@ public class ColumnTypeConverter {
             return ScalarType.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(TinyIntType tinyIntType) {
-        //    return ScalarType.createType(PrimitiveType.TINYINT);
-        //}
+        public Type visit(TinyIntType tinyIntType) {
+            return ScalarType.createType(PrimitiveType.TINYINT);
+        }
 
         public Type visit(SmallIntType smallIntType) {
             return ScalarType.createType(PrimitiveType.SMALLINT);
@@ -546,15 +546,13 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.DATETIME);
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(org.apache.paimon.types.ArrayType arrayType) {
-        //    return new ArrayType(fromPaimonType(arrayType.getElementType()));
-        //}
+        public Type visit(org.apache.paimon.types.ArrayType arrayType) {
+            return new ArrayType(fromPaimonType(arrayType.getElementType()));
+        }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(org.apache.paimon.types.MapType mapType) {
-        //    return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
-        //}
+        public Type visit(org.apache.paimon.types.MapType mapType) {
+            return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
+        }
 
         // TODO: uncomment this and unit test case when this type is supported in paimon connector
         //public Type visit(RowType rowType) {

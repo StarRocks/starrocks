@@ -36,7 +36,7 @@ public:
                              FragmentContext* fragment_ctx, const std::shared_ptr<::parquet::schema::GroupNode>& schema,
                              const std::vector<ExprContext*>& output_expr_ctxs,
                              const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert)
-            : Operator(factory, id, "iceberg_table_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "iceberg_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
               _iceberg_table_data_location(_location + "/data/"),
               _file_format(std::move(file_format)),

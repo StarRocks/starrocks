@@ -146,8 +146,8 @@ void StreamLoadAction::handle(HttpRequest* req) {
     if (ctx->status.ok()) {
         ctx->status = _handle(ctx);
         if (!ctx->status.ok() && ctx->status.code() != TStatusCode::PUBLISH_TIMEOUT) {
-            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id
-                         << " errmsg=" << ctx->status.get_error_msg();
+            LOG(WARNING) << "Fail to handle streaming load, id=" << ctx->id << " errmsg=" << ctx->status.get_error_msg()
+                         << " " << ctx->brief();
         }
     }
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
@@ -566,7 +566,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000, config::txn_commit_rpc_timeout_ms);
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
     }
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     // plan this load

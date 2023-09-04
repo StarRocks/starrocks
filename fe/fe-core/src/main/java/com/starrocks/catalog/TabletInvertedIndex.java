@@ -172,6 +172,9 @@ public class TabletInvertedIndex {
                         if (backendTabletInfo.isSetIs_error_state()) {
                             replica.setIsErrorState(backendTabletInfo.is_error_state);
                         }
+                        if (backendTabletInfo.isSetMax_rowset_creation_time()) {
+                            replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
+                        }
                         if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                             foundTabletsWithValidSchema.add(tabletId);
                             // 1. (intersection)
@@ -448,9 +451,9 @@ public class TabletInvertedIndex {
 
                     // validate partition
                     long partitionId = tabletMeta.getPartitionId();
-                    Partition partition = table.getPartition(partitionId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
-                        partition = recycleBin.getPartition(partitionId);
+                        partition = recycleBin.getPhysicalPartition(partitionId);
                         if (partition != null) {
                             isInRecycleBin = true;
                         } else {
@@ -602,8 +605,7 @@ public class TabletInvertedIndex {
         writeLock();
         try {
             tabletMetaMap.putIfAbsent(tabletId, tabletMeta);
-
-            LOG.debug("add tablet: {}", tabletId);
+            LOG.debug("add tablet: {} tabletMeta: {}", tabletId, tabletMeta);
         } finally {
             writeUnlock();
         }
@@ -697,6 +699,10 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    public Table<Long, Long, Replica> getReplicaMetaTable() {
+        return replicaMetaTable;
     }
 
     public void addReplica(long tabletId, Replica replica) {
@@ -856,11 +862,21 @@ public class TabletInvertedIndex {
     }
 
     public long getTabletCount() {
-        return this.tabletMetaMap.size();
+        readLock();
+        try {
+            return this.tabletMetaMap.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public long getReplicaCount() {
-        return this.replicaMetaTable.size();
+        readLock();
+        try {
+            return this.replicaMetaTable.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     // just for test

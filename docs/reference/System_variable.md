@@ -33,7 +33,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for all the future sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
-A variable set by `SET var_name = xxx;` only takes effect for the current session. Example:
+A variable set by `SET <var_name> = xxx;` only takes effect for the current session. Example:
 
 ```SQL
 SET query_mem_limit = 137438953472;
@@ -43,13 +43,13 @@ SET forward_to_master = true;
 SET time_zone = "Asia/Shanghai";
 ```
 
-A variable set by `SET GLOBAL var_name = xxx;` takes effect globally. Example:
+A variable set by `SET GLOBAL <var_name> = xxx;` takes effect globally. Example:
 
 ```SQL
 SET GLOBAL query_mem_limit = 137438953472;
 ```
 
-Variables that can **only be set globally effective** include:
+The following variables only take effect globally. They cannot take effect for a single session, which means you must use `SET GLOBAL <var_name> = xxx;` for these variables. If you try to set such a variable for a single session (`SET <var_name> = xxx;`), an error is returned.
 
 * activate_all_roles_on_login
 * character_set_database
@@ -275,6 +275,10 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Used for MySQL client compatibility. No practical usage.
 
+* enable_strict_type (v3.1 and later)
+
+  Whether to allow implicit conversions for all compound predicates and for all expressions in the WHERE clause. Default value: `false`.
+
 * force_streaming_aggregate
 
   Used to control whether the aggregation node enables streaming aggregation for computing. The default value is false, meaning the feature is not enabled.
@@ -337,9 +341,9 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
 
-* `log_rejected_record_num` (v3.1 and later)
+* log_rejected_record_num (v3.1 and later)
 
-  Specifies the maximum number of unqualified data rows that can be logged. This parameter is supported from v3.1 onwards. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
+  Specifies the maximum number of unqualified data rows that can be logged. Valid values: `0`, `-1`, and any non-zero positive integer. Default value: `0`.
   
   * The value `0` specifies that data rows that are filtered out will not be logged.
   * The value `-1` specifies that all data rows that are filtered out will be logged.
@@ -584,11 +588,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * version (global)
 
-  Used for MySQL client compatibility. No practical usage.
+  The MySQL server version returned to the client.
 
 * version_comment (global)
 
-  Used to display the version of StarRocks. Cannot be changed.
+  The StarRocks version. Cannot be changed.
 
 * wait_timeout
 

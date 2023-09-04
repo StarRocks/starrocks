@@ -400,7 +400,7 @@ void OrcChunkReader::_try_implicit_cast(TypeDescriptor* from, const TypeDescript
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }
-    } else if (_broker_load_mode && !_strict_mode && is_string_type(t1) && is_string_type(t2)) {
+    } else if (_broker_load_mode && is_string_type(t1) && is_string_type(t2)) {
         // For broker load, the orc field length is larger than the maximum length of the starrocks field
         // will cause load failure in non-strict mode. Here we keep the maximum length of the orc field
         // the same as the maximum length of the starrocks field.
@@ -509,8 +509,7 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::read_next failed. reason = $0, file = $1", e.what(),
-                                     _current_file_name);
+        auto s = strings::Substitute("ORC reader read file $0 failed. Reason is $1.", _current_file_name, e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }

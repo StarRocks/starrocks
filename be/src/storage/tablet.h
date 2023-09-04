@@ -289,6 +289,22 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    const TabletSchemaCSPtr tablet_schema() const override;
+
+    const TabletSchema& unsafe_tablet_schema_ref() const override;
+
+    const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
+
+    void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
+
+    int64_t data_size();
+
+    int64_t in_writing_data_size();
+
+    void add_in_writing_data_size(int64_t txn_id, int64_t delta);
+
+    void remove_in_writing_data_size(int64_t txn_id);
+
     // verify all rowsets of current(max) version in this tablet
     [[nodiscard]] Status verify();
 
@@ -337,6 +353,9 @@ private:
 
     TimestampedVersionTracker _timestamped_version_tracker;
 
+    // Max schema_version schema from Rowset or FE
+    TabletSchemaCSPtr _max_version_schema;
+
     OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
@@ -351,6 +370,7 @@ private:
 
     // explain how these two locks work together.
     mutable std::shared_mutex _meta_lock;
+    mutable std::shared_mutex _schema_lock;
     // A new load job will produce a new rowset, which will be inserted into both _rs_version_map
     // and _inc_rs_version_map. Only the most recent rowsets are kept in _inc_rs_version_map to
     // reduce the amount of data that needs to be copied during the clone task.
@@ -395,6 +415,8 @@ private:
     std::atomic<int64_t> _last_checkpoint_time{0};
 
     std::unique_ptr<BinlogManager> _binlog_manager;
+
+    std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -422,27 +444,27 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
 }
 
 inline KeysType Tablet::keys_type() const {
-    return _tablet_meta->tablet_schema().keys_type();
+    return tablet_schema()->keys_type();
 }
 
 inline size_t Tablet::num_columns() const {
-    return _tablet_meta->tablet_schema().num_columns();
+    return tablet_schema()->num_columns();
 }
 
 inline size_t Tablet::num_key_columns() const {
-    return _tablet_meta->tablet_schema().num_key_columns();
+    return tablet_schema()->num_key_columns();
 }
 
 inline size_t Tablet::num_rows_per_row_block() const {
-    return _tablet_meta->tablet_schema().num_rows_per_row_block();
+    return tablet_schema()->num_rows_per_row_block();
 }
 
 inline size_t Tablet::next_unique_id() const {
-    return _tablet_meta->tablet_schema().next_column_unique_id();
+    return tablet_schema()->next_column_unique_id();
 }
 
 inline size_t Tablet::field_index(const string& field_name) const {
-    return _tablet_meta->tablet_schema().field_index(field_name);
+    return tablet_schema()->field_index(field_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

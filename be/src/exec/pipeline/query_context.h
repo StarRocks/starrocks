@@ -53,6 +53,7 @@ public:
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
+    int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -172,8 +173,8 @@ public:
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
-    bool is_result_sink() const { return _is_result_sink; }
-    void set_result_sink(bool value) { _is_result_sink = value; }
+    bool is_final_sink() const { return _is_final_sink; }
+    void set_final_sink() { _is_final_sink = true; }
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
@@ -188,6 +189,7 @@ public:
 private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
+    MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -231,7 +233,7 @@ private:
     // table level scan stats
     phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
 
-    bool _is_result_sink = false;
+    bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;

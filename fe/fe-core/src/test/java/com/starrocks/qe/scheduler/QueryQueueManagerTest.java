@@ -90,11 +90,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     );
     private static final Frontend LOCAL_FRONTEND = FRONTENDS.get(1);
 
+    private static final int ABSENT_CONCURRENCY_LIMIT = -1;
+
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
 
-    private boolean prevQueueEnable;
+    private boolean prevQueueEnableSelect;
+    private boolean prevQueueEnableStatistic;
+    private boolean prevQueueEnableLoad;
     private int prevQueueConcurrencyHardLimit;
     private double prevQueueMemUsedPctHardLimit;
     private int prevQueuePendingTimeoutSecond;
@@ -110,7 +114,9 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @Before
     public void before() {
-        prevQueueEnable = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
+        prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
+        prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
         prevQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         prevQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
@@ -138,8 +144,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @After
     public void after() {
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
+
         // Reset query queue configs.
-        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnable);
+        GlobalVariable.setEnableQueryQueueSelect(prevQueueEnableSelect);
+        GlobalVariable.setEnableQueryQueueStatistic(prevQueueEnableStatistic);
+        GlobalVariable.setEnableQueryQueueLoad(prevQueueEnableLoad);
         GlobalVariable.setQueryQueueConcurrencyLimit(prevQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(prevQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
@@ -186,6 +199,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
             Assert.assertTrue(manager.needCheckQueue(coordinator));
         }
+
+        {
+            // 4. set connectContext.needQueued to false.
+            connectContext.setNeedQueued(false);
+            DefaultCoordinator coordinator = getSchedulerWithQueryId(
+                    "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
+            Assert.assertFalse(manager.needCheckQueue(coordinator));
+            connectContext.setNeedQueued(true);
+        }
     }
 
     @Test
@@ -197,6 +219,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueLoad(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueLoad(false);
         }
 
         {
@@ -206,17 +229,30 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueSelect(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueSelect(false);
         }
 
         {
             // 3. Query for statistic.
+            connectContext.setStatisticsContext(false);
             connectContext.setStatisticsJob(true); // Mock statistics job.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
             GlobalVariable.setEnableQueryQueueStatistic(false);
             Assert.assertFalse(manager.isEnableQueue(coordinator));
             GlobalVariable.setEnableQueryQueueStatistic(true);
             Assert.assertTrue(manager.isEnableQueue(coordinator));
+
             connectContext.setStatisticsJob(false);
+            GlobalVariable.setEnableQueryQueueStatistic(true);
+            Assert.assertFalse(manager.isEnableQueue(coordinator));
+
+            connectContext.setStatisticsContext(true);
+            GlobalVariable.setEnableQueryQueueStatistic(false);
+            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            GlobalVariable.setEnableQueryQueueStatistic(true);
+            Assert.assertTrue(manager.isEnableQueue(coordinator));
+            connectContext.setStatisticsContext(false);
+            GlobalVariable.setEnableQueryQueueStatistic(false);
         }
     }
 
@@ -311,7 +347,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     @Test
     public void testGroupQueueNormal() throws Exception {
         final int concurrencyLimit = 3;
-        final int numGroups = 4;
+        final int numGroups = 5;
         final int numGroupPendingCoords = concurrencyLimit * 5 + 1;
         // Each group and non-group has `numGroupPendingCoords` coordinators.
         final int numPendingCoords = numGroupPendingCoords * (numGroups + 1);
@@ -322,10 +358,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         TWorkGroup group0 = new TWorkGroup().setId(0L).setConcurrency_limit(concurrencyLimit - 1);
         TWorkGroup group1 = new TWorkGroup().setId(1L).setConcurrency_limit(0);
-        TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(concurrencyLimit);
-        TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit + 1);
+        TWorkGroup group2 = new TWorkGroup().setId(2L).setConcurrency_limit(ABSENT_CONCURRENCY_LIMIT);
+        TWorkGroup group3 = new TWorkGroup().setId(3L).setConcurrency_limit(concurrencyLimit);
+        TWorkGroup group4 = new TWorkGroup().setId(4L).setConcurrency_limit(concurrencyLimit + 1);
         TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
-        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, nonGroup);
+        List<TWorkGroup> groups = ImmutableList.of(group0, group1, group2, group3, group4, nonGroup);
 
         // 1. Run `concurrencyLimit` non-group queries first, and they shouldn't be queued.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
@@ -1371,8 +1408,10 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         if (group != null && group.getId() != LogicalSlot.ABSENT_GROUP_ID) {
             ResourceGroup resourceGroup = new ResourceGroup();
+            if (group.getConcurrency_limit() != ABSENT_CONCURRENCY_LIMIT) {
+                resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
+            }
             resourceGroup.setId(group.getId());
-            resourceGroup.setConcurrencyLimit(group.getConcurrency_limit());
             mockedGroups.put(group.getId(), resourceGroup);
             new MockUp<ResourceGroupMgr>() {
                 @Mock

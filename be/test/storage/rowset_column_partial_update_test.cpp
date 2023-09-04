@@ -66,7 +66,7 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
-        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.tablet_schema = tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
@@ -134,6 +134,11 @@ public:
         return tablet;
     }
 
+    DataDir* get_stores() {
+        TCreateTabletReq request;
+        return StorageEngine::instance()->get_stores_for_create_tablet(request.storage_medium)[0];
+    }
+
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes, std::function<int16_t(int64_t)> v1_func,
                                           std::function<int32_t(int64_t)> v2_func,
@@ -151,14 +156,14 @@ public:
 
         writer_context.partial_update_tablet_schema = partial_schema;
         writer_context.referenced_column_ids = column_indexes;
-        writer_context.tablet_schema = partial_schema.get();
+        writer_context.tablet_schema = partial_schema;
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
         writer_context.partial_update_mode = mode;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema(*partial_schema.get());
+        auto schema = ChunkHelper::convert_schema(partial_schema);
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
@@ -178,7 +183,7 @@ public:
             CHECK_OK(writer->flush_chunk(*chunk));
         }
         RowsetSharedPtr partial_rowset = *writer->build();
-        partial_rowset->set_schema(&tablet->tablet_schema());
+        partial_rowset->set_schema(tablet->tablet_schema());
 
         return partial_rowset;
     }
@@ -673,6 +678,7 @@ TEST_F(RowsetColumnPartialUpdateTest, test_full_clone2) {
 }
 
 TEST_F(RowsetColumnPartialUpdateTest, test_dcg_gc) {
+    fs::remove_all(get_stores()->path());
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
@@ -702,6 +708,27 @@ TEST_F(RowsetColumnPartialUpdateTest, test_dcg_gc) {
     ASSERT_TRUE(clear_size.ok());
     ASSERT_EQ(*clear_size, 6);
     // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    // check delta column files gc
+    // 1. find out all .cols files
+    tablet->data_dir()->perform_path_scan();
+    ASSERT_EQ(tablet->data_dir()->get_all_check_dcg_files_cnt(), 10);
+    // 2. gc .cols files
+    tablet->data_dir()->perform_delta_column_files_gc();
+    tablet->data_dir()->perform_path_gc_by_rowsetid();
+    tablet->data_dir()->perform_path_scan();
+    ASSERT_EQ(tablet->data_dir()->get_all_check_dcg_files_cnt(), 2);
+    // 3. check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    // 4. gc and check again
+    tablet->data_dir()->perform_delta_column_files_gc();
+    tablet->data_dir()->perform_path_gc_by_rowsetid();
+    tablet->data_dir()->perform_path_scan();
+    ASSERT_EQ(tablet->data_dir()->get_all_check_dcg_files_cnt(), 2);
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));

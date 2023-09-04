@@ -218,12 +218,12 @@ public:
         writer_context.partition_id = 10;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = _schema.get();
+        writer_context.tablet_schema = _schema;
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
-        _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
+        _vectorized_schema = std::move(MemTable::convert_schema(_schema, _slots));
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
@@ -408,7 +408,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
     }
 
-    Schema read_schema = ChunkHelper::convert_schema(*tablet_schema);
+    Schema read_schema = ChunkHelper::convert_schema(tablet_schema);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;

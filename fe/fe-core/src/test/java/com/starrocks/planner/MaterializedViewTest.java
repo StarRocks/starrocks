@@ -380,6 +380,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(eventTable);
+
+        starRocksAssert.withTable("CREATE TABLE test_agg_with_having_tbl (\n" +
+                "dt date NULL,\n" +
+                "col1 varchar(240) NULL,\n" +
+                "col2 varchar(30) NULL,\n" +
+                "col3 varchar(60) NULL,\n" +
+                "col4 decimal128(22, 2) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt, col1)\n" +
+                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
@@ -683,18 +696,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate11() throws Exception {
-        String sql = "CREATE TABLE test_agg_with_having_tbl (\n" +
-                "dt date NULL,\n" +
-                "col1 varchar(240) NULL,\n" +
-                "col2 varchar(30) NULL,\n" +
-                "col3 varchar(60) NULL,\n" +
-                "col4 decimal128(22, 2) NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(dt, col1)\n" +
-                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";;
         String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
                 "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
@@ -707,7 +708,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "      test_agg_with_having_tbl p1\n" +
                 "    group by\n" +
                 "      1, 2, 3";
-        starRocksAssert.withTable(sql);
         starRocksAssert.withMaterializedView(mv);
         sql("select col1 from test_agg_with_having_tbl p1\n" +
                 "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
@@ -818,6 +818,60 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate16() throws Exception {
+        String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
+                "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select " +
+                " col1,col2, col3,\n" +
+                "      sum(col4) as sum_amt\n" +
+                "    from\n" +
+                "      test_agg_with_having_tbl p1\n" +
+                "    group by\n" +
+                "      1, 2, 3";
+        starRocksAssert.withMaterializedView(mv);
+        {
+            sql("select col1 from test_agg_with_having_tbl p1\n" +
+                    "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
+                    "    group by 1\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .notContain("AGGREGATE")
+                    .contains("PREDICATES: 10: sum_amt >= 500000, 8: col2 = '02', 9: col3 = '2023-03-31'\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+        }
+        {
+            sql("select col1, col2 from test_agg_with_having_tbl p1\n" +
+                    "    where p1.col3 = \"2023-03-31\"\n" +
+                    "    group by 1, 2\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .notContain("AGGREGATE")
+                    .contains("PREDICATES: 10: sum_amt >= 500000, 9: col3 = '2023-03-31'\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+
+        }
+        {
+            sql("select col1, col2 from test_agg_with_having_tbl p1\n" +
+                    "    group by 1, 2\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .contains(":AGGREGATE (update finalize)\n" +
+                            "  |  output: sum(10: sum_amt)\n" +
+                            "  |  group by: 7: col1, 8: col2\n" +
+                            "  |  having: 11: sum >= 500000\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: test_mv1\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+
+        }
     }
 
     @Test
@@ -3729,14 +3783,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
             String query = "select * from lineorder where not( lo_orderkey <= 20000 and lo_linenumber <= 10000)";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: (18: lo_orderkey >= 20001) OR (19: lo_linenumber >= 10001)");
+            checker.contains("PREDICATES: (18: lo_orderkey > 20000) OR (19: lo_linenumber > 10000)");
         }
 
         {
             String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
             String query = "select * from lineorder where lo_orderkey > 10000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("lo_orderkey >= 10001");
+            checker.contains("PREDICATES: 18: lo_orderkey > 10000");
         }
 
         {
@@ -3804,14 +3858,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: 18: lo_orderkey <= 999, 19: lo_linenumber <= 1999");
+            checker.contains("PREDICATES: 18: lo_orderkey < 1000, 19: lo_linenumber < 2000");
         }
 
         {
             String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: 18: lo_orderkey >= 15001, 19: lo_linenumber <= 999");
+            checker.contains("PREDICATES: 18: lo_orderkey > 15000, 19: lo_linenumber < 1000");
         }
 
         {
@@ -3903,5 +3957,398 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query = "select * from lineorder where not lo_revenue > 0";
             testRewriteOK(mv, query);
         }
+    }
+
+    @Test
+    public void testEmptyPartitionPrune() throws Exception {
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE test_empty_partition_tbl(\n" +
+                "  `dt` datetime DEFAULT NULL,\n" +
+                "  `col1` bigint(20) DEFAULT NULL,\n" +
+                "  `col2` bigint(20) DEFAULT NULL,\n" +
+                "  `col3` bigint(20) DEFAULT NULL,\n" +
+                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (dt, col1)\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_empty_partition_mv1 \n" +
+                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
+                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                "partition by date_trunc('day', dt)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select\n" +
+                "      col1,\n" +
+                "        dt,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    GROUP BY\n" +
+                "        col1,\n" +
+                "        dt;");
+        String sql = "select\n" +
+                "      col1,\n" +
+                "        sum(col2) AS sum_col2,\n" +
+                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
+                "    FROM\n" +
+                "        test_empty_partition_tbl AS f\n" +
+                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
+                "    GROUP BY col1;";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
+    }
+
+    @Test
+    public void testAggWithoutRollup() throws Exception {
+        {
+            starRocksAssert.withTable("create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+
+            starRocksAssert.withTable("CREATE TABLE test_sr_table_join(\n" +
+                    "fdate int,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "fqqid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(fqqid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");");
+
+            String mv = "select" +
+                    " t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                    "GROUP BY fdate, fplat_form_itg2_name;";
+
+            String query = "select" +
+                    " t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate = 20230705\n" +
+                    "GROUP BY fplat_form_itg2_name;";
+                    testRewriteOK(mv, query);
+        }
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
+    }
+
+    @Test
+    public void testRangePredicate() {
+        // integer
+        {
+            String mv = "select * from lineorder where lo_orderkey < 10001";
+            String query = "select * from lineorder where lo_orderkey <= 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < 2147483647";
+            String query = "select * from lineorder where lo_orderkey < 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey <= 2147483646";
+            String query = "select * from lineorder where lo_orderkey < 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < 2147483647";
+            String query = "select * from lineorder where lo_orderkey <= 2147483646";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey >= 2147483647";
+            String query = "select * from lineorder where lo_orderkey > 2147483646";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 2147483646";
+            String query = "select * from lineorder where lo_orderkey >= 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > -2147483648";
+            String query = "select * from lineorder where lo_orderkey >= -2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey >= -2147483647";
+            String query = "select * from lineorder where lo_orderkey > -2147483648";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < -2147483647";
+            String query = "select * from lineorder where lo_orderkey <= -2147483648";
+            testRewriteOK(mv, query);
+        }
+
+        // small int
+        {
+            String mv = "select * from test.test_all_type where t1b < 100";
+            String query = "select * from test.test_all_type where t1b <= 99";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b <= 99";
+            String query = "select * from test.test_all_type where t1b < 100";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b < 32767";
+            String query = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b <= 32766";
+            String query = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b <= 32766";
+            String mv = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b >= 32767";
+            String mv = "select * from test.test_all_type where t1b > 32766";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b >= 32767";
+            String query = "select * from test.test_all_type where t1b > 32766";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b > -32768";
+            String query = "select * from test.test_all_type where t1b >= -32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b > -32768";
+            String mv = "select * from test.test_all_type where t1b >= -32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b < -32767";
+            String mv = "select * from test.test_all_type where t1b <= -32768";
+            testRewriteOK(mv, query);
+        }
+
+        // bigint
+        {
+            String mv = "select * from test.test_all_type where t1d < 100";
+            String query = "select * from test.test_all_type where t1d <= 99";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d <= 99";
+            String query = "select * from test.test_all_type where t1d < 100";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d < 9223372036854775807";
+            String query = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d <= 9223372036854775806";
+            String query = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d <= 9223372036854775806";
+            String mv = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d >= 9223372036854775807";
+            String mv = "select * from test.test_all_type where t1d > 9223372036854775806";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d >= 9223372036854775807";
+            String query = "select * from test.test_all_type where t1d > 9223372036854775806";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d > -9223372036854775808";
+            String query = "select * from test.test_all_type where t1d >= -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d > -9223372036854775808";
+            String mv = "select * from test.test_all_type where t1d >= -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d <= -9223372036854775808";
+            String mv = "select * from test.test_all_type where t1d < -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        // date
+        {
+            String mv = "select * from test.test_all_type where id_date < '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date <= '2023-08-09'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date <= '2023-08-09'";
+            String query = "select * from test.test_all_type where id_date < '2023-08-10'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date > '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date >= '2023-08-11'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date >= '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date > '2023-08-11'";
+            testRewriteOK(mv, query);
+        }
+
+        // datetime
+        {
+            String mv = "select * from test.test_all_type where id_datetime < '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime <= '2023-08-10 12:00:00'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime <= '2023-08-10 12:00:00'";
+            String query = "select * from test.test_all_type where id_datetime < '2023-08-10 12:00:01'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime > '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime >= '2023-08-10 12:00:02'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime >= '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime > '2023-08-10 12:00:00'";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testJoinWithToBitmapRewrite() throws Exception {
+        String table1 = "CREATE TABLE test_sr_table_join(\n" +
+                "fdate int,\n" +
+                "fetl_time BIGINT ,\n" +
+                "facct_type BIGINT ,\n" +
+                "userid STRING ,\n" +
+                "fplat_form_itg2 BIGINT ,\n" +
+                "funit BIGINT ,\n" +
+                "flcnt BIGINT\n" +
+                ")PARTITION BY range(fdate) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(userid)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table1);
+        String table2 = "create table dim_test_sr_table (\n" +
+                "fplat_form_itg2 bigint,\n" +
+                "fplat_form_itg2_name string\n" +
+                ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table2);
+
+        {
+            String mv = "select t1.fdate, t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228," +
+                    " sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                    "GROUP BY fdate, fplat_form_itg2_name;";
+            String query = "select t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION_COUNT(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                    "GROUP BY fplat_form_itg2_name;";
+            testRewriteOK(mv, query);
+        }
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
+    }
+
+    @Test
+    public void testCountRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE count_tbl_1 (\n" +
+                "k1 int,\n" +
+                "k2 int\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1)" +
+                "PROPERTIES (" +
+                "\"replication_num\" = \"1\")\n");
+        testRewriteNonmatch("SELECT count(distinct k1) FROM count_tbl_1", "select count(*) from count_tbl_1");
+        starRocksAssert.dropTable("count_tbl_1");
     }
 }

@@ -323,6 +323,9 @@ vectorized_functions = [
     [30421, 'url_encode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_encode'],
     [30422, 'url_decode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_decode'],
 
+    [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
+     'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -618,6 +621,7 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100021, 'xx_hash3_64', 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
 
     # Utility functions
     [100011, 'sleep', 'BOOLEAN', ['INT'], "UtilityFunctions::sleep"],

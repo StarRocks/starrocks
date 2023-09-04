@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -155,6 +156,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
     private boolean hasIcebergTableSink = false;
+    private boolean hasHiveTableSink = false;
+
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
 
@@ -257,7 +260,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public boolean hasTableSink() {
-        return hasIcebergTableSink() || hasOlapTableSink();
+        return hasIcebergTableSink() || hasOlapTableSink() || hasHiveTableSink();
     }
 
     public boolean hasOlapTableSink() {
@@ -274,6 +277,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setHasIcebergTableSink() {
         this.hasIcebergTableSink = true;
+    }
+
+    public boolean hasHiveTableSink() {
+        return this.hasHiveTableSink;
+    }
+
+    public void setHasHiveTableSink() {
+        this.hasHiveTableSink = true;
     }
 
     public boolean forceSetTableSinkDop() {
@@ -710,5 +721,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void reset() {
         // Do nothing.
+    }
+
+    public void disablePhysicalPropertyOptimize() {
+        forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
+    }
+
+    private void forEachNode(PlanNode root, Consumer<PlanNode> consumer) {
+        consumer.accept(root);
+        for (PlanNode child : root.getChildren()) {
+            forEachNode(child, consumer);
+        }
     }
 }

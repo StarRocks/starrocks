@@ -14,6 +14,7 @@
 
 #include "exec/aggregate/aggregate_blocking_node.h"
 
+#include <memory>
 #include <type_traits>
 #include <variant>
 
@@ -26,14 +27,16 @@
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_source_operator.h"
+#include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
-#include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
@@ -172,7 +175,8 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
 template <class AggFactory, class SourceFactory, class SinkFactory>
 pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                                    pipeline::PipelineBuilderContext* context) {
+                                                                    pipeline::PipelineBuilderContext* context,
+                                                                    bool per_bucket_optimize) {
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
@@ -184,7 +188,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
-    auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
+    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     auto operators_generator = [this, should_cache, upstream_source_op, context,
                                 spill_channel_factory](bool post_cache) {
@@ -206,15 +210,29 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     // Initialize OperatorFactory's fields involving runtime filters.
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    auto bucket_process_context_factory = std::make_shared<BucketProcessContextFactory>();
+    if (per_bucket_optimize) {
+        agg_sink_op = std::make_shared<BucketProcessSinkOperatorFactory>(
+                context->next_operator_id(), id(), bucket_process_context_factory, std::move(agg_sink_op));
+    }
+
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+
+    if (per_bucket_optimize) {
+        auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
+                context->next_operator_id(), id(), bucket_process_context_factory, std::move(agg_source_op));
+        context->inherit_upstream_source_properties(bucket_source_operator.get(), upstream_source_op);
+        agg_source_op = std::move(bucket_source_operator);
+    }
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source =
+                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
 
@@ -229,11 +247,13 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     auto& agg_node = _tnode.agg_node;
 
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool use_per_bucket_optimize =
+            _tnode.agg_node.__isset.use_per_bucket_optimize && _tnode.agg_node.use_per_bucket_optimize;
     bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
-        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
             Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
             return group_by_expr_ctxs;
@@ -249,7 +269,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
         if (agg_node.need_finalize) {
             if (!has_group_by_keys) {
-                ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+                ops_with_sink =
+                        context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
             } else if (could_local_shuffle) {
                 ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
             }
@@ -262,19 +283,22 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         }
     }
 
+    use_per_bucket_optimize &= dynamic_cast<LocalExchangeSourceOperatorFactory*>(ops_with_sink.back().get()) == nullptr;
+
     OpFactories ops_with_source;
     if (sorted_streaming_aggregate) {
         ops_with_source =
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
-                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
+                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
     } else {
         if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
-            ops_with_source =
-                    _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
-                                           SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+            ops_with_source = _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                                                     SpillableAggregateBlockingSinkOperatorFactory>(
+                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
-                                                     AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+                                                     AggregateBlockingSinkOperatorFactory>(
+                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
         }
     }
 

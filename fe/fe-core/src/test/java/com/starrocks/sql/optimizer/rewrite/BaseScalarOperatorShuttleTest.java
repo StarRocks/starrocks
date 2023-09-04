@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -32,7 +33,14 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Type.ARRAY_TINYINT;
 import static com.starrocks.catalog.Type.INT;
@@ -154,4 +162,97 @@ class BaseScalarOperatorShuttleTest {
         assertNotEquals(otherOperator, newOperator);
 
     }
+
+    @ParameterizedTest(name = "{index}: {0}.")
+    @MethodSource("inPredicateCases")
+    void testNegateInPredicate(ScalarOperator operator, String expected) {
+        NegateFilterShuttle shuttle1 = NegateFilterShuttle.getInstance();
+        ScalarOperator reuslt = shuttle1.negateFilter(operator);
+        assertEquals(expected, reuslt.toString());
+    }
+
+    private static Stream<Arguments> inPredicateCases() {
+        List<Arguments> argumentsList = Lists.newArrayList();
+        // not in constant values without null
+        InPredicateOperator operator = new InPredicateOperator(true, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", false),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2)));
+
+        argumentsList.add(Arguments.of(operator, "1: id IN (1, 2)"));
+
+        operator = new InPredicateOperator(true, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2)));
+
+        argumentsList.add(Arguments.of(operator, "1: id IN (1, 2) OR 1: id IS NULL"));
+
+        // not in constant values with null
+        operator = new InPredicateOperator(true, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", false),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                ConstantOperator.NULL));
+        argumentsList.add(Arguments.of(operator, "1: id IN (1, 2, null) OR 1: id NOT IN (1, 2, null) IS NULL"));
+
+        operator = new InPredicateOperator(true, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                ConstantOperator.NULL));
+        argumentsList.add(Arguments.of(operator, "1: id IN (1, 2, null) OR 1: id NOT IN (1, 2, null) IS NULL"));
+
+        // not in values contains expr
+        operator = new InPredicateOperator(true, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                new CastOperator(INT, ConstantOperator.createChar("a"))));
+
+        argumentsList.add(Arguments.of(operator, "1: id IN (1, 2, cast(a as int(11))) " +
+                "OR 1: id NOT IN (1, 2, cast(a as int(11))) IS NULL"));
+
+        // in constant values without null
+        operator = new InPredicateOperator(false, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", false),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2)));
+
+        argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2)"));
+
+        operator = new InPredicateOperator(false, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2)));
+
+        argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2) OR 1: id IS NULL"));
+
+        // in constant values with null
+        operator = new InPredicateOperator(false, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", false),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                ConstantOperator.NULL));
+        argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2, null) OR 1: id IN (1, 2, null) IS NULL"));
+
+        operator = new InPredicateOperator(false, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                ConstantOperator.NULL));
+        argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2, null) OR 1: id IN (1, 2, null) IS NULL"));
+
+        // in values contains expr
+        operator = new InPredicateOperator(false, ImmutableList.of(
+                new ColumnRefOperator(1, INT, "id", true),
+                ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2),
+                new CastOperator(INT, ConstantOperator.createChar("a"))));
+
+        argumentsList.add(Arguments.of(operator, "1: id NOT IN (1, 2, cast(a as int(11))) " +
+                "OR 1: id IN (1, 2, cast(a as int(11))) IS NULL"));
+        return argumentsList.stream();
+    }
+
 }

@@ -76,6 +76,7 @@ import java.util.List;
 
 public class ShowMaterializedViewTest {
 
+    private static final String TEST_DB_NAME = "db_show_materialized_view";
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
@@ -84,8 +85,8 @@ public class ShowMaterializedViewTest {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl6\n" +
+        starRocksAssert.withDatabase(TEST_DB_NAME).useDatabase(TEST_DB_NAME)
+                .withTable("CREATE TABLE tbl6\n" +
                         "(\n" +
                         "    k1 date,\n" +
                         "    k2 int,\n" +
@@ -101,7 +102,7 @@ public class ShowMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view test.mv_refresh_priority\n" +
+                .withMaterializedView("create materialized view mv_refresh_priority\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh deferred manual\n" +
@@ -217,7 +218,7 @@ public class ShowMaterializedViewTest {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                     OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
@@ -228,7 +229,7 @@ public class ShowMaterializedViewTest {
             }
         };
         String mvName = "mv_refresh_priority";
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunManager trm = tm.getTaskRunManager();
@@ -252,10 +253,9 @@ public class ShowMaterializedViewTest {
         Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
 
         // specific db
-        String dbName = "test";
-        Assert.assertFalse(tm.showTaskRunStatus(dbName).isEmpty());
-        Assert.assertFalse(tm.showTasks(dbName).isEmpty());
-        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(dbName).isEmpty());
+        Assert.assertFalse(tm.showTaskRunStatus(TEST_DB_NAME).isEmpty());
+        Assert.assertFalse(tm.showTasks(TEST_DB_NAME).isEmpty());
+        Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(TEST_DB_NAME).isEmpty());
 
         long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
         Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));

@@ -278,7 +278,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-                <version>18.3.13</version>
+                <version>18.3.16</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -706,6 +706,12 @@ under the License.
                 <groupId>org.apache.groovy</groupId>
                 <artifactId>groovy-groovysh</artifactId>
                 <version>4.0.9</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>concurrent</artifactId>
+                <version>202</version>
             </dependency>
 
         </dependencies>

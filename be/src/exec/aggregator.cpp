@@ -129,12 +129,15 @@ void AggregatorParams::init() {
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
-            if (fn.name.function_name == "array_agg") {
+            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
                     agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
                     agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
+                }
+                if (fn.aggregate_fn.__isset.is_distinct) {
+                    agg_fn_types[i].is_distinct = fn.aggregate_fn.is_distinct;
                 }
             }
         }
@@ -394,8 +397,10 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
                                                 is_input_nullable, fn.binary_type, state->func_version());
             if (func == nullptr) {
-                return Status::InternalError(
-                        strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
+                return Status::InternalError(strings::Substitute(
+                        "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
+                        fn.name.function_name, type_to_string(arg_type.type), type_to_string(serde_type.type),
+                        type_to_string(return_type.type), is_input_nullable ? "true" : "false"));
             }
             VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
                      << return_type;
@@ -459,7 +464,11 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _agg_fn_ctxs[i] = FunctionContext::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
-                _agg_fn_types[i].arg_typedescs, _agg_fn_types[i].is_asc_order, _agg_fn_types[i].nulls_first);
+                _agg_fn_types[i].arg_typedescs, _agg_fn_types[i].is_distinct, _agg_fn_types[i].is_asc_order,
+                _agg_fn_types[i].nulls_first);
+        if (state->query_options().__isset.group_concat_max_len) {
+            _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
+        }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
@@ -799,7 +808,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     } else {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
-
+    RETURN_IF_ERROR(check_has_error());
     // For agg function column is non-nullable and table is empty
     // sum(zero_row) should be null, not 0.
     if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
@@ -868,7 +877,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         DCHECK(!_group_by_columns.empty());
 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
-
         const auto num_rows = _group_by_columns[0]->size();
         Columns agg_result_column = _create_agg_result_columns(num_rows, true);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -883,6 +891,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
 
     _num_pass_through_rows += result_chunk->num_rows();
@@ -932,6 +941,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
@@ -1357,7 +1367,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                 }
             }
         }
-
+        RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 
         // If there is null key, output it last
@@ -1375,7 +1385,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
                     } else {
                         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
-
+                    RETURN_IF_ERROR(check_has_error());
                     ++read_index;
                 } else {
                     // Output null key in next round

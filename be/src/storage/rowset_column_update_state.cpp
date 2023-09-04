@@ -102,7 +102,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     OlapReaderStatistics stats;
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     std::vector<uint32_t> update_columns;
@@ -110,7 +110,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     for (uint32_t cid : txn_meta.partial_update_column_ids()) {
         update_columns_with_keys.push_back(cid);
-        if (cid >= schema.num_key_columns()) {
+        if (cid >= schema->num_key_columns()) {
             update_columns.push_back(cid);
         }
     }
@@ -304,7 +304,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
                                                    OlapReaderStatistics* stats, int64_t version,
                                                    RowsetSegmentId rowset_seg_id, const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
-    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, &rowset->schema());
+    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
         return segment.status();
@@ -351,7 +351,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
     auto segment_writer =
-            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema.get(), writer_options);
+            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
     return std::move(segment_writer);
 }
@@ -427,26 +427,26 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
 
 // this function build segment writer for segment files
 StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segment_writer(
-        Rowset* rowset, const TabletSchema& tablet_schema, int segment_id) {
+        Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, int segment_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     const std::string path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
     (void)fs->delete_file(path); // delete .dat if already exist
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, &tablet_schema, writer_options);
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, tablet_schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     return std::move(segment_writer);
 }
 
 static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_columns_ids(
-        const RowsetTxnMetaPB& txn_meta, const TabletSchema& tablet_schema) {
+        const RowsetTxnMetaPB& txn_meta, const TabletSchemaCSPtr& tablet_schema) {
     std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_ids().begin(),
                                             txn_meta.partial_update_column_ids().end());
     std::set<uint32_t> update_columns_set(update_column_ids.begin(), update_column_ids.end());
 
     std::vector<uint32_t> read_column_ids;
-    for (uint32_t i = 0; i < tablet_schema.num_columns(); i++) {
+    for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
         if (update_columns_set.find(i) == update_columns_set.end()) {
             read_column_ids.push_back(i);
         }
@@ -455,11 +455,11 @@ static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_c
     return {read_column_ids, update_column_ids};
 }
 
-Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchema& tablet_schema,
+Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& tablet_schema,
                                                       const std::vector<uint32_t>& column_ids, const int64_t row_cnt,
                                                       vector<std::shared_ptr<Column>>* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
-        const TabletColumn& tablet_column = tablet_schema.column(column_ids[i]);
+        const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
         if (tablet_column.has_default_value()) {
             const TypeInfoPtr& type_info = get_type_info(tablet_column);
             std::unique_ptr<DefaultValueColumnIterator> default_value_iter =
@@ -476,7 +476,7 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchema& tablet
     return Status::OK();
 }
 
-Status RowsetColumnUpdateState::_update_primary_index(const TabletSchema& tablet_schema, Tablet* tablet,
+Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                                       const EditVersion& edit_version, uint32_t rowset_id,
                                                       std::map<int, ChunkUniquePtr>& segid_to_chunk,
                                                       int64_t insert_row_cnt, PersistentIndexMetaPB& index_meta,
@@ -484,7 +484,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchema& tablet
                                                       PrimaryIndex& index) {
     // 1. build pk column
     vector<uint32_t> pk_column_ids;
-    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
@@ -504,7 +504,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchema& tablet
         // record delvec
         auto delvec = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
-        delvec->init(edit_version.major(), del_ids.data(), del_ids.size());
+        delvec->init(edit_version.major_number(), del_ids.data(), del_ids.size());
         delvecs.emplace_back(new_delete.first, delvec);
     }
     return Status::OK();
@@ -525,13 +525,13 @@ Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& sta
     return Status::OK();
 }
 
-static void padding_char_columns(const Schema& schema, const TabletSchema& tschema, Chunk* chunk) {
+static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& tschema, Chunk* chunk) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
     ChunkHelper::padding_char_columns(char_field_indexes, schema, tschema, chunk);
 }
 
 // handle new rows, generate segment files and update primary index
-Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchema& tablet_schema, Tablet* tablet,
+Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                                  const EditVersion& edit_version, Rowset* rowset, uint32_t rowset_id,
                                                  PersistentIndexMetaPB& index_meta,
                                                  vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
@@ -607,13 +607,13 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::vector<uint32_t> unique_update_column_ids;
     const auto& tschema = rowset->schema();
     for (int32_t cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= tschema.num_key_columns()) {
+        if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((uint32_t)cid);
         }
     }
     for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
-        auto& column = tschema.column(cid);
+        auto& column = tschema->column(cid);
         if (!column.is_key()) {
             unique_update_column_ids.push_back(cid);
         }
@@ -634,8 +634,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // prepare delta column writers by the way
             if (delta_column_group_writer.count(rssid) == 0) {
                 // we can generate delta column group by new version
-                ASSIGN_OR_RETURN(auto writer, _prepare_delta_column_group_writer(rowset, partial_tschema, rssid,
-                                                                                 latest_applied_version.major() + 1));
+                ASSIGN_OR_RETURN(auto writer,
+                                 _prepare_delta_column_group_writer(rowset, partial_tschema, rssid,
+                                                                    latest_applied_version.major_number() + 1));
                 delta_column_group_writer[rssid] = std::move(writer);
             }
         }
@@ -664,7 +665,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         // 4.1 read from source segment
         ASSIGN_OR_RETURN(auto source_chunk_ptr,
                          read_from_source_segment(rowset, partial_schema, tablet, &stats,
-                                                  latest_applied_version.major(), rowsetid_segid, seg_path));
+                                                  latest_applied_version.major_number(), rowsetid_segid, seg_path));
         // 4.2 read from update segment
         int64_t t2 = MonotonicMillis();
         std::vector<uint32_t> rowids;
@@ -678,7 +679,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         uint64_t segment_file_size = 0;
         uint64_t index_size = 0;
         uint64_t footer_position = 0;
-        padding_char_columns(partial_schema, *partial_tschema, source_chunk_ptr.get());
+        padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
         RETURN_IF_ERROR(delta_column_group_writer[each.first]->append_chunk(*source_chunk_ptr));
         RETURN_IF_ERROR(
                 delta_column_group_writer[each.first]->finalize(&segment_file_size, &index_size, &footer_position));
@@ -692,7 +693,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         // must record unique column id in delta column group
         std::vector<std::vector<uint32_t>> dcg_column_ids{unique_update_column_ids};
         std::vector<std::string> dcg_column_files{file_name(delta_column_group_writer[each.first]->segment_path())};
-        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, dcg_column_ids,
+        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1, dcg_column_ids,
                                                        dcg_column_files);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
@@ -700,8 +701,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // generate segment file for insert data
     if (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE) {
         // ignore insert missing rows if partial_update_mode == COLUMN_UPDATE_MODE
-        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major() + 1, 0), rowset,
-                                         rowset_id, index_meta, delvecs, index));
+        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major_number() + 1, 0),
+                                         rowset, rowset_id, index_meta, delvecs, index));
         cost_str << " [insert missing rows] " << watch.elapsed_time();
         watch.reset();
     }

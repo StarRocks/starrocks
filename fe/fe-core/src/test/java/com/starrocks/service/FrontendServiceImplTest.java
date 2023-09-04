@@ -17,7 +17,9 @@ package com.starrocks.service;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -37,15 +39,22 @@ import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TImmutablePartitionRequest;
+import com.starrocks.thrift.TImmutablePartitionResult;
+import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStreamLoadPutRequest;
+import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
@@ -91,6 +100,23 @@ public class FrontendServiceImplTest {
         request.setBackend_id(backendId);
 
         return request;
+    }
+
+    @Test
+    public void testUpdateImmutablePartitionException() throws TException {
+        new MockUp<FrontendServiceImpl>() {
+            @Mock
+            public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(
+                    TImmutablePartitionRequest request) {
+                throw new RuntimeException("test");
+            }
+        };
+
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
     }
 
     @Test
@@ -169,6 +195,30 @@ public class FrontendServiceImplTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access_auto (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");")
+                .withTable("CREATE TABLE site_access_exception (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE site_access_empty (\n" +
                         "    event_day DATETIME NOT NULL,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -260,8 +310,8 @@ public class FrontendServiceImplTest {
     @AfterClass
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String dropSQL = "drop table site_access";
-        String dropSQL2 = "drop table site_access_2";
+        String dropSQL = "drop table if exists site_access";
+        String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
@@ -270,6 +320,74 @@ public class FrontendServiceImplTest {
         } catch (Exception ex) {
 
         }
+    }
+
+    @Test
+    public void testImmutablePartitionException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("site_access_exception");
+        List<Long> partitionIds = Lists.newArrayList();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Table t = db.getTable("v");
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setDb_id(db.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(t.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setTable_id(table.getId());
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds.add(1L);
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+    }
+
+    @Test
+    public void testImmutablePartitionApi() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("site_access_auto");
+        List<Long> partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_ids(partitionIds);
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(2, table.getPhysicalPartitions().size());
+
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(3, table.getPhysicalPartitions().size());
+
+        partitionIds = table.getPhysicalPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toList());
+        request.setPartition_ids(partitionIds);
+        partition = impl.updateImmutablePartition(request);
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assert.assertEquals(5, table.getPhysicalPartitions().size());
     }
 
     @Test
@@ -452,6 +570,22 @@ public class FrontendServiceImplTest {
         request.setType(TTableType.VIEW);
 
         return request;
+    }
+
+    @Test
+    public void testGetTableNames() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams params = new TGetTablesParams();
+        params.setCatalog_name("default_catalog");
+        params.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        params.setCurrent_user_ident(tUserIdentity);
+
+        TGetTablesResult result = impl.getTableNames(params);
+        Assert.assertEquals(15, result.tables.size());
     }
 
     @Test
@@ -743,6 +877,43 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testGetSpecialColumnForSyncMv() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `base1` (\n" +
+                        "event_day DATE,\n" +
+                        "department_id int(11) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(event_day, department_id)\n" +
+                        "DISTRIBUTED BY HASH(department_id) BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\"\n" +
+                        ");")
+                .withMaterializedView("create materialized view test_table.mv$test as select event_day from base1");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test4";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.base1 TO USER `test4`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test4");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+        request.setPattern("mv$test");
+        request.setDb("test_table");
+        request.setType(TTableType.MATERIALIZED_VIEW);
+        TListMaterializedViewStatusResult response = impl.listMaterializedViewStatus(request);
+        Assert.assertEquals(1, response.materialized_views.size());
+    }
+  
+    @Test
     public void testGetLoadTxnStatus() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
@@ -769,5 +940,35 @@ public class FrontendServiceImplTest {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+    }
+  
+    @Test
+    public void testStreamLoadPutColumnMapException() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_hour");
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        // wrong format of str_to_date()
+        request.setColumns("col1,event_day=str_to_date(col1)");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assert.assertEquals(1, errMsg.size());
+        Assert.assertEquals(
+                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
+                        "No matching function with signature: str_to_date(varchar).",
+                errMsg.get(0));
     }
 }

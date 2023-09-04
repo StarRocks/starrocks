@@ -58,14 +58,17 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -73,6 +76,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -134,6 +138,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
+    public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -172,6 +178,9 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+
+    // light schema change
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -282,16 +291,16 @@ public class PropertyAnalyzer {
         return shortKeyColumnCount;
     }
 
-    public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
+    public static int analyzePartitionTimeToLive(Map<String, String> properties) {
         int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
                 partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Partition TTL Number: " + e.getMessage());
+                throw new SemanticException("Partition TTL Number: " + e.getMessage());
             }
             if (partitionTimeToLive <= 0 && partitionTimeToLive != INVALID) {
-                throw new AnalysisException("Illegal Partition TTL Number: " + partitionTimeToLive);
+                throw new SemanticException("Illegal Partition TTL Number: " + partitionTimeToLive);
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
@@ -317,10 +326,26 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
-    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
-            throws AnalysisException {
+    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+        long bucketSize = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
+            try {
+                bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize <= 0) {
+                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new AnalysisException("Bucket size is not set");
+        }
+    }
+
+    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
         if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
-            throw new AnalysisException(
+            throw new SemanticException(
                     "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
         int autoRefreshPartitionsLimit = -1;
@@ -328,36 +353,35 @@ public class PropertyAnalyzer {
             try {
                 autoRefreshPartitionsLimit = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
+                throw new SemanticException("Auto Refresh Partitions Limit: " + e.getMessage());
             }
             if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
-                throw new AnalysisException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
+                throw new SemanticException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
             }
             properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         return autoRefreshPartitionsLimit;
     }
 
-    public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
+    public static int analyzePartitionRefreshNumber(Map<String, String> properties) {
         int partitionRefreshNumber = -1;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             try {
                 partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_REFRESH_NUMBER));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
+                throw new SemanticException("Partition Refresh Number: " + e.getMessage());
             }
             if (partitionRefreshNumber <= 0 && partitionRefreshNumber != INVALID) {
-                throw new AnalysisException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
+                throw new SemanticException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
             }
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
     }
 
-    public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv)
-            throws AnalysisException {
+    public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv) {
         if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
-            throw new AnalysisException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
+            throw new SemanticException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
         }
         List<TableName> tables = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
@@ -368,7 +392,7 @@ public class PropertyAnalyzer {
                 if (mv.containsBaseTable(tableName)) {
                     tables.add(tableName);
                 } else {
-                    throw new AnalysisException(tableName.toSql() +
+                    throw new SemanticException(tableName.toSql() +
                             " is not base table of materialized view " + mv.getName());
                 }
             }
@@ -377,17 +401,16 @@ public class PropertyAnalyzer {
         return tables;
     }
 
-    public static int analyzeMVRewriteStaleness(Map<String, String> properties)
-            throws AnalysisException {
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties) {
         int maxMVRewriteStaleness = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             try {
                 maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
+                throw new SemanticException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
             }
             if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
-                throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+                throw new SemanticException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
             }
             properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
         }
@@ -537,6 +560,30 @@ public class PropertyAnalyzer {
         return schemaVersion;
     }
 
+    public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
+        if (properties == null || properties.isEmpty()) {
+            return false;
+        }
+        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        // set light schema change false by default
+        if (Config.allow_default_light_schema_change) {
+            properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            return true;
+        }
+        if (null == value) {
+            return false;
+        }
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
+            return true;
+        } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
+            return false;
+        }
+        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+            + " must be `true` or `false`");
+    }
+
+
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {
         Set<String> bfColumns = null;
@@ -680,6 +727,19 @@ public class PropertyAnalyzer {
         return defaultVal;
     }
 
+    public static Pair<Boolean, Boolean> analyzeEnablePersistentIndex(Map<String, String> properties, boolean isPrimaryKey) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+            String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
+            return Pair.create(Boolean.parseBoolean(val), true);
+        } else {
+            if (isPrimaryKey) {
+                return Pair.create(Config.enable_persistent_index_by_default, false);
+            }
+            return Pair.create(false, false);
+        }
+    }
+
     // analyze property like : "type" = "xxx";
     public static String analyzeType(Map<String, String> properties) {
         String type = null;
@@ -713,8 +773,7 @@ public class PropertyAnalyzer {
         return val;
     }
 
-    public static List<UniqueConstraint> analyzeUniqueConstraint(
-            Map<String, String> properties, Database db, OlapTable table) throws AnalysisException {
+    public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
 
@@ -725,7 +784,7 @@ public class PropertyAnalyzer {
             }
             uniqueConstraints = UniqueConstraint.parse(uniqueConstraintStr);
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
-                throw new AnalysisException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
+                throw new SemanticException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
             }
 
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
@@ -735,19 +794,19 @@ public class PropertyAnalyzer {
                     String dbName = uniqueConstraint.getDbName() != null ? uniqueConstraint.getDbName()
                             : db.getFullName();
                     if (uniqueConstraint.getTableName() == null) {
-                        throw new AnalysisException("must set table name for unique constraint in materialized view");
+                        throw new SemanticException("must set table name for unique constraint in materialized view");
                     }
                     String tableName = uniqueConstraint.getTableName();
                     Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName,
                             dbName, tableName);
                     if (uniqueConstraintTable == null) {
-                        throw new AnalysisException(
+                        throw new SemanticException(
                                 String.format("table: %s.%s.%s does not exist", catalogName, dbName, tableName));
                     }
                     boolean columnExist = uniqueConstraint.getUniqueColumns().stream()
                             .allMatch(uniqueConstraintTable::containColumn);
                     if (!columnExist) {
-                        throw new AnalysisException(
+                        throw new SemanticException(
                                 String.format("some columns of:%s do not exist in table:%s.%s.%s",
                                         uniqueConstraint.getUniqueColumns(), catalogName, dbName, tableName));
                     }
@@ -756,7 +815,7 @@ public class PropertyAnalyzer {
                 } else {
                     boolean columnExist = uniqueConstraint.getUniqueColumns().stream().allMatch(table::containColumn);
                     if (!columnExist) {
-                        throw new AnalysisException(
+                        throw new SemanticException(
                                 String.format("some columns of:%s do not exist in table:%s",
                                         uniqueConstraint.getUniqueColumns(), table.getName()));
                     }
@@ -770,8 +829,7 @@ public class PropertyAnalyzer {
 
     private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String tablePath,
                                                                                    String foreignKeyConstraintDesc,
-                                                                                   Database db)
-            throws AnalysisException {
+                                                                                   Database db) {
         String[] parts = tablePath.split("\\.");
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String dbName = db.getFullName();
@@ -786,22 +844,22 @@ public class PropertyAnalyzer {
         } else if (parts.length == 1) {
             tableName = parts[0];
         } else {
-            throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+            throw new SemanticException(String.format("invalid foreign key constraint:%s," +
                     "table path is invalid", foreignKeyConstraintDesc));
         }
 
         if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-            throw new AnalysisException(String.format("catalog: %s do not exist", catalogName));
+            throw new SemanticException(String.format("catalog: %s do not exist", catalogName));
         }
         Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
         if (parentDb == null) {
-            throw new AnalysisException(
+            throw new SemanticException(
                     String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
         }
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable(catalogName, dbName, tableName);
         if (table == null) {
-            throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
+            throw new SemanticException(String.format("catalog:%s, database: %s, table:%s do not exist",
                     catalogName, dbName, tableName));
         }
 
@@ -816,8 +874,7 @@ public class PropertyAnalyzer {
     }
 
     private static void analyzeForeignKeyUniqueConstraint(Table parentTable, List<String> parentColumns,
-                                                          Table analyzedTable)
-            throws AnalysisException {
+                                                          Table analyzedTable) {
         KeysType parentTableKeyType = KeysType.DUP_KEYS;
         if (parentTable.isNativeTableOrMaterializedView()) {
             OlapTable parentOlapTable = (OlapTable) parentTable;
@@ -833,12 +890,12 @@ public class PropertyAnalyzer {
         }
 
         if (parentTableKeyType == KeysType.AGG_KEYS) {
-            throw new AnalysisException(
+            throw new SemanticException(
                     String.format("do not support reference agg table:%s", parentTable.getName()));
         } else if (parentTableKeyType == KeysType.DUP_KEYS) {
             // for DUP_KEYS type olap table or external table
             if (!parentTable.hasUniqueConstraints() && mvUniqueConstraints.isEmpty()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         String.format("dup table:%s has no unique constraint", parentTable.getName()));
             } else {
                 List<UniqueConstraint> uniqueConstraints = parentTable.getUniqueConstraints();
@@ -855,7 +912,7 @@ public class PropertyAnalyzer {
                     }
                 }
                 if (!matched) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
                                     parentTable.getName()));
                 }
@@ -864,14 +921,14 @@ public class PropertyAnalyzer {
             // for PRIMARY_KEYS and UNIQUE_KEYS type table
             // parent columns should be keys
             if (!((OlapTable) parentTable).isKeySet(Sets.newHashSet(parentColumns))) {
-                throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
+                throw new SemanticException(String.format("columns:%s are not key columns of table:%s",
                         parentColumns, parentTable.getName()));
             }
         }
     }
 
     public static List<ForeignKeyConstraint> analyzeForeignKeyConstraint(
-            Map<String, String> properties, Database db, Table analyzedTable) throws AnalysisException {
+            Map<String, String> properties, Database db, Table analyzedTable) {
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
@@ -887,7 +944,7 @@ public class PropertyAnalyzer {
                 }
                 Matcher foreignKeyMatcher = ForeignKeyConstraint.FOREIGN_KEY_PATTERN.matcher(trimed);
                 if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 9) {
-                    throw new AnalysisException(
+                    throw new SemanticException(
                             String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
                 String sourceTablePath = foreignKeyMatcher.group(1);
@@ -901,7 +958,7 @@ public class PropertyAnalyzer {
                 List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
                 if (childColumns.size() != parentColumns.size()) {
-                    throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+                    throw new SemanticException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
                 // analyze table exist for foreign key constraint
@@ -910,7 +967,7 @@ public class PropertyAnalyzer {
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
                 if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
-                    throw new AnalysisException(String.format("some columns of:%s do not exist in parent table:%s",
+                    throw new SemanticException(String.format("some columns of:%s do not exist in parent table:%s",
                             parentColumns, parentTable.getName()));
                 }
 
@@ -921,15 +978,15 @@ public class PropertyAnalyzer {
                             db);
                     childTable = childTablePair.second;
                     if (!childColumns.stream().allMatch(childTable::containColumn)) {
-                        throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                        throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
                                 childColumns, childTable.getName()));
                     }
                 } else {
                     if (!analyzedTable.isNativeTable()) {
-                        throw new AnalysisException("do not support add foreign key on external table");
+                        throw new SemanticException("do not support add foreign key on external table");
                     }
                     if (!childColumns.stream().allMatch(analyzedTable::containColumn)) {
-                        throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                        throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
                                 childColumns, analyzedTable.getName()));
                     }
                 }
@@ -942,7 +999,7 @@ public class PropertyAnalyzer {
                     Column childColumn = childTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);
                     if (!childColumn.getType().equals(parentColumn.getType())) {
-                        throw new AnalysisException(String.format(
+                        throw new SemanticException(String.format(
                                 "column:%s type does mot match referenced column:%s type", pair.first, pair.second));
                     }
                 }
@@ -953,7 +1010,7 @@ public class PropertyAnalyzer {
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }
             if (foreignKeyConstraints.isEmpty()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
             }
             properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
@@ -983,13 +1040,35 @@ public class PropertyAnalyzer {
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
     }
 
-    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties) throws AnalysisException {
+    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            if (type.equalsIgnoreCase("LOCAL")) {
+                return TPersistentIndexType.LOCAL;
+            } else {
+                throw new AnalysisException("Invalid persistent index type: " + type);
+            }
+        }
+        return TPersistentIndexType.LOCAL;
+    }
+
+    public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
+                                                           boolean removeProperties) throws AnalysisException {
         String text = properties.get(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        if (text == null) {
+        if (removeProperties) {
+            properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
+        }
+        if (Strings.isNullOrEmpty(text)) {
             return null;
         }
-        properties.remove(PROPERTIES_STORAGE_COOLDOWN_TTL);
-        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        PeriodDuration periodDuration;
+        try {
+            periodDuration = TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
+        return periodDuration;
     }
 
 }

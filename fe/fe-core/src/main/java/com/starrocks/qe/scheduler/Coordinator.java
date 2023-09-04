@@ -31,6 +31,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -80,9 +81,32 @@ public abstract class Coordinator {
         startScheduling();
     }
 
-    public abstract void startScheduling() throws Exception;
+    /**
+     * Start scheduling fragments of this job, mainly containing the following work:
+     * <ul>
+     *     <li> Instantiates multiple parallel instances of each fragment.
+     *     <li> Assigns these fragment instances to appropriate workers (including backends and compute nodes).
+     *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
+     * </ul>
+     * <p>
+     *
+     * @param needDeploy Whether deploying fragment instances to workers.
+     */
+    public abstract void startScheduling(boolean needDeploy) throws Exception;
+
+    public void startScheduling() throws Exception {
+        startScheduling(true);
+    }
+
+    public void startSchedulingWithoutDeploy() throws Exception {
+        startScheduling(false);
+    }
+
+    public abstract String getSchedulerExplain();
 
     public abstract void updateFragmentExecStatus(TReportExecStatusParams params);
+
+    public abstract void updateAuditStatistics(TReportAuditStatisticsParams params);
 
     public void cancel() {
         cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
@@ -134,7 +158,7 @@ public abstract class Coordinator {
 
     public abstract void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier);
 
-    public abstract RuntimeProfile buildMergedQueryProfile(PQueryStatistics statistics);
+    public abstract RuntimeProfile buildMergedQueryProfile();
 
     public abstract RuntimeProfile getQueryProfile();
 
@@ -155,6 +179,11 @@ public abstract class Coordinator {
     public abstract List<String> getRejectedRecordPaths();
 
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
+
+    // ------------------------------------------------------------------------------------
+    // Methods for audit.
+    // ------------------------------------------------------------------------------------
+    public abstract PQueryStatistics getAuditStatistics();
 
     // ------------------------------------------------------------------------------------
     // Common methods.

@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "exec/parquet_builder.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 
 namespace starrocks::pipeline {
 
@@ -60,6 +61,8 @@ bool IcebergTableSinkOperator::is_finished() const {
 }
 
 Status IcebergTableSinkOperator::set_finishing(RuntimeState* state) {
+    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
             writer.second->close(state);
@@ -98,9 +101,9 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
-        _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
+        return _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
     } else if (_is_static_partition_insert && !_partition_writers.empty()) {
-        _partition_writers.begin()->second->append_chunk(chunk.get(), state);
+        return _partition_writers.begin()->second->append_chunk(chunk.get(), state);
     } else {
         Columns partitions_columns;
         partitions_columns.resize(_partition_expr.size());
@@ -131,12 +134,13 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({partition_location, std::move(writer)});
-            _partition_writers[partition_location]->append_chunk(chunk.get(), state);
+            return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
         } else {
-            partition_writer->second->append_chunk(chunk.get(), state);
+            return partition_writer->second->append_chunk(chunk.get(), state);
         }
     }
-    return Status::OK();
+
+    CHECK(false) << "unreachable";
 }
 
 std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<std::string>& names,
@@ -153,7 +157,7 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
                                                                  IcebergTableDescriptor* iceberg_table,
                                                                  const TIcebergTableSink& thrift_sink,
                                                                  std::vector<ExprContext*> partition_expr_ctxs)
-        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_iceberg_table_sink),
+        : OperatorFactory(id, "iceberg_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _fragment_ctx(std::move(fragment_ctx)),
           _iceberg_table(iceberg_table),

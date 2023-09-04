@@ -147,4 +147,9 @@ public class HudiColumnValue implements ColumnValue {
             values.add(cv);
         }
     }
+
+    @Override
+    public byte getByte() {
+        throw new UnsupportedOperationException("Hoodie type does not support tinyint");
+    }
 }

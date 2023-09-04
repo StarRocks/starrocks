@@ -29,30 +29,30 @@ import java.util.Set;
 public class MvTaskRunContext extends TaskRunContext {
 
     // all the RefBaseTable's partition name to its intersected materialized view names.
-    Map<String, Set<String>> refBaseTableMVIntersectedPartitions;
+    private Map<String, Set<String>> refBaseTableMVIntersectedPartitions;
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
-    Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
+    private Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition key range.
-    Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
+    private Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
     // all the RefBaseTable's partition name to its list partition keys.
-    Map<String, List<List<String>>> refBaseTableListPartitionMap;
+    private Map<String, List<List<String>>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
-    Map<String, Set<String>> externalRefBaseTableMVPartitionMap;
+    private Map<String, Set<String>> externalRefBaseTableMVPartitionMap;
 
     // The Table which materialized view' partition column comes from is called `RefBaseTable`:
     // - Materialized View's to-refresh partitions is synced from its `refBaseTable`.
-    Table refBaseTable;
+    private Table refBaseTable;
     // The `RefBaseTable`'s partition column which materialized view's partition column derives from
     // is called `refBaseTablePartitionColumn`.
-    Column refBaseTablePartitionColumn;
+    private Column refBaseTablePartitionColumn;
 
-    String nextPartitionStart = null;
-    String nextPartitionEnd = null;
-    ExecPlan execPlan = null;
+    private String nextPartitionStart = null;
+    private String nextPartitionEnd = null;
+    private ExecPlan execPlan = null;
 
-    int partitionTTLNumber = TableProperty.INVALID;
+    private int partitionTTLNumber = TableProperty.INVALID;
 
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;

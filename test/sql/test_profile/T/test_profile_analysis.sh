@@ -1,8 +1,7 @@
 #!/bin/bash
 
 function test_explain_analyze() {
-    sql=$1
-    analyze_output=$(${mysql_cmd} -e "${sql}")
+    analyze_output=$(${mysql_cmd} -e "$1")
     if grep -q "Summary" <<< "${analyze_output}"; then
         echo "Analyze profile succeeded"
     else

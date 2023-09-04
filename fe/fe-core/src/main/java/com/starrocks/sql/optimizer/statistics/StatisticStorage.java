@@ -17,9 +17,11 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorTableColumnStats;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public interface StatisticStorage {
     default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
@@ -40,6 +42,15 @@ public interface StatisticStorage {
         return getColumnStatistics(table, columns);
     }
 
+    default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
+        return columns.stream().
+                map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+    }
+
+    default List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+        return getConnectorTableStatistics(table, columns);
+    }
+
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
     }
@@ -52,6 +63,9 @@ public interface StatisticStorage {
     }
 
     default void expireTableAndColumnStatistics(Table table, List<String> columns) {
+    }
+
+    default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
     }
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);

@@ -46,8 +46,7 @@ class EngineChecksumTask : public EngineTask {
 public:
     Status execute() override;
 
-    EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
-                       uint32_t* checksum);
+    EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TVersion version, uint32_t* checksum);
 
     ~EngineChecksumTask() override = default;
 
@@ -57,7 +56,6 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
 
     TTabletId _tablet_id;
-    TSchemaHash _schema_hash;
     TVersion _version;
     uint32_t* _checksum;
 }; // EngineTask

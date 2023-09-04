@@ -400,6 +400,10 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     }
     //drop tablet schema from metacache;
     erase_metacache(tablet_schema_cache_key(tablet_id));
+
+    std::unique_lock wrlock(_meta_lock);
+    _tablet_in_writing_txn_size.erase(tablet_id);
+
     return Status::OK();
 }
 
@@ -583,6 +587,12 @@ Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
 Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
     erase_metacache(segment_name);
     auto st = fs::delete_file(segment_location(tablet_id, segment_name));
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+Status TabletManager::delete_del(int64_t tablet_id, std::string_view del_name) {
+    erase_metacache(del_name);
+    auto st = fs::delete_file(del_location(tablet_id, del_name));
     return st.is_not_found() ? Status::OK() : st;
 }
 
@@ -793,6 +803,9 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
+    // collect trash files, and remove them by background threads
+    auto trash_files = log_applier->trash_files();
+
     CHECK_EQ(1, txns_size);
     auto tablet_id = tablet->id();
     auto txn_id = txns[0];
@@ -807,6 +820,22 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
                 auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
                 LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
                                          << r;
+            }
+        }
+        // Delete trash_file files
+        if (nullptr != trash_files) {
+            for (const auto& trash_file : *trash_files) {
+                if (is_del(trash_file)) {
+                    auto r = tablet_mgr->delete_del(tablet_id, trash_file);
+                    LOG_IF(WARNING, !r.ok())
+                            << "Fail to delete " << tablet_mgr->del_location(tablet_id, trash_file) << ": " << r;
+                } else if (is_segment(trash_file)) {
+                    auto r = tablet_mgr->delete_segment(tablet_id, trash_file);
+                    LOG_IF(WARNING, !r.ok())
+                            << "Fail to delete " << tablet_mgr->segment_location(tablet_id, trash_file) << ": " << r;
+                } else {
+                    LOG(ERROR) << "Unknown file: " << trash_file << " tablet_id: " << tablet_id;
+                }
             }
         }
     };
@@ -854,6 +883,10 @@ void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_s
             for (const auto& segment : txn_log->op_write().rowset().segments()) {
                 auto st = delete_segment(tablet_id, segment);
                 LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+            for (const auto& del_file : txn_log->op_write().dels()) {
+                auto st = delete_del(tablet_id, del_file);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << del_file << ": " << st;
             }
         }
         if (txn_log->has_op_compaction()) {
@@ -974,6 +1007,33 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
         (void)_metacache->adjust_capacity(delta);
         VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
     }
+}
+
+int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
+    int64_t size = 0;
+    std::shared_lock rdlock(_meta_lock);
+    const auto& it = _tablet_in_writing_txn_size.find(tablet_id);
+    if (it != _tablet_in_writing_txn_size.end()) {
+        for (auto& [k, v] : it->second) {
+            size += v;
+        }
+    }
+    VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
+    return size;
+}
+
+void TabletManager::set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id]
+            << " size: " << size << " txn_id: " << txn_id;
+    _tablet_in_writing_txn_size[tablet_id][txn_id] = size;
+}
+
+void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "remove tablet " << tablet_id
+            << "in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id] << " txn_id: " << txn_id;
+    _tablet_in_writing_txn_size[tablet_id].erase(txn_id);
 }
 
 } // namespace starrocks::lake
