@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -25,7 +26,12 @@ import java.util.List;
 
 public class MvRewriteSingleTableTest extends MvRewriteTestBase {
 
-    @Ignore
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",

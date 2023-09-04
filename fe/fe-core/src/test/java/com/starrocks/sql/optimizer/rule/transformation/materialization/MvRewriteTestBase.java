@@ -85,7 +85,7 @@ public class MvRewriteTestBase {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -111,7 +111,9 @@ public class MvRewriteTestBase {
                 }
             }
         };
+    }
 
+    public static void prepareDefaultDatas() throws Exception {
         starRocksAssert.withTable("create table emps (\n" +
                         "    empid int not null,\n" +
                         "    deptno int not null,\n" +
@@ -332,7 +334,7 @@ public class MvRewriteTestBase {
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
     }
 
-    protected void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
+    protected static void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
         starRocksAssert.withMaterializedView(sql);
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }

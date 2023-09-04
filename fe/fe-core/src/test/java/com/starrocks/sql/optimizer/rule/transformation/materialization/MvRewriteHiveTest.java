@@ -17,11 +17,19 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Set;
 
 public class MvRewriteHiveTest extends MvRewriteTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
