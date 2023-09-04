@@ -104,6 +104,7 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
+    public static String APPROX_TOP_K = "approx_top_k";
 
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
@@ -264,6 +265,14 @@ public class AnalyticExpr extends Expr {
         }
 
         return fn.functionName().equalsIgnoreCase(ROWNUMBER);
+    }
+
+    public static boolean isApproxTopKFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(APPROX_TOP_K);
     }
 
     /**

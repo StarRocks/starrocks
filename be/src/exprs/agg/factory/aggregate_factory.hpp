@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_agg.h"
@@ -215,6 +216,11 @@ public:
     template <LogicalType LT, bool ignoreNulls, bool isLag>
     static AggregateFunctionPtr MakeLeadLagWindowFunction() {
         return std::make_shared<LeadLagWindowFunction<LT, ignoreNulls, isLag>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeApproxTopKAggregateFunction() {
+        return std::make_shared<ApproxTopKAggregateFunction<LT>>();
     }
 
     template <LogicalType LT>
