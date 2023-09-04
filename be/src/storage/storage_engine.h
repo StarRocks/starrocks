@@ -75,8 +75,37 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
+
+struct DeltaColumnGroupKey {
+    int64_t tablet_id;
+    RowsetId rowsetid;
+    uint32_t segment_id;
+
+    DeltaColumnGroupKey() = default;
+    DeltaColumnGroupKey(int64_t tid, RowsetId rid, uint32_t sid) : tablet_id(tid), rowsetid(rid), segment_id(sid) {}
+    ~DeltaColumnGroupKey() = default;
+
+    bool operator==(const DeltaColumnGroupKey& rhs) const {
+        return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id && rowsetid == rhs.rowsetid;
+    }
+
+    bool operator<(const DeltaColumnGroupKey& rhs) const {
+        if (tablet_id < rhs.tablet_id) {
+            return true;
+        } else if (tablet_id > rhs.tablet_id) {
+            return false;
+        } else if (rowsetid < rhs.rowsetid) {
+            return true;
+        } else if (rowsetid != rhs.rowsetid) {
+            return false;
+        } else {
+            return segment_id < rhs.segment_id;
+        }
+    }
+};
 
 struct AutoIncrementMeta {
     int64_t min;
@@ -97,6 +126,9 @@ class StorageEngine {
 public:
     StorageEngine(const EngineOptions& options);
     virtual ~StorageEngine();
+
+    StorageEngine(const StorageEngine&) = delete;
+    const StorageEngine& operator=(const StorageEngine&) = delete;
 
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
 
@@ -123,6 +155,9 @@ public:
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
+
+    bool is_lake_persistent_index_dir_inited();
+    DataDir* get_persistent_index_store();
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
@@ -185,6 +220,8 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
+    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -202,8 +239,6 @@ public:
     bool rowset_id_in_use(const RowsetId& rowset_id) { return _rowset_id_generator->id_in_use(rowset_id); }
 
     void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
-
-    void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
 
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
@@ -231,6 +266,23 @@ public:
     void remove_increment_map_by_table_id(int64_t table_id);
 
     bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
+    size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
+
+    void search_delta_column_groups_by_version(const DeltaColumnGroupList& all_dcgs, int64_t version,
+                                               DeltaColumnGroupList* dcgs);
+
+    Status get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
+                                  int64_t version, DeltaColumnGroupList* dcgs);
+
+    void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
+
+    void clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
+    void wake_finish_publish_vesion_thread() {
+        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+        _finish_publish_version_cv.notify_one();
+    }
 
 protected:
     static StorageEngine* _s_instance;
@@ -283,6 +335,8 @@ private:
     void* _repair_compaction_thread_callback(void* arg);
     // manual compaction function
     void* _manual_compaction_thread_callback(void* arg);
+    // pk index major compaction function
+    void* _pk_index_major_compaction_thread_callback(void* arg);
 
     bool _check_and_run_manual_compaction_task();
 
@@ -291,6 +345,9 @@ private:
 
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
+
+    // finish publish version process function
+    void* _finish_publish_version_thread_callback(void* arg);
 
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
@@ -317,7 +374,10 @@ private:
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
+    DataDir* _persistent_index_data_dir = nullptr;
     uint32_t _available_storage_medium_type_count;
+
+    std::atomic<bool> _lake_persistent_index_dir_inited{false};
 
     bool _is_all_cluster_id_exist;
 
@@ -334,6 +394,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to check finish publish version task
+    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -346,6 +408,8 @@ private:
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     std::vector<std::thread> _manual_compaction_threads;
+    // thread to run pk index major compaction
+    std::thread _pk_index_major_compaction_thread;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -362,13 +426,14 @@ private:
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
 
+    std::mutex _finish_publish_version_mutex;
+    std::condition_variable _finish_publish_version_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
     bool _need_report_tablet = false;
     bool _need_report_disk_stat = false;
-
-    std::mutex _engine_task_mutex;
 
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
@@ -387,7 +452,7 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    HeartbeatFlags* _heartbeat_flags = nullptr;
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
@@ -395,8 +460,11 @@ private:
 
     bool _need_write_cluster_id = true;
 
-    StorageEngine(const StorageEngine&) = delete;
-    const StorageEngine& operator=(const StorageEngine&) = delete;
+    // Delta Column Group cache, dcg is short for `Delta Column Group`
+    // This cache just used for non-Primary Key table
+    std::mutex _delta_column_group_cache_lock;
+    std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
+    std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

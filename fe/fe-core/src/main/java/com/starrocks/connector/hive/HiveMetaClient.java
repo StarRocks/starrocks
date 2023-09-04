@@ -155,9 +155,9 @@ public class HiveMetaClient {
             argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
             Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage());
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
@@ -178,9 +178,54 @@ public class HiveMetaClient {
         }
     }
 
+    public void createDatabase(Database database) {
+        Class<?>[] argClasses = {Database.class};
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createDatabase")) {
+            callRPC("createDatabase", "Failed to create database " + database.getName(), argClasses, database);
+        }
+    }
+
+    public void dropDatabase(String dbName, boolean deleteData) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropDatabase")) {
+            callRPC("dropDatabase", "Failed to drop database " + dbName, dbName, deleteData, false, false);
+        }
+    }
+
     public List<String> getAllTableNames(String dbName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables")) {
             return callRPC("getAllTables", "Failed to get all table names on database: " + dbName, dbName);
+        }
+    }
+
+    public void createTable(Table table) {
+        Class<?>[] argClasses = {Table.class};
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.createTable")) {
+            callRPC("createTable", "Failed to create table " + table.getDbName() + "." + table.getTableName(),
+                    argClasses, table);
+        }
+    }
+
+    public void dropTable(String dbName, String tableName) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropTable")) {
+            callRPC("dropTable", "Failed to drop table " + dbName + "." + tableName,
+                    dbName, tableName, true, false);
+        }
+    }
+
+    public void alterTable(String dbName, String tableName, Table newTable) {
+        Class<?>[] argClasses = {String.class, String.class, Table.class};
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.alterTable")) {
+            callRPC("alter_table", "Failed to alter table " + dbName + "." + tableName,
+                    argClasses, dbName, tableName, newTable);
+        }
+    }
+
+    public void alterPartition(String dbName, String tableName, Partition newPartition) {
+        Class<?>[] argClasses = {String.class, String.class, Partition.class};
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.alterPartition")) {
+            callRPC("alter_partition", "Failed to alter partition " + dbName + "." + tableName + newPartition.getValues(),
+                    argClasses, dbName, tableName, newPartition);
         }
     }
 
@@ -215,6 +260,20 @@ public class HiveMetaClient {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition")) {
             return callRPC("getPartition", String.format("Failed to get partition on %s.%s", dbName, tableName),
                     dbName, tableName, partitionValues);
+        }
+    }
+
+    public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.addPartitions")) {
+            callRPC("add_partitions", String.format("Failed to add partitions on %s.%s",
+                    dbName, tableName), partitions);
+        }
+    }
+
+    public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.dropPartition")) {
+            callRPC("dropPartition", String.format("Failed to drop partition on %s.%s.%s",
+                    dbName, tableName, partValues), dbName, tableName, partValues, deleteData);
         }
     }
 

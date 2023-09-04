@@ -237,7 +237,7 @@ private:
         // In the unplug state, has_output will return true directly if there is a chunk in the queue.
         // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
         bool unpluging = false;
-        bool is_short_circuited = false;
+        std::atomic<bool> is_short_circuited = false;
     };
     std::vector<ChunkQueueState> _chunk_queue_states;
 
@@ -254,6 +254,8 @@ private:
     // key of first level is be_number
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
+
+    std::atomic<bool> _is_chunk_meta_built{false};
 
     static constexpr size_t kUnplugBufferThreshold = 16;
 };

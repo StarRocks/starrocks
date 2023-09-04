@@ -52,6 +52,7 @@ public:
     ~HiveDataSource() override = default;
 
     HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range);
+    std::string name() const override;
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
@@ -81,7 +82,7 @@ private:
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner();
-    HdfsScanner* _create_paimon_jni_scanner();
+    HdfsScanner* _create_paimon_jni_scanner(FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================
@@ -100,7 +101,12 @@ private:
     // 1. conjuncts that column is not exist in file, are used to filter file in file reader.
     // 2. conjuncts that column is materialized, are evaled in group reader.
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    std::unordered_set<SlotId> _conjunct_slots;
+    std::unordered_set<SlotId> _slots_in_conjunct;
+
+    // used for reader to decide decode or not
+    // if only used by filter(not output) and only used in conjunct_ctx_by_slot
+    // there is no need to decode.
+    std::unordered_set<SlotId> _slots_of_mutli_slot_conjunct;
 
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
@@ -127,6 +133,8 @@ private:
 
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
+    bool _can_use_any_column = false;
+    bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

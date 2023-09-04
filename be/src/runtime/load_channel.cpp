@@ -108,11 +108,11 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get());
             }
-            if (st = channel->open(request, _schema, request.is_incremental()); st.ok()) {
+            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
         } else if (request.is_incremental()) {
-            st = it->second->incremental_open(request, _schema);
+            st = it->second->incremental_open(request, response, _schema);
         }
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();

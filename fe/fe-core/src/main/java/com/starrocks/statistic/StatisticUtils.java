@@ -22,7 +22,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -62,6 +61,8 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -82,6 +83,7 @@ public class StatisticUtils {
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
+        context.setStatisticsContext(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -130,7 +132,7 @@ public class StatisticUtils {
         // collectPartitionIds contains partition that is first loaded.
         List<Long> collectPartitionIds = Lists.newArrayList();
         for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            if (table.getPartition(partitionId).isFirstLoad()) {
+            if (table.getPhysicalPartition(partitionId).isFirstLoad()) {
                 collectPartitionIds.add(partitionId);
             }
         }
@@ -166,10 +168,13 @@ public class StatisticUtils {
         }
 
         if (sync) {
+            long await = Config.semi_sync_collect_statistic_await_seconds;
             try {
-                future.get();
+                future.get(await, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException e) {
                 LOG.error("failed to execute statistic collect job", e);
+            } catch (TimeoutException e) {
+                LOG.warn("await collect statistic failed after {} seconds", await);
             }
         }
     }
@@ -205,7 +210,8 @@ public class StatisticUtils {
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
-                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
+                StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
 
         // check database
         if (db == null) {
@@ -246,12 +252,11 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
-        if (table instanceof IcebergTable) {
-            // TODO, shall we check empty for external table?
+        if (!table.isNativeTableOrMaterializedView()) {
+            // for external table, return false directly
             return false;
-        } else {
-            return table.getPartitions().stream().noneMatch(Partition::hasData);
         }
+        return table.getPartitions().stream().noneMatch(Partition::hasData);
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {

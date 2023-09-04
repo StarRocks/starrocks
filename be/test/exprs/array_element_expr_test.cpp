@@ -19,21 +19,11 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
+#include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
 
 namespace {
-
-class FakeConstExpr : public starrocks::Expr {
-public:
-    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
-
-    Expr* clone(ObjectPool*) const override { return nullptr; }
-
-    ColumnPtr _column;
-};
 
 ColumnPtr const_int_column(int32_t value, size_t size = 1) {
     auto data = Int32Column::create();

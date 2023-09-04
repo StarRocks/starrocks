@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -53,6 +54,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -61,6 +63,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -68,6 +71,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -98,9 +102,12 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -176,7 +183,7 @@ public class AstToStringBuilder {
             sb.append(Joiner.on(", ").join(privList));
             sb.append(" ON ");
 
-            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+            if (stmt.getObjectType().equals(ObjectType.SYSTEM)) {
                 sb.append(stmt.getObjectType().name());
             } else {
                 if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
@@ -323,8 +330,18 @@ public class AstToStringBuilder {
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
-                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+            String dbName = null;
+            String jobName = null;
+            if (stmt.getLabelName() != null) {
+                dbName = stmt.getLabelName().getDbName();
+                jobName = stmt.getLabelName().getLabelName();
+            }
+            if (dbName != null) {
+                sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
+                    .append(jobName).append(" ON ").append(stmt.getTableName());
+            } else {
+                sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
+            }
 
             if (stmt.getRoutineLoadDesc() != null) {
                 sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
@@ -704,6 +721,25 @@ public class AstToStringBuilder {
             return sqlBuilder.toString();
         }
 
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(FileTableFunctionRelation.IDENTIFIER);
+            sb.append("(");
+            boolean first = true;
+            for (Map.Entry<String, String> entry : node.getProperties().entrySet()) {
+                if (!first) {
+                    sb.append(",");
+                }
+                first = false;
+                sb.append("'").append(entry.getKey()).append("'");
+                sb.append("=");
+                sb.append("'").append((entry.getValue())).append("'");
+            }
+            sb.append(")");
+            return sb.toString();
+        }
+
         // ---------------------------------- Expression --------------------------------
 
         @Override
@@ -882,11 +918,24 @@ public class AstToStringBuilder {
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
                 sb.append(")");
-            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-                sb.append(visit(node.getChild(0)));
+            } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                int end = 1;
+                if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+                    end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
+                }
+                for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
+                    if (i != 0) {
+                        sb.append(",");
+                    }
+                    sb.append(visit(node.getChild(i)));
+                }
                 List<OrderByElement> sortClause = fnParams.getOrderByElements();
                 if (sortClause != null) {
                     sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
+                if (functionName.equals(FunctionSet.GROUP_CONCAT) && end < node.getChildren().size() && end > 0) {
+                    sb.append(" SEPARATOR ");
+                    sb.append(visit(node.getChild(end)));
                 }
                 sb.append(")");
             } else {
@@ -1129,6 +1178,11 @@ public class AstToStringBuilder {
             return strBuilder.toString();
         }
 
+        @Override
+        public String visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return visitFunctionCall(node, context);
+        }
+
         private String visitAstList(List<? extends ParseNode> contexts) {
             return Joiner.on(", ").join(contexts.stream().map(this::visit).collect(toList()));
         }
@@ -1139,6 +1193,54 @@ public class AstToStringBuilder {
             } else {
                 return "(" + visit(node) + ")";
             }
+        }
+
+        // --------------------------------------------Storage volume Statement ----------------------------------------
+
+        @Override
+        public String visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE STORAGE VOLUME ");
+            if (stmt.isSetIfNotExists()) {
+                sb.append("IF NOT EXISTS ");
+            }
+            sb.append(stmt.getName());
+            sb.append(" TYPE = ").append(stmt.getStorageVolumeType());
+            sb.append(" LOCATIONS = (");
+            List<String> locations = stmt.getStorageLocations();
+            for (int i = 0; i < locations.size(); ++i) {
+                if (i == 0) {
+                    sb.append("'").append(locations.get(i)).append("'");
+                } else {
+                    sb.append(", '").append(locations.get(i)).append("'");
+                }
+            }
+            sb.append(")");
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            sb.append(" PROPERTIES (").
+                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER STORAGE VOLUME ").append(stmt.getName());
+            if (!stmt.getComment().isEmpty()) {
+                sb.append(" COMMENT = '").append(stmt.getComment()).append("'");
+            }
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
+            StorageVolume.addMaskForCredential(properties);
+            if (!properties.isEmpty()) {
+                sb.append(" SET (").
+                        append(new PrintableMap<>(properties, "=", true, false))
+                        .append(")");
+            }
+            return sb.toString();
         }
     }
 }

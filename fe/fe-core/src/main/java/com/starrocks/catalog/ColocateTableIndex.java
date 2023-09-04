@@ -220,6 +220,8 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId,
                                    boolean isReplay)
             throws DdlException {
+        Preconditions.checkArgument(tbl.getDefaultDistributionInfo().supportColocate(),
+                "colocate not supported");
         writeLock();
         try {
             boolean groupAlreadyExist = true;
@@ -238,6 +240,13 @@ public class ColocateTableIndex implements Writable {
                     groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                if (!(tbl instanceof ExternalOlapTable)) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    if (distributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        distributionInfo.setBucketNum(bucketNum);
+                    }
+                }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());

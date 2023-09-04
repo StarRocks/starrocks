@@ -167,19 +167,20 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private State state;
     private TabletStatus tabletStatus;
 
-    private long dbId;
-    private long tblId;
-    private long partitionId;
-    private long indexId;
-    private long tabletId;
+    private final long dbId;
+    private final long tblId;
+    private final long partitionId;
+    private final long indexId;
+    private final long tabletId;
     private int schemaHash;
     private TStorageMedium storageMedium;
 
-    private long createTime = -1;
+    private final long createTime;
     private long finishedTime = -1;
 
     private LocalTablet tablet = null;
     private long visibleVersion = -1;
+    private long visibleTxnId = -1;
     private long committedVersion = -1;
 
     private Replica srcReplica = null;
@@ -201,7 +202,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private GroupId colocateGroupId = null;
     private boolean relocationForRepair = false;
 
-    private SystemInfoService infoService;
+    private final SystemInfoService infoService;
 
     // for DiskAndTabletLoadReBalancer to identify balance type
     private BalanceType balanceType;
@@ -358,9 +359,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     public void setVersionInfo(long visibleVersion,
-                               long committedVersion) {
+                               long committedVersion, long visibleTxnId) {
         this.visibleVersion = visibleVersion;
         this.committedVersion = committedVersion;
+        this.visibleTxnId = visibleTxnId;
+    }
+
+    public long getVisibleTxnId() {
+        return visibleTxnId;
     }
 
     public void setDest(Long destBeId, long destPathHash) {
@@ -604,13 +610,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * 1. replica's last failed version > 0
      * 2. better to choose a replica which has a lower last failed version
      * 3. best to choose a replica if its last success version > last failed version
-     * 4. if these is replica which need further repair, choose that replica.
+     * 4. if there's replica which needs further repair, choose that replica.
      *
      * database lock should be held.
      */
-    public void chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
+    public boolean chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
             throws SchedException {
         Replica chosenReplica = null;
+        boolean needFurtherRepair = false;
+
         for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.isBad()) {
                 continue;
@@ -630,6 +638,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
             if (replica.needFurtherRepair()) {
                 chosenReplica = replica;
+                needFurtherRepair = true;
                 break;
             }
 
@@ -639,13 +648,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 chosenReplica = replica;
                 break;
             } else if (replica.getLastFailedVersion() < chosenReplica.getLastFailedVersion()) {
-                // its better to select a low last failed version replica
+                // it's better to select a low last failed version replica
                 chosenReplica = replica;
             }
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
         }
 
         // check if the dest replica has available slot
@@ -661,6 +670,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         setDest(chosenReplica.getBackendId(), chosenReplica.getPathHash());
+
+        return needFurtherRepair;
     }
 
     public void releaseResource(TabletScheduler tabletScheduler) {
@@ -744,6 +755,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 && decommissionedReplica.getState() == ReplicaState.DECOMMISSION
                 && decommissionedReplicaPreviousState != null) {
             decommissionedReplica.setState(decommissionedReplicaPreviousState);
+            decommissionedReplica.setWatermarkTxnId(-1);
+            LOG.debug("reset replica {} on backend {} with state from DECOMMISSION to {}, tablet: {}",
+                    decommissionedReplica.getId(), decommissionedReplica.getBackendId(),
+                    decommissionedReplica.getState(), tabletId);
         }
     }
 
@@ -788,7 +803,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         cloneTask.setPathHash(srcPathHash, destPathHash);
         cloneTask.setIsLocal(srcReplica.getBackendId() == destBackendId);
 
-        // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING or REPLICA_MISSING_IN_CLUSTER,
+        // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE
         Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
         if (db == null) {
@@ -800,6 +815,27 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     || tabletStatus == TabletStatus.REPLICA_RELOCATING
                     || tabletStatus == TabletStatus.COLOCATE_MISMATCH
                     || (type == Type.BALANCE && !cloneTask.isLocal())) {
+                // We should avoid full clone task to run concurrently with replica drop task,
+                // otherwise it may cause replica lost in the following scenario:
+                // we have a tablet T with only one replica,
+                // t1: balancer move T from backend 10001 to backend 10002
+                // t2: after clone finished, redundant replica on 10001 will be dropped,
+                //     but this will only clean the meta from FE, replica is physically
+                //     dropped until next tablet report from BE
+                // t3: balancer schedule a task to move back T from backend 10002 to backend 10001
+                // t4: tablet report from 10001 received, and a replica drop task is sent to backend 10001
+                // t5: clone on backend 10001 finished, and a new replica of T is created on FE
+                // t6: replica drop task has been executed on backend 10001
+                // t7: after the second clone finished, redundant replica on 10002 will be dropped
+                // t8: replica of T is physically lost with only meta of replica on 10001 is left on FE
+                //
+                // If the timing of consecutive full clones is too close, we will delay the next full clone
+                // so that report handler will delete the src replica physically in time.
+                if (System.currentTimeMillis() - tablet.getLastFullCloneFinishedTimeMs() <
+                        Config.tablet_sched_consecutive_full_clone_delay_sec * 1000) {
+                    throw new SchedException(Status.SCHEDULE_RETRY, "consecutive full clone needs to delay");
+                }
+
                 Replica cloneReplica = new Replica(
                         GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
                         -1 /* version */, schemaHash,
@@ -974,7 +1010,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (cloneTask.isLocal()) {
                 unprotectedFinishLocalMigration(request);
             } else {
-                finishInfo = unprotectedFinishClone(request, db, partition, replicationNum);
+                finishInfo = unprotectedFinishClone(request, partition, replicationNum);
             }
 
             state = State.FINISHED;
@@ -1013,7 +1049,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         replica.updateVersion(reportedTablet.version);
     }
 
-    private String unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
+    private String unprotectedFinishClone(TFinishTaskRequest request, Partition partition,
                                           short replicationNum) throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
@@ -1074,10 +1110,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);
+            tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
             GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
-            // so we keep it state unchanged, and log update replica
+            // so, we keep it state unchanged, and log update replica
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
         }
         return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
@@ -1139,7 +1176,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.add(TimeUtils.longToTimeString(lastSchedTime));
         result.add(TimeUtils.longToTimeString(lastVisitedTime));
         result.add(TimeUtils.longToTimeString(finishedTime));
-        result.add(copyTimeMs > 0 ? String.valueOf(copySize / copyTimeMs / 1000.0) : FeConstants.NULL_STRING);
+        result.add(copyTimeMs > 0 ? String.valueOf((double) copySize / copyTimeMs / 1000.0) : FeConstants.NULL_STRING);
         result.add(String.valueOf(failedSchedCounter));
         result.add(String.valueOf(failedRunningCounter));
         result.add(TimeUtils.longToTimeString(lastAdjustPrioTime));

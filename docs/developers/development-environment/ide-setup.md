@@ -18,7 +18,7 @@ The overall idea is to write code on the MacBook,  then automatically synchroniz
 
 ### MacBook Setup
 
-**Thrift 0.13**
+#### Thrift 0.13
 
 There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
@@ -33,7 +33,7 @@ $ thrift -version
 Thrift version 0.13.0
 ```
 
-**Protobuf**
+#### Protobuf
 
 Just use the latest version v3 directly, because the latest version of Protobuf is compatible with the v2 version of the Protobuf protocol in StarRocks.
 
@@ -41,23 +41,23 @@ Just use the latest version v3 directly, because the latest version of Protobuf 
 brew install protobuf
 ```
 
-**Maven**
+#### Maven
 
 ```bash
 brew install maven
 ```
 
-**OpenJDK 1.8 or 11**
+#### OpenJDK 1.8 or 11
 
 ```bash
 brew install openjdk@11
 ```
 
-**Python3**
+#### Python3
 
 MacOS comes with it, no installation is needed.
 
-**Setup system env**
+#### Setup system env
 
 ```bash
 export JAVA_HOME=xxxxx
@@ -66,11 +66,11 @@ export PYTHON=/usr/bin/python3
 
 ### Ubuntu22 server setup
 
-**Clone StarRocks code**
+#### Clone StarRocks code
 
 `git clone https://github.com/StarRocks/starrocks.git`
 
-**Install required tools for compilation**:
+#### Install required tools for compilation
 
 ```bash
 sudo apt update
@@ -86,7 +86,7 @@ Setup `JAVA_HOME` env
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ```
 
-**Do a compilation of StarRocks**
+#### Do a compilation of StarRocks
 
 ```bash
 cd starrocks/
@@ -105,11 +105,11 @@ FE development is simple because you can compile it in MacOS directly. Just ente
 
 Then you can use IDEA to open `fe` folder directly, everything is ok.
 
-**Local debug**
+#### Local debug
 
 The same as other Java applications.
 
-**Remote debug**
+#### Remote debug
 
 In Ubuntu server, run with `./start_fe.sh --debug`, then use IDEA remote debug to connect it. The default port is 5005, you can change it in `start_fe.sh` scripts.
 
@@ -149,7 +149,7 @@ Notice: Be careful not to check `Include system environment variables`.
 
 From here on, all setup is complete. After Clion and the remote server are synchronized for a while, the code jump will work normally.
 
-**Debug**
+#### Debug
 
 BE debug is a little difficult, you have to use gdb in your remote server. Of course, you can use gdb server + Clion remote gdb, but I don't recommend it, it's too stuck. 
 
@@ -183,7 +183,7 @@ Then just run `./bin/start_be.sh` without any flag.
 
 > If you face the error report when debugging for lakehouse, just add `handle SIGSEGV nostop noprint pass` in `~/.gdbinit`.
 
-**LLVM**
+#### LLVM
 
 Of course, you can use LLVM tools to development be.
 

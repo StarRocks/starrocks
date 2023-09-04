@@ -41,7 +41,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -142,7 +142,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private @NotNull Executor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
-            lakeTaskExecutor = Executors.newFixedThreadPool(Config.experimental_lake_publish_version_threads);
+            lakeTaskExecutor = Executors.newCachedThreadPool();
         }
         return lakeTaskExecutor;
     }
@@ -396,7 +396,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
             long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;

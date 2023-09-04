@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
@@ -27,6 +28,18 @@ import java.util.stream.Collectors;
 public class LogUtil {
 
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
+        boolean enableConnectionLog = false;
+        if (Config.audit_log_modules != null) {
+            for (String module : Config.audit_log_modules) {
+                if ("connection".equals(module)) {
+                    enableConnectionLog = true;
+                    break;
+                }
+            }
+        }
+        if (!enableConnectionLog) {
+            return;
+        }
         AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
                 .setEventType(AuditEvent.EventType.CONNECTION)
                 .setUser(authPacket == null ? "null" : authPacket.getUser())
@@ -55,7 +68,8 @@ public class LogUtil {
                 .collect(Collectors.joining(System.lineSeparator(), System.lineSeparator(), ""));
     }
 
-    public static String removeCommentAndLineSeparator(String origStmt) {
+    // just remove redundant spaces, tabs and line separators
+    public static String removeLineSeparator(String origStmt) {
         char inStringStart = '-';
 
         StringBuilder sb = new StringBuilder();
@@ -79,20 +93,12 @@ public class LogUtil {
                     character == '#') {
                 // process comment style like '-- comment' or '# comment'
                 while (idx < length - 1 && origStmt.charAt(idx) != '\n') {
+                    appendChar(sb, origStmt.charAt(idx));
                     ++idx;
                 }
-                appendChar(sb, ' ');
-            } else if (character == '/' && idx != length - 2 &&
-                    origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) != '+') {
-                //  process comment style like '/* comment */'
-                while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
-                    ++idx;
-                }
-                ++idx;
-                appendChar(sb, ' ');
-            } else if (character == '/' && idx != origStmt.length() - 2 &&
-                    origStmt.charAt(idx + 1) == '*' && origStmt.charAt(idx + 2) == '+') {
-                //  process hint
+                appendChar(sb, '\n');
+            } else if (character == '/' && idx != origStmt.length() - 1 && origStmt.charAt(idx + 1) == '*') {
+                //  process comment style like '/* comment */' or hint
                 while (idx < length - 1 && (origStmt.charAt(idx) != '*' || origStmt.charAt(idx + 1) != '/')) {
                     appendChar(sb, origStmt.charAt(idx));
                     idx++;

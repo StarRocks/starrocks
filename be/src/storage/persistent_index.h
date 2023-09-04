@@ -23,6 +23,7 @@
 #include "storage/edit_version.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -32,15 +33,24 @@ class Tablet;
 class Schema;
 class Column;
 
+namespace lake {
+class LakeLocalPersistentIndex;
+}
+
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
 enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
-    PERSISTENT_INDEX_VERSION_2
+    PERSISTENT_INDEX_VERSION_2,
+    PERSISTENT_INDEX_VERSION_3
 };
 
 static constexpr uint64_t NullIndexValue = -1;
+static std::string MergeSuffix = ".merged";
+static std::string BloomFilterSuffix = ".bf";
+
+extern bool write_pindex_bf;
 
 enum CommitType {
     kFlush = 0,
@@ -53,14 +63,17 @@ struct IOStat {
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
     uint64_t l0_write_cost = 0;
-    uint64_t l1_read_cost = 0;
+    uint64_t l1_l2_read_cost = 0;
     uint64_t flush_or_wal_cost = 0;
+    uint64_t compaction_cost = 0;
+    uint64_t reload_meta_cost = 0;
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} l1_read_cost: "
-                "{} flush_or_wal_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_read_cost, flush_or_wal_cost);
+                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
+                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
+                compaction_cost, reload_meta_cost);
     }
 };
 
@@ -102,6 +115,7 @@ struct KVRef {
     KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
+struct IndexPage;
 struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
@@ -183,16 +197,15 @@ public:
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     // [not thread-safe]
     virtual std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
-                                                                 bool without_null) const = 0;
+                                                                 bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket, bool without_null,
-                                            BloomFilter* bf = nullptr) const = 0;
+                                            size_t npage_hint, size_t nbucket, bool with_null) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -304,19 +317,19 @@ public:
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |num_entry|: number of entries expected, it should be:
-    //                 the num of KV entries if without_null == false
-    //                 the num of KV entries excluding nulls if without_null == true
-    // |without_null|: whether to include null entries
+    //                 the num of KV entries if with_null == true
+    //                 the num of KV entries excluding nulls if with_null == false
+    // |with_null|: whether to include null entries
     std::vector<std::pair<uint32_t, std::vector<std::vector<KVRef>>>> get_kv_refs_by_shard(size_t num_entry,
-                                                                                           bool without_null);
+                                                                                           bool with_null);
 
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys, size_t idx_begin,
                                                          size_t idx_end);
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys,
                                                          const std::vector<size_t>& idxes);
 
-    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false,
-                                    std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
+    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1,
+                                    bool keep_delete);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -331,6 +344,7 @@ public:
 
 private:
     friend class PersistentIndex;
+    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -396,6 +410,7 @@ public:
         return usage;
     }
 
+    // return total kv count of this immutable index
     size_t total_size() {
         size_t size = 0;
         for (const auto& shard : _shards) {
@@ -406,16 +421,30 @@ public:
 
     size_t memory_usage() {
         size_t mem_usage = 0;
-        for (auto& [_, bf] : _bf_map) {
+        for (auto& bf : _bf_vec) {
             mem_usage += bf->size();
         }
         return mem_usage;
     }
 
-    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
+    std::string filename() const {
+        if (_file != nullptr) {
+            return _file->filename();
+        } else {
+            return "";
+        }
+    }
+
+    EditVersion version() const { return _version; }
+
+    bool has_bf() { return !_bf_vec.empty(); }
+
+    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
+                                                          bool load_bf_data);
 
 private:
     friend class PersistentIndex;
+    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
@@ -438,6 +467,23 @@ private:
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
+    Status _split_keys_info_by_page(size_t shard_idx, std::vector<KeyInfo>& keys_info,
+                                    std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+
+    Status _get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                        KeysInfo* found_keys_info,
+                                        std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                        std::map<size_t, IndexPage>& pages) const;
+
+    Status _get_in_varlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                        KeysInfo* found_keys_info,
+                                        std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                        std::map<size_t, IndexPage>& pages) const;
+
+    Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                 KeysInfo* found_keys_info,
+                                 std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
 
@@ -449,6 +495,12 @@ private:
 
     Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
+    bool _need_bloom_filter(size_t idx_begin, size_t idx_end, std::vector<KeysInfo>& keys_info_by_shard) const;
+
+    Status _prepare_bloom_filter(size_t idx_begin, size_t idx_end) const;
+
+    bool _filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, std::vector<KeyInfo>* res) const;
+
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
     size_t _size = 0;
@@ -457,7 +509,7 @@ private:
         uint64_t offset;
         uint64_t bytes;
         uint32_t npage;
-        uint32_t size;
+        uint32_t size; // kv count
         uint32_t key_size;
         uint32_t value_size;
         uint32_t nbucket;
@@ -466,7 +518,8 @@ private:
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
-    std::map<size_t, std::unique_ptr<BloomFilter>> _bf_map;
+    mutable std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
+    std::vector<size_t> _bf_off;
 };
 
 class ImmutableIndexWriter {
@@ -478,18 +531,34 @@ public:
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
     Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
 
-    Status write_shard_as_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
+    Status write_bf();
 
     Status finish();
 
+    // return total kv count of this immutable index
     size_t total_kv_size() { return _total_kv_size; }
+
+    size_t file_size() { return _total_kv_bytes + _total_bf_bytes; }
+
+    bool bf_flushed() { return _bf_flushed; }
+    /*
+    void swap_bf_vec(std::vector<std::unique_ptr<BloomFilter>>* bf_vec) {
+        if (!_bf_flushed) {
+            bf_vec->swap(_bf_vec);
+        }
+    }
+    */
 
 private:
     EditVersion _version;
     string _idx_file_path_tmp;
     string _idx_file_path;
+    string _bf_file_path;
     std::shared_ptr<FileSystem> _fs;
-    std::unique_ptr<WritableFile> _wb;
+    std::unique_ptr<WritableFile> _idx_wb;
+    std::unique_ptr<WritableFile> _bf_wb;
+    std::vector<size_t> _shard_bf_size;
+    std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
     size_t _nshard = 0;
     size_t _cur_key_size = -1;
@@ -497,8 +566,10 @@ private:
     size_t _total = 0;
     size_t _total_moved = 0;
     size_t _total_kv_size = 0;
-    size_t _total_bytes = 0;
+    size_t _total_kv_bytes = 0;
+    size_t _total_bf_bytes = 0;
     ImmutableIndexMetaPB _meta;
+    bool _bf_flushed = false;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
@@ -518,7 +589,7 @@ class PersistentIndex {
 public:
     // |path|: directory that contains index files
     PersistentIndex(std::string path);
-    ~PersistentIndex();
+    virtual ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }
 
@@ -536,6 +607,9 @@ public:
         size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
         for (int i = 0; i < _l1_vec.size(); i++) {
             memory_usage += _l1_vec[i]->memory_usage();
+        }
+        for (int i = 0; i < _l2_vec.size(); i++) {
+            memory_usage += _l2_vec[i]->memory_usage();
         }
         return memory_usage;
     }
@@ -558,7 +632,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     // apply modification
     Status on_commited();
@@ -571,9 +645,8 @@ public:
     // |values|: value array for return values
     Status get(size_t n, const Slice* keys, IndexValue* values);
 
-    Status get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                        std::map<size_t, KeysInfo>* _keys_info_by_key_size, KeysInfo* found_keys_info,
-                                        size_t idx);
+    Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
+                                        std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
 
     // batch upsert
     // |n|: size of key/value array
@@ -625,6 +698,22 @@ public:
 
     bool is_error() { return _error; }
 
+    // just for unit test
+    bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
+
+    Status major_compaction(Tablet* tablet);
+
+    Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
+
+    double get_write_amp_score() const;
+
+    void meta_lock() { _meta_lock.lock(); }
+    void meta_unlock() { _meta_lock.unlock(); }
+
+protected:
+    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
+                                      const EditVersion& min_l2_version);
+
 private:
     size_t _dump_bound();
 
@@ -638,14 +727,13 @@ private:
     bool _need_merge_advance();
     Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
 
-    Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
     Status _delete_tmp_index_file();
 
     Status _flush_l0();
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
-                                      bool keep_delete, std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map);
+                                      bool keep_delete);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
@@ -668,6 +756,30 @@ private:
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
+    void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
+                                        size_t& total_usage);
+
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
+
+    uint64_t _l1_l2_file_size() const;
+
+    void _get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                      std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
+
+    StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
+                                                 const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
+
+    bool _enable_minor_compaction();
+
+    void _calc_write_amp_score();
+
+    size_t _get_tmp_l1_count();
+
+    bool _l0_is_full();
+
+    bool _need_rebuild_index(const PersistentIndexMetaPB& index_meta);
+
+protected:
     // prevent concurrent operations
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
     mutable std::shared_mutex _lock;
@@ -681,6 +793,10 @@ private:
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
+    bool _has_l1 = false;
+    std::shared_ptr<FileSystem> _fs;
+    bool _dump_snapshot = false;
+    bool _flushed = false;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
     // The usage and size is not exactly accurate after reload persistent index from disk becaues
@@ -689,11 +805,14 @@ private:
     // write cost of PersistentIndexMeta
     std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_length;
     std::vector<int> _l1_merged_num;
-    bool _has_l1 = false;
-    std::shared_ptr<FileSystem> _fs;
+    // l2 files's version
+    std::vector<EditVersion> _l2_versions;
+    // record if this version is generated by bg merge compaction
+    std::vector<bool> _l2_version_merged;
+    // all l2
+    std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
 
-    bool _dump_snapshot = false;
-    bool _flushed = false;
+private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _get_lock;
@@ -702,6 +821,31 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
     std::vector<KeysInfo> _found_keys_info;
+    // save bloom filter of l1 after merge compaction in order to skip read bloom filter file
+    // std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
+    // make update index and compaction l2 concurrently safe.
+    mutable std::mutex _meta_lock;
+    // set if major compaction is running
+    std::atomic<bool> _major_compaction_running{false};
+    // write amplification score, 0.0 means this index doesn't need major compaction
+    std::atomic<double> _write_amp_score{0.0};
+};
+
+struct PersistentIndexMetaLockGuard {
+public:
+    explicit PersistentIndexMetaLockGuard() {}
+    ~PersistentIndexMetaLockGuard() {
+        if (nullptr != _pindex) {
+            _pindex->meta_unlock();
+        }
+    }
+    void acquire_meta_lock(PersistentIndex* pindex) {
+        pindex->meta_lock();
+        _pindex = pindex;
+    }
+
+private:
+    PersistentIndex* _pindex = nullptr;
 };
 
 } // namespace starrocks

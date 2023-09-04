@@ -61,6 +61,7 @@ import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 
@@ -108,6 +110,7 @@ public class GlobalTransactionMgr implements Writable {
         return callbackFactory;
     }
 
+    @NotNull
     public DatabaseTransactionMgr getDatabaseTransactionMgr(long dbId) throws AnalysisException {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (dbTransactionMgr == null) {
@@ -329,7 +332,7 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public TransactionStatus getLabelState(long dbId, String label) {
+    public TransactionStatus getLabelStatus(long dbId, String label) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             return dbTransactionMgr.getLabelState(label);
@@ -337,7 +340,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return TransactionStatus.UNKNOWN;
         }
-
     }
 
     public Long getLabelTxnID(long dbId, String label) {
@@ -350,19 +352,35 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
+    public TransactionState getLabelTransactionState(long dbId, String label) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            return dbTransactionMgr.getLabelTransactionState(label);
+        } catch (AnalysisException e) {
+            LOG.warn("Get transaction state by label " + label + " failed", e);
+            return null;
+        }
+    }
+
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), null);
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
     }
 
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
@@ -377,9 +395,10 @@ public class GlobalTransactionMgr implements Writable {
      * @note callers should get db.write lock before call this api
      */
     @NotNull
-    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                List<TabletFailInfo> tabletFailInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
+                                                @NotNull List<TabletCommitInfo> tabletCommitInfos,
+                                                @NotNull List<TabletFailInfo> tabletFailInfos,
+                                                @Nullable TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -511,6 +530,11 @@ public class GlobalTransactionMgr implements Writable {
     public void abortTransaction(Long dbId, String label, String reason) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.abortTransaction(label, reason);
+    }
+
+    public TTransactionStatus getTxnStatus(Database db, long transactionId) throws UserException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
+        return dbTransactionMgr.getTxnStatus(transactionId);
     }
 
     /**
@@ -725,9 +749,6 @@ public class GlobalTransactionMgr implements Writable {
         return dbTransactionMgr.getPartitionTransInfo(tid, tableId);
     }
 
-    /**
-     * It is a non thread safe method, only invoked by checkpoint thread without any lock or image dump thread with db lock
-     */
     public int getTransactionNum() {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {

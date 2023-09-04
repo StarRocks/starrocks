@@ -22,7 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -58,6 +58,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
+    public String getTableName() {
+        return table.getName();
+    }
+
+    @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
@@ -82,7 +87,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (tabletMeta.getTableId() != table.getId()) {
                 continue;
             }
-            if (table.getPartition(tabletMeta.getPartitionId()) == null) {
+            if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
                 continue;
             }
@@ -116,7 +121,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : allIndices) {
                 Optional<Tablet> unfinishedTablet =
@@ -144,7 +149,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
             long version = -1;
             if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {

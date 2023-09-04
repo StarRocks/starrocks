@@ -129,6 +129,8 @@ struct TInternalScanRange {
   // Allow this query to cache remote data on local disks or not.
   // Only the cloud native tablet will respect this field.
   12: optional bool fill_data_cache = true;
+  // used for per-bucket compute optimize
+  13: optional i32 bucket_sequence
 }
 
 enum TFileFormatType {
@@ -341,6 +343,9 @@ struct THdfsScanRange {
 
     // paimon predicate info
     15: optional string paimon_predicate_info
+
+    // last modification time of the hdfs file, for data cache
+    16: optional i64 modification_time
 }
 
 struct TBinlogScanRange {
@@ -448,19 +453,24 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
+
+  101: optional string catalog_name;
 }
 
 enum TAccessPathType {
-    ROOT,
-    KEY,
-    OFFSET,
-    FIELD,
+    ROOT,       // ROOT
+    KEY,        // MAP KEY
+    OFFSET,     // ARRAY/MAP OFFSET
+    FIELD,      // STRUCT FIELD
+    INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
+    ALL,        // ARRAY/MAP ALL DATA
 }
 
 struct TColumnAccessPath {
     1: optional TAccessPathType type
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
+    4: optional bool from_predicate
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -483,7 +493,10 @@ struct TOlapScanNode {
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
   29: optional list<TColumnAccessPath> column_access_paths
+
   30: optional bool use_pk_index
+  31: required list<Descriptors.TColumn> columns_desc
+  32: optional bool output_chunk_by_bucket
 }
 
 struct TJDBCScanNode {
@@ -525,7 +538,8 @@ struct TEqJoinCondition {
 enum TStreamingPreaggregationMode {
   AUTO,
   FORCE_STREAMING,
-  FORCE_PREAGGREGATION
+  FORCE_PREAGGREGATION,
+  LIMITED_MEM
 }
 
 enum TJoinOp {
@@ -703,6 +717,8 @@ struct TAggregationNode {
   26: optional bool interpolate_passthrough = false
   
   27: optional bool use_sort_agg
+
+  28: optional bool use_per_bucket_optimize
 }
 
 struct TRepeatNode {
@@ -1000,6 +1016,10 @@ struct THdfsScanNode {
     12: optional bool case_sensitive;
 
     13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+
+    14: optional bool can_use_any_column;
+
+    15: optional bool can_use_min_max_count_opt;
 }
 
 struct TProjectNode {

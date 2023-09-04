@@ -17,6 +17,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
@@ -41,6 +42,7 @@ public:
     virtual void change_num_threads(int32_t num_threads) {}
     virtual void submit(DriverRawPtr driver) = 0;
     virtual void cancel(DriverRawPtr driver) = 0;
+    virtual void close() = 0;
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
@@ -49,6 +51,8 @@ public:
     // to objects owned by FragmentContext.
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done, bool attach_profile) = 0;
+
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
@@ -71,8 +75,10 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
+    void close() override;
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
                            bool attach_profile) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 

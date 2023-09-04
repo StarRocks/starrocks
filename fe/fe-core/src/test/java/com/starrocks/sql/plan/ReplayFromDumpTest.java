@@ -15,13 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Writable;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -30,174 +25,20 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-public class ReplayFromDumpTest {
-    public static ConnectContext connectContext;
-    public static StarRocksAssert starRocksAssert;
+import static org.junit.Assert.fail;
 
-    public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
-            "[fragment statistics]");
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        // Should disable Dynamic Partition in replay dump test
-        Config.dynamic_partition_enable = false;
-        Config.tablet_sched_disable_colocate_overall_balance = true;
-        // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        connectContext.getSessionVariable().setJoinImplementationMode("auto");
-        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        FeConstants.runningUnitTest = true;
-        FeConstants.showLocalShuffleColumnsInExplain = false;
-
-        new MockUp<EditLog>() {
-            @Mock
-            protected void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-    }
-
-    @Before
-    public void before() {
-        BackendCoreStat.reset();
-        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        FeConstants.showLocalShuffleColumnsInExplain = true;
-    }
-
-    public String getModelContent(String filename, String model) {
-        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-        File file = new File(path + "/" + filename + ".sql");
-        StringBuilder modelContentBuilder = new StringBuilder();
-
-        String tempStr;
-        boolean hasModelContent = false;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            while ((tempStr = reader.readLine()) != null) {
-                if (tempStr.equals("[" + model + "]")) {
-                    hasModelContent = true;
-                    continue;
-                }
-
-                if (MODEL_LISTS.contains(tempStr)) {
-                    hasModelContent = false;
-                }
-
-                if (hasModelContent) {
-                    modelContentBuilder.append(tempStr).append("\n");
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-        return modelContentBuilder.toString();
-    }
-
-    public QueryDumpInfo getDumpInfoFromJson(String dumpInfoString) {
-        return GsonUtils.GSON.fromJson(dumpInfoString, QueryDumpInfo.class);
-    }
-
-    public SessionVariable getTestSessionVariable() {
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-        sessionVariable.setMaxTransformReorderJoins(8);
-        sessionVariable.setEnableGlobalRuntimeFilter(true);
-        sessionVariable.setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
-        return sessionVariable;
-    }
-
-    public void compareDumpWithOriginTest(String filename) throws Exception {
-        String dumpString = getModelContent(filename, "dump");
-        String originCostPlan = Stream.of(getModelContent(filename, "fragment statistics").split("\n")).
-                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        String replayCostPlan = Stream.of(
-                        PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
-                .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        Assert.assertEquals(originCostPlan, replayCostPlan);
-    }
-
-    private String getDumpInfoFromFile(String fileName) throws Exception {
-        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-        File file = new File(path + "/" + fileName + ".json");
-        StringBuilder sb = new StringBuilder();
-        String tempStr;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            while ((tempStr = reader.readLine()) != null) {
-                sb.append(tempStr);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        return sb.toString();
-    }
-
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJonStr) throws Exception {
-        return getCostPlanFragment(dumpJonStr, null);
-    }
-
-    private Pair<QueryDumpInfo, String> getCostPlanFragment(String dumpJsonStr, SessionVariable sessionVariable)
-            throws Exception {
-        return getPlanFragment(dumpJsonStr, sessionVariable, TExplainLevel.COSTS);
-    }
-
-    private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level) throws Exception {
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
-        if (sessionVariable != null) {
-            queryDumpInfo.setSessionVariable(sessionVariable);
-        }
-        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
-        return new Pair<>(queryDumpInfo,
-                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
-                        getExplainString(level));
-    }
-
-    @Test
-    public void testTPCH1() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q1");
-    }
-
-    @Test
-    public void testTPCH5() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q5");
-    }
-
-    @Test
-    public void testTPCH7() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q7");
-    }
+public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
@@ -229,11 +70,6 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  output columns: 3, 90"));
         sessionVariable.setNewPlanerAggStage(0);
-    }
-
-    @Test
-    public void testTPCH20() throws Exception {
-        compareDumpWithOriginTest("tpchcost/q20");
     }
 
     @Test
@@ -322,12 +158,12 @@ public class ReplayFromDumpTest {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  MultiCastDataSinks\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 52\n" +
+                "    EXCHANGE ID: 56\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 73\n" +
+                "    EXCHANGE ID: 77\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  40:Project\n" +
@@ -339,13 +175,6 @@ public class ReplayFromDumpTest {
                 "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
-    @Test
-    public void testTPCH01() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch01"));
-        // check q1 has two agg phase with default column statistics
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (merge finalize)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (update serialize)"));
-    }
 
     @Test
     public void testGroupByLimit() throws Exception {
@@ -498,21 +327,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("36:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("34:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
                 "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
                 "127: concat, 9: upc, 108: upc_desc"));
-    }
-
-    @Test
-    public void testJoinWithPipelineDop() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
     }
 
     @Test
@@ -530,15 +349,15 @@ public class ReplayFromDumpTest {
 
     @Test
     public void testCountDistinctWithLimit() throws Exception {
-        // check use two stage agg
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/count_distinct_limit"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(5: lo_suppkey)"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count)\n" +
-                "  |  group by: 10: lo_extendedprice, 13: lo_revenue"));
+                "  |  group by: 5: lo_suppkey, 10: lo_extendedprice, 13: lo_revenue"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(5: lo_suppkey)\n" +
+                "  |  group by: 10: lo_extendedprice, 13: lo_revenue\n" +
+                "  |  limit: 1"));
     }
 
     @Test
@@ -592,7 +411,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpch_random"), null, TExplainLevel.NORMAL);
         // check optimizer could extract best plan
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("11:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
     }
 
@@ -878,55 +697,69 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testMV_JoinAgg1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg1");
-        // Table and mv have no stats, mv rewrite is ok.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg2() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Assert.assertFalse(replayPair.second.contains("table: mv1, rollup: mv1"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg3() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // Table and mv have no stats, mv rewrite is ok.
+    public void testReduceJoinTransformation1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg3"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_JoinAgg4() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
-                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertFalse(replayPair.second.contains("line_order_flat_mv"));
-        FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testMV_MVOnMV1() throws Exception {
-        FeConstants.isReplayFromQueryDump = true;
-        // TODO: If table and mv have stats, query cannot be rewritten for now.
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv1"),
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("mv2"));
-        FeConstants.isReplayFromQueryDump = false;
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("31:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(212: case)\n" +
+                "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
+    }
+
+    @Test
+    public void testReduceJoinTransformation2() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("40:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 396: substring = 361: date\n" +
+                "  |  other join predicates: 209: zid = 298: zid"));
+    }
+
+    @Test
+    public void testReduceJoinTransformation3() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_3"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("26:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 71: order_id = 2: orderid\n" +
+                "  |  \n" +
+                "  |----25:EXCHANGE"));
+    }
+
+
+    @Test
+    public void testMockQueryDump() {
+        List<String> fileNames = mockCases();
+        for (String fileName : fileNames) {
+            try {
+                Pair<QueryDumpInfo, String> replayPair =
+                        getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
+                                null, TExplainLevel.NORMAL);
+                Assert.assertTrue(replayPair.second, replayPair.second.contains("mock"));
+            } catch (Throwable e) {
+                fail("file: " + fileName + " should success. errMsg: " + e.getMessage());
+            }
+
+        }
+    }
+
+    private static List<String> mockCases() {
+        String folderPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath()
+                + "/query_dump/mock-files";
+        File folder = new File(folderPath);
+        List<String> fileNames = Lists.newArrayList();
+
+        if (folder.exists() && folder.isDirectory()) {
+            File[] files = folder.listFiles();
+            for (File file : files) {
+                fileNames.add(file.getName().split("\\.")[0]);
+            }
+        }
+        return fileNames;
     }
 }

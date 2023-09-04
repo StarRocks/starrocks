@@ -61,6 +61,10 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
         _sink_type = sink.type;
     }
 
+    if (_sink_type == TResultSinkType::HTTP_PROTOCAL) {
+        _format_type = sink.format;
+    }
+
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
         _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);

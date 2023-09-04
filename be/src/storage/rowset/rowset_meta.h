@@ -45,6 +45,7 @@
 #include "json2pb/json_to_pb.h"
 #include "json2pb/pb_to_json.h"
 #include "storage/olap_common.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -90,15 +91,25 @@ public:
 
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
+    void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }
+
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
+
+    void set_total_row_size(int64_t total_size) { _rowset_meta_pb->set_total_row_size(total_size); }
 
     int64_t total_update_row_size() { return _rowset_meta_pb->total_update_row_size(); }
 
     size_t total_disk_size() const { return _rowset_meta_pb->total_disk_size(); }
 
+    void set_total_disk_size(size_t disk_size) { _rowset_meta_pb->set_total_disk_size(disk_size); }
+
     size_t data_disk_size() const { return _rowset_meta_pb->data_disk_size(); }
 
+    void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
+
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
+
+    void set_index_disk_size(int64_t index_disk_size) { _rowset_meta_pb->set_index_disk_size(index_disk_size); }
 
     bool has_delete_predicate() const { return _rowset_meta_pb->has_delete_predicate(); }
 
@@ -135,6 +146,10 @@ public:
     int64_t partition_id() const { return _rowset_meta_pb->partition_id(); }
 
     int64_t num_segments() const { return _rowset_meta_pb->num_segments(); }
+
+    void set_num_segments(int64_t num_segments) { _rowset_meta_pb->set_num_segments(num_segments); }
+
+    void set_empty(bool empty) { _rowset_meta_pb->set_empty(empty); }
 
     void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { *rs_meta_pb = *_rowset_meta_pb; }
 
@@ -191,6 +206,10 @@ public:
 
     uint32_t get_rowset_seg_id() const { return _rowset_meta_pb->rowset_seg_id(); }
 
+    void set_segments_overlap_pb(SegmentsOverlapPB overlap) {
+        return _rowset_meta_pb->set_segments_overlap_pb(overlap);
+    }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
@@ -198,6 +217,21 @@ public:
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
     const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
+
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
+        TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
+        tablet_schema_ptr->to_schema_pb(ts_pb);
+        CHECK(_schema == nullptr);
+        _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+    }
+
+    const TabletSchemaCSPtr tablet_schema() { return _schema; }
+
+    void set_partial_schema_change(bool partial_schema_change) {
+        _rowset_meta_pb->set_partial_schema_change(partial_schema_change);
+    }
+
+    bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
@@ -209,6 +243,9 @@ private:
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
             _rowset_id.init(_rowset_meta_pb->rowset_id());
+        }
+        if (_rowset_meta_pb->has_tablet_schema()) {
+            _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
         }
     }
 
@@ -237,6 +274,7 @@ private:
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
+    TabletSchemaCSPtr _schema = nullptr;
 };
 
 } // namespace starrocks

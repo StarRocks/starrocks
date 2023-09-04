@@ -78,7 +78,7 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    _mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
+    _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;

@@ -16,23 +16,33 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.Connector;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -43,24 +53,75 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
 
+    public class QueryMetadatas {
+        private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
+
+        public QueryMetadatas() {}
+
+        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
+            if (metadatas.containsKey(catalogName)) {
+                return metadatas.get(catalogName);
+            }
+
+            CatalogConnector connector = connectorMgr.getConnector(catalogName);
+            if (connector == null) {
+                LOG.error("Connector [{}] doesn't exist", catalogName);
+                return null;
+            }
+            ConnectorMetadata connectorMetadata = connector.getMetadata();
+            metadatas.put(catalogName, connectorMetadata);
+            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
+            return connectorMetadata;
+        }
+    }
+
     private final LocalMetastore localMetastore;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
-    private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
+
+    private static final RemovalListener<String, QueryMetadatas> CACHE_REMOVAL_LISTENER = (notification) -> {
+        String queryId = notification.getKey();
+        QueryMetadatas meta = notification.getValue();
+        if (meta != null) {
+            meta.metadatas.values().forEach(ConnectorMetadata::clear);
+            if (notification.getCause() != RemovalCause.EXPLICIT) {
+                LOG.info("Evict cache due to {} and deregister query-level " +
+                        "connector metadata on query id: {}", notification.getCause(), queryId);
+            }
+        }
+    };
+
+    private final LoadingCache<String, QueryMetadatas> metadataCacheByQueryId =
+            CacheBuilder.newBuilder()
+                    .maximumSize(Config.catalog_metadata_cache_size)
+                    .expireAfterAccess(300, TimeUnit.SECONDS)
+                    .removalListener(CACHE_REMOVAL_LISTENER)
+                    .build(new CacheLoader<String, QueryMetadatas>() {
+                        @NotNull
+                        @Override
+                        public QueryMetadatas load(String key) throws Exception {
+                            return new QueryMetadatas();
+                        }
+                    });
 
     public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
@@ -70,35 +131,47 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
-    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return Optional.of(localMetastore);
-        } else {
-            String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
-                    ConnectContext.get().getQueryId().toString() : null;
-            if (queryId != null) {
-                QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId, ignored -> new QueryMetadatas());
-                return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
-            } else {
-                Connector connector = connectorMgr.getConnector(catalogName);
-                if (connector == null) {
-                    LOG.error("Failed to get {} catalog", catalogName);
-                    return Optional.empty();
-                } else {
-                    return Optional.of(connector.getMetadata());
-                }
-            }
+    // get query id from thread local context if possible
+    private Optional<String> getOptionalQueryID() {
+        if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
+            return Optional.of(ConnectContext.get().getQueryId().toString());
         }
+        return Optional.empty();
+    }
+
+
+    /** get ConnectorMetadata by catalog name
+     * if catalog is null or empty will return localMetastore
+     * @param catalogName catalog's name
+     * @return ConnectorMetadata
+     */
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+            return Optional.of(localMetastore);
+        }
+
+        CatalogConnector connector = connectorMgr.getConnector(catalogName);
+        if (connector == null) {
+            LOG.error("Failed to get {} catalog", catalogName);
+            return Optional.empty();
+        }
+
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) { // use query-level cache if from query
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId.get());
+            return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
+        }
+
+        return Optional.ofNullable(connector.getMetadata());
     }
 
     public void removeQueryMetadata() {
-        String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
-                ConnectContext.get().getQueryId().toString() : null;
-        if (queryId != null) {
-            QueryMetadatas queryMetadatas = metadataByQueryId.get(queryId);
+        Optional<String> queryId = getOptionalQueryID();
+        if (queryId.isPresent()) {
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getIfPresent(queryId.get());
             if (queryMetadatas != null) {
                 queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
-                metadataByQueryId.remove(queryId);
+                metadataCacheByQueryId.invalidate(queryId.get());
                 LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
@@ -200,11 +273,37 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.dropTable(stmt);
+                inactiveViews(ImmutableList.of(new TableName(dbName, tableName)),
+                        "table [" + tableName + "] " + " has been dropped");
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
-                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tableName);
+                throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
             }
         });
+    }
+
+    public static void inactiveViews(List<TableName> tableNames, String reason) {
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<View> views = Lists.newArrayList();
+        for (Long viewDbId : allDbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(viewDbId);
+            if (null == db) {
+                continue;
+            }
+            db.getTables().stream().filter(v -> v instanceof View).forEach(v -> views.add((View) v));
+        }
+
+        for (View view : views) {
+            List<TableName> usedTables = view.getTableRefs();
+            if (CollectionUtils.containsAny(usedTables, tableNames)) {
+                view.setInvalid(reason);
+            }
+        }
+    }
+
+    public Optional<Table> getTable(TableName tableName) {
+        return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {
@@ -262,15 +361,41 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
+        List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
+                Collectors.toList());
+        List<ConnectorTableColumnStats> columnStatisticList =
+                GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columnNames);
+
+        Statistics.Builder statistics = Statistics.builder();
+        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
+            ColumnRefOperator columnRef = requiredColumnRefs.get(i);
+            ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
+            if (connectorTableColumnStats != null) {
+                statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
+                if (!connectorTableColumnStats.isUnknown()) {
+                    statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+                }
+            }
+        }
+        return statistics.build();
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata ->
-                metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
+        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            return connectorMetadata.map(metadata ->
+                    metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
+        } else {
+            return statistics;
+        }
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
@@ -323,28 +448,5 @@ public class MetadataMgr {
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });
-    }
-
-    private class QueryMetadatas {
-        private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
-
-        public QueryMetadatas() {
-        }
-
-        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
-            if (metadatas.containsKey(catalogName)) {
-                return metadatas.get(catalogName);
-            }
-
-            Connector connector = connectorMgr.getConnector(catalogName);
-            if (connector == null) {
-                LOG.error("Connector [{}] doesn't exist", catalogName);
-                return null;
-            }
-            ConnectorMetadata connectorMetadata = connector.getMetadata();
-            metadatas.put(catalogName, connectorMetadata);
-            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
-            return connectorMetadata;
-        }
     }
 }

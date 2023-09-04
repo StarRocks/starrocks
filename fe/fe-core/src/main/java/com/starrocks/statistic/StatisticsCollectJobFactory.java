@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -114,7 +115,16 @@ public class StatisticsCollectJobFactory {
         if (columns == null || columns.isEmpty()) {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
-        return new ExternalFullStatisticsCollectJob(catalogName, db, table, columns,
+
+        List<String> partitionNames;
+        if (!table.isUnPartitioned()) {
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    listPartitionNames(catalogName, db.getFullName(), table.getName());
+        } else {
+            partitionNames = ImmutableList.of(table.getName());
+        }
+
+        return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columns,
                 analyzeType, scheduleType, properties);
     }
 

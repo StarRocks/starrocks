@@ -143,6 +143,10 @@ public class LogicalWindowOperator extends LogicalOperator {
                 useHashBasedPartition);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
         @Override
         protected LogicalWindowOperator newInstance() {

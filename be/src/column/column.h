@@ -116,13 +116,7 @@ public:
 
     // Size of column data in memory (may be approximate). Zero, if could not be determined.
     virtual size_t byte_size() const = 0;
-    virtual size_t byte_size(size_t from, size_t size) const {
-        DCHECK_LE(from + size, this->size()) << "Range error";
-        if (empty()) {
-            return 0;
-        }
-        return byte_size() * size / this->size();
-    }
+    virtual size_t byte_size(size_t from, size_t size) const = 0;
 
     // The byte size for serialize, for varchar, we need to add the len byte size
     virtual size_t byte_size(size_t idx) const = 0;
@@ -196,7 +190,7 @@ public:
     //      src_column data: [5, 6]
     // After call this function, column data will be set as [5, 1, 2, 6, 4]
     // The values in indexes is incremented
-    virtual Status update_rows(const Column& src, const uint32_t* indexes) = 0;
+    virtual void update_rows(const Column& src, const uint32_t* indexes) = 0;
 
     // This function will append data from src according to the input indexes. 'indexes' contains
     // the row index of the src.

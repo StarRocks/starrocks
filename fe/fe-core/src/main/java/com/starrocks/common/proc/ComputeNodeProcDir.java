@@ -46,7 +46,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
-                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
+                .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
         if (RunMode.allowCreateLakeTable()) {
             builder.add("StarletPort").add("WorkerId");
         }
@@ -131,6 +131,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             double memUsedPct = computeNode.getMemUsedPct();
             computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             computeNodeInfo.add(String.format("%.1f", computeNode.getCpuUsedPermille() / 10.0) + " %");
+
+            computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
             if (RunMode.allowCreateLakeTable()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));

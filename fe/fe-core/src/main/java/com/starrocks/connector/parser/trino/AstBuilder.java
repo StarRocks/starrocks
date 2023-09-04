@@ -53,6 +53,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -77,6 +78,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -90,6 +92,7 @@ import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
 import io.trino.sql.tree.BetweenPredicate;
+import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
 import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
@@ -103,6 +106,7 @@ import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
 import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.ExplainType;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
@@ -158,6 +162,7 @@ import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
+import io.trino.sql.tree.Unnest;
 import io.trino.sql.tree.Values;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -263,6 +268,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
+        return queryStatement;
+    }
+
+    @Override
+    protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
+        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
+        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
         return queryStatement;
     }
 
@@ -392,6 +404,48 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
             return new ValuesRelation(records, colNames);
         }
+    }
+
+    @Override
+    protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
+        List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
+        List<Expr> expressions = new ArrayList<>();
+
+        for (Expr arg : arguments) {
+            if (arg instanceof ArrayExpr) {
+                if (!arg.getChildren().isEmpty()) {
+                    // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
+                    Expr firstArrayElement = arg.getChildren().get(0);
+                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFnName().
+                            getFunction().equalsIgnoreCase("row")) {
+                        List<List<Expr>> items = new ArrayList<>();
+                        for (Expr row : arg.getChildren()) {
+                            int rowIndex = 0;
+                            for (Expr literal : row.getChildren()) {
+                                if (items.size() <= rowIndex) {
+                                    items.add(new ArrayList<>());
+                                    items.get(rowIndex).add(literal);
+                                } else {
+                                    items.get(rowIndex).add(literal);
+                                }
+                                ++rowIndex;
+                            }
+                        }
+
+                        for (List<Expr> item : items) {
+                            Expr arrayExpr = new ArrayExpr(null, item);
+                            expressions.add(arrayExpr);
+                        }
+                        continue;
+                    }
+                }
+            }
+            expressions.add(arg);
+        }
+
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
+        return tableFunctionRelation;
     }
 
     @Override
@@ -848,6 +902,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitBinaryLiteral(BinaryLiteral node, ParseTreeContext context) {
+        return new VarBinaryLiteral(node.getValue());
+    }
+
+    @Override
     protected ParseNode visitStringLiteral(StringLiteral node, ParseTreeContext context) {
         return new com.starrocks.analysis.StringLiteral(node.getValue());
     }
@@ -871,7 +930,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
-            return new DateLiteral(node.getValue(), Type.DATETIME);
+            String value = node.getValue();
+            if (value.length() <= 10) {
+                value += " 00:00:00";
+            }
+            return new DateLiteral(value, Type.DATETIME);
         } catch (AnalysisException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }

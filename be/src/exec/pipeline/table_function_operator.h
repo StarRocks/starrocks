@@ -26,7 +26,7 @@ class TableFunctionOperator final : public Operator {
 public:
     TableFunctionOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           const TPlanNode& tnode)
-            : Operator(factory, id, "table_function", plan_node_id, driver_sequence), _tnode(tnode) {}
+            : Operator(factory, id, "table_function", plan_node_id, false, driver_sequence), _tnode(tnode) {}
 
     ~TableFunctionOperator() override = default;
 

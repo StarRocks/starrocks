@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -27,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -55,6 +57,24 @@ public class MetaUtils {
     public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+        }
+    }
+
+    public static void checkNotSupportCatalog(String catalogName, String operation) {
+        if (catalogName == null) {
+            throw new SemanticException("Catalog is null");
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            throw new SemanticException("Catalog %s is not found", catalogName);
+        }
+
+        if (catalog.getType().equalsIgnoreCase("iceberg")) {
+            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
         }
     }
 

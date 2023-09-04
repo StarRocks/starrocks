@@ -173,6 +173,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                     auto col = _context.tablet_schema->column(i);
                     if (col.is_auto_increment()) {
+                        /*
+                            The auto increment id set here is inconsistent with the id in
+                            full tablet schema. The id here is indicate the offset id of
+                            auto increment column in partial segment file.
+                        */
                         _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                         break;
                     }
@@ -188,6 +193,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
             for (auto i = 0; i < _context.tablet_schema->num_columns(); ++i) {
                 auto col = _context.tablet_schema->column(i);
                 if (col.is_auto_increment()) {
+                    // same above
                     _rowset_txn_meta_pb->set_auto_increment_partial_update_column_id(i);
                     break;
                 }
@@ -432,7 +438,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
         path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    const auto* schema = _context.tablet_schema;
+    const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
@@ -677,7 +683,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                     _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
                     config::vertical_compaction_max_columns_per_group, &column_groups);
         }
-        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[0]);
+        auto schema = ChunkHelper::convert_schema(_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
                 if (_context.tablet_schema->schema()->field(i)->name() == _context.merge_condition) {
@@ -761,7 +767,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
@@ -788,7 +794,7 @@ Status HorizontalRowsetWriter::_final_merge() {
 
             seg_iterators.clear();
 
-            auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[i]);
+            auto schema = ChunkHelper::convert_schema(_context.tablet_schema, column_groups[i]);
 
             for (const auto& segment : segments) {
                 auto res = segment->new_iterator(schema, seg_options);
@@ -828,7 +834,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                 if (st.is_end_of_file()) {
                     break;
                 } else if (st.ok()) {
-                    ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                    ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                     if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[i], false); !st.ok()) {
                         LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
                         return st;
@@ -859,7 +865,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                   << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
                   << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema);
+        auto schema = ChunkHelper::convert_schema(_context.tablet_schema);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -920,7 +926,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, _context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = add_chunk(*chunk); !st.ok()) {
@@ -1146,7 +1152,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_w
     std::lock_guard<std::mutex> l(_lock);
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
                                                                                   _context.rowset_id, _num_segment)));
-    const auto* schema = _context.tablet_schema;
+    const auto schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;

@@ -46,7 +46,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -58,6 +58,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
 
 public class SplitAggregateRule extends TransformationRule {
     private SplitAggregateRule() {
@@ -71,6 +74,10 @@ public class SplitAggregateRule extends TransformationRule {
     private static final int ONE_STAGE = 1;
 
     private static final int TWO_STAGE = 2;
+
+    private static final int THREE_STAGE = 3;
+
+    private static final int FOUR_STAGE = 4;
 
     public static SplitAggregateRule getInstance() {
         return INSTANCE;
@@ -102,7 +109,7 @@ public class SplitAggregateRule extends TransformationRule {
         }
         // 2 Must do multi stage aggregate when aggregate distinct function has array type
         if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
                 callOperator.isDistinct())) {
             return true;
         }
@@ -152,49 +159,51 @@ public class SplitAggregateRule extends TransformationRule {
         }
     }
 
-    // True means good cases for two phase agg. It requires both group by keys and distinct cols are
-    // low cardinality which helps deduplication in the local stage.
-    private boolean hasAggregateEffect(OptExpression input, List<ColumnRefOperator> distinctColumns) {
-        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
-        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
+    private boolean isTwoStageMoreEfficient(OptExpression input, List<ColumnRefOperator> distinctColumns) {
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+        Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
-
-        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) || !aggOp.hasLimit()) {
             return false;
         }
-        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
-        double rowCount = Math.max(1, statistics.getOutputRowCount());
 
-        if (CollectionUtils.isNotEmpty(distinctColumns)) {
-            for (ColumnRefOperator distinctCol : distinctColumns) {
-                double ndv = inputStatistics.getColumnStatistic(distinctCol).getDistinctValuesCount();
-                rowCount = rowCount > ndv ? rowCount : ndv;
-            }
-        }
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
+                Maps.newHashMap());
 
+        double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(distinctColumns, inputStatistics,
+                Maps.newHashMap());
 
-        if (rowCount * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount) {
-            return true;
-        }
-        return false;
+        // both group by key and distinct key cannot with high cardinality
+        return aggOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && distinctOutputRow * LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount
+                && aggOutputRow > aggOp.getLimit();
     }
 
 
-    // True means good cases for parallel deduplication. It requires group by keys have a relatively high
-    // cardinality (number of distinct value > 1000) to distribute data across multiple cores which helps
-    // parallel deduplication in the distinct global stage.
-    private boolean isSuitableForParallelDeduplication(OptExpression input) {
-        Statistics statistics = input.getGroupExpression().getGroup().getStatistics();
-        Statistics inputStatistics = input.getGroupExpression().getInputs().get(0).getStatistics();
-        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
-
-        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
-            // split agg into more phase if no statistic info available
+    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE) {
             return false;
         }
-        double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
-        double rowCount = Math.max(1, statistics.getOutputRowCount());
-        return inputRowCount / StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < rowCount;
+
+        Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+            return true;
+        }
+
+        LogicalAggregationOperator aggOp = input.getOp().cast();
+
+        double inputRowCount = inputStatistics.getOutputRowCount();
+        double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(aggOp.getGroupingKeys(), inputStatistics,
+                Maps.newHashMap());
+
+        double distinctOutputRow = StatisticsCalculator.computeGroupByStatistics(groupKeys, inputStatistics,
+                Maps.newHashMap());
+
+        return inputRowCount < SMALL_SCALE_ROWS_LIMIT
+                || aggOutputRow > LOW_AGGREGATE_EFFECT_COEFFICIENT
+                || distinctOutputRow * MEDIUM_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount;
     }
 
     @Override
@@ -281,7 +290,7 @@ public class SplitAggregateRule extends TransformationRule {
 
         return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
                 && aggMode == AUTO_MODE
-                && hasAggregateEffect(input, distinctColumns);
+                && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
     private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
@@ -308,6 +317,15 @@ public class SplitAggregateRule extends TransformationRule {
                     fnCall.getFunction(), fnCall.getChild(0).getType());
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
+        } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+            return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF), false);
+        } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
+            // only support const inputs
+            boolean allConst = fnCall.getChildren().stream().allMatch(ScalarOperator::isConstant);
+            Preconditions.checkState(allConst, "can't rewrite to group_concat_distinct for non-const inputs");
+            return fnCall;
         }
         return null;
     }
@@ -371,7 +389,7 @@ public class SplitAggregateRule extends TransformationRule {
         List<ColumnRefOperator> partitionByCols;
 
         boolean shouldFurtherSplit = false;
-        if (isSuitableForParallelDeduplication(input)
+        if (isThreeStageMoreEfficient(input, distinctGlobal.getGroupingKeys())
                 || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
             partitionByCols = oldAgg.getGroupingKeys();
         } else {
@@ -590,8 +608,8 @@ public class SplitAggregateRule extends TransformationRule {
             ColumnRefOperator column = entry.getKey();
             CallOperator aggregation = entry.getValue();
             CallOperator callOperator;
+            Type intermediateType = getIntermediateType(aggregation);
             if (!aggregation.isDistinct()) {
-                Type intermediateType = getIntermediateType(aggregation);
                 List<ScalarOperator> arguments =
                         Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
                                 aggregation.isNullable()));
@@ -624,7 +642,8 @@ public class SplitAggregateRule extends TransformationRule {
                             Lists.newArrayList(newChildren), fn);
                 }
                 // Remove distinct
-                callOperator = new CallOperator(aggregation.getFnName(), aggregation.getType(),
+                callOperator = new CallOperator(aggregation.getFnName(), aggType.isAnyGlobal() ?
+                        aggregation.getType() : intermediateType,
                         aggregation.getChildren(), aggregation.getFunction());
             }
             newAggregationMap.put(column, callOperator);

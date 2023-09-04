@@ -49,7 +49,7 @@ public final class PlanValidator {
         boolean enablePlanValidation = ConnectContext.get().getSessionVariable().getEnablePlanValidation();
         try {
             for (Checker checker : checkerList) {
-                try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(checker.getClass().getSimpleName())) {
+                try (PlannerProfile.ScopedTimer tracer = PlannerProfile.getScopedTimer(checker.getClass().getSimpleName())) {
                     checker.validate(optExpression, taskContext);
                 }
             }

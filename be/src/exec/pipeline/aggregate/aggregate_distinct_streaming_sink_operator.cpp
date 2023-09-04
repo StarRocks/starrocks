@@ -23,6 +23,9 @@ namespace starrocks::pipeline {
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
+        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+    }
     return _aggregator->open(state);
 }
 
@@ -35,6 +38,11 @@ void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
 
 Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+
+    // skip processing if cancelled
+    if (state->is_cancelled()) {
+        return Status::OK();
+    }
 
     if (_aggregator->hash_set_variant().size() == 0) {
         _aggregator->set_ht_eos();
@@ -49,7 +57,10 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeSta
 }
 
 void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_level) {
-    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
+    }
+    _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
 }
 
 Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -64,6 +75,8 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
         return _push_chunk_by_force_streaming(chunk);
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
         return _push_chunk_by_force_preaggregation(chunk->num_rows());
+    } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
+        return _push_chunk_by_limited_memory(chunk, chunk_size);
     } else {
         return _push_chunk_by_auto(chunk, chunk->num_rows());
     }
@@ -86,6 +99,18 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
 
     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
+    return Status::OK();
+}
+
+Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_limited_memory(const ChunkPtr& chunk,
+                                                                             const size_t chunk_size) {
+    bool ht_needs_expansion = _aggregator->hash_set_variant().need_expand(chunk_size);
+    if (ht_needs_expansion && _limited_mem_state.has_limited(*_aggregator)) {
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
+        _aggregator->set_streaming_all_states(true);
+    } else {
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk_size));
+    }
     return Status::OK();
 }
 

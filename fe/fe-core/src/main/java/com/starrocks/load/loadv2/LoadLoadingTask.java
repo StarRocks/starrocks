@@ -51,15 +51,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
-import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -93,47 +93,45 @@ public class LoadLoadingTask extends LoadTask {
     private final long timeoutS;
     private final Map<String, String> sessionVariables;
     private final TLoadJobType loadJobType;
-    private String mergeConditionStr;
-    private TPartialUpdateMode partialUpdateMode;
+    private final String mergeConditionStr;
+    private final TPartialUpdateMode partialUpdateMode;
 
     private LoadingTaskPlanner planner;
-    private ConnectContext context;
+    private final ConnectContext context;
 
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
+    private final List<List<TBrokerFileStatus>> fileStatusList;
+    private final int fileNum;
 
-    public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
-            long jobDeadlineMs, long execMemLimit, boolean strictMode,
-            long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
-            Map<String, String> sessionVariables,
-            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt, 
-            TPartialUpdateMode partialUpdateMode) {
-        super(callback, TaskType.LOADING, priority);
-        this.db = db;
-        this.table = table;
-        this.brokerDesc = brokerDesc;
-        this.fileGroups = fileGroups;
-        this.jobDeadlineMs = jobDeadlineMs;
-        this.execMemLimit = execMemLimit;
-        this.strictMode = strictMode;
-        this.txnId = txnId;
-        this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
+    private LoadLoadingTask(Builder builder) {
+        super(builder.callback, TaskType.LOADING, builder.priority);
+        this.db = builder.db;
+        this.table = builder.table;
+        this.brokerDesc = builder.brokerDesc;
+        this.fileGroups = builder.fileGroups;
+        this.jobDeadlineMs = builder.jobDeadlineMs;
+        this.execMemLimit = builder.execMemLimit;
+        this.strictMode = builder.strictMode;
+        this.txnId = builder.txnId;
+        this.timezone = builder.timezone;
+        this.timeoutS = builder.timeoutS;
+        this.createTimestamp = builder.createTimestamp;
+        this.partialUpdate = builder.partialUpdate;
+        this.mergeConditionStr = builder.mergeConditionStr;
+        this.sessionVariables = builder.sessionVariables;
+        this.context = builder.context;
+        this.loadJobType = builder.loadJobType;
+        this.originStmt = builder.originStmt;
+        this.partialUpdateMode = builder.partialUpdateMode;
         this.retryTime = 1; // load task retry does not satisfy transaction's atomic
-        this.timezone = timezone;
-        this.timeoutS = timeoutS;
-        this.createTimestamp = createTimestamp;
-        this.partialUpdate = partialUpdate;
-        this.mergeConditionStr = mergeConditionStr;
-        this.sessionVariables = sessionVariables;
-        this.context = context;
-        this.loadJobType = loadJobType;
-        this.originStmt = originStmt;
-        this.partialUpdateMode = partialUpdateMode;
+        this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
+        this.loadId = builder.loadId;
+        this.fileStatusList = builder.fileStatusList;
+        this.fileNum = builder.fileNum;
     }
 
-    public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
-        this.loadId = loadId;
+    public void prepare() throws UserException {
         if (!Config.enable_pipeline_load) {
             planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
                     strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
@@ -142,8 +140,9 @@ public class LoadLoadingTask extends LoadTask {
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum);
+            loadPlanner.setPartialUpdateMode(partialUpdateMode);
             loadPlanner.plan();
         }
     }
@@ -164,26 +163,23 @@ public class LoadLoadingTask extends LoadTask {
         executeOnce();
     }
 
+    private Coordinator.Factory getCoordinatorFactory() {
+        return new DefaultCoordinator.Factory();
+    }
+
     private void executeOnce() throws Exception {
         // New one query id,
         Coordinator curCoordinator;
         if (!Config.enable_pipeline_load) {
-            curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
+            curCoordinator = getCoordinatorFactory().createNonPipelineBrokerLoadScheduler(
+                    callback.getCallbackId(), loadId,
+                    planner.getDescTable(),
                     planner.getFragments(), planner.getScanNodes(),
-                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
-            /*
-            * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-            * And the variable 'load_mem_limit' does not make any effect.
-            * However, in order to ensure the consistency of semantics when executing on the BE side,
-            * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-            * here we use exec_mem_limit to directly override the load_mem_limit property.
-            */
-            curCoordinator.setQueryType(TQueryType.LOAD);
-            curCoordinator.setExecMemoryLimit(execMemLimit);
-            curCoordinator.setLoadMemLimit(execMemLimit);
-            curCoordinator.setTimeout((int) (getLeftTimeMs() / 1000));
+                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context, execMemLimit);
+
+            curCoordinator.setTimeoutSecond((int) (getLeftTimeMs() / 1000));
         } else {
-            curCoordinator = new Coordinator(loadPlanner);
+            curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         }
         curCoordinator.setLoadJobType(loadJobType);
 
@@ -231,6 +227,8 @@ public class LoadLoadingTask extends LoadTask {
                     }
                     sb.deleteCharAt(sb.length() - 1);
                     summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+
+                    summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
                 }
 
                 profile.addChild(summaryProfile);
@@ -238,11 +236,11 @@ public class LoadLoadingTask extends LoadTask {
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.endProfile();
-                profile.addChild(curCoordinator.buildMergedQueryProfile(null));
+                profile.addChild(curCoordinator.buildMergedQueryProfile());
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
-                String profileContent = ProfileManager.getInstance().pushProfile(profile);
+                String profileContent = ProfileManager.getInstance().pushProfile(null, profile);
                 if (context.getQueryDetail() != null) {
                     context.getQueryDetail().setProfile(profileContent);
                 }
@@ -297,6 +295,151 @@ public class LoadLoadingTask extends LoadTask {
             planner.updateLoadInfo(this.loadId);
         } else {
             loadPlanner.updateLoadInfo(this.loadId);
+        }
+    }
+
+    public static class Builder {
+        private TUniqueId loadId;
+        private Database db;
+        private OlapTable table;
+        private BrokerDesc brokerDesc;
+        private List<BrokerFileGroup> fileGroups;
+        private long jobDeadlineMs;
+        private long execMemLimit;
+        private boolean strictMode;
+        private long txnId;
+        private String timezone;
+        private long createTimestamp;
+        private boolean partialUpdate;
+        private long timeoutS;
+        private Map<String, String> sessionVariables;
+        private TLoadJobType loadJobType;
+        private String mergeConditionStr;
+        private TPartialUpdateMode partialUpdateMode;
+        private ConnectContext context;
+        private OriginStatement originStmt;
+        private List<List<TBrokerFileStatus>> fileStatusList;
+        private int fileNum = 0;
+        private LoadTaskCallback callback;
+        private int priority;
+
+        public Builder setCallback(LoadTaskCallback callback) {
+            this.callback = callback;
+            return this;
+        }
+
+        public Builder setPriority(int priority) {
+            this.priority = priority;
+            return this;
+        }
+
+        public Builder setLoadId(TUniqueId loadId) {
+            this.loadId = loadId;
+            return this;
+        }
+
+        public Builder setDb(Database db) {
+            this.db = db;
+            return this;
+        }
+
+        public Builder setTable(OlapTable table) {
+            this.table = table;
+            return this;
+        }
+
+        public Builder setBrokerDesc(BrokerDesc brokerDesc) {
+            this.brokerDesc = brokerDesc;
+            return this;
+        }
+
+        public Builder setFileGroups(List<BrokerFileGroup> fileGroups) {
+            this.fileGroups = fileGroups;
+            return this;
+        }
+
+        public Builder setJobDeadlineMs(long jobDeadlineMs) {
+            this.jobDeadlineMs = jobDeadlineMs;
+            return this;
+        }
+
+        public Builder setExecMemLimit(long execMemLimit) {
+            this.execMemLimit = execMemLimit;
+            return this;
+        }
+
+        public Builder setStrictMode(boolean strictMode) {
+            this.strictMode = strictMode;
+            return this;
+        }
+
+        public Builder setTxnId(long txnId) {
+            this.txnId = txnId;
+            return this;
+        }
+
+        public Builder setTimezone(String timezone) {
+            this.timezone = timezone;
+            return this;
+        }
+
+        public Builder setCreateTimestamp(long createTimestamp) {
+            this.createTimestamp = createTimestamp;
+            return this;
+        }
+
+        public Builder setPartialUpdate(boolean partialUpdate) {
+            this.partialUpdate = partialUpdate;
+            return this;
+        }
+
+        public Builder setTimeoutS(long timeoutS) {
+            this.timeoutS = timeoutS;
+            return this;
+        }
+
+        public Builder setSessionVariables(Map<String, String> sessionVariables) {
+            this.sessionVariables = sessionVariables;
+            return this;
+        }
+
+        public Builder setLoadJobType(TLoadJobType loadJobType) {
+            this.loadJobType = loadJobType;
+            return this;
+        }
+
+        public Builder setMergeConditionStr(String mergeConditionStr) {
+            this.mergeConditionStr = mergeConditionStr;
+            return this;
+        }
+
+        public Builder setPartialUpdateMode(TPartialUpdateMode partialUpdateMode) {
+            this.partialUpdateMode = partialUpdateMode;
+            return this;
+        }
+
+        public Builder setContext(ConnectContext context) {
+            this.context = context;
+            return this;
+        }
+
+        public Builder setOriginStmt(OriginStatement originStmt) {
+            this.originStmt = originStmt;
+            return this;
+        }
+
+        public Builder setFileStatusList(List<List<TBrokerFileStatus>> fileStatusList) {
+            this.fileStatusList = fileStatusList;
+            return this;
+        }
+
+        public Builder setFileNum(int fileNum) {
+            this.fileNum = fileNum;
+            return this;
+        }
+
+        public LoadLoadingTask build() {
+            return new LoadLoadingTask(this);
         }
     }
 }

@@ -41,32 +41,6 @@ import java.util.List;
 public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
 
-    private static Type getSuperType(Type t1, Type t2) {
-        if (t1.matchesType(t2)) {
-            return t1;
-        }
-        if (t1.isNull()) {
-            return t2;
-        }
-        if (t2.isNull()) {
-            return t1;
-        }
-        if (t1.isScalarType() && t2.isScalarType()) {
-            Type commonType = Type.getCommonType(t1, t2);
-            return commonType.isValid() ? commonType : null;
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            Type superElementType = getSuperType(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType());
-            return superElementType != null ? new ArrayType(superElementType) : null;
-        }
-        if (t1.isMapType() && t2.isMapType()) {
-            Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
-            Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
-            return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
-        }
-        return null;
-    }
-
     private static Function newScalarFunction(ScalarFunction fn, List<Type> newArgTypes, Type newRetType) {
         ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), newArgTypes, newRetType,
                 fn.getLocation(), fn.getSymbolName(), fn.getPrepareFnSymbol(),
@@ -168,8 +142,8 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
-    // map_apply(lambda of function, map) -> return type of lambda
-    private static class MapApplyDeduce implements java.util.function.Function<Type[], Type> {
+    // map_apply/array_map(lambda of function, map/array) -> return type of lambda
+    private static class LambdaDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             // fake return type, the real return type is from the right part lambda expression of lambda functions.
@@ -181,15 +155,6 @@ public class PolymorphicFunctionAnalyzer {
         @Override
         public Type apply(Type[] types) {
             return types[0];
-        }
-    }
-
-    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
-        @Override
-        public Type apply(Type[] types) {
-            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
-            Arrays.fill(types, commonType);
-            return commonType;
         }
     }
 
@@ -210,22 +175,33 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
+            Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
-            .put("map_keys", new MapKeysDeduce())
-            .put("map_values", new MapValuesDeduce())
-            .put("map_from_arrays", new MapFromArraysDeduce())
+            .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
+            .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
             .put(FunctionSet.ROW, new RowDeduce())
-            .put("map_apply", new MapApplyDeduce())
-            .put("map_filter", new MapFilterDeduce())
-            .put("distinct_map_keys", new DistinctMapKeysDeduce())
-            .put("map_concat", new CommonDeduce())
-            .put("if", new IfDeduce())
-            .put("ifnull", new CommonDeduce())
-            .put("nullif", new CommonDeduce())
-            .put("coalesce", new CommonDeduce())
+            .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
+            .put(FunctionSet.ARRAY_MAP, new LambdaDeduce())
+            .put(FunctionSet.MAP_FILTER, new MapFilterDeduce())
+            .put(FunctionSet.DISTINCT_MAP_KEYS, new DistinctMapKeysDeduce())
+            .put(FunctionSet.MAP_CONCAT, new CommonDeduce())
+            .put(FunctionSet.IF, new IfDeduce())
+            .put(FunctionSet.IFNULL, new CommonDeduce())
+            .put(FunctionSet.NULLIF, new CommonDeduce())
+            .put(FunctionSet.COALESCE, new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
             .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
+            .put(FunctionSet.ANY_VALUE, types -> types[0])
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -302,7 +278,6 @@ public class PolymorphicFunctionAnalyzer {
             }
         }
         // deduce by special function
-        // TODO: refactor resolve arg types, some from L254, others from L262.
         resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
         if (resolvedFunction != null) {
             return resolvedFunction;

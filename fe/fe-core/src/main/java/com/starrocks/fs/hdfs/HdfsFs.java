@@ -37,6 +37,10 @@ public class HdfsFs {
     private Configuration configuration;
     private String userName;
 
+    public HdfsFs() {
+
+    }
+
     public HdfsFs(HdfsFsIdentity identity) {
         this.identity = identity;
         this.lock = new ReentrantLock();

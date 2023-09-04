@@ -1,66 +1,107 @@
 # dbt-starrocks
 
+![PyPI](https://img.shields.io/pypi/v/dbt-starrocks)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/dbt-starrocks)
+![PyPI - Downloads](https://img.shields.io/pypi/dw/dbt-starrocks)
+
 This project is **under development**.
 
 
-The `dbt-starrocks` package contains all of the code enabling dbt to work with a StarRocks database. For
-more information on using dbt with StarRocks.
+The `dbt-starrocks` package contains all the code to enable [dbt](https://getdbt.com) to work with [StarRocks](https://www.starrocks.io).
 
-## Getting started
-Configuration your envs:
+This is an experimental plugin:
+- We have not tested it extensively
+- Requires StarRocks version 2.5.0 or higher  
+  - version 3.1.x is recommended
+  - StarRocks versions 2.4 and below are no longer supported
 
-- Python: 3.7.4
-- StarRocks: 2.4.0+
-- DBT: 1.1.0
 
-Install the `dbt-starrocks` into the `plugin` directory, and
-```
-  pip install .
-```
+## Installation
 
-Create your project:
-```
-  dbt init
+This plugin can be installed via pip:
+
+```shell
+$ pip install dbt-starrocks
 ```
 
-## Basic Example
+## Supported features
+| Starrocks <= 2.5 | Starrocks 2.5 ~ 3.1  | Starrocks >= 3.1  |              Feature              |
+|:----------------:|:--------------------:|:-----------------:|:---------------------------------:|
+|        ✅         |          ✅           |         ✅         |       Table materialization       |
+|        ✅         |          ✅           |         ✅         |       View materialization        |
+|        ❌         |          ❌           |         ✅         | Materialized View materialization |
+|        ❌         |          ✅           |         ✅         |    Incremental materialization    |
+|        ❌         |          ✅           |         ✅         |         Primary Key Model         |
+|        ✅         |          ✅           |         ✅         |              Sources              |
+|        ✅         |          ✅           |         ✅         |         Custom data tests         |
+|        ✅         |          ✅           |         ✅         |           Docs generate           |
+|        ❌         |          ❌           |         ❌         |               Kafka               |
+
+### Notice
+1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
+2. When StarRocks Version >= 2.5, `Create table as` supports table_type='PRIMARY'
+3. When StarRocks Version < 3.1 distributed_by is required
+
+## Profile Configuration
+
+**Example entry for profiles.yml:**
+
+```
+starrocks:
+  target: dev
+  outputs:
+    dev:
+      type: starrocks
+      host: localhost
+      port: 9030
+      schema: analytics
+      username: your_starrocks_username
+      password: your_starrocks_password
+```
+
+| Option   | Description                                            | Required? | Example                        |
+|----------|--------------------------------------------------------|-----------|--------------------------------|
+| type     | The specific adapter to use                            | Required  | `starrocks`                    |
+| host     | The hostname to connect to                             | Required  | `192.168.100.28`               |
+| port     | The port to use                                        | Required  | `9030`                         |
+| schema   | Specify the schema (database) to build models into     | Required  | `analytics`                    |
+| username | The username to use to connect to the server           | Required  | `dbt_admin`                    |
+| password | The password to use for authenticating to the server   | Required  | `correct-horse-battery-staple` |
+| version  | Let Plugin try to go to a compatible starrocks version | Optional  | `3.1.0`                        |
+
+
+## Example
+
 ### dbt seed properties(yml):
-#### Minimum configuration:
-```
-config:
-  distributed_by: ['id']
-```
-
 #### Complete configuration:
 ```
-config:
+models:
+  materialized: table       // table or view or materialized_view
   engine: 'OLAP'
   keys: ['id', 'name', 'some_date']
-  table_type: 'PRIMARY'     //PRIMARY or DUPLICATE or UNIQUE
+  table_type: 'PRIMARY'     // PRIMARY or DUPLICATE or UNIQUE
   distributed_by: ['id']
-  buckets: 3                //default 10
+  buckets: 3                // default 10
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
-  properties: {"replication_num":"1", "in_memory": "true"}
+  properties: [{"replication_num":"1", "in_memory": "true"}]
+  refresh_method: 'async' // only for materialized view default manual
 ```
   
-### dbt run config(table/incremental):
-#### Minimum configuration:
+### dbt run config:
+#### Example configuration:
 ```
-{{ config(materialized=var("materialized_var", "table"), distributed_by=['id'])}}
-{{ config(materialized='incremental', distributed_by=['id']) }}
+{{ config(materialized='view') }}
+{{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='materialized_view') }}
+{{ config(materialized='materialized_view', properties={"storage_medium":"SSD"}) }}
+{{ config(materialized='materialized_view', refresh_method="ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)") }}
 ```
-
-#### Complete configuration:
-```
-{{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id'], properties={"in_memory": "true"}) }}
-{{ config(materialized='incremental', engine='OLAP', buckets=32, distributed_by=['id'], properties={"in_memory": "true"}) }}
-```
+For materialized view only support partition_by、buckets、distributed_by、properties、refresh_method configuration.
 
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
 
-## Notice
-1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
-2. When StarRocks Version >= 2.5, `Create table as` support table_type='PRIMARY'
-3. distributed_by is must
+## Contributing
+We welcome you to contribute to dbt-starrocks. Please see the [Contributing Guide](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) for more information.

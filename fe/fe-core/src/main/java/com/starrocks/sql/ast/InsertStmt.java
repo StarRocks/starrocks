@@ -21,7 +21,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -155,6 +154,10 @@ public class InsertStmt extends DmlStmt {
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public boolean isSystem() {
         return isSystem;
     }
@@ -197,7 +200,8 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isSpecifyKeyPartition() {
-        return targetTable != null && targetTable instanceof IcebergTable && isStaticKeyPartitionInsert();
+        return targetTable != null && (targetTable.isHiveTable() || targetTable.isIcebergTable()) &&
+                isStaticKeyPartitionInsert();
     }
 
     public boolean isStaticKeyPartitionInsert() {

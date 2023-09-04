@@ -99,6 +99,8 @@ public:
 
     static TabletMetaSharedPtr create();
 
+    static RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets);
+
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
@@ -118,7 +120,7 @@ public:
 
     [[nodiscard]] Status serialize(std::string* meta_binary);
     [[nodiscard]] Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -153,9 +155,9 @@ public:
 
     const TabletSchema& tablet_schema() const;
 
-    void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
 
-    std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
+    TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -171,6 +173,8 @@ public:
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
+
+    void reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb);
 
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     void remove_delete_predicate_by_version(const Version& version);
@@ -234,7 +238,7 @@ private:
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
-    std::shared_ptr<const TabletSchema> _schema = nullptr;
+    TabletSchemaCSPtr _schema = nullptr;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;

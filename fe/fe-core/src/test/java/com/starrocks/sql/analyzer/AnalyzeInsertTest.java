@@ -18,8 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
@@ -75,7 +75,7 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into tmc values (1,2)");
         analyzeSuccess("insert into tmc (id,name) values (1,2)");
         analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
-        analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "materialized column 'mc' can not be specified.");
+        analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
     }
 
     @Test
@@ -107,16 +107,6 @@ public class AnalyzeInsertTest {
         };
         analyzeFail("insert into iceberg_catalog.db.err_tbl values (1)",
                 "Table err_tbl is not found");
-
-        new Expectations(metadata) {
-            {
-                metadata.getTable(anyString, anyString, anyString);
-                result = new HiveTable();
-                minTimes = 0;
-            }
-        };
-        analyzeFail("insert into iceberg_catalog.db.hive_tbl values (1)",
-                "Only support insert into olap table or mysql table or iceberg table");
 
         new Expectations(metadata) {
             {
@@ -166,6 +156,10 @@ public class AnalyzeInsertTest {
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.ARRAY_DATE));
                 minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
             }
         };
 
@@ -194,5 +188,29 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
                 "partition value can't be null.");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
+
+        new Expectations() {
+            {
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.DATETIME),
+                        new Column("p2", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.DATETIME));
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1", "p2");
+                minTimes = 1;
+
+                icebergTable.getType();
+                result = Table.TableType.ICEBERG;
+                minTimes = 1;
+            }
+        };
+
+        analyzeFail("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"",
+                "Unsupported partition column type [DATETIME] for ICEBERG table sink.");
     }
 }

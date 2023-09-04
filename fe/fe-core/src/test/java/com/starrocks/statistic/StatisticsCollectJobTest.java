@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -53,6 +54,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -468,6 +471,49 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQLList() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                database,
+                table,
+                Lists.newArrayList("c1", "c2", "c3", "par_col"),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(12, collectSqlList.size());
+
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "c1", "c2", "c3", "par_col");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
+
+        collectSqlList = collectJob.buildCollectSQLList(3);
+        Assert.assertEquals(4, collectSqlList.size());
+
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "tpch");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "tpch", "region");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table,
+                        Lists.newArrayList("r_regionkey", "r_name", "r_comment"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(3, collectSqlList.size());
+
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
+        assertContains(collectSqlList.get(0).toString(), "1=1");
     }
 
     @Test

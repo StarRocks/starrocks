@@ -16,13 +16,13 @@ PROPERTIES (
 
 -- prepare init data and analyze
 insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
-analyze full table allstring;
+[UC]analyze full table allstring;
 
 function: wait_global_dict_ready('v1', 'allstring')
 -- truncate
 truncate table allstring;
 -- session 1
-submit task etl_${uuid0} as insert into allstring select * from (select 'C8' union select 'A10' union select sleep(10) ) tb;
+[UC]submit task etl_${uuid0} as insert into allstring select * from (select 'C8' union select 'A10' union select sleep(10) ) tb;
 -- session 2
 insert into allstring select * from (select 'C8' union select 'A10' union select 1 ) tb;
 function: wait_global_dict_ready('v1', 'allstring')

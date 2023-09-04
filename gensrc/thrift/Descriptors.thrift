@@ -39,24 +39,27 @@ include "Types.thrift"
 include "Exprs.thrift"
 
 struct TSlotDescriptor {
-  1: required Types.TSlotId id
-  2: required Types.TTupleId parent
-  3: required Types.TTypeDesc slotType
-  4: required i32 columnPos   // in originating table
-  5: required i32 byteOffset  // into tuple
-  6: required i32 nullIndicatorByte
-  7: required i32 nullIndicatorBit
-  8: required string colName;
-  9: required i32 slotIdx
-  10: required bool isMaterialized
+  1: optional Types.TSlotId id
+  2: optional Types.TTupleId parent
+  3: optional Types.TTypeDesc slotType
+  4: optional i32 columnPos   // Deprecated
+  5: optional i32 byteOffset  // Deprecated
+  6: optional i32 nullIndicatorByte // Deprecated
+  7: optional i32 nullIndicatorBit // Deprecated
+  8: optional string colName;
+  9: optional i32 slotIdx // Deprecated
+  10: optional bool isMaterialized // Deprecated
+  11: optional bool isOutputColumn // Deprecated
+  12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
+  13: optional i32 col_unique_id = -1
 }
 
 struct TTupleDescriptor {
-  1: required Types.TTupleId id
-  2: required i32 byteSize
-  3: required i32 numNullBytes
+  1: optional Types.TTupleId id
+  2: optional i32 byteSize // Deprecated
+  3: optional i32 numNullBytes // Deprecated
   4: optional Types.TTableId tableId
-  5: optional i32 numNullSlots
+  5: optional i32 numNullSlots // Deprecated
 }
 
 enum THdfsFileFormat {
@@ -152,6 +155,7 @@ enum TSchemaTableType {
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
+    SCH_PIPES,
 
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
@@ -194,7 +198,9 @@ struct TColumn {
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
     8: optional Exprs.TExpr define_expr 
-    9: optional bool is_auto_increment                                                              
+    9: optional bool is_auto_increment
+    10: optional i32 col_unique_id  = -1
+    11: optional bool has_bitmap_index = false
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -253,6 +259,7 @@ struct TOlapTableIndexSchema {
     1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
+    4: required list<TColumn> columns_desc
 }
 
 struct TOlapTableSchemaParam {

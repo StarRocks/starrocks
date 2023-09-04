@@ -49,10 +49,12 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
@@ -170,6 +172,9 @@ public class TabletInvertedIndex {
                         if (backendTabletInfo.isSetIs_error_state()) {
                             replica.setIsErrorState(backendTabletInfo.is_error_state);
                         }
+                        if (backendTabletInfo.isSetMax_rowset_creation_time()) {
+                            replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
+                        }
                         if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                             foundTabletsWithValidSchema.add(tabletId);
                             // 1. (intersection)
@@ -207,17 +212,9 @@ public class TabletInvertedIndex {
                             long partitionId = tabletMeta.getPartitionId();
                             TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                             if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
-                                // If storage medium is less than 1, there is no need to send migration tasks to BE.
-                                // Because BE will ignore this request.
                                 if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                    if (backendStorageTypeCnt <= 1) {
-                                        LOG.debug("available storage medium type count is less than 1, " +
-                                                        "no need to send migrate task. tabletId={}, backendId={}.",
-                                                tabletId, backendId);
-                                    } else if (tabletMigrationMap.size() <=
-                                            Config.tablet_sched_max_migration_task_sent_once) {
-                                        tabletMigrationMap.put(storageMedium, tabletId);
-                                    }
+                                    addToTabletMigrationMap(backendId, backendStorageTypeCnt, tabletId,
+                                            tabletMeta, tabletMigrationMap, storageMedium);
                                 }
                                 if (storageMedium != tabletMeta.getStorageMedium()) {
                                     tabletMeta.setStorageMedium(storageMedium);
@@ -304,9 +301,70 @@ public class TabletInvertedIndex {
                 tabletMigrationMap.size(), transactionsToClear.size(), transactionsToPublish.size(), (end - start));
     }
 
-    private void deleteTabletByConsistencyChecker(long tabletId, long backendId,
+    private void addToTabletMigrationMap(long backendId, long backendStorageTypeCnt, long tabletId,
+                                         TabletMeta tabletMeta, ListMultimap<TStorageMedium, Long> tabletMigrationMap,
+                                         TStorageMedium storageMedium) {
+        // 1. If storage medium is less than 1, there is no need to send migration tasks to BE.
+        // Because BE will ignore this request.
+        if (backendStorageTypeCnt <= 1) {
+            LOG.debug("available storage medium type count is less than 1, " +
+                            "no need to send migrate task. tabletId={}, backendId={}.",
+                    tabletMeta, backendId);
+            return;
+        }
+
+        // 2. If size of tabletMigrationMap exceeds (Config.tablet_sched_max_migration_task_sent_once - running_tasks_on_be),
+        // dot not send more tasks. The number of tasks running on be cannot exceed Config.tablet_sched_max_migration_task_sent_once
+        if (tabletMigrationMap.size() >=
+                Config.tablet_sched_max_migration_task_sent_once
+                        - AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false)) {
+            LOG.debug("size of tabletMigrationMap + size of running tasks on BE is bigger than {}",
+                    Config.tablet_sched_max_migration_task_sent_once);
+            return;
+        }
+
+        // 3. If the task already running on be, do not send again
+        if (AgentTaskQueue.getTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, tabletId) != null) {
+            LOG.debug("migrate of tablet:{} is already running on BE", tabletId);
+            return;
+        }
+
+        //4. If the table is Primary key, do not send
+        Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+        if (db == null) {
+            return;
+        }
+        db.readLock();
+        try {
+            OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                LOG.debug("tablet:{} is primary key table, do not support migrate", tabletId);
+                // Currently, primary key table doesn't support tablet migration between local disks.
+                return;
+            }
+        } finally {
+            db.readUnlock();
+        }
+
+        tabletMigrationMap.put(storageMedium, tabletId);
+    }
+
+    private void deleteTabletByConsistencyChecker(TabletMeta tabletMeta, long tabletId, long backendId,
                                                   String reason, Set<Long> invalidTablets) {
-        LOG.info("delete tablet {} on backend {} from inverted index by consistency checker, because: {}",
+        if (tabletMeta != null) {
+            Long toBeCleanedTime = tabletMeta.getToBeCleanedTime();
+            if (toBeCleanedTime == null) {
+                // init `toBeCleanedTime` and delay the actual deletion to next round of check
+                tabletMeta.setToBeCleanedTime(System.currentTimeMillis() +
+                        Config.consistency_tablet_meta_check_interval_ms / 2);
+                return;
+            } else if (System.currentTimeMillis() < toBeCleanedTime) {
+                return;
+            }
+        }
+
+        LOG.info("TabletMetaChecker: delete tablet {} on backend {} from inverted index by" +
+                        " consistency checker, because: {}",
                 tabletId, backendId, reason);
         deleteTablet(tabletId);
         invalidTablets.add(tabletId);
@@ -332,8 +390,11 @@ public class TabletInvertedIndex {
 
         long startTime = System.currentTimeMillis();
         long scannedTabletCount = 0;
+        long numIgnoredTabletCausedByAbnormalState = 0;
+        List<Long> ignoreTablets = new ArrayList<>();
 
         for (Long backendId : backendIds) {
+            LOG.info("TabletMetaChecker: start to check tablet meta consistency for backend {}", backendId);
             List<Long> tabletIds = getTabletIdsByBackendId(backendId);
             backendTabletNumReport.put(backendId, new Pair<>(0L, 0L));
 
@@ -343,7 +404,7 @@ public class TabletInvertedIndex {
 
                 TabletMeta tabletMeta = getTabletMeta(tabletId);
                 if (tabletMeta == null) {
-                    deleteTabletByConsistencyChecker(tabletId, backendId, "tablet meta is null", invalidTablets);
+                    deleteTabletByConsistencyChecker(null, tabletId, backendId, "tablet meta is null", invalidTablets);
                     continue;
                 }
 
@@ -355,7 +416,7 @@ public class TabletInvertedIndex {
                     if (database != null) {
                         isInRecycleBin = true;
                     } else {
-                        deleteTabletByConsistencyChecker(tabletId, backendId,
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "database " + dbId + " doesn't exist", invalidTablets);
                         continue;
                     }
@@ -372,21 +433,31 @@ public class TabletInvertedIndex {
                         if (table != null) {
                             isInRecycleBin = true;
                         } else {
-                            deleteTabletByConsistencyChecker(tabletId, backendId,
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "table " + dbId + "." + tableId + " doesn't exist", invalidTablets);
                             continue;
                         }
                     }
 
+                    // To avoid delete tablet using by restore job, rollup job, schema change job etc.
+                    if (table instanceof OlapTable &&
+                            ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                        if (ignoreTablets.size() < 20) {
+                            ignoreTablets.add(tabletId);
+                        }
+                        numIgnoredTabletCausedByAbnormalState++;
+                        continue;
+                    }
+
                     // validate partition
                     long partitionId = tabletMeta.getPartitionId();
-                    Partition partition = table.getPartition(partitionId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
-                        partition = recycleBin.getPartition(partitionId);
+                        partition = recycleBin.getPhysicalPartition(partitionId);
                         if (partition != null) {
                             isInRecycleBin = true;
                         } else {
-                            deleteTabletByConsistencyChecker(tabletId, backendId,
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "partition " + dbId + "." + tableId + "." + partitionId + " doesn't exist",
                                     invalidTablets);
                             continue;
@@ -397,7 +468,7 @@ public class TabletInvertedIndex {
                     long indexId = tabletMeta.getIndexId();
                     MaterializedIndex index = partition.getIndex(indexId);
                     if (index == null) {
-                        deleteTabletByConsistencyChecker(tabletId, backendId,
+                        deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                 "materialized index " + dbId + "." + tableId + "." +
                                         partitionId + "." + indexId + " doesn't exist",
                                 invalidTablets);
@@ -408,7 +479,7 @@ public class TabletInvertedIndex {
                         // validate tablet
                         Tablet tablet = index.getTablet(tabletId);
                         if (tablet == null) {
-                            deleteTabletByConsistencyChecker(tabletId, backendId,
+                            deleteTabletByConsistencyChecker(tabletMeta, tabletId, backendId,
                                     "tablet " + dbId + "." + tableId + "." +
                                             partitionId + "." + indexId + "." + tabletId + " doesn't exist",
                                     invalidTablets);
@@ -421,6 +492,8 @@ public class TabletInvertedIndex {
                     } else {
                         backendTabletNumReport.get(backendId).first++;
                     }
+
+                    tabletMeta.resetToBeCleanedTime();
                 } finally {
                     database.readUnlock();
                 }
@@ -429,9 +502,13 @@ public class TabletInvertedIndex {
 
         // logging report
         LOG.info("TabletMetaChecker has cleaned {} invalid tablet(s), scanned {} tablet(s) on {} backend(s) in {}ms," +
-                " backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
+                " total tablets in recycle bin: {}, total ignored tablets: {}, up to 20 of ignored tablets: {}, " +
+                        "backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}",
                 invalidTablets.size(), scannedTabletCount, backendIds.size(),
-                System.currentTimeMillis() - startTime, backendTabletNumReport);
+                System.currentTimeMillis() - startTime,
+                backendTabletNumReport.values().stream().mapToLong(p -> p.second).sum(),
+                numIgnoredTabletCausedByAbnormalState, ignoreTablets,
+                backendTabletNumReport);
     }
 
     public Long getTabletIdByReplica(long replicaId) {
@@ -528,8 +605,7 @@ public class TabletInvertedIndex {
         writeLock();
         try {
             tabletMetaMap.putIfAbsent(tabletId, tabletMeta);
-
-            LOG.debug("add tablet: {}", tabletId);
+            LOG.debug("add tablet: {} tabletMeta: {}", tabletId, tabletMeta);
         } finally {
             writeUnlock();
         }
@@ -623,6 +699,10 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    public Table<Long, Long, Replica> getReplicaMetaTable() {
+        return replicaMetaTable;
     }
 
     public void addReplica(long tabletId, Replica replica) {
@@ -779,6 +859,24 @@ public class TabletInvertedIndex {
         replicaNumMap.put(TStorageMedium.HDD, hddNum);
         replicaNumMap.put(TStorageMedium.SSD, ssdNum);
         return replicaNumMap;
+    }
+
+    public long getTabletCount() {
+        readLock();
+        try {
+            return this.tabletMetaMap.size();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public long getReplicaCount() {
+        readLock();
+        try {
+            return this.replicaMetaTable.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     // just for test

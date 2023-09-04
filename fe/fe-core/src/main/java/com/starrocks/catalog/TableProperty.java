@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
@@ -41,7 +42,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -54,10 +54,14 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
@@ -67,6 +71,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * TableProperty contains additional information about OlapTable
@@ -82,10 +87,33 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
+    public enum QueryRewriteConsistencyMode {
+        DISABLE,    // 0: disable query rewrite
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check
+        CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+
+        public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
+            return CHECKED;
+        }
+
+        public static QueryRewriteConsistencyMode defaultForExternalTable() {
+            return DISABLE;
+        }
+
+        public static QueryRewriteConsistencyMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on("/").join(QueryRewriteConsistencyMode.values());
+        }
+    }
+
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
+    private transient DynamicPartitionProperty dynamicPartitionProperty =
+            new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = RunMode.defaultReplicationNum();
 
@@ -106,13 +134,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<TableName> excludedTriggerTables;
 
     // This property only applies to materialized views,
-    // The mv which base table is external table would be query rewrite even the mv data is not up to date
-    // when this property is set to true.
-    private boolean forceExternalTableQueryRewrite = false;
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode forceExternalTableQueryRewrite =
+            QueryRewriteConsistencyMode.defaultForExternalTable();
+
+    // This property only applies to materialized views,
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
+            QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
+
+    // Only meaningful when enablePersistentIndex = true.
+    // and it's null in SHARED NOTHGING
+    TPersistentIndexType persistendIndexType;
 
     /*
      * the default storage volume of this table.
@@ -123,6 +160,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
      * This property should be set when creating the table, and can not be changed.
      */
     private String storageVolume;
+
+    private PeriodDuration storageCoolDownTTL;
 
     // This property only applies to materialized views
     private String resourceGroup = null;
@@ -135,6 +174,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
+
+    // the default automatic bucket size
+    private long bucketSize = 0;
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
@@ -160,6 +202,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
+    private Boolean useSchemaLightChange;
+
     private PeriodDuration dataCachePartitionDuration;
 
     public TableProperty(Map<String, String> properties) {
@@ -174,7 +218,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbitGlobalDict = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
         return newTableProperty;
     }
 
@@ -209,6 +253,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
+                break;
+            case OperationType.OP_MODIFY_BUCKET_SIZE:
+                buildBucketSize();
                 break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
@@ -266,7 +313,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-
     public TableProperty buildBinlogAvailableVersion() {
         binlogAvailabeVersions = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -302,13 +348,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildAutoRefreshPartitionsLimit() {
         autoRefreshPartitionsLimit =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
-                String.valueOf(INVALID)));
+                        String.valueOf(INVALID)));
         return this;
     }
 
     public TableProperty buildPartitionRefreshNumber() {
-        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
-                String.valueOf(INVALID)));
+        partitionRefreshNumber =
+                Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                        String.valueOf(INVALID)));
         return this;
     }
 
@@ -335,10 +382,57 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildForceExternalTableQueryRewrite() {
-        forceExternalTableQueryRewrite =
-                Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
-                        "false"));
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
+        QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+        if (res == null) {
+            String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                    .stream().map(Enum::name).collect(Collectors.joining(","));
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY + " could only be " + allValues + " but got " + value);
+        }
+        return res;
+    }
+
+    public static QueryRewriteConsistencyMode analyzeExternalTableQueryRewrite(String value) {
+        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+            // old version use the boolean value
+            boolean boolValue = Boolean.parseBoolean(value);
+            return boolValue ? QueryRewriteConsistencyMode.CHECKED : QueryRewriteConsistencyMode.DISABLE;
+        } else {
+            QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+            if (res == null) {
+                String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                        .stream().map(Enum::name).collect(Collectors.joining(","));
+                throw new SemanticException(
+                        PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE + " could only be " + allValues + " but " +
+                                "got " + value);
+            }
+            return res;
+        }
+    }
+
+    public TableProperty buildQueryRewrite() {
+        // NOTE: keep compatible with previous version
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
+        if (value != null) {
+            try {
+                forceExternalTableQueryRewrite = analyzeExternalTableQueryRewrite(value);
+            } catch (SemanticException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
+            }
+        }
+
+        queryRewriteConsistencyMode = QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
+        value = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+        if (value != null) {
+            try {
+                queryRewriteConsistencyMode = analyzeQueryRewriteMode(value);
+            } catch (SemanticException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, e);
+            }
+        }
+
         return this;
     }
 
@@ -349,7 +443,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-            RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.allowCreateLakeTable() ? "default" : "local");
         return this;
     }
 
@@ -372,17 +466,45 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildBucketSize() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
+            bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
         return this;
     }
 
+    public TableProperty buildPersistentIndexType() {
+        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
+        if (type.equals("LOCAL")) {
+            persistendIndexType = TPersistentIndexType.LOCAL;
+        }
+        return this;
+    }
+
+    public static String persistentIndexTypeToString(TPersistentIndexType type) {
+        switch (type) {
+            case LOCAL:
+                return "LOCAL";
+            default:
+                // shouldn't happen
+                // for it has been checked outside
+                LOG.warn("unknown PersistentIndexType");
+                return "UNKNOWN";
+        }
+    }
+
+
     public TableProperty buildConstraint() {
         try {
             uniqueConstraints = UniqueConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (AnalysisException e) {
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+        } catch (SemanticException e) {
             LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
         }
 
@@ -395,6 +517,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
             dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
                     properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
+        }
+        return this;
+    }
+
+    public TableProperty buildStorageCoolDownTTL() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            String storageCoolDownTTL = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+            if (Strings.isNullOrEmpty(storageCoolDownTTL)) {
+                this.storageCoolDownTTL = null;
+            } else {
+                this.storageCoolDownTTL = TimeUtils.parseHumanReadablePeriodOrDuration(storageCoolDownTTL);
+            }
         }
         return this;
     }
@@ -459,12 +593,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
-    public boolean getForceExternalTableQueryRewrite() {
+    public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
         return this.forceExternalTableQueryRewrite;
     }
 
-    public void setForceExternalTableQueryRewrite(boolean forceExternalTableQueryRewrite) {
-        this.forceExternalTableQueryRewrite = forceExternalTableQueryRewrite;
+    public void setForceExternalTableQueryRewrite(QueryRewriteConsistencyMode externalTableQueryRewrite) {
+        this.forceExternalTableQueryRewrite = externalTableQueryRewrite;
+    }
+
+    public void setQueryRewriteConsistencyMode(QueryRewriteConsistencyMode mode) {
+        this.queryRewriteConsistencyMode = mode;
+    }
+
+    public QueryRewriteConsistencyMode getQueryRewriteConsistencyMode() {
+        return this.queryRewriteConsistencyMode;
     }
 
     public boolean isInMemory() {
@@ -475,12 +617,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public String getPersistentIndexTypeString() {
+        return persistentIndexTypeToString(persistendIndexType);
+    }
+
+    public TPersistentIndexType getPersistentIndexType() {
+        return persistendIndexType;
+    }
+
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
     }
 
     public boolean enableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+
+    public long getBucketSize() {
+        return bucketSize;
     }
 
     public String getStorageVolume() {
@@ -543,14 +697,28 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return dataCachePartitionDuration;
     }
 
+    public PeriodDuration getStorageCoolDownTTL() {
+        return storageCoolDownTTL;
+    }
+
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
-        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext();) {
+        for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, String> entry = it.next();
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
                 it.remove();
             }
         }
+    }
+
+    public TableProperty buildUseLightSchemaChange() {
+        useSchemaLightChange = Boolean.parseBoolean(
+            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "false"));
+        return this;
+    }
+
+    public Boolean getUseSchemaLightChange() {
+        return useSchemaLightChange;
     }
 
     @Override
@@ -568,7 +736,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildReplicationNum();
         buildInMemory();
         buildStorageVolume();
+        buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
+        buildPersistentIndexType();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
@@ -577,10 +747,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
-        buildForceExternalTableQueryRewrite();
+        buildQueryRewrite();
+        buildBucketSize();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildConstraint();
         buildDataCachePartitionDuration();
+        buildUseLightSchemaChange();
     }
 }

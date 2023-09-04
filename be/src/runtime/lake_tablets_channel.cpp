@@ -39,7 +39,7 @@
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
-#include "util/bthreads/shared_mutex.h"
+#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/stack_trace_mutex.h"
@@ -63,13 +63,13 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+    Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
-    Status incremental_open(const PTabletWriterOpenRequest& params,
+    Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
     void cancel() override;
@@ -187,8 +187,8 @@ LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                bool is_incremental) {
+Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                                std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -203,6 +203,20 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sha
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     }
     RETURN_IF_ERROR(_create_delta_writers(params, false));
+
+    for (auto& [id, writer] : _delta_writers) {
+        auto st = writer->check_immutable();
+        if (!st.ok()) {
+            LOG(WARNING) << "check immutable failed, tablet " << id << ", txn " << _txn_id << ", status " << st;
+        }
+        if (writer->is_immutable()) {
+            result->add_immutable_tablet_ids(id);
+            result->add_immutable_partition_ids(writer->partition_id());
+        }
+        VLOG(1) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
+                << _txn_id << ", is_immutable  " << writer->is_immutable();
+    }
+
     return Status::OK();
 }
 
@@ -352,6 +366,14 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         sender.next_seq++;
     }
 
+    for (auto tablet_id : request.tablet_ids()) {
+        auto& writer = _delta_writers[tablet_id];
+        if (writer->is_immutable()) {
+            response->add_immutable_tablet_ids(tablet_id);
+            response->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     auto t1 = std::chrono::steady_clock::now();
     response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
@@ -422,13 +444,15 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         std::unique_ptr<AsyncDeltaWriter> writer;
         if (params.miss_auto_increment_column()) {
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, params.merge_condition(), true, params.table_id(), _mem_tracker);
+                                              slots, params.merge_condition(), true, params.table_id(),
+                                              params.min_immutable_tablet_size(), _mem_tracker);
         } else if (!params.merge_condition().empty()) {
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, params.merge_condition(), _mem_tracker);
+                                              slots, params.merge_condition(), params.min_immutable_tablet_size(),
+                                              _mem_tracker);
         } else {
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                              slots, _mem_tracker);
+                                              slots, params.min_immutable_tablet_size(), _mem_tracker);
         }
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
@@ -508,7 +532,7 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                             std::shared_ptr<OlapTableSchemaParam> schema) {
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     RETURN_IF_ERROR(_create_delta_writers(params, true));

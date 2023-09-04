@@ -32,7 +32,8 @@ class TimestampValue {
 public:
     using type = Timestamp;
 
-    inline static TimestampValue create(int year, int month, int day, int hour, int minute, int second);
+    inline static TimestampValue create(int year, int month, int day, int hour, int minute, int second,
+                                        int microsecond);
 
     inline Timestamp timestamp() const { return _timestamp; }
 
@@ -151,9 +152,10 @@ public:
     Timestamp _timestamp;
 };
 
-TimestampValue TimestampValue::create(int year, int month, int day, int hour, int minute, int second) {
+TimestampValue TimestampValue::create(int year, int month, int day, int hour, int minute, int second,
+                                      int microsecond = 0) {
     TimestampValue ts;
-    ts.from_timestamp(year, month, day, hour, minute, second, 0);
+    ts.from_timestamp(year, month, day, hour, minute, second, microsecond);
     return ts;
 }
 

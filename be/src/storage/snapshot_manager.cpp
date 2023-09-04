@@ -73,7 +73,7 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->clone_mem_tracker());
+            _s_instance = new SnapshotManager(GlobalEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;
@@ -166,9 +166,11 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // load original tablet meta
     std::string cloned_header_file = clone_dir + "/" + std::to_string(tablet_id) + ".hdr";
     std::string cloned_meta_file = clone_dir + "/meta";
+    std::string clone_dcgs_snapshot_file = clone_dir + "/" + std::to_string(tablet_id) + ".dcgs_snapshot";
 
     bool has_header_file = fs::path_exist(cloned_header_file);
     bool has_meta_file = fs::path_exist(cloned_meta_file);
+    bool has_dcgs_snapshot_file = fs::path_exist(clone_dcgs_snapshot_file);
     if (has_header_file && has_meta_file) {
         return Status::InternalError("found both header and meta file");
     }
@@ -196,7 +198,9 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
-    TabletSchema tablet_schema(new_tablet_meta_pb.schema());
+    auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
+
+    std::unordered_map<string, string> old_to_new_rowsetid;
 
     std::unordered_map<Version, RowsetMetaPB*, HashOfVersion> rs_version_map;
     for (const auto& visible_rowset : cloned_tablet_meta_pb.rs_metas()) {
@@ -207,6 +211,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         rowset_meta->set_tablet_schema_hash(schema_hash);
         Version rowset_version = {visible_rowset.start_version(), visible_rowset.end_version()};
         rs_version_map[rowset_version] = rowset_meta;
+        old_to_new_rowsetid.insert({visible_rowset.rowset_id(), rowset_id.to_string()});
     }
 
     for (const auto& inc_rowset : cloned_tablet_meta_pb.inc_rs_metas()) {
@@ -222,18 +227,40 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         RETURN_IF_ERROR(_rename_rowset_id(inc_rowset, clone_dir, tablet_schema, rowset_id, rowset_meta));
         rowset_meta->set_tablet_id(tablet_id);
         rowset_meta->set_tablet_schema_hash(schema_hash);
+        old_to_new_rowsetid.insert({inc_rowset.rowset_id(), rowset_id.to_string()});
+    }
+
+    if (has_dcgs_snapshot_file) {
+        DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+        auto st = DeltaColumnGroupListHelper::parse_snapshot(clone_dcgs_snapshot_file, dcg_snapshot_pb);
+        if (!st.ok()) {
+            return Status::InternalError("failed to parse dcgs meta");
+        }
+
+        // reset rowsetid, tablet id in PB
+        int idx = 0;
+        for (auto& rowset_id : (*dcg_snapshot_pb.mutable_rowset_id())) {
+            rowset_id = old_to_new_rowsetid[rowset_id];
+            (*dcg_snapshot_pb.mutable_tablet_id())[idx] = tablet_id;
+            idx++;
+        }
+
+        st = DeltaColumnGroupListHelper::save_snapshot(clone_dcgs_snapshot_file, dcg_snapshot_pb);
+        if (!st.ok()) {
+            return Status::InternalError("failed to save dcgs meta");
+        }
     }
 
     return TabletMeta::save(cloned_header_file, new_tablet_meta_pb);
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
-                                          TabletSchema& tablet_schema, const RowsetId& rowset_id,
+                                          TabletSchemaCSPtr& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -247,7 +274,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
     context.rowset_path_prefix = new_path;
-    context.tablet_schema = &tablet_schema;
+    context.tablet_schema = org_rowset_meta->tablet_schema() ? org_rowset_meta->tablet_schema() : tablet_schema;
     context.rowset_state = org_rowset_meta->rowset_state();
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset
@@ -319,6 +346,9 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
             return Status::VersionAlreadyMerged(strings::Substitute("version $0 has been merged", v));
         } else if (rowset == nullptr) {
             return Status::RuntimeError(strings::Substitute("no incremental rowset $0", v));
+        } else if (rowset->rowset_meta()->partial_schema_change()) {
+            return Status::RuntimeError(
+                    strings::Substitute("rowset with version $0 has done partial schema change", v));
         }
         snapshot_rowsets.emplace_back(std::move(rowset));
     }
@@ -458,6 +488,34 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         return snapshot_id_path;
     }
 
+    // 5. snapshot dcgs for non-PrimaryKey tablet
+    auto meta_store = tablet->data_dir()->get_meta();
+    DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+    for (const auto& snapshot_rowset : snapshot_rowsets) {
+        for (int i = 0; i < snapshot_rowset->num_segments(); ++i) {
+            int64_t tablet_id = tablet->tablet_id();
+            RowsetId rowsetid = snapshot_rowset->rowset_meta()->rowset_id();
+
+            DeltaColumnGroupList dcgs;
+            RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(meta_store, tablet_id, rowsetid, i,
+                                                                      snapshot_version, &dcgs));
+
+            DeltaColumnGroupListPB dcg_list_pb;
+            DeltaColumnGroupListSerializer::serialize_delta_column_group_list(dcgs, &dcg_list_pb);
+
+            dcg_snapshot_pb.add_tablet_id(tablet_id);
+            dcg_snapshot_pb.add_rowset_id(rowsetid.to_string());
+            dcg_snapshot_pb.add_segment_id(i);
+
+            auto add_dcg_list_pb = dcg_snapshot_pb.add_dcg_lists();
+            add_dcg_list_pb->CopyFrom(dcg_list_pb);
+        }
+    }
+
+    std::stringstream dcg_snapshot_path;
+    dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
+    RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
+
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
     snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
     std::string header_path = _get_header_full_path(tablet, snapshot_dir);
@@ -483,7 +541,17 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
     // 1. get missing rowsets for snapshot
     std::shared_lock rdlock(tablet->get_header_lock());
     auto st = tablet->updates()->get_rowsets_for_incremental_snapshot(missing_version_ranges, snapshot_rowsets);
-    if (st.ok() && snapshot_rowsets.empty()) {
+
+    bool need_full_snapshot = false;
+    for (const auto& rowset : snapshot_rowsets) {
+        if (rowset->rowset_meta()->partial_schema_change()) {
+            need_full_snapshot = true;
+            LOG(FATAL) << "incremental rowset with partial schema change";
+            break;
+        }
+    }
+
+    if (st.ok() && (snapshot_rowsets.empty() || need_full_snapshot)) {
         snapshot_type = SNAPSHOT_TYPE_FULL;
         full_snapshot_version = tablet->updates()->max_version();
         st = tablet->updates()->get_applied_rowsets(full_snapshot_version, &snapshot_rowsets);
@@ -619,8 +687,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         auto version = meta_pb.mutable_updates()->add_versions();
 
         uint32_t next_segment_id = 0;
-        version->mutable_version()->set_major(snapshot_version);
-        version->mutable_version()->set_minor(0);
+        version->mutable_version()->set_major_number(snapshot_version);
+        version->mutable_version()->set_minor_number(0);
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
@@ -629,8 +697,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
         meta_pb.mutable_updates()->set_next_log_id(0);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_major(snapshot_version);
-        meta_pb.mutable_updates()->mutable_apply_version()->set_minor(0);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_major_number(snapshot_version);
+        meta_pb.mutable_updates()->mutable_apply_version()->set_minor_number(0);
     }
 
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -672,6 +740,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
+        // reset rowsetid means that it is different from the rowset in snapshot meta.
+        // It is reasonable that reset the creation time here.
+        rowset_meta_pb.set_creation_time(UnixSeconds());
     }
     return Status::OK();
 }

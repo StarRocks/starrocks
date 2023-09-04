@@ -62,10 +62,17 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "cpuCores")
     private int cpuCores;
     @SerializedName(value = "rebootTime")
-    private long rebootTime = -1L;   
+    private long rebootTime = -1L;
+    private boolean isSetStoragePath = false;
 
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
+    }
+
+    public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
+                             int starletPort, long hbTime, String version, int cpuCores, boolean isSetStoragePath) {
+        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+        this.isSetStoragePath = isSetStoragePath;
     }
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
@@ -123,6 +130,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public int getCpuCores() {
         return cpuCores;
+    }
+
+    public boolean isSetStoragePath() {
+        return isSetStoragePath;
     }
 
     public static BackendHbResponse read(DataInput in) throws IOException {

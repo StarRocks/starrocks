@@ -54,8 +54,11 @@ constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 constexpr size_t kLongKeySize = 64;
 constexpr size_t kFixedMaxKeySize = 128;
+constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
 
 const char* const kIndexFileMagic = "IDX1";
+
+bool write_pindex_bf = true;
 
 using KVPairPtr = const uint8_t*;
 
@@ -70,7 +73,7 @@ T pad(T v, P p) {
 }
 
 static std::string get_l0_index_file_name(std::string& dir, const EditVersion& version) {
-    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
+    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major_number(), version.minor_number());
 }
 
 struct IndexHash {
@@ -322,6 +325,10 @@ static void copy_kv_to_page(size_t key_size, size_t num_kv, const KVPairPtr* kv_
     }
 }
 
+static bool load_bf_or_not() {
+    return config::enable_pindex_filter && StorageEngine::instance()->update_manager()->keep_pindex_bf();
+}
+
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t key_size, size_t npage_hint,
                                                                            size_t nbucket,
                                                                            const std::vector<KVRef>& kv_refs) {
@@ -460,8 +467,11 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 }
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
-    if (_wb) {
+    if (_idx_wb) {
         FileSystem::Default()->delete_file(_idx_file_path_tmp);
+    }
+    if (_bf_wb) {
+        FileSystem::Default()->delete_file(_bf_file_path);
     }
 }
 
@@ -471,7 +481,10 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     _idx_file_path_tmp = _idx_file_path + ".tmp";
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
     WritableFileOptions wblock_opts{.sync_on_close = sync_on_close, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
+    ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
+
+    _bf_file_path = _idx_file_path + BloomFilterSuffix;
+    ASSIGN_OR_RETURN(_bf_wb, _fs->new_writable_file(wblock_opts, _bf_file_path));
     return Status::OK();
 }
 
@@ -488,14 +501,41 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         }
         _cur_key_size = key_size;
     }
+    if (write_pindex_bf) {
+        std::unique_ptr<BloomFilter> bf;
+        Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to create bloom filter, status: " << st;
+            return st;
+        }
+        st = bf->init(kvs.size(), 0.05, HASH_MURMUR3_X64_64);
+        if (!st.ok()) {
+            LOG(WARNING) << "init bloom filter failed, status: " << st;
+            return st;
+        }
+        for (const auto& kv : kvs) {
+            bf->add_hash(kv.hash);
+        }
+        _shard_bf_size.emplace_back(bf->size());
+        // update memory usage is too high, flush bloom filter advance to avoid use too much memory
+        if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+            for (auto& bf : _bf_vec) {
+                _bf_wb->append(Slice(bf->data(), bf->size()));
+            }
+            _bf_vec.clear();
+            _bf_flushed = true;
+        }
+        _bf_vec.emplace_back(std::move(bf));
+    }
+
     auto rs_create = ImmutableIndexShard::create(key_size, npage_hint, nbucket, kvs);
     if (!rs_create.ok()) {
         return std::move(rs_create).status();
     }
     auto& shard = rs_create.value();
-    size_t pos_before = _wb->size();
-    RETURN_IF_ERROR(shard->write(*_wb));
-    size_t pos_after = _wb->size();
+    size_t pos_before = _idx_wb->size();
+    RETURN_IF_ERROR(shard->write(*_idx_wb));
+    size_t pos_after = _idx_wb->size();
     auto shard_meta = _meta.add_shards();
     shard_meta->set_size(kvs.size());
     shard_meta->set_npage(shard->npage());
@@ -517,7 +557,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _total_kv_size += shard_kv_size;
     }
     shard_meta->set_data_size(shard_kv_size);
-    _total_bytes += pos_after - pos_before;
+    _total_kv_bytes += pos_after - pos_before;
     auto iter = _shard_info_by_length.find(_cur_key_size);
     if (iter == _shard_info_by_length.end()) {
         if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
@@ -531,60 +571,61 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     return Status::OK();
 }
 
-Status ImmutableIndexWriter::write_shard_as_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info,
-                                                    ImmutableIndex* immutable_index) {
-    const auto key_size = old_shard_info.key_size;
-    const bool new_key_length = _nshard == 0 || _cur_key_size != key_size;
-    if (_nshard == 0) {
-        _cur_key_size = key_size;
-        _cur_value_size = kIndexValueSize;
-    } else {
-        if (new_key_length) {
-            CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+Status ImmutableIndexWriter::write_bf() {
+    size_t pos_before = _idx_wb->size();
+    LOG(INFO) << "write kv size:" << pos_before << ", _bf_wb size: " << _bf_wb->size();
+    if (_bf_wb->size() != 0) {
+        VLOG(10) << "_bf_wb already write size: " << _bf_wb->size();
+        DCHECK(_bf_flushed);
+        uint64_t remaining = _bf_wb->size();
+        uint64_t offset = 0;
+        std::string read_buffer;
+        raw::stl_string_resize_uninitialized(&read_buffer, 4096);
+        std::unique_ptr<RandomAccessFile> rfile;
+        ASSIGN_OR_RETURN(rfile, _fs->new_random_access_file(_bf_file_path));
+        while (remaining > 0) {
+            if (remaining < 4096) {
+                raw::stl_string_resize_uninitialized(&read_buffer, remaining);
+            }
+            RETURN_IF_ERROR(rfile->read_at_fully(offset, read_buffer.data(), read_buffer.size()));
+            RETURN_IF_ERROR(_idx_wb->append(Slice(read_buffer.data(), read_buffer.size())));
+            offset += read_buffer.size();
+            remaining -= read_buffer.size();
         }
-        _cur_key_size = key_size;
     }
-    std::string buff;
-    raw::stl_string_resize_uninitialized(&buff, old_shard_info.bytes);
-    RETURN_IF_ERROR(immutable_index->_file->read_at_fully(old_shard_info.offset, buff.data(), buff.size()));
-    size_t pos_before = _wb->size();
-    _wb->append(Slice(buff.data(), buff.size()));
-    size_t pos_after = _wb->size();
-    auto shard_info = _meta.add_shards();
-    shard_info->set_size(old_shard_info.size);
-    shard_info->set_npage(old_shard_info.npage);
-    shard_info->set_key_size(old_shard_info.key_size);
-    shard_info->set_value_size(old_shard_info.value_size);
-    shard_info->set_nbucket(old_shard_info.nbucket);
-    shard_info->set_data_size(old_shard_info.data_size);
-    auto page_pointer = shard_info->mutable_data();
-    page_pointer->set_offset(pos_before);
-    page_pointer->set_size(pos_after - pos_before);
-    _total += old_shard_info.size;
-    _total_bytes += pos_after - pos_before;
-    // not accurate, but not important as well
-    _total_kv_size += old_shard_info.bytes;
-    auto iter = _shard_info_by_length.find(_cur_key_size);
-    if (iter == _shard_info_by_length.end()) {
-        if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
-            LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size;
-            return Status::InternalError("insert shard info failed");
-        }
-    } else {
-        iter->second.second++;
+    for (auto& bf : _bf_vec) {
+        _idx_wb->append(Slice(bf->data(), bf->size()));
     }
-    _nshard++;
+    _meta.mutable_shard_bf_off()->Add(pos_before);
+    for (auto bf_len : _shard_bf_size) {
+        _meta.mutable_shard_bf_off()->Add(pos_before + bf_len);
+        pos_before += bf_len;
+        _total_bf_bytes += bf_len;
+    }
+    if (pos_before != _idx_wb->size()) {
+        std::string err_msg =
+                strings::Substitute("immmutable index file size inconsistent. file: $0, expect: $1, actual: $2",
+                                    _idx_wb->filename(), pos_before, _idx_wb->size());
+        LOG(ERROR) << err_msg;
+        return Status::InternalError(err_msg);
+    }
+    if (_bf_flushed) {
+        _bf_vec.clear();
+    }
     return Status::OK();
 }
 
 Status ImmutableIndexWriter::finish() {
+    if (write_pindex_bf) {
+        RETURN_IF_ERROR(write_bf());
+    }
     LOG(INFO) << strings::Substitute(
-            "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) bytes:$5 usage:$6", _idx_file_path_tmp,
-            _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0, _total_bytes,
-            _total_kv_size * 1000 / std::max(_total_bytes, 1UL) / 1000.0);
+            "finish writing immutable index $0 #shard:$1 #kv:$2 #moved:$3($4) kv_bytes:$5 usage:$6 bf_bytes:$7",
+            _idx_file_path_tmp, _nshard, _total, _total_moved, _total_moved * 1000 / std::max(_total, 1UL) / 1000.0,
+            _total_kv_bytes, _total_kv_size * 1000 / std::max(_total_kv_bytes, 1UL) / 1000.0, _total_bf_bytes);
     _version.to_pb(_meta.mutable_version());
     _meta.set_size(_total);
-    _meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
+    _meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     for (const auto& [key_size, shard_info] : _shard_info_by_length) {
         const auto [shard_offset, shard_num] = shard_info;
         auto info = _meta.add_shard_info();
@@ -600,10 +641,13 @@ Status ImmutableIndexWriter::finish() {
     uint32_t checksum = crc32c::Value(footer.data(), footer.size());
     put_fixed32_le(&footer, checksum);
     footer.append(kIndexFileMagic, 4);
-    RETURN_IF_ERROR(_wb->append(Slice(footer)));
-    RETURN_IF_ERROR(_wb->close());
+    RETURN_IF_ERROR(_idx_wb->append(Slice(footer)));
+    RETURN_IF_ERROR(_idx_wb->close());
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
-    _wb.reset();
+    _idx_wb.reset();
+    RETURN_IF_ERROR(_bf_wb->close());
+    FileSystem::Default()->delete_file(_bf_file_path);
+    _bf_wb.reset();
     return Status::OK();
 }
 
@@ -790,7 +834,7 @@ public:
     bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
-                                                         bool without_null) const override {
+                                                         bool with_null) const override {
         std::vector<std::vector<KVRef>> ret(nshard);
         uint32_t shard_bits = log2(nshard);
         for (auto i = 0; i < nshard; ++i) {
@@ -798,7 +842,7 @@ public:
         }
         auto hasher = FixedKeyHash<KeySize>();
         for (const auto& [key, value] : _map) {
-            if (without_null && value.get_value() == NullIndexValue) {
+            if (!with_null && value.get_value() == NullIndexValue) {
                 continue;
             }
             IndexHash h(hasher(key));
@@ -808,16 +852,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-                                    size_t nbucket, bool without_null, BloomFilter* bf) const override {
+                                    size_t nbucket, bool with_null) const override {
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
-            if (bf != nullptr) {
-                for (const auto& kvs : kv_ref_by_shard) {
-                    for (const auto& kv : kvs) {
-                        bf->add_hash(kv.hash);
-                    }
-                }
-            }
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), with_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(KeySize, npage_hint, nbucket, kvs));
             }
@@ -874,7 +911,7 @@ struct StringHasher2 {
 class EqualOnStringWithHash {
 public:
     bool operator()(const std::string& lhs, const std::string& rhs) const {
-        return memequal(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+        return memequal_padded(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
     }
 };
 
@@ -1194,7 +1231,7 @@ public:
     }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
-                                                         bool without_null) const override {
+                                                         bool with_null) const override {
         std::vector<std::vector<KVRef>> ret(nshard);
         uint32_t shard_bits = log2(nshard);
         for (auto i = 0; i < nshard; ++i) {
@@ -1203,7 +1240,7 @@ public:
         for (const auto& composite_key : _set) {
             const auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
             IndexHash h(StringHasher2()(composite_key));
-            if (without_null && value == NullIndexValue) {
+            if (!with_null && value == NullIndexValue) {
                 continue;
             }
             ret[h.shard(shard_bits)].emplace_back((uint8_t*)(composite_key.data()), h.hash, composite_key.size());
@@ -1212,16 +1249,9 @@ public:
     }
 
     Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard, size_t npage_hint,
-                                    size_t nbucket, bool without_null, BloomFilter* bf) const override {
+                                    size_t nbucket, bool with_null) const override {
         if (nshard > 0) {
-            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), without_null);
-            if (bf != nullptr) {
-                for (const auto& kvs : kv_ref_by_shard) {
-                    for (const auto& kv : kvs) {
-                        bf->add_hash(kv.hash);
-                    }
-                }
-            }
+            const auto& kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), with_null);
             for (const auto& kvs : kv_ref_by_shard) {
                 RETURN_IF_ERROR(writer->write_shard(kKeySizeMagicNum, npage_hint, nbucket, kvs));
             }
@@ -1763,7 +1793,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // create a new empty _l0 file, set _offset to 0
         data->set_offset(0);
         data->set_size(0);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = 0;
         _page_size = 0;
         break;
@@ -1798,7 +1828,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         data->set_size(snapshot_size);
         snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset = snapshot_size;
         _page_size = 0;
         break;
@@ -1809,7 +1839,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         PagePointerPB* data = wal_pb->mutable_data();
         data->set_offset(_offset);
         data->set_size(_page_size);
-        meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _offset += _page_size;
         _page_size = 0;
         break;
@@ -1875,12 +1905,11 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
 }
 
 Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& path, const EditVersion& version,
-                                                           bool write_tmp_l1,
-                                                           std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map) {
+                                                           bool write_tmp_l1, bool keep_delete) {
     auto writer = std::make_unique<ImmutableIndexWriter>();
     std::string idx_file_path;
     if (!write_tmp_l1) {
-        idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major(), version.minor());
+        idx_file_path = strings::Substitute("$0/index.l1.$1.$2", path, version.major_number(), version.minor_number());
     } else {
         idx_file_path = path;
     }
@@ -1902,25 +1931,14 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
             const auto nbucket = MutableIndex::estimate_nbucket(key_size, size, nshard, npage_hint);
             const auto expand_exponent = nshard / shard_size;
             for (auto i = 0; i < shard_size; ++i) {
-                if (bf_map != nullptr) {
-                    std::unique_ptr<BloomFilter> bf;
-                    Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to create bloom filter, status: " << st;
-                        return st;
-                    }
-                    bf->init(size, 0.05, HASH_MURMUR3_X64_64);
-                    RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(
-                            writer, expand_exponent, npage_hint, nbucket, !write_tmp_l1, bf.get()));
-                    (*bf_map)[key_size] = std::move(bf);
-                } else {
-                    RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(
-                            writer, expand_exponent, npage_hint, nbucket, !write_tmp_l1, nullptr));
-                }
+                // if keep_delete == true, flush immutable index with Delete Flag
+                RETURN_IF_ERROR(_shards[shard_offset + i]->flush_to_immutable_index(writer, expand_exponent, npage_hint,
+                                                                                    nbucket, keep_delete));
             }
         }
     }
-    return writer->finish();
+    RETURN_IF_ERROR(writer->finish());
+    return Status::OK();
 }
 
 size_t ShardByLengthMutableIndex::size() {
@@ -2105,12 +2123,221 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
     return Status::OK();
 }
 
+bool ImmutableIndex::_filter(size_t shard_idx, std::vector<KeyInfo>& keys_info, std::vector<KeyInfo>* res) const {
+    // add configure enable_pindex_filter, if there are some bug exists, set it to false
+    if (!config::enable_pindex_filter || _bf_off.empty()) {
+        return false;
+    }
+    if (!_bf_vec.empty() && _bf_vec.size() <= shard_idx) {
+        LOG(ERROR) << "error shard idx:" << shard_idx << ", size:" << _bf_vec.size();
+        return false;
+    }
+
+    if (!_bf_vec.empty() && _bf_vec[shard_idx] != nullptr) {
+        for (size_t i = 0; i < keys_info.size(); i++) {
+            auto key_idx = keys_info[i].first;
+            auto hash = keys_info[i].second;
+            if (_bf_vec[shard_idx]->test_hash(hash)) {
+                res->emplace_back(std::make_pair(key_idx, hash));
+            }
+        }
+        return true;
+    }
+
+    // read bloom filter for specified shard
+    size_t off = _bf_off[shard_idx];
+    size_t len = _bf_off[shard_idx + 1] - off;
+    std::string bf_buff;
+    raw::stl_string_resize_uninitialized(&bf_buff, len);
+    Status st = _file->read_at_fully(off, bf_buff.data(), bf_buff.size());
+    if (!st.ok()) {
+        LOG(WARNING) << "shard_idx: " << shard_idx << "read bloom filter failed, " << st;
+        return false;
+    }
+    std::unique_ptr<BloomFilter> bf;
+    st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
+    if (!st.ok()) {
+        LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter init failed, " << st;
+        return false;
+    }
+    st = bf->init(bf_buff.data(), len, HASH_MURMUR3_X64_64);
+    if (!st.ok()) {
+        LOG(WARNING) << "shard_idx: " << shard_idx << "bloom filter init failed, " << st;
+        return false;
+    }
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        auto key_idx = keys_info[i].first;
+        auto hash = keys_info[i].second;
+        if (bf->test_hash(hash)) {
+            res->emplace_back(std::make_pair(key_idx, hash));
+        }
+    }
+    return true;
+}
+
+Status ImmutableIndex::_split_keys_info_by_page(size_t shard_idx, std::vector<KeyInfo>& keys_info,
+                                                std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const {
+    const auto& shard_info = _shards[shard_idx];
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        auto key_idx = keys_info[i].first;
+        auto hash = keys_info[i].second;
+        auto pageid = IndexHash(hash).page() % shard_info.npage;
+        auto iter = keys_info_by_page.find(pageid);
+        if (iter == keys_info_by_page.end()) {
+            std::vector<KeyInfo> k;
+            k.emplace_back(key_idx, hash);
+            keys_info_by_page[pageid] = std::move(k);
+        } else {
+            iter->second.emplace_back(key_idx, hash);
+        }
+    }
+    return Status::OK();
+}
+
+Status ImmutableIndex::_get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                                    KeysInfo* found_keys_info,
+                                                    std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                                    std::map<size_t, IndexPage>& pages) const {
+    const auto& shard_info = _shards[shard_idx];
+    uint8_t candidate_idxes[kBucketSizeMax];
+    for (auto [_, keys_info] : keys_info_by_page) {
+        for (size_t i = 0; i < keys_info.size(); i++) {
+            IndexHash h(keys_info[i].second);
+            auto pageid = h.page() % shard_info.npage;
+            auto bucketid = h.bucket() % shard_info.nbucket;
+            auto iter = pages.find(pageid);
+            CHECK(iter != pages.end());
+            auto& bucket_info = iter->second.header().buckets[bucketid];
+            uint8_t* bucket_pos;
+            if (pageid == bucket_info.pageid) {
+                bucket_pos = iter->second.pack(bucket_info.packid);
+            } else {
+                auto it = pages.find(bucket_info.pageid);
+                if (it != pages.end()) {
+                    bucket_pos = it->second.pack(bucket_info.packid);
+                } else {
+                    IndexPage page;
+                    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + kPageSize * bucket_info.pageid, page.data,
+                                                         kPageSize));
+                    pages[bucket_info.pageid] = std::move(page);
+                    bucket_pos = pages[bucket_info.pageid].pack(bucket_info.packid);
+                }
+            }
+            auto nele = bucket_info.size;
+            auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+            auto key_idx = keys_info[i].first;
+            const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
+            auto kv_pos = bucket_pos + pad(nele, kPackSize);
+            values[key_idx] = NullIndexValue;
+            for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+                auto idx = candidate_idxes[candidate_idx];
+                auto candidate_kv = kv_pos + (shard_info.key_size + shard_info.value_size) * idx;
+                if (strings::memeq(candidate_kv, fixed_key_probe, shard_info.key_size)) {
+                    values[key_idx] = UNALIGNED_LOAD64(candidate_kv + shard_info.key_size);
+                    found_keys_info->key_infos.emplace_back(key_idx, h.hash);
+                    break;
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                                    KeysInfo* found_keys_info,
+                                                    std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                                    std::map<size_t, IndexPage>& pages) const {
+    const auto& shard_info = _shards[shard_idx];
+    uint8_t candidate_idxes[kBucketSizeMax];
+    for (auto [_, keys_info] : keys_info_by_page) {
+        for (size_t i = 0; i < keys_info.size(); i++) {
+            IndexHash h(keys_info[i].second);
+            auto pageid = h.page() % shard_info.npage;
+            auto bucketid = h.bucket() % shard_info.nbucket;
+            auto iter = pages.find(pageid);
+            CHECK(iter != pages.end());
+            auto& bucket_info = iter->second.header().buckets[bucketid];
+            uint8_t* bucket_pos;
+            if (pageid == bucket_info.pageid) {
+                bucket_pos = iter->second.pack(bucket_info.packid);
+            } else {
+                auto it = pages.find(bucket_info.pageid);
+                if (it != pages.end()) {
+                    bucket_pos = it->second.pack(bucket_info.packid);
+                } else {
+                    IndexPage page;
+                    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + kPageSize * bucket_info.pageid, page.data,
+                                                         kPageSize));
+                    pages[bucket_info.pageid] = std::move(page);
+                    bucket_pos = pages[bucket_info.pageid].pack(bucket_info.packid);
+                }
+            }
+            auto nele = bucket_info.size;
+            auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+            auto key_idx = keys_info[i].first;
+            const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
+            auto offset_pos = bucket_pos + pad(nele, kPackSize);
+            values[key_idx] = NullIndexValue;
+            for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+                auto idx = candidate_idxes[candidate_idx];
+                auto kv_offset = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * idx);
+                auto kv_size = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * (idx + 1)) - kv_offset;
+                auto candidate_kv = bucket_pos + kv_offset;
+                if (keys[key_idx].size == kv_size - shard_info.value_size &&
+                    strings::memeq(candidate_kv, key_probe, kv_size - shard_info.value_size)) {
+                    values[key_idx] = UNALIGNED_LOAD64(candidate_kv + kv_size - shard_info.value_size);
+                    found_keys_info->key_infos.emplace_back(key_idx, h.hash);
+                    break;
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
+                                             KeysInfo* found_keys_info,
+                                             std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const {
+    const auto& shard_info = _shards[shard_idx];
+    std::map<size_t, IndexPage> pages;
+    for (auto [pageid, keys_info] : keys_info_by_page) {
+        IndexPage page;
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + kPageSize * pageid, page.data, kPageSize));
+        pages[pageid] = std::move(page);
+    }
+    if (shard_info.key_size != 0) {
+        return _get_in_fixlen_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, pages);
+    } else {
+        return _get_in_varlen_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, pages);
+    }
+}
+
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                                      IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
     }
+
+    DCHECK(_bf_vec.empty() || _bf_vec.size() > shard_idx);
+    std::vector<KeyInfo> check_keys_info;
+    bool filter = _filter(shard_idx, keys_info, &check_keys_info);
+    if (!filter) {
+        check_keys_info.swap(keys_info);
+    }
+
+    // an optimization for very small data import. In some real time scenario, user only import a very small batch data
+    // once, and we only need to read a little page but not total shard.
+    std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
+    Status st = _split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page);
+    if (!st.ok()) {
+        return st;
+    }
+
+    if (st.ok() && keys_info_by_page.size() == 1) {
+        return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
+    }
+
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
@@ -2118,9 +2345,9 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
-        return _get_in_fixlen_shard(shard_idx, n, keys, keys_info, values, found_keys_info, &shard);
+        return _get_in_fixlen_shard(shard_idx, n, keys, check_keys_info, values, found_keys_info, &shard);
     } else {
-        return _get_in_varlen_shard(shard_idx, n, keys, keys_info, values, found_keys_info, &shard);
+        return _get_in_varlen_shard(shard_idx, n, keys, check_keys_info, values, found_keys_info, &shard);
     }
 }
 
@@ -2201,11 +2428,101 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
 static void split_keys_info_by_shard(std::vector<KeyInfo>& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
     uint32_t shard_bits = log2(keys_info_by_shards.size());
     for (const auto& key_info : keys_info) {
-        auto& key_idx = key_info.first;
-        auto& hash = key_info.second;
+        auto key_idx = key_info.first;
+        auto hash = key_info.second;
         size_t shard = IndexHash(hash).shard(shard_bits);
         keys_info_by_shards[shard].key_infos.emplace_back(key_idx, hash);
     }
+}
+
+bool ImmutableIndex::_need_bloom_filter(size_t idx_begin, size_t idx_end,
+                                        std::vector<KeysInfo>& keys_info_by_shard) const {
+    if (_bf_off.empty()) {
+        return false;
+    }
+
+    if (!config::enable_pindex_filter || !StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+        return false;
+    }
+
+    DCHECK(idx_end < _bf_off.size());
+    size_t bf_bytes = _bf_off[idx_end] - _bf_off[idx_begin];
+    size_t read_shard_bytes = 0;
+    for (size_t i = 0; i < keys_info_by_shard.size(); i++) {
+        if (!keys_info_by_shard[i].key_infos.empty()) {
+            read_shard_bytes += _shards[i].bytes;
+        }
+    }
+    return bf_bytes * config::max_bf_read_bytes_percent <= read_shard_bytes;
+}
+
+// There are several conditions
+// 1. enable_pindex_filter is false, bloom filter is disable
+// 2. _bf_off is empty which means there are no bloom filter exist in index file, this could be happened when we upgrade from
+//    elder version
+// 3. bloom filter already kept in memory
+// 4. bloom filter is not in memory and memory usage is too high, skip the bloom filter to reduce memory usage
+// 5. bloom filter is not in memory and memory usage is not high, we will read bloom filter from index file
+Status ImmutableIndex::_prepare_bloom_filter(size_t idx_begin, size_t idx_end) const {
+    if (!config::enable_pindex_filter || _bf_off.empty()) {
+        return Status::OK();
+    }
+    if (_bf_vec.empty()) {
+        _bf_vec.resize(_shards.size());
+    }
+    DCHECK(idx_begin < idx_end);
+    DCHECK(_bf_vec.size() >= _shards.size() && _bf_vec.size() >= idx_end);
+    if (_bf_vec.size() < _shards.size()) {
+        return Status::OK();
+    }
+    // alread loaded in memory
+    if (_bf_vec[idx_begin] != nullptr) {
+        return Status::OK();
+    }
+    DCHECK(_bf_off.size() > idx_end);
+    size_t batch_bytes = kBatchBloomFilterReadSize;
+    size_t read_bytes = 0;
+    size_t start_idx = idx_begin;
+    size_t num = 0;
+    for (size_t i = idx_begin; i < idx_end; i++) {
+        if (read_bytes >= batch_bytes) {
+            size_t offset = _bf_off[start_idx];
+            size_t bytes = _bf_off[start_idx + num] - offset;
+            std::string buff;
+            raw::stl_string_resize_uninitialized(&buff, bytes);
+            RETURN_IF_ERROR(_file->read_at_fully(offset, buff.data(), buff.size()));
+            for (size_t i = 0; i < num; i++) {
+                size_t buff_off = _bf_off[start_idx + i] - _bf_off[start_idx];
+                size_t buff_size = _bf_off[start_idx + i + 1] - _bf_off[start_idx + i];
+                std::unique_ptr<BloomFilter> bf;
+                RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+                RETURN_IF_ERROR(bf->init(buff.data() + buff_off, buff_size, HASH_MURMUR3_X64_64));
+                _bf_vec[start_idx + i] = std::move(bf);
+            }
+            start_idx = i;
+            read_bytes = _bf_off[i + 1] - _bf_off[i];
+            num = 1;
+        } else {
+            num++;
+            read_bytes += _bf_off[i + 1] - _bf_off[i];
+        }
+    }
+    if (start_idx < idx_end) {
+        size_t offset = _bf_off[start_idx];
+        size_t bytes = _bf_off[start_idx + num] - offset;
+        std::string buff;
+        raw::stl_string_resize_uninitialized(&buff, bytes);
+        RETURN_IF_ERROR(_file->read_at_fully(offset, buff.data(), buff.size()));
+        for (size_t i = 0; i < num; i++) {
+            size_t buff_off = _bf_off[start_idx + i] - _bf_off[start_idx];
+            size_t buff_size = _bf_off[start_idx + i + 1] - _bf_off[start_idx + i];
+            std::unique_ptr<BloomFilter> bf;
+            RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+            RETURN_IF_ERROR(bf->init(buff.data() + buff_off, buff_size, HASH_MURMUR3_X64_64));
+            _bf_vec[start_idx + i] = std::move(bf);
+        }
+    }
+    return Status::OK();
 }
 
 Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values,
@@ -2215,30 +2532,15 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         return Status::OK();
     }
 
-    std::vector<KeyInfo> check_keys_info;
-    bool filter = false;
-    std::map<size_t, std::unique_ptr<BloomFilter>>::iterator bf_iter = _bf_map.find(key_size);
-    if (config::enable_parallel_get_and_bf && bf_iter != _bf_map.end()) {
-        for (size_t i = 0; i < keys_info.size(); i++) {
-            auto key_idx = keys_info.key_infos[i].first;
-            auto hash = keys_info.key_infos[i].second;
-            if (bf_iter->second->test_hash(hash)) {
-                check_keys_info.emplace_back(std::make_pair(key_idx, hash));
-            }
-        }
-        filter = true;
-    }
-
     const auto [shard_off, nshard] = iter->second;
     if (nshard > 1) {
         std::vector<KeysInfo> keys_info_by_shard(nshard);
-        if (filter) {
-            split_keys_info_by_shard(check_keys_info, keys_info_by_shard);
-        } else {
-            split_keys_info_by_shard(keys_info.key_infos, keys_info_by_shard);
-        }
         MonotonicStopWatch watch;
         watch.start();
+        split_keys_info_by_shard(keys_info.key_infos, keys_info_by_shard);
+        if (_need_bloom_filter(shard_off, shard_off + nshard, keys_info_by_shard)) {
+            RETURN_IF_ERROR(_prepare_bloom_filter(shard_off, shard_off + nshard));
+        }
         for (size_t i = 0; i < nshard; i++) {
             RETURN_IF_ERROR(_get_in_shard(shard_off + i, n, keys, keys_info_by_shard[i].key_infos, values,
                                           found_keys_info, stat));
@@ -2250,11 +2552,12 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
     } else {
         MonotonicStopWatch watch;
         watch.start();
-        if (filter) {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, check_keys_info, values, found_keys_info, stat));
-        } else {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, keys_info.key_infos, values, found_keys_info, stat));
+        KeysInfo infos;
+        infos.key_infos.assign(keys_info.key_infos.begin(), keys_info.key_infos.end());
+        if (config::enable_pindex_filter && StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
+            RETURN_IF_ERROR(_prepare_bloom_filter(shard_off, shard_off + nshard));
         }
+        RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, infos.key_infos, values, found_keys_info, stat));
         if (stat != nullptr) {
             stat->get_in_shard_cnt++;
             stat->get_in_shard_cost += watch.elapsed_time();
@@ -2282,7 +2585,8 @@ Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_s
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file) {
+StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file,
+                                                               bool load_bf_data) {
     ASSIGN_OR_RETURN(auto file_size, file->get_size());
     if (file_size < 12) {
         return Status::Corruption(
@@ -2355,7 +2659,62 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
             return Status::InternalError("load failed because of insert failed");
         }
     }
+
+    std::vector<std::unique_ptr<BloomFilter>> bf_vec(nshard);
+    size_t nshard_bf = meta.shard_bf_off_size();
+    DCHECK(nshard_bf == 0 || nshard_bf == nshard + 1);
+    std::vector<size_t> bf_off;
+    for (size_t i = 0; i < nshard_bf; i++) {
+        bf_off.emplace_back(meta.shard_bf_off(i));
+    }
+
+    if (load_bf_data && nshard_bf != 0) {
+        size_t batch_bytes = kBatchBloomFilterReadSize;
+        size_t read_bytes = 0;
+        size_t start_idx = 0;
+        size_t num = 0;
+        for (size_t i = 0; i < nshard; i++) {
+            if (read_bytes >= batch_bytes) {
+                size_t offset = bf_off[start_idx];
+                size_t bytes = bf_off[start_idx + num] - offset;
+                std::string buff;
+                raw::stl_string_resize_uninitialized(&buff, bytes);
+                RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+                for (size_t i = 0; i < num; i++) {
+                    size_t buff_off = bf_off[start_idx + i] - bf_off[start_idx];
+                    size_t buff_size = bf_off[start_idx + i + 1] - bf_off[start_idx + i];
+                    std::unique_ptr<BloomFilter> bf;
+                    RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+                    RETURN_IF_ERROR(bf->init(buff.data() + buff_off, buff_size, HASH_MURMUR3_X64_64));
+                    bf_vec[start_idx + i] = std::move(bf);
+                }
+                start_idx = i;
+                read_bytes = bf_off[i + 1] - bf_off[i];
+                num = 1;
+            } else {
+                num++;
+                read_bytes += bf_off[i + 1] - bf_off[i];
+            }
+        }
+        if (start_idx < nshard) {
+            size_t offset = bf_off[start_idx];
+            size_t bytes = bf_off[start_idx + num] - offset;
+            std::string buff;
+            raw::stl_string_resize_uninitialized(&buff, bytes);
+            RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+            for (size_t i = 0; i < num; i++) {
+                size_t buff_off = bf_off[start_idx + i] - bf_off[start_idx];
+                size_t buff_size = bf_off[start_idx + i + 1] - bf_off[start_idx + i];
+                std::unique_ptr<BloomFilter> bf;
+                RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+                RETURN_IF_ERROR(bf->init(buff.data() + buff_off, buff_size, HASH_MURMUR3_X64_64));
+                bf_vec[start_idx + i] = std::move(bf);
+            }
+        }
+        idx->_bf_vec.swap(bf_vec);
+    }
     idx->_file.swap(file);
+    idx->_bf_off.swap(bf_off);
     return std::move(idx);
 }
 
@@ -2365,6 +2724,11 @@ PersistentIndex::~PersistentIndex() {
     if (!_l1_vec.empty()) {
         for (const auto& l1 : _l1_vec) {
             l1->clear();
+        }
+    }
+    if (!_l2_vec.empty()) {
+        for (const auto& l2 : _l2_vec) {
+            l2->clear();
         }
     }
 }
@@ -2401,7 +2765,8 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     const IndexSnapshotMetaPB& snapshot_meta = l0_meta.snapshot();
     EditVersion l0_version = snapshot_meta.version();
-    RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version));
+    RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version,
+                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     return Status::OK();
 }
 
@@ -2416,7 +2781,8 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             // so we use index file size as the _usage and the _usage will be adjusted in subsequent compaction.
             if (index_meta.has_l1_version()) {
                 EditVersion version = index_meta.l1_version();
-                auto l1_file_path = strings::Substitute("$0/index.l1.$1.$2", _path, version.major(), version.minor());
+                auto l1_file_path =
+                        strings::Substitute("$0/index.l1.$1.$2", _path, version.major_number(), version.minor_number());
                 auto l1_st = _fs->get_file_size(l1_file_path);
                 if (!l1_st.ok()) {
                     return l1_st.status();
@@ -2451,12 +2817,14 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
         _l1_merged_num.clear();
         _has_l1 = false;
     }
-    std::unique_ptr<RandomAccessFile> l1_rfile;
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
-        auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
-        ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_block_path));
-        auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
+        auto l1_block_path =
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+        ASSIGN_OR_RETURN(auto l1_rfile, _fs->new_random_access_file(l1_block_path));
+        // TODO
+        // we can reduce load bf data diskio after flush or compaction
+        auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
         if (!l1_st.ok()) {
             return l1_st.status();
         }
@@ -2465,6 +2833,27 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             _l1_vec.emplace_back(std::move(l1_st).value());
             _l1_merged_num.emplace_back(-1);
             _has_l1 = true;
+        }
+    }
+    {
+        std::unique_lock wrlock(_lock);
+        _l2_versions.clear();
+        _l2_version_merged.clear();
+        _l2_vec.clear();
+    }
+    if (index_meta.l2_versions_size() > 0) {
+        for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+            auto l2_block_path = strings::Substitute(
+                    "$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                    index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
+            ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+            ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
+            {
+                std::unique_lock wrlock(_lock);
+                _l2_versions.emplace_back(index_meta.l2_versions(i));
+                _l2_version_merged.push_back(index_meta.l2_version_merged(i));
+                _l2_vec.emplace_back(std::move(l2_index));
+            }
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
@@ -2485,20 +2874,11 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             total_size += l0_kv_pairs_size;
             total_usage += l0_kv_pairs_usage;
             if (_has_l1) {
-                auto iter = _l1_vec[0]->_shard_info_by_length.find(key_size);
-                if (iter != _l1_vec[0]->_shard_info_by_length.end()) {
-                    auto [l1_shard_offset, l1_shard_size] = iter->second;
-                    const auto l1_kv_pairs_size =
-                            std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                            0UL, [](size_t s, const auto& e) { return s + e.size; });
-                    const auto l1_kv_pairs_usage =
-                            std::accumulate(std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset),
-                                            std::next(_l1_vec[0]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                            0UL, [](size_t s, const auto& e) { return s + e.data_size; });
-                    total_size += l1_kv_pairs_size;
-                    total_usage += l1_kv_pairs_usage;
-                }
+                _get_stat_from_immutable_index(_l1_vec[0].get(), key_size, total_size, total_usage);
+            }
+            // update size and usage by l2
+            for (int i = 0; i < _l2_vec.size(); i++) {
+                _get_stat_from_immutable_index(_l2_vec[i].get(), key_size, total_size, total_usage);
             }
             if (auto [it, inserted] = _usage_and_size_by_key_length.insert({key_size, {total_usage, total_size}});
                 !inserted) {
@@ -2509,6 +2889,24 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     }
 
     return Status::OK();
+}
+
+void PersistentIndex::_get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
+                                                     size_t& total_usage) {
+    auto iter = immu_index->_shard_info_by_length.find(key_size);
+    if (iter != immu_index->_shard_info_by_length.end()) {
+        auto [l1_shard_offset, l1_shard_size] = iter->second;
+        const auto l1_kv_pairs_size =
+                std::accumulate(std::next(immu_index->_shards.begin(), l1_shard_offset),
+                                std::next(immu_index->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
+                                [](size_t s, const auto& e) { return s + e.size; });
+        const auto l1_kv_pairs_usage =
+                std::accumulate(std::next(immu_index->_shards.begin(), l1_shard_offset),
+                                std::next(immu_index->_shards.begin(), l1_shard_offset + l1_shard_size), 0UL,
+                                [](size_t s, const auto& e) { return s + e.data_size; });
+        total_size += l1_kv_pairs_size;
+        total_usage += l1_kv_pairs_usage;
+    }
 }
 
 Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta) {
@@ -2527,7 +2925,8 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
+    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
+                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     _dump_snapshot = false;
     _flushed = false;
     return status;
@@ -2608,6 +3007,20 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
     return Status::OK();
 }
 
+bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_meta) {
+    if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
+        index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
+        // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
+        // PERSISTENT_INDEX_VERSION_2.
+        // We need to rebuild persistent index because the meta structure is changed
+        return true;
+    } else if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
+        // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
+        return true;
+    }
+    return false;
+}
+
 Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
@@ -2640,10 +3053,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
-            // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
-            // PERSISTENT_INDEX_VERSION_2.
-            // We need to rebuild persistent index because the meta structure is changed
-            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2) {
+            if (_need_rebuild_index(index_meta)) {
                 LOG(WARNING) << "different format version, we need to rebuild persistent index";
                 status = Status::InternalError("different format version");
             } else {
@@ -2663,27 +3073,37 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                 if (index_meta.has_l0_meta()) {
                     EditVersion l0_version = index_meta.l0_meta().snapshot().version();
                     std::string l0_file_name =
-                            strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l0_file_name);
                     LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
                 }
                 if (index_meta.has_l1_version()) {
                     EditVersion l1_version = index_meta.l1_version();
                     std::string l1_file_name =
-                            strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
                     Status st = FileSystem::Default()->delete_file(l1_file_name);
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+                if (index_meta.l2_versions_size() > 0) {
+                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+                        EditVersion l2_version = index_meta.l2_versions(i);
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        Status st = FileSystem::Default()->delete_file(l2_file_name);
+                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                    }
                 }
             }
         }
     }
 
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
-    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+    auto tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
     // Init PersistentIndex
@@ -2727,6 +3147,13 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
             return Status::InternalError(msg);
         }
     }
+    // clear l2
+    {
+        std::unique_lock wrlock(_lock);
+        _l2_vec.clear();
+        _l2_versions.clear();
+        _l2_version_merged.clear();
+    }
 
     // Init PersistentIndexMetaPB
     //   1. reset |version| |key_size|
@@ -2735,8 +3162,10 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
@@ -2809,48 +3238,98 @@ Status PersistentIndex::abort() {
     return Status::NotSupported("TODO");
 }
 
+uint64_t PersistentIndex::_l1_l2_file_size() const {
+    uint64_t total_l1_l2_file_size = 0;
+    if (_has_l1) {
+        total_l1_l2_file_size += _l1_vec[0]->file_size();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        total_l1_l2_file_size += _l2_vec[i]->file_size();
+    }
+    return total_l1_l2_file_size;
+}
+
+bool PersistentIndex::_enable_minor_compaction() {
+    if (config::enable_pindex_minor_compaction) {
+        if (_l2_versions.size() < config::max_allow_pindex_l2_num) {
+            return true;
+        } else {
+            LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
+                         << " , current l2 cnt: " << _l2_versions.size();
+        }
+    }
+    return false;
+}
+
 // There are four cases as below in commit
 //   1. _flush_l0
-//   2. _merge_compaction
+//   2. _merge_compaction or _minor_compaction
 //   3. _dump_snapshot
 //   4. append_wal
 // both case1 and case2 will create a new l1 file and a new empty l0 file
 // case3 will write a new snapshot l0
 // case4 will append wals into l0 file
-Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
+Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) {
+    MonotonicStopWatch watch;
+    watch.start();
     DCHECK_EQ(index_meta->key_size(), _key_size);
     // check if _l0 need be flush, there are two conditions:
     //   1. _l1 is not exist, _flush_l0 and build _l1
     //   2. _l1 is exist, merge _l0 and _l1
     // rebuild _l0 and _l1
     // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
-    const auto l0_mem_size = _l0->memory_usage();
-    uint64_t l1_file_size = _has_l1 ? _l1_vec[0]->file_size() : 0;
+    uint64_t l1_l2_file_size = _l1_l2_file_size();
+    bool do_minor_compaction = false;
     // if l1 is not empty,
     if (_flushed) {
-        RETURN_IF_ERROR(_merge_compaction());
+        if (_enable_minor_compaction()) {
+            RETURN_IF_ERROR(_minor_compaction(index_meta));
+            do_minor_compaction = true;
+        } else {
+            RETURN_IF_ERROR(_merge_compaction());
+        }
+        if (stat != nullptr) {
+            stat->compaction_cost += watch.elapsed_time();
+            watch.reset();
+        }
     } else {
-        if (l1_file_size != 0) {
+        if (l1_l2_file_size != 0) {
             // and l0 memory usage is large enough,
-            if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+            if (_l0_is_full()) {
                 // do l0 l1 merge compaction
                 _flushed = true;
-                RETURN_IF_ERROR(_merge_compaction());
+                if (_enable_minor_compaction()) {
+                    RETURN_IF_ERROR(_minor_compaction(index_meta));
+                    do_minor_compaction = true;
+                } else {
+                    RETURN_IF_ERROR(_merge_compaction());
+                }
+                if (stat != nullptr) {
+                    stat->compaction_cost += watch.elapsed_time();
+                    watch.reset();
+                }
             }
             // if l1 is empty, and l0 memory usage is large enough
-        } else if (l0_mem_size > config::l0_snapshot_size) {
+        } else if (_l0_is_full()) {
             // do flush l0
             _flushed = true;
             RETURN_IF_ERROR(_flush_l0());
+            if (stat != nullptr) {
+                stat->flush_or_wal_cost += watch.elapsed_time();
+                watch.reset();
+            }
         }
     }
     _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
     // for case1 and case2
-    if (_flushed) {
+    if (do_minor_compaction) {
+        // clear _l0 and reload l1 and l2s
+        RETURN_IF_ERROR(_reload(*index_meta));
+    } else if (_flushed) {
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _version.to_pb(index_meta->mutable_version());
         _version.to_pb(index_meta->mutable_l1_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -2860,36 +3339,49 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     } else if (_dump_snapshot) {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
+        if (index_meta->l2_versions_size() < _l2_versions.size()) {
+            // major compaction happen, reload
+            RETURN_IF_ERROR(_reload(*index_meta));
+        }
     } else {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
-        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
+        if (index_meta->l2_versions_size() < _l2_versions.size()) {
+            // major compaction happen, reload
+            RETURN_IF_ERROR(_reload(*index_meta));
+        }
+    }
+    if (stat != nullptr) {
+        stat->reload_meta_cost += watch.elapsed_time();
     }
     return Status::OK();
 }
 
 Status PersistentIndex::on_commited() {
     if (_flushed || _dump_snapshot) {
-        RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
+        RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
+                                                   _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
     }
     RETURN_IF_ERROR(_delete_tmp_index_file());
     _dump_snapshot = false;
     _flushed = false;
     _need_bloom_filter = false;
+    _calc_write_amp_score();
 
     return Status::OK();
 }
 
 Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                                   std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat) {
-    if (_l1_vec.empty()) {
+    if (_l1_vec.empty() && _l2_vec.empty()) {
         return Status::OK();
     }
     for (auto& [_, keys_info] : keys_info_by_key_size) {
@@ -2910,45 +3402,61 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
                 keys_info.set_difference(found_keys_info);
             }
         }
+        for (int i = _l2_vec.size(); i > 0; i--) {
+            if (keys_info.size() == 0) {
+                break;
+            }
+            KeysInfo found_keys_info;
+            // get data from l2
+            RETURN_IF_ERROR(_l2_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size, stat));
+            if (found_keys_info.size() != 0) {
+                std::sort(found_keys_info.key_infos.begin(), found_keys_info.key_infos.end());
+                // modify keys_info
+                keys_info.set_difference(found_keys_info);
+            }
+        }
     }
     return Status::OK();
 }
 
 class GetFromImmutableIndexTask : public Runnable {
 public:
-    GetFromImmutableIndexTask(size_t num, size_t idx, const Slice* keys, IndexValue* values,
-                              std::map<size_t, KeysInfo>* keys_info_by_key_size, PersistentIndex* index)
+    GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
+                              std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
+                              PersistentIndex* index)
             : _num(num),
-              _idx(idx),
+              _immu_index(immu_index),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
+              _found_keys_info(found_keys_info),
               _index(index) {}
 
     void run() override {
-        _index->get_from_one_immutable_index(_num, _keys, _values, _keys_info_by_key_size, &_found_keys_info, _idx);
+        _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
+                                             _found_keys_info);
     }
 
 private:
     size_t _num;
-    size_t _idx;
+    ImmutableIndex* _immu_index;
     const Slice* _keys;
     IndexValue* _values;
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
-    KeysInfo _found_keys_info;
+    KeysInfo* _found_keys_info;
     PersistentIndex* _index;
 };
 
-Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                                     std::map<size_t, KeysInfo>* _keys_info_by_key_size,
-                                                     KeysInfo* found_keys_info, size_t idx) {
-    DCHECK(_l1_vec.size() > idx);
+Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
+                                                     IndexValue* values,
+                                                     std::map<size_t, KeysInfo>* keys_info_by_key_size,
+                                                     KeysInfo* found_keys_info) {
     Status st;
-    for (auto& [key_size, keys_info] : (*_keys_info_by_key_size)) {
-        st = _l1_vec[idx]->get(n, keys, keys_info, values, found_keys_info, key_size, nullptr);
+    for (auto& [key_size, keys_info] : (*keys_info_by_key_size)) {
+        st = immu_index->get(n, keys, keys_info, values, found_keys_info, key_size, nullptr);
         if (!st.ok()) {
-            std::string msg = strings::Substitute("get from one immutableindex failed, l1 idx: $0, status: $1", idx,
-                                                  st.to_string());
+            std::string msg = strings::Substitute("get from one immutableindex failed, file: $0, status: $1",
+                                                  immu_index->filename(), st.to_string());
             LOG(ERROR) << msg;
             _set_error(true, msg);
             break;
@@ -2956,7 +3464,6 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
     }
     std::unique_lock<std::mutex> ul(_get_lock);
     _running_get_task--;
-    _found_keys_info[idx].key_infos.swap(found_keys_info->key_infos);
     if (_running_get_task == 0) {
         _get_task_finished.notify_all();
     }
@@ -2965,18 +3472,21 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
 
 Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice* keys, IndexValue* values,
                                                            std::map<size_t, KeysInfo>& keys_info_by_key_size) {
-    if (_l1_vec.empty()) {
+    if (_l1_vec.empty() && _l2_vec.empty()) {
         return Status::OK();
     }
 
     std::unique_lock<std::mutex> ul(_get_lock);
     std::map<size_t, KeysInfo>::iterator iter;
     std::string error_msg;
-    std::vector<std::vector<uint64_t>> get_values(_l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
-    _found_keys_info.resize(_l1_vec.size());
-    for (size_t i = 0; i < _l1_vec.size(); i++) {
-        GetFromImmutableIndexTask task(n, i, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                       &keys_info_by_key_size, this);
+    std::vector<std::vector<uint64_t>> get_values(_l2_vec.size() + _l1_vec.size(),
+                                                  std::vector<uint64_t>(n, NullIndexValue));
+    // store keys_info from old to new
+    _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
+    for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
+        ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
+        GetFromImmutableIndexTask task(n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
+                                       &keys_info_by_key_size, &_found_keys_info[i], this);
         std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
         auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
         if (!st.ok()) {
@@ -2995,7 +3505,7 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     }
 
     // wait all task finished
-    for (int i = 0; i < _l1_vec.size(); i++) {
+    for (int i = 0; i < _found_keys_info.size(); i++) {
         for (int j = 0; j < _found_keys_info[i].size(); j++) {
             auto key_idx = _found_keys_info[i].key_infos[j].first;
             values[key_idx] = get_values[i][key_idx];
@@ -3004,6 +3514,32 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     _found_keys_info.clear();
 
     return Status::OK();
+}
+
+void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                                   std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat) {
+    std::for_each(
+            l2_vec.begin(), l2_vec.end(), [&usage_and_size_stat](const std::unique_ptr<ImmutableIndex>& immu_index) {
+                for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
+                    auto [l2_shard_offset, l2_shard_size] = shard_info;
+                    const auto size =
+                            std::accumulate(std::next(immu_index->_shards.begin(), l2_shard_offset),
+                                            std::next(immu_index->_shards.begin(), l2_shard_offset + l2_shard_size), 0L,
+                                            [](size_t s, const auto& e) { return s + e.size; });
+                    const auto usage =
+                            std::accumulate(std::next(immu_index->_shards.begin(), l2_shard_offset),
+                                            std::next(immu_index->_shards.begin(), l2_shard_offset + l2_shard_size), 0L,
+                                            [](size_t s, const auto& e) { return s + e.data_size; });
+
+                    auto iter = usage_and_size_stat.find(key_size);
+                    if (iter == usage_and_size_stat.end()) {
+                        usage_and_size_stat.insert({key_size, {usage, size}});
+                    } else {
+                        iter->second.first += usage;
+                        iter->second.second += size;
+                    }
+                }
+            });
 }
 
 Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
@@ -3100,7 +3636,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
         RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
     }
     if (stat != nullptr) {
-        stat->l1_read_cost += watch.elapsed_time();
+        stat->l1_l2_read_cost += watch.elapsed_time();
         watch.reset();
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
@@ -3124,19 +3660,24 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
-    std::set<size_t> check_l1_key_sizes;
-    RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_key_sizes));
+    std::set<size_t> check_l1_l2_key_sizes;
+    RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_l2_key_sizes));
     if (!_l1_vec.empty()) {
         int end_idx = _has_l1 ? 1 : 0;
         for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
-            for (const auto check_l1_key_size : check_l1_key_sizes) {
-                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys, check_l1_key_size));
+            for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
+                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
             }
         }
     }
     if (_has_l1 && check_l1) {
-        for (const auto check_l1_key_size : check_l1_key_sizes) {
-            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_key_size));
+        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
+            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_l2_key_size));
+        }
+    }
+    for (int i = _l2_vec.size() - 1; i >= 0; i--) {
+        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
+            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
         }
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
@@ -3227,28 +3768,23 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
 Status PersistentIndex::flush_advance() {
     // flush l0 into _l1_vec
     int idx = _l1_vec.size();
-    std::string l1_tmp_file =
-            strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), idx);
-    std::map<size_t, std::unique_ptr<BloomFilter>> bf_map;
-    if (_need_bloom_filter) {
-        RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, &bf_map));
-    } else {
-        RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, nullptr));
-    }
+    std::string l1_tmp_file = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                  _version.minor_number(), idx);
+    RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
 
-    LOG(INFO) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+    VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
-    auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
+    auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
     if (!l1_st.ok()) {
+        LOG(ERROR) << "load tmp l1 failed, file_path: " << l1_tmp_file << ", status:" << l1_st.status();
         return l1_st.status();
     }
     {
         std::unique_lock wrlock(_lock);
         _l1_vec.emplace_back(std::move(l1_st).value());
         _l1_merged_num.emplace_back(1);
-        _l1_vec.back()->_bf_map.swap(bf_map);
     }
 
     // clear l0
@@ -3258,7 +3794,8 @@ Status PersistentIndex::flush_advance() {
 }
 
 Status PersistentIndex::_flush_l0() {
-    return _l0->flush_to_immutable_index(_path, _version, false, nullptr);
+    // when l2 exist, must flush l0 with Delete Flag
+    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty());
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
@@ -3284,12 +3821,16 @@ bool PersistentIndex::_can_dump_directly() {
     return _dump_bound() <= config::l0_snapshot_size;
 }
 
-bool PersistentIndex::_need_flush_advance() {
+bool PersistentIndex::_l0_is_full() {
     const auto l0_mem_size = _l0->memory_usage();
-    uint64_t l1_file_size = _has_l1 ? _l1_vec[0]->file_size() : 0;
-    bool flush_advance = (l1_file_size != 0) ? l0_mem_size * config::l0_l1_merge_ratio > l1_file_size
-                                             : l0_mem_size > config::l0_max_mem_usage;
-    return flush_advance;
+    auto manager = StorageEngine::instance()->update_manager();
+    return l0_mem_size >= config::l0_max_mem_usage ||
+           (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+            l0_mem_size >= config::l0_min_mem_usage);
+}
+
+bool PersistentIndex::_need_flush_advance() {
+    return _l0_is_full();
 }
 
 bool PersistentIndex::_need_merge_advance() {
@@ -3309,11 +3850,23 @@ bool PersistentIndex::_need_merge_advance() {
     return merged_candidate_num >= config::max_tmp_l1_num;
 }
 
-Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version) {
-    std::string l0_file_name = strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
-    std::string l1_file_name = strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+static StatusOr<EditVersion> parse_l2_filename(const std::string& filename) {
+    int64_t major, minor;
+    if (sscanf(filename.c_str(), "index.l2.%" PRId64 ".%" PRId64, &major, &minor) != 2) {
+        return Status::InvalidArgument(fmt::format("invalid l2 filename: {}", filename));
+    }
+    return EditVersion(major, minor);
+}
+
+Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
+                                                   const EditVersion& min_l2_version) {
+    std::string l0_file_name =
+            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+    std::string l1_file_name =
+            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
     std::string l0_prefix("index.l0");
     std::string l1_prefix("index.l1");
+    std::string l2_prefix("index.l2");
     std::string dir = _path;
     auto cb = [&](std::string_view name) -> bool {
         std::string full(name);
@@ -3327,9 +3880,37 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                 return false;
             }
         }
+        if (full.compare(0, l2_prefix.length(), l2_prefix) == 0) {
+            auto version_st = parse_l2_filename(full);
+            if (!version_st.ok()) {
+                LOG(ERROR) << "Parse l2 file error: " << version_st.status();
+            } else {
+                if ((*version_st) < min_l2_version) {
+                    // delete expired l2 file
+                    std::string path = dir + "/" + full;
+                    VLOG(1) << "delete expired index file " << path;
+                    Status st = FileSystem::Default()->delete_file(path);
+                    if (!st.ok()) {
+                        LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
+                                     << st.to_string();
+                        return false;
+                    }
+                }
+            }
+        }
         return true;
     };
     return FileSystem::Default()->iterate_dir(_path, cb);
+}
+
+static bool skip_major_compaction_tmp_index_file(const std::string& full) {
+    std::string suffix = ".merged.tmp";
+    if (full.length() >= suffix.length() &&
+        full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 Status PersistentIndex::_delete_tmp_index_file() {
@@ -3338,7 +3919,8 @@ Status PersistentIndex::_delete_tmp_index_file() {
         std::string suffix = ".tmp";
         std::string full(name);
         if (full.length() >= suffix.length() &&
-            full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
+            full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
+            !skip_major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
@@ -3620,8 +4202,7 @@ static Status merge_shard_kvs_with_delete(size_t key_size, std::vector<KVRef>& l
 
 Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                                    std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
-                                                   bool keep_delete,
-                                                   std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map) {
+                                                   bool keep_delete) {
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         size_t total_usage = 0;
         size_t total_size = 0;
@@ -3640,7 +4221,7 @@ Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer,
         const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
                                                       0UL, [](size_t s, const auto& e) { return s + e->size(); });
-        auto l0_kvs_by_shard = _l0->_shards[l0_shard_offset]->get_kv_refs_by_shard(nshard, l0_kv_pairs_size, false);
+        auto l0_kvs_by_shard = _l0->_shards[l0_shard_offset]->get_kv_refs_by_shard(nshard, l0_kv_pairs_size, true);
 
         int merge_l1_num = l1_end_idx - l1_start_idx;
         std::vector<std::vector<std::vector<KVRef>>> l1_kvs_by_shard;
@@ -3658,15 +4239,6 @@ Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer,
         }
         std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards(index_num);
         uint32_t shard_bits = log2(nshard);
-        std::unique_ptr<BloomFilter> bf;
-        if (bf_map != nullptr) {
-            Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &bf);
-            if (!st.ok()) {
-                LOG(WARNING) << "failed to create bloom filter, status: " << st;
-                return st;
-            }
-            bf->init(total_size, 0.05, HASH_MURMUR3_X64_64);
-        }
         // shard iteration example:
         //
         // nshard_l1(4) < nshard(8)
@@ -3720,21 +4292,91 @@ Status PersistentIndex::_merge_compaction_internal(ImmutableIndexWriter* writer,
                 RETURN_IF_ERROR(
                         merge_shard_kvs(key_size, l0_kvs_by_shard[shard_idx], l1_kvs, estimate_size_per_shard, kvs));
             }
-            if (bf.get() != nullptr) {
-                for (const auto& kv : kvs) {
-                    bf->add_hash(kv.hash);
-                }
-            }
             // write shard
             RETURN_IF_ERROR(writer->write_shard(key_size, npage_hint, nbucket, kvs));
             // clear shard
             l0_kvs_by_shard[shard_idx].clear();
             l0_kvs_by_shard[shard_idx].shrink_to_fit();
         }
-        if (bf_map != nullptr) {
-            (*bf_map)[key_size] = std::move(bf);
-        }
     }
+    return Status::OK();
+}
+
+size_t PersistentIndex::_get_tmp_l1_count() {
+    return _has_l1 ? _l1_vec.size() - 1 : _l1_vec.size();
+}
+
+// There are a few steps in minor compaction:
+// 1. flush l0 to l1:
+//    a. if there is only one tmp-l1 file, move this tmp-l1 to l1 file.
+//    b. if there are > 2 tmp-l1 file, then merge l0 and tmp-l1 files to new l1 file.
+//    c. if there is only one l1 file, flush l0 to new l1 file.
+//    d. if there is not l1 file exists, flush l0 to l1 file.
+// 2. move old l1 to l2. only if old l1 exist
+// 3. modify PersistentIndex meta
+Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
+    // 1. flush l0 to l1
+    const std::string new_l1_filename =
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
+    const size_t tmp_l1_cnt = _get_tmp_l1_count();
+    // maybe need to dump snapshot in 1.a
+    bool need_snapshot = false;
+    if (tmp_l1_cnt == 1) {
+        // step 1.a
+        // move tmp l1 to l1
+        std::string tmp_l1_filename = _l1_vec[_has_l1 ? 1 : 0]->filename();
+        RETURN_IF_ERROR(FileSystem::Default()->link_file(tmp_l1_filename, new_l1_filename));
+        if (_l0->size() > 0) {
+            // check if need to dump snapshot
+            need_snapshot = true;
+        }
+        LOG(INFO) << "PersistentIndex minor compaction, link from tmp-l1: " << tmp_l1_filename
+                  << " to l1: " << new_l1_filename;
+    } else if (tmp_l1_cnt > 1) {
+        // step 1.b
+        auto writer = std::make_unique<ImmutableIndexWriter>();
+        RETURN_IF_ERROR(writer->init(new_l1_filename, _version, true));
+        // followe this rules:
+        // 1, remove delete key when l2 not exist
+        // 2. skip merge l1, only merge tmp-l1 and l0
+        RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
+                                                   _usage_and_size_by_key_length, !_l2_vec.empty()));
+        RETURN_IF_ERROR(writer->finish());
+        LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
+                  << ", output: " << new_l1_filename;
+    } else if (_l1_vec.size() == 1) {
+        // step 1.c
+        RETURN_IF_ERROR(_flush_l0());
+        DCHECK(_has_l1);
+        LOG(INFO) << "PersistentIndex minor compaction, flush l0, old l1: " << _l1_version
+                  << ", output: " << new_l1_filename;
+    } else {
+        // step 1.d
+        RETURN_IF_ERROR(_flush_l0());
+        DCHECK(!_has_l1);
+        LOG(INFO) << "PersistentIndex minor compaction, flush l0, "
+                  << "output: " << new_l1_filename;
+    }
+    // 2. move old l1 to l2.
+    if (_has_l1) {
+        // just link old l1 file to l2
+        const std::string l2_file_path =
+                strings::Substitute("$0/index.l2.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+        const std::string old_l1_file_path =
+                strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major_number(), _l1_version.minor_number());
+        LOG(INFO) << "PersistentIndex minor compaction, link from " << old_l1_file_path << " to " << l2_file_path;
+        RETURN_IF_ERROR(FileSystem::Default()->link_file(old_l1_file_path, l2_file_path));
+        _l1_version.to_pb(index_meta->add_l2_versions());
+        index_meta->add_l2_version_merged(false);
+    }
+    // 3. modify meta
+    index_meta->set_size(_size);
+    index_meta->set_usage(_usage);
+    index_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+    _version.to_pb(index_meta->mutable_version());
+    _version.to_pb(index_meta->mutable_l1_version());
+    MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+    RETURN_IF_ERROR(_l0->commit(l0_meta, _version, need_snapshot ? kSnapshot : kFlush));
     return Status::OK();
 }
 
@@ -3746,17 +4388,17 @@ Status PersistentIndex::_merge_compaction() {
     if (_l0->size() == 0) {
         if (!_has_l1 && _l1_vec.size() == 1) {
             const std::string idx_file_path =
-                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
             const std::string idx_file_path_tmp = _l1_vec[0]->_file->filename();
             return FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path);
         }
     }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
-            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+            strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
-    RETURN_IF_ERROR(
-            _merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length, false, nullptr));
+    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length,
+                                               !_l2_vec.empty()));
     // _usage should be equal to total_kv_size. But they may be differen because of compatibility problem when we upgrade
     // from old version and _usage maybe not accurate.
     // so we use total_kv_size to correct the _usage.
@@ -3769,13 +4411,14 @@ Status PersistentIndex::_merge_compaction() {
 Status PersistentIndex::_merge_compaction_advance() {
     DCHECK(_l1_vec.size() >= config::max_tmp_l1_num);
     auto writer = std::make_unique<ImmutableIndexWriter>();
-    const std::string idx_file_path_tmp =
-            strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), _l1_vec.size());
+    const std::string idx_file_path_tmp = strings::Substitute(
+            "$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(), _version.minor_number(), _l1_vec.size());
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
     LOG(INFO) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
-    bool keep_delete = (merge_l1_start_idx != 0);
+    // keep delete flag when older l1 or l2 exist
+    bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
 
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
@@ -3791,16 +4434,18 @@ Status PersistentIndex::_merge_compaction_advance() {
     for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
         for (const auto& [key_size, shard_info] : _l1_vec[i]->_shard_info_by_length) {
             auto [l1_shard_offset, l1_shard_size] = shard_info;
-            const auto size = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                              std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                              0L, [](size_t s, const auto& e) { return s + e.size; });
-            const auto usage = std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                               std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                               0L, [](size_t s, const auto& e) { return s + e.data_size; });
+            const int64_t size =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.size; });
+            const int64_t usage =
+                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
+                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
+                                    [](size_t s, const auto& e) { return s + e.data_size; });
 
             auto iter = usage_and_size_stat.find(key_size);
             if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({key_size, {usage, size}});
+                usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
             } else {
                 iter->second.first += usage;
                 iter->second.second += size;
@@ -3808,14 +4453,8 @@ Status PersistentIndex::_merge_compaction_advance() {
         }
     }
 
-    std::map<size_t, std::unique_ptr<BloomFilter>> bf_map;
-    if (_need_bloom_filter) {
-        RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx,
-                                                   usage_and_size_stat, keep_delete, &bf_map));
-    } else {
-        RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx,
-                                                   usage_and_size_stat, keep_delete, nullptr));
-    }
+    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx, usage_and_size_stat,
+                                               keep_delete));
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
@@ -3832,19 +4471,16 @@ Status PersistentIndex::_merge_compaction_advance() {
         }
     }
 
-    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(),
-                                                          _version.minor(), new_l1_vec.size());
+    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
+                                                          _version.minor_number(), new_l1_vec.size());
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path));
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));
-    auto l1_st = ImmutableIndex::load(std::move(l1_rfile));
+    auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
     if (!l1_st.ok()) {
         return l1_st.status();
     }
     new_l1_vec.emplace_back(std::move(l1_st).value());
-    if (_need_bloom_filter) {
-        new_l1_vec.back()->_bf_map.swap(bf_map);
-    }
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
     {
         std::unique_lock wrlock(_lock);
@@ -3852,6 +4488,214 @@ Status PersistentIndex::_merge_compaction_advance() {
         _l1_merged_num.swap(new_l1_merged_num);
     }
     _l0->clear();
+    return Status::OK();
+}
+
+// generate all possible key size in l1 and l2
+static void generate_all_key_size(size_t key_size, std::vector<size_t>& key_size_list) {
+    if (key_size > 0) {
+        key_size_list.push_back(key_size);
+    } else {
+        for (size_t i = 0; i <= kSliceMaxFixLength; i++) {
+            key_size_list.push_back(i);
+        }
+    }
+}
+
+static void major_compaction_debug_str(const std::vector<EditVersion>& l2_versions,
+                                       const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                                       const EditVersion& output_version,
+                                       const std::unique_ptr<ImmutableIndexWriter>& writer,
+                                       std::stringstream& debug_str) {
+    debug_str << "input : [";
+    for (int i = 0; i < l2_versions.size(); i++) {
+        debug_str << "(ver: " << l2_versions[i] << ", file_sz: " << l2_vec[i]->file_size()
+                  << ", kv_cnt: " << l2_vec[i]->total_size() << ") ";
+    }
+    debug_str << "] output : (ver: " << output_version << ", file_sz: " << writer->file_size()
+              << ", kv_cnt: " << writer->total_kv_size() << ") ";
+}
+
+StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
+        const std::vector<EditVersion>& l2_versions, const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec) {
+    DCHECK(l2_versions.size() == l2_vec.size());
+    MonotonicStopWatch watch;
+    watch.start();
+    auto writer = std::make_unique<ImmutableIndexWriter>();
+    // use latest l2 edit version as new l2 edit version
+    EditVersion new_l2_version = l2_versions.back();
+    const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major_number(),
+                                                          new_l2_version.minor_number(), MergeSuffix);
+    RETURN_IF_ERROR(writer->init(idx_file_path, new_l2_version, true));
+    std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
+    _get_l2_stat(l2_vec, usage_and_size_stat);
+    std::vector<size_t> key_size_list;
+    generate_all_key_size(_key_size, key_size_list);
+    for (const size_t key_size : key_size_list) {
+        size_t total_usage = 0;
+        size_t total_size = 0;
+        auto iter = usage_and_size_stat.find(key_size);
+        if (iter != usage_and_size_stat.end()) {
+            total_usage = iter->second.first;
+            total_size = iter->second.second;
+        }
+
+        const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_usage);
+        const auto nbucket = MutableIndex::estimate_nbucket(key_size, total_usage, nshard, npage_hint);
+        const auto estimate_size_per_shard = total_size / nshard;
+
+        std::vector<std::vector<std::vector<KVRef>>> l2_kvs_by_shard;
+        std::vector<int32_t> finished_l2_idx(l2_vec.size(), -1);
+        std::vector<std::pair<size_t, size_t>> l2_shard_info(l2_vec.size(), std::make_pair<size_t, size_t>(0, 0));
+        size_t index_num = 0;
+        for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
+            auto iter = l2_vec[l2_idx]->_shard_info_by_length.find(key_size);
+            if (iter != l2_vec[l2_idx]->_shard_info_by_length.end()) {
+                l2_shard_info[l2_idx] = iter->second;
+                index_num += (iter->second.second / nshard) + 1;
+            }
+            std::vector<std::vector<KVRef>> elem(nshard);
+            l2_kvs_by_shard.emplace_back(elem);
+        }
+        // use index_shards to store shard info when read from l2
+        std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards(index_num);
+        uint32_t shard_bits = log2(nshard);
+
+        for (size_t shard_idx = 0; shard_idx < nshard; shard_idx++) {
+            size_t index_shard_idx = 0;
+            for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
+                if (l2_shard_info[l2_idx].second == 0) {
+                    continue;
+                }
+                int32_t shard_idx_start = shard_idx * l2_shard_info[l2_idx].second / nshard;
+                int32_t shard_idx_end = (shard_idx + 1) * l2_shard_info[l2_idx].second / nshard;
+                do {
+                    //get kv for l2
+                    if (finished_l2_idx[l2_idx] < shard_idx_start) {
+                        RETURN_IF_ERROR(l2_vec[l2_idx]->_get_kvs_for_shard(
+                                l2_kvs_by_shard[l2_idx], l2_shard_info[l2_idx].first + shard_idx_start, shard_bits,
+                                &index_shards[index_shard_idx]));
+                        finished_l2_idx[l2_idx] = shard_idx_start;
+                    }
+                    index_shard_idx++;
+                    shard_idx_start++;
+                } while (shard_idx_start < shard_idx_end);
+            }
+
+            //merge_shard_kvs
+            std::vector<KVRef> kvs;
+            std::vector<std::vector<KVRef>> l2_kvs(l2_vec.size());
+            for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
+                l2_kvs[l2_idx].swap(l2_kvs_by_shard[l2_idx][shard_idx]);
+            }
+            // empty l0 kvs
+            std::vector<KVRef> empty_l0_kvs;
+            RETURN_IF_ERROR(merge_shard_kvs(key_size, empty_l0_kvs, l2_kvs, estimate_size_per_shard, kvs));
+            // write shard
+            RETURN_IF_ERROR(writer->write_shard(key_size, npage_hint, nbucket, kvs));
+        }
+    }
+    RETURN_IF_ERROR(writer->finish());
+    _write_amp_score.store(0.0);
+    std::stringstream debug_str;
+    major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
+    LOG(INFO) << "PersistentIndex background compact l2 : " << debug_str.str() << " cost: " << watch.elapsed_time();
+    return new_l2_version;
+}
+
+static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions, const EditVersion& output_l2_version,
+                               PersistentIndexMetaPB& index_meta) {
+    // delete input l2 versions, and add output l2 version
+    std::vector<EditVersion> new_l2_versions;
+    std::vector<bool> new_l2_version_merged;
+    // put new output l2 version to first position
+    new_l2_versions.push_back(output_l2_version);
+    new_l2_version_merged.push_back(true);
+    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+        bool need_remove = false;
+        for (const auto& input_ver : input_l2_versions) {
+            if (EditVersion(index_meta.l2_versions(i)) == input_ver) {
+                need_remove = true;
+                break;
+            }
+        }
+        if (!need_remove) {
+            new_l2_versions.emplace_back(EditVersion(index_meta.l2_versions(i)));
+            new_l2_version_merged.push_back(index_meta.l2_version_merged(i));
+        }
+    }
+    // rebuild l2 versions in meta
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
+    for (const auto& ver : new_l2_versions) {
+        ver.to_pb(index_meta.add_l2_versions());
+    }
+    for (const bool merge : new_l2_version_merged) {
+        index_meta.add_l2_version_merged(merge);
+    }
+}
+
+Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta) {
+    if (index_meta.l2_versions_size() <= 1) {
+        return Status::OK();
+    }
+    // 1. load current l2 vec
+    std::vector<EditVersion> l2_versions;
+    std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+        l2_versions.emplace_back(index_meta.l2_versions(i));
+        auto l2_block_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, index_meta.l2_versions(i).major_number(),
+                                                 index_meta.l2_versions(i).minor_number(),
+                                                 index_meta.l2_version_merged(i) ? MergeSuffix : "");
+        ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+        ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
+        l2_vec.emplace_back(std::move(l2_index));
+    }
+    // 2. merge l2 files to new l2 file
+    ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
+    modify_l2_versions(l2_versions, new_l2_version, index_meta);
+    return Status::OK();
+}
+
+// Major compaction will merge compaction l2 files, contains a few steps:
+// 1. load current l2 vec
+// 2. merge l2 files to new l2 file
+// 3. modify PersistentIndexMetaPB and make this step atomic.
+Status PersistentIndex::major_compaction(Tablet* tablet) {
+    bool expect_running_state = false;
+    if (!_major_compaction_running.compare_exchange_strong(expect_running_state, true)) {
+        // already in compaction
+        return Status::OK();
+    }
+    DeferOp defer([&]() { _major_compaction_running.store(false); });
+    // merge all l2 files
+    PersistentIndexMetaPB prev_index_meta;
+    RETURN_IF_ERROR(
+            TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &prev_index_meta));
+    if (prev_index_meta.l2_versions_size() <= 1) {
+        return Status::OK();
+    }
+    // 1. load current l2 vec
+    std::vector<EditVersion> l2_versions;
+    std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
+        l2_versions.emplace_back(prev_index_meta.l2_versions(i));
+        auto l2_block_path = strings::Substitute(
+                "$0/index.l2.$1.$2$3", _path, prev_index_meta.l2_versions(i).major_number(),
+                prev_index_meta.l2_versions(i).minor_number(), prev_index_meta.l2_version_merged(i) ? MergeSuffix : "");
+        ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
+        ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
+        l2_vec.emplace_back(std::move(l2_index));
+    }
+    // 2. merge l2 files to new l2 file
+    ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
+    // 3. modify PersistentIndexMetaPB and make this step atomic.
+    std::lock_guard<std::mutex> guard(_meta_lock);
+    PersistentIndexMetaPB index_meta;
+    RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
+    modify_l2_versions(l2_versions, new_l2_version, index_meta);
+    RETURN_IF_ERROR(
+            TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta));
     return Status::OK();
 }
 
@@ -3891,6 +4735,25 @@ Status PersistentIndex::test_flush_varlen_to_immutable_index(const std::string& 
         RETURN_IF_ERROR(writer.write_shard(SliceMutableIndex::kKeySizeMagicNum, npage_hint, nbucket, kvs));
     }
     return writer.finish();
+}
+
+void PersistentIndex::_calc_write_amp_score() {
+    if (_l2_versions.size() <= 1) {
+        _write_amp_score.store(0.0);
+    } else {
+        // write amplification
+        // = 1 + 1 + (l1 and l2 file count + config::l0_l1_merge_ratio) / (l1 and l2 file count) / 0.85
+        double l1_l2_count = (_has_l1 ? 1 : 0) + _l2_versions.size();
+        _write_amp_score.store(2.0 + (l1_l2_count + (double)config::l0_l1_merge_ratio) / l1_l2_count / 0.85);
+    }
+}
+
+double PersistentIndex::get_write_amp_score() const {
+    if (_major_compaction_running.load()) {
+        return 0.0;
+    } else {
+        return _write_amp_score.load();
+    }
 }
 
 } // namespace starrocks

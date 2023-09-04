@@ -18,8 +18,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,7 +97,7 @@ public class UniqueConstraint {
         return tableName;
     }
 
-    public static List<UniqueConstraint> parse(String constraintDescs) throws AnalysisException {
+    public static List<UniqueConstraint> parse(String constraintDescs) {
         if (Strings.isNullOrEmpty(constraintDescs)) {
             return null;
         }
@@ -110,18 +110,12 @@ public class UniqueConstraint {
             String[] uniqueColumns = constraintDesc.split(",");
             List<String> columnNames =
                     Arrays.stream(uniqueColumns).map(String::trim).collect(Collectors.toList());
-            try {
-                parseUniqueConstraintColumns(columnNames, uniqueConstraints);
-            } catch (AnalysisException e) {
-                LOG.warn("parse unique constraint failed, unique constraint: {}", constraintDesc, e);
-                throw e;
-            }
+            parseUniqueConstraintColumns(columnNames, uniqueConstraints);
         }
         return uniqueConstraints;
     }
 
-    private static void parseUniqueConstraintColumns(List<String> columnNames, List<UniqueConstraint> uniqueConstraints)
-            throws AnalysisException {
+    private static void parseUniqueConstraintColumns(List<String> columnNames, List<UniqueConstraint> uniqueConstraints) {
         String catalogName = null;
         String dbName = null;
         String tableName = null;
@@ -132,36 +126,36 @@ public class UniqueConstraint {
                 uniqueConstraintColumns.add(parts[0]);
             } else if (parts.length == 2) {
                 if (tableName != null && !tableName.equals(parts[0])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 tableName = parts[0];
                 uniqueConstraintColumns.add(parts[1]);
             } else if (parts.length == 3) {
                 if (dbName != null && !dbName.equals(parts[0])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 if (tableName != null && !tableName.equals(parts[1])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 dbName = parts[0];
                 tableName = parts[1];
                 uniqueConstraintColumns.add(parts[2]);
             } else if (parts.length == 4) {
                 if (catalogName != null && !catalogName.equals(parts[0])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 if (dbName != null && !dbName.equals(parts[1])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 if (tableName != null && !tableName.equals(parts[2])) {
-                    throw new AnalysisException("unique constraint column should be in same table");
+                    throw new SemanticException("unique constraint column should be in same table");
                 }
                 catalogName = parts[0];
                 dbName = parts[1];
                 tableName = parts[2];
                 uniqueConstraintColumns.add(parts[3]);
             } else {
-                throw new AnalysisException("invalid unique constraint" + columnName);
+                throw new SemanticException("invalid unique constraint" + columnName);
             }
         }
 

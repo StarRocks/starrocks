@@ -93,13 +93,17 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
         _node_select_idx.reserve(selection_idx.size());
 
         auto* node = it.second;
+        if (_is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         bool has_send_data = false;
         if (_enable_replicated_storage) {
             for (unsigned short selection : selection_idx) {
                 auto choose_tablet_id = tablet_id_selections[selection];
                 DCHECK(tablet_to_bes.find(choose_tablet_id) != tablet_to_bes.end());
                 auto& be_ids = tablet_to_bes.find(choose_tablet_id)->second;
-                DCHECK_LT(be_ids.size(), 0);
+                DCHECK_LT(0, be_ids.size());
                 // TODO(meegoo): add backlist policy
                 // first replica is primary replica, which determined by FE now
                 // only send to primary replica when enable replicated storage engine
@@ -303,6 +307,18 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
         _vectorized_partition->close(state);
     }
     return status;
+}
+
+bool TabletSinkColocateSender::get_immutable_partition_ids(std::set<int64_t>* partition_ids) {
+    bool has_immutable_partition = false;
+    for_each_node_channel([&has_immutable_partition, partition_ids](NodeChannel* ch) {
+        if (ch->has_immutable_partition()) {
+            has_immutable_partition = true;
+            partition_ids->merge(ch->immutable_partition_ids());
+            ch->reset_immutable_partition_ids();
+        }
+    });
+    return has_immutable_partition;
 }
 
 } // namespace starrocks::stream_load

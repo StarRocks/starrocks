@@ -45,7 +45,7 @@ record_mode = os.environ.get("record_mode", "false") == "true"
 case_list = choose_cases.choose_cases(record_mode).case_list
 
 if len(case_list) == 0:
-    print("** ERROR: No case! **")
+    print("** INFO: No case! **")
     sys.exit(0)
 
 
@@ -268,7 +268,7 @@ Start to run: %s
                 db_name = self._get_db_name(sql)
                 if len(db_name) > 0:
                     all_db_dict.setdefault(db_name, set()).add(case.name)
-        error_info_dict = {db: cases for db, cases in all_db_dict.items() if len(cases) > 1}
+        error_info_dict = {db: list(cases) for db, cases in all_db_dict.items() if len(cases) > 1}
         tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
 
     @staticmethod
@@ -279,7 +279,7 @@ Start to run: %s
             uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
             for each_uuid in uuid_vars:
                 if each_uuid not in variable_dict:
-                    variable_dict[each_uuid] = uuid.uuid1().hex
+                    variable_dict[each_uuid] = uuid.uuid4().hex
 
         for sql in sql_list:
             for each_var in variable_dict:

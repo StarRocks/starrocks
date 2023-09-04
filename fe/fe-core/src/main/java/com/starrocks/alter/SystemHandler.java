@@ -38,6 +38,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -46,6 +48,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -221,6 +224,9 @@ public class SystemHandler extends AlterHandler {
             throws DdlException {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Backend> decommissionBackends = Lists.newArrayList();
+
+        long needCapacity = 0L;
+        long releaseCapacity = 0L;
         // check if exist
         for (Pair<String, Integer> pair : hostPortPairs) {
             Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
@@ -229,13 +235,57 @@ public class SystemHandler extends AlterHandler {
             }
             if (backend.isDecommissioned()) {
                 // already under decommission, ignore it
+                LOG.info(backend.getAddress() + " has already been decommissioned and will be ignored.");
                 continue;
             }
+            needCapacity += backend.getDataUsedCapacityB();
+            releaseCapacity += backend.getAvailableCapacityB();
             decommissionBackends.add(backend);
         }
 
-        // TODO(cmy): check if replication num can be met
-        // TODO(cmy): check remaining space
+        if (decommissionBackends.isEmpty()) {
+            LOG.info("No backends will be decommissioned.");
+            return decommissionBackends;
+        }
+
+        if (infoService.getClusterAvailableCapacityB() - releaseCapacity < needCapacity) {
+            decommissionBackends.clear();
+            throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
+        }
+
+        short maxReplicationNum = 0;
+        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        for (long dbId : localMetastore.getDbIds()) {
+            Database db = localMetastore.getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            db.readLock();
+            try {
+                for (Table table : db.getTables()) {
+                    if (table instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) table;
+                        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                        for (long partitionId : olapTable.getAllPartitionIds()) {
+                            short replicationNum = partitionInfo.getReplicationNum(partitionId);
+                            if (replicationNum > maxReplicationNum) {
+                                maxReplicationNum = replicationNum;
+                                if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <
+                                        maxReplicationNum) {
+                                    decommissionBackends.clear();
+                                    throw new DdlException(
+                                            "It will cause insufficient BE number if these BEs are decommissioned " +
+                                            "because the table " + db.getFullName() + "." + olapTable.getName() + " requires " +
+                                            maxReplicationNum + " replicas.");
+                                }
+                            }
+                        }
+                    }
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
 
         return decommissionBackends;
     }

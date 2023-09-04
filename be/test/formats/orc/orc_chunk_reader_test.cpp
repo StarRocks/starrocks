@@ -840,11 +840,17 @@ TEST_F(OrcChunkReaderTest, TestDecimal128) {
 std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, ObjectPool* pool,
                                                                const std::string& reader_tz,
                                                                const std::string& write_tz,
-                                                               const std::vector<int64_t>& values) {
+                                                               const std::vector<int64_t>& values,
+                                                               const bool isInstant) {
     const char* filename = "orc_scanner_test_timestamp.orc";
     std::filesystem::remove(filename);
     ORC_UNIQUE_PTR<orc::OutputStream> outStream = orc::writeLocalFile(filename);
-    ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:timestamp with local time zone>"));
+    ORC_UNIQUE_PTR<orc::Type> schema;
+    if (isInstant) {
+        schema = orc::Type::buildTypeFromString("struct<c0:timestamp with local time zone>");
+    } else {
+        schema = orc::Type::buildTypeFromString("struct<c0:timestamp>");
+    }
 
     orc::WriterOptions writer_options;
     writer_options.setTimezoneName(write_tz);
@@ -908,32 +914,53 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
 TEST_F(OrcChunkReaderTest, TestTimestamp) {
     // clang-format off
     const std::vector<int64_t> orc_values = {
-        // 2021.5.25 1:18:40 GMT
-        // 2021.5.25 9:18:40 Asia/Shanghai
-        1621905520,
-        // 1970.1.1 0:0:0 GMT
-        // 1970.1.1 8:00:0 Asia/Shanghai
-        0,
-        // 1702.5.31 19:55:52 GMT
-        // to Asia/Shanghai, it's supposed to be
-        // 1702.6.01 03:55:52
-        // but acutally it's
-        // 1702-06-01 04:01:35
-        // before unix epoch, time conversion is totoally a mess.
-        -8444232248
-    };
-    const std::vector<std::string> exp_values = {
-        "2021-05-25 09:18:40",
-        "1970-01-01 08:00:00",
-        "1702-06-01 04:01:35",
+            // 2021.5.25 1:18:40 GMT
+            // 2021.5.25 9:18:40 Asia/Shanghai
+            1621905520,
+            // 1970.1.1 0:0:0 GMT
+            // 1970.1.1 8:00:0 Asia/Shanghai
+            0,
+            // 1702.5.31 19:55:52 GMT
+            // to Asia/Shanghai, it's supposed to be
+            // 1702.6.01 03:55:52
+            // but acutally it's
+            // 1702-06-01 04:01:35
+            // before unix epoch, time conversion is totoally a mess.
+            -8444232248
     };
     // clang-format on
-    ObjectPool pool;
-    auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values);
-    EXPECT_EQ(res.size(), orc_values.size());
-    for (size_t i = 0; i < res.size(); i++) {
-        std::string o = res[i].to_string();
-        EXPECT_EQ(o, exp_values[i]);
+    {
+        // Instant Timestamp
+        const std::vector<std::string> exp_values = {
+                "2021-05-25 09:18:40",
+                "1970-01-01 08:00:00",
+                "1702-06-01 04:01:35",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      true);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            std::string o = res[i].to_string();
+            EXPECT_EQ(o, exp_values[i]);
+        }
+    }
+    {
+        // Timestamp
+        // Instant Timestamp
+        const std::vector<std::string> exp_values = {
+                "2021-05-25 01:18:40",
+                "1970-01-01 00:00:00",
+                "1702-05-31 19:55:52",
+        };
+        ObjectPool pool;
+        auto res = convert_orc_to_starrocks_timestamp(_runtime_state.get(), &pool, "Asia/Shanghai", "UTC", orc_values,
+                                                      false);
+        EXPECT_EQ(res.size(), orc_values.size());
+        for (size_t i = 0; i < res.size(); i++) {
+            std::string o = res[i].to_string();
+            EXPECT_EQ(o, exp_values[i]);
+        }
     }
 }
 
@@ -1109,8 +1136,8 @@ TEST_F(OrcChunkReaderTest, TestReadBinaryColumn) {
         EXPECT_FALSE(nulls[0]);
         EXPECT_EQ(vo[0], 0);
         EXPECT_EQ(vo[1], 2);
-        EXPECT_EQ(vb[0], u'\n');
-        EXPECT_EQ(vb[1], u'\274');
+        EXPECT_EQ((int)vb[0], 10);
+        EXPECT_EQ((int)vb[1], 188);
     }
 }
 
@@ -1154,6 +1181,42 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
 
         EXPECT_EQ("[1, NULL, '123456']", result->debug_row(0));
         EXPECT_EQ("[2, NULL, '12345']", result->debug_row(1));
+        EXPECT_TRUE(result->get_column_by_index(1)->has_null());
+    }
+
+    {
+        SlotDesc slot_descs[] = {
+                {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {""},
+        };
+        slot_descs[1].type.len = 12;
+        slot_descs[2].type.len = 6;
+        static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_varchar_column.orc";
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_broker_load_mode(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_columns(), 3);
+
+        EXPECT_EQ("[1, '123456789012', '123456']", result->debug_row(0));
+        EXPECT_EQ("[2, '12345678901', '12345']", result->debug_row(1));
     }
 
     {
@@ -1184,11 +1247,8 @@ TEST_F(OrcChunkReaderTest, TestReadVarcharColumn) {
         ChunkPtr result = reader.cast_chunk(&ckptr);
         DCHECK(result != nullptr);
 
-        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_rows(), 0);
         EXPECT_EQ(result->num_columns(), 3);
-
-        EXPECT_EQ("[1, '123456789012', '123456']", result->debug_row(0));
-        EXPECT_EQ("[2, '12345678901', '12345']", result->debug_row(1));
     }
 }
 
@@ -1301,9 +1361,6 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        for (int i = 0; i < result->num_rows(); ++i) {
-            std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
-        }
         EXPECT_EQ(result->debug_row(0), "[1, [0.999999999]]");
         EXPECT_EQ(result->debug_row(1), "[2, [0.000000001,NULL]]");
         EXPECT_EQ(result->debug_row(2), "[3, [NULL,NULL]]");
@@ -2090,7 +2147,7 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_char", TYPE_CHAR},
               {"col_varchar", TYPE_VARCHAR},
               {"col_binary", TYPE_VARBINARY},
-              {"col_decimal", TYPE_DECIMAL64},
+              {"col_decimal", TYPE_DECIMAL128},
               {"col_timestamp", TYPE_DATETIME},
               {"col_date", TYPE_DATE}}}};
 

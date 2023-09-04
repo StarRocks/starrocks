@@ -42,8 +42,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
-import com.starrocks.http.UnauthorizedException;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.http.HttpConnectContext;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
@@ -56,6 +56,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 public class RestBaseAction extends BaseAction {
+    protected static final String CATALOG_KEY = "catalog";
+
     protected static final String DB_KEY = "db";
     protected static final String TABLE_KEY = "table";
     protected static final String LABEL_KEY = "label";
@@ -66,20 +68,27 @@ public class RestBaseAction extends BaseAction {
     }
 
     @Override
-    public void handleRequest(BaseRequest request) throws Exception {
+    public void handleRequest(BaseRequest request) {
         LOG.info("receive http request. url={}", request.getRequest().uri());
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
+        } catch (AccessDeniedException accessDeniedException) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), accessDeniedException);
+            response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+            response.appendContent(new RestBaseResult(accessDeniedException.getMessage()).toJson());
+            writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
-            if (e instanceof UnauthorizedException) {
-                response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
-                response.appendContent(new RestBaseResult(e.getMessage()).toJson());
-                writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
-            } else {
-                sendResult(request, response, new RestBaseResult(e.getMessage()));
+            sendResult(request, response, new RestBaseResult(e.getMessage()));
+        } catch (Exception e) {
+            LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
+            String msg = e.getMessage();
+            if (msg == null) {
+                msg = e.toString();
             }
+            response.appendContent(new RestBaseResult(msg).toJson());
+            writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -88,8 +97,10 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        ConnectContext ctx = new ConnectContext(null);
+        // ctx's lifetime is same as the channel
+        HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setNettyChannel(request.getContext());
         ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);

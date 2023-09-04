@@ -43,7 +43,7 @@ The name of the materialized view. The naming requirements are as follows:
 
 **COMMENT** (optional)
 
-Comment on the materialized view.
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
 
 **query_statement** (required)
 
@@ -123,6 +123,7 @@ The following table shows the correspondence between the aggregate function in t
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+[COMMENT ""]
 -- distribution_desc
 [DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]]
 -- refresh_desc
@@ -138,7 +139,6 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
-[COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
 AS 
 <query_statement>
@@ -160,9 +160,17 @@ The name of the materialized view. The naming requirements are as follows:
 >
 > Multiple materialized views can be created on the same base table, but the names of the materialized views in the same database cannot be duplicated.
 
+**COMMENT** (optional)
+
+Comment on the materialized view. Note that `COMMENT` must be placed after `mv_name`. Otherwise, the materialized view cannot be created.
+
 **distribution_desc** (optional)
 
 The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+
+> **NOTE**
+>
+> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
 
 - **Hash bucketing**:
 
@@ -176,7 +184,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
 
   > **NOTE**
   >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 - **Random bucketing**:
 
@@ -199,7 +207,11 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 - `IMMEDIATE`: Refresh the asynchronous materialized view immediately after it is created.
 - `DEFERRED`: The asynchronous materialized view is not refreshed after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
 
-**refresh_scheme_desc** (optional)
+**refresh_scheme** (optional)
+
+> **NOTE**
+>
+> While creating an asynchronous materialized view, you must specify either `distribution_desc` or `refresh_scheme`, or both.
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
@@ -210,20 +222,23 @@ If this parameter is not specified, the default value `MANUAL` is used.
 
 **partition_expression** (optional)
 
-The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view. Valid values:
+The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view.
+
+> **CAUTION**
+>
+> Currently, asynchronous materialized views do not support the list partitioning strategy.
+
+Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", 'dt')` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. From v3.1 onwards, you can further use time_slice or date_slice functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(`dt`, INTERVAL 7 DAY))` where time_slice's or date_slice's type must be of finer granularity than `date_trunc`'s type.
+- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
+- time_slice or date_slice functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
 **order_by_expression** (optional)
 
 The sort key of the asynchronous materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys. For example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter is supported from StarRocks v3.0 onwards.
-
-**COMMENT** (optional)
-
-Comment on the materialized view.
 
 **PROPERTIES** (optional)
 
@@ -248,7 +263,11 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
 The query statement to create the asynchronous materialized view.
 
-### Query a synchronous materialized view
+> **CAUTION**
+>
+> Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
+
+### Query an asynchronous materialized view
 
 An asynchronous materialized view is a physical table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
 

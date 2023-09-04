@@ -16,20 +16,32 @@
 
 {% macro starrocks__drop_relation(relation) -%}
   {% call statement('drop_relation', auto_begin=False) %}
-    drop {{ relation.type }} if exists {{ relation }}
+    {%- if relation.is_materialized_view -%}
+        drop materialized view if exists {{ relation }};
+    {%- else -%}
+        drop {{ relation.type }} if exists {{ relation }};
+    {%- endif -%}
   {% endcall %}
 {%- endmacro %}
 
 {% macro starrocks__rename_relation(from_relation, to_relation) -%}
   {% call statement('rename_relation') %}
-    {% if to_relation.is_view %}
-      {% set results = run_query('show create view ' + from_relation.render() ) %}
-        create view {{ to_relation }} as {{ results[0]['Create View'].replace(from_relation.table, to_relation.table).split('AS',1)[1] }}
-        {% call statement('drop_view') %}
-          drop view if exists {{ from_relation }}
-        {% endcall %}
-      {% else %}
-      alter table {{ from_relation }} rename {{ to_relation.table }}
+    {% if from_relation.is_materialized_view and to_relation.is_materialized_view %}
+        alter materialized view {{ from_relation }} rename {{ to_relation.table }}
+    {%- elif from_relation.is_table and to_relation.is_table %}
+       alter table {{ from_relation }} rename {{ to_relation.table }}
+    {% elif from_relation.is_view and to_relation.is_view %}
+      {% set results = run_query("select VIEW_DEFINITION as sql from information_schema.views where TABLE_SCHEMA='"
+           + from_relation.schema + "' and TABLE_NAME='" + from_relation.table + "'") %}
+      create view {{ to_relation }} as {{ results[0]['sql'] }}
+      {% call statement('drop_view') %}
+        drop view if exists {{ from_relation }}
+      {% endcall %}
+    {%- else -%}
+      {%- set msg -%}
+          unsupported rename from {{ from_relation.type }} to {{ to_relation.type }}
+      {%- endset %}
+      {{ exceptions.raise_compiler_error(msg) }}
     {% endif %}
   {% endcall %}
 {%- endmacro %}

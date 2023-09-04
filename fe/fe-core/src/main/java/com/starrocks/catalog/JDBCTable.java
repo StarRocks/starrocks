@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
@@ -41,6 +40,9 @@ public class JDBCTable extends Table {
 
     private static final String TABLE = "table";
     private static final String RESOURCE = "resource";
+    public static final String PARTITION_NULL_VALUE = "null";
+
+    public static final String JDBC_TABLENAME = "jdbc_tablename";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
@@ -48,8 +50,10 @@ public class JDBCTable extends Table {
     private String resourceName;
 
     private Map<String, String> properties;
-    private String dbName;
     private String catalogName;
+    private String dbName;
+    private List<Column> partitionColumns;
+
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -60,11 +64,20 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
-    public JDBCTable(long id, String name, List<Column> schema, String dbName, String catalogName,
-                     Map<String, String> properties) throws DdlException {
+    public JDBCTable(long id, String name, List<Column> schema, String dbName,
+                     String catalogName, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.JDBC, schema);
-        this.dbName = dbName;
         this.catalogName = catalogName;
+        this.dbName = dbName;
+        validate(properties);
+    }
+
+    public JDBCTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                     String catalogName, Map<String, String> properties) throws DdlException {
+        super(id, name, TableType.JDBC, schema);
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+        this.partitionColumns = partitionColumns;
         validate(properties);
     }
 
@@ -72,8 +85,25 @@ public class JDBCTable extends Table {
         return resourceName;
     }
 
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
     public String getJdbcTable() {
         return jdbcTable;
+    }
+
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return partitionColumns == null || partitionColumns.size() == 0;
     }
 
     public String getProperty(String propertyKey) {
@@ -87,15 +117,21 @@ public class JDBCTable extends Table {
 
         resourceName = properties.get(RESOURCE);
         if (Strings.isNullOrEmpty(resourceName)) {
+            if (properties.get(JDBCResource.USER) == null ||
+                    properties.get(JDBCResource.PASSWORD) == null) {
+                throw new DdlException("all catalog properties must be set");
+            }
             if (Strings.isNullOrEmpty(properties.get(JDBCResource.URI)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.USER)) ||
-                    Strings.isNullOrEmpty(properties.get(JDBCResource.PASSWORD)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_URL)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.CHECK_SUM)) ||
                     Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {
                 throw new DdlException("all catalog properties must be set");
             }
-            jdbcTable = name;
+            if (properties.get(JDBCTable.JDBC_TABLENAME) == null) {
+                jdbcTable = name;
+            } else {
+                jdbcTable = properties.get(JDBCTable.JDBC_TABLENAME);
+            }
             this.properties = properties;
             return;
         }
@@ -147,7 +183,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
 
-            if (dbName.isEmpty()) {
+            if (properties.get(JDBC_TABLENAME) != null) {
                 tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
             } else {
                 tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);

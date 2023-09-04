@@ -6,6 +6,66 @@ StarRocks employs both role-based access control (RBAC) and identity-based acces
 
 Within a StarRocks cluster, privileges can be granted to users or roles. A role is a collection of privileges that can be assigned to users or other roles in the cluster as needed. A user can be granted one or more roles, which determine their permissions on different objects.
 
+## View user and role information
+
+Users with the system-defined role `user_admin` can view all the user and role information within the StarRocks cluster.
+
+### View privilege information
+
+You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md).
+
+- View the privileges of the current user.
+
+  ```SQL
+  SHOW GRANTS;
+  ```
+
+  > **NOTE**
+  >
+  > Any user can view their own privileges without needing any privileges.
+
+- View the privileges of a specific user.
+
+  The following example shows the privileges of the user `jack`:
+
+  ```SQL
+  SHOW GRANTS FOR jack@'172.10.1.10';
+  ```
+
+- View the privileges of a specific role.
+
+  The following example shows the privileges of the role `example_role`:
+
+  ```SQL
+  SHOW GRANTS FOR ROLE example_role;
+  ```
+
+### View user property
+
+You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
+
+The following example shows the property of the user `jack`:
+
+```SQL
+SHOW PROPERTY FOR jack@'172.10.1.10';
+```
+
+### View roles
+
+You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md).
+
+```SQL
+SHOW ROLES;
+```
+
+### View users
+
+You can view all the users within the StarRocks cluster using SHOW USERS.
+
+```SQL
+SHOW USERS;
+```
+
 ## Manage users
 
 Users with the system-defined role `user_admin` can create users, alter users, and drop users in StarRocks.
@@ -274,66 +334,6 @@ You can revoke privileges from a user or a role using [REVOKE](../sql-reference/
   REVOKE SELECT ON TABLE sr_member FROM ROLE example_role;
   ```
 
-## View user and role information
-
-Users with the system-defined role `user_admin` can view all the user and role information within the StarRocks cluster.
-
-### View privilege information
-
-You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md).
-
-- View the privileges of the current user.
-
-  ```SQL
-  SHOW GRANTS;
-  ```
-
-  > **NOTE**
-  >
-  > Any user can view their own privileges without needing any privileges.
-
-- View the privileges of a specific user.
-
-  The following example shows the privileges of the user `jack`:
-
-  ```SQL
-  SHOW GRANTS FOR jack@'172.10.1.10';
-  ```
-
-- View the privileges of a specific role.
-
-  The following example shows the privileges of the role `example_role`:
-
-  ```SQL
-  SHOW GRANTS FOR ROLE example_role;
-  ```
-
-### View user property
-
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md).
-
-The following example shows the property of the user `jack`:
-
-```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
-```
-
-### View roles
-
-You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md).
-
-```SQL
-SHOW ROLES;
-```
-
-### View users
-
-You can view all the users within the StarRocks cluster using SHOW USERS.
-
-```SQL
-SHOW USERS;
-```
-
 ## Best practices
 
 ### Multi-service access control
@@ -417,7 +417,7 @@ GRANT public_sales TO ROLE lineb_query;
 
 We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
 
-1. Grant global read-only privilege:
+1. Grant global read-only privileges on StarRocks tables:
 
    ```SQL
    --Create a role.
@@ -441,7 +441,7 @@ We recommend you customize roles to manage privileges and users. The following e
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
-2. Grant global write privilege:
+2. Grant global write privileges on StarRocks tables:
 
    ```SQL
    --Create a role.
@@ -461,11 +461,27 @@ We recommend you customize roles to manage privileges and users. The following e
    CREATE ROLE read_catalog_only;
    --Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   --Grant the SELECT privilege on all tables in all databases.
+   --Grant the SELECT privilege on all tables and views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
+   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
-4. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
+   Note: You can query only Hive table views (since v3.1).
+
+4. Grant write-only privileges on a specific external catalog
+
+   You can only write data into Iceberg tables (since v3.1).
+
+   ```SQL
+   -- Create a role.
+   CREATE ROLE write_catalog_only;
+   -- Switch to the corresponding catalog.
+   SET CATALOG iceberg_catalog;
+   -- Grant the privilege to write data into Iceberg tables.
+   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
+   ```
+
+5. Grant privileges to perform backup and restore operations on global, database, table, and partition levels.
 
    - Grant privileges to perform global backup and restore operations:
 
@@ -500,7 +516,7 @@ We recommend you customize roles to manage privileges and users. The following e
      --Grant the privilege to load data into any table.
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      --Grant the privilege to export data from any table in the database to be backed up.
-     GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE recover_db;
+     GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      ```
 
    - Grant the privileges to perform table-level backup and restore operations:
@@ -514,6 +530,10 @@ We recommend you customize roles to manage privileges and users. The following e
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
      --Grant the privilege to create tables in corresponding databases.
      GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
+     --Grant the privilege to load data into any table in a database.
+     GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
+     -- Grant the privilege to export data from the table you want to back up.
+     GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
      ```
 
    - Grant the privileges to perform partition-level backup and restore operations:

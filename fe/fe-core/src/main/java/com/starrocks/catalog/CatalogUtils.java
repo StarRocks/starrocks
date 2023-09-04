@@ -24,6 +24,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -44,6 +45,10 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 public class CatalogUtils {
 
     private static final Logger LOG = LogManager.getLogger(CatalogUtils.class);
+
+    public static String normalizeTableName(String dbName, String tableName) {
+        return dbName + "." + tableName;
+    }
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
@@ -301,8 +306,23 @@ public class CatalogUtils {
         }
     }
 
+    public static int calPhysicalPartitionBucketNum() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
+        return Math.min(backendNum, 16);
+    }
+
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;

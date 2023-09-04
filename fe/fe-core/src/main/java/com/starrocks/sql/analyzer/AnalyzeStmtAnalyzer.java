@@ -113,6 +113,10 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
+                if (!analyzeTable.isHiveTable() && !analyzeTable.isIcebergTable()) {
+                    throw new SemanticException("Analyze external table only support hive and iceberg table",
+                            statement.getTableName().toString());
+                }
                 statement.setExternal(true);
             }
             return null;

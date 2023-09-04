@@ -82,6 +82,11 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
     DCHECK(_index_id_to_tablet_be_map.find(channel->index_id()) != _index_id_to_tablet_be_map.end());
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
     for (auto& it : channel->_node_channels) {
+        NodeChannel* node = it.second.get();
+        if (channel->is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         int64_t be_id = it.first;
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
@@ -109,7 +114,6 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
             }
         }
 
-        NodeChannel* node = it.second.get();
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
         if (!st.ok()) {
@@ -326,6 +330,17 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
         _vectorized_partition->close(state);
     }
     return status;
+}
+
+bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_ids) {
+    bool has_immutable_partition = false;
+    for_each_index_channel([&has_immutable_partition, partition_ids](NodeChannel* ch) {
+        if (ch->has_immutable_partition()) {
+            has_immutable_partition = true;
+            partition_ids->merge(ch->immutable_partition_ids());
+        }
+    });
+    return has_immutable_partition;
 }
 
 } // namespace starrocks::stream_load

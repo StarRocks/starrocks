@@ -45,7 +45,7 @@ class HashPartitionSinkOperator final : public Operator {
 public:
     HashPartitionSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               HashPartitionContext* hash_partition_ctx)
-            : Operator(factory, id, "hash_partition_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "hash_partition_sink", plan_node_id, true, driver_sequence),
               _hash_partition_ctx(hash_partition_ctx) {}
 
     Status prepare(RuntimeState* state) override;

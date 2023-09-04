@@ -72,6 +72,10 @@ public:
 
     [[nodiscard]] Status delete_metadata(int64_t version);
 
+    bool get_enable_persistent_index(int64_t version);
+
+    StatusOr<PersistentIndexTypePB> get_persistent_index_type(int64_t version);
+
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
     [[nodiscard]] Status put_txn_log(TxnLogPtr log);
@@ -103,7 +107,7 @@ public:
     StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
 
     StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                      bool fill_cache);
+                                      bool fill_data_cache, bool fill_metadata_cache);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
@@ -138,6 +142,8 @@ public:
     void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
 
     int64_t version_hint() const { return _version_hint; }
+
+    int64_t data_size();
 
 private:
     TabletManager* _mgr;

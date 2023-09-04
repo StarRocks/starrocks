@@ -24,20 +24,31 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "simd/simd.h"
 
 namespace starrocks {
 
 template <typename T>
-constexpr bool IsWindowFunctionSliceState = false;
+constexpr bool IsUnresizableWindowFunctionState = false;
 
 template <>
-inline constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsUnresizableWindowFunctionState<MaxAggregateData<TYPE_VARCHAR>> = true;
 
 template <>
-inline constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsUnresizableWindowFunctionState<MinAggregateData<TYPE_VARCHAR>> = true;
+
+template <LogicalType LT>
+inline constexpr bool IsUnresizableWindowFunctionState<ApproxTopKState<LT>> = true;
+
+template <typename T>
+constexpr bool IsNeverNullFunctionState = false;
+
+template <LogicalType LT>
+inline constexpr bool IsNeverNullFunctionState<ApproxTopKState<LT>> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"
@@ -149,11 +160,18 @@ public:
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {
-                dst_nullable_column->set_has_null(true);
+                if constexpr (!IsNeverNullFunctionState<State>) {
+                    dst_nullable_column->set_has_null(true);
+                }
                 const NullData& src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
-                    dst_nullable_column->append_nulls(chunk_size);
+                    if constexpr (IsNeverNullFunctionState<NestedState>) {
+                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
+                                                                     &dst_nullable_column->data_column());
+                    } else {
+                        dst_nullable_column->append_nulls(chunk_size);
+                    }
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
                     dst_null_data = src_null_data;
@@ -190,16 +208,16 @@ public:
         // binary column couldn't call resize method like Numeric Column
         // for non-slice type, null column data has been reset to zero in AnalyticNode
         // for slice type, we need to emplace back null data
-        if (!this->data(state).is_null) {
+        if (IsNeverNullFunctionState<NestedState> || !this->data(state).is_null) {
             nested_function->get_values(ctx, this->data(state).nested_state(), nullable_column->mutable_data_column(),
                                         start, end);
-            if constexpr (IsWindowFunctionSliceState<NestedState>) {
+            if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
                 NullData& null_data = nullable_column->null_column_data();
                 null_data.insert(null_data.end(), end - start, 0);
             }
         } else {
             NullData& null_data = nullable_column->null_column_data();
-            if constexpr (IsWindowFunctionSliceState<NestedState>) {
+            if constexpr (IsUnresizableWindowFunctionState<NestedState>) {
                 nullable_column->append_nulls(end - start);
             } else {
                 for (size_t i = start; i < end; ++i) {
@@ -746,6 +764,9 @@ public:
         const Column* data_columns[column_size];
 
         for (size_t i = 0; i < column_size; i++) {
+            if (columns[i]->only_null()) {
+                return;
+            }
             if (columns[i]->is_nullable()) {
                 if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
@@ -772,6 +793,11 @@ public:
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         auto column_size = ctx->get_num_args();
+        for (size_t i = 0; i < column_size; i++) {
+            if (columns[i]->only_null()) {
+                return;
+            }
+        }
         // This container stores the columns we really pass to the nested function.
         const Column* data_columns[column_size];
 
@@ -837,6 +863,14 @@ public:
         }
     }
 
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        for (size_t i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
+    }
+
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
@@ -855,11 +889,22 @@ public:
             if (i->is_nullable()) {
                 has_nullable_column = true;
 
-                const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
+                const auto* nullable_column = down_cast<const NullableColumn*>(
+                        ColumnHelper::unpack_and_duplicate_const_column(i->size(), i).get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
                     dst_nullable_column->set_has_null(true);
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
+
+                    size_t null_size = SIMD::count_nonzero(src_null_data);
+                    // if one column only has null element, set dst_column all null
+                    if (null_size == chunk_size) {
+                        dst_nullable_column->data_column()->resize(chunk_size);
+                        for (int j = 0; j < chunk_size; ++j) {
+                            dst_null_data[j] |= 1;
+                        }
+                        return;
+                    }
 
                     // for one row, every columns should be probing to obtain null column.
                     for (int j = 0; j < chunk_size; ++j) {

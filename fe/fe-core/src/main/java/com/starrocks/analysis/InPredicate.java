@@ -131,7 +131,11 @@ public class InPredicate extends Predicate {
         msg.node_type = TExprNodeType.IN_PRED;
         msg.setOpcode(opcode);
         msg.setVector_opcode(vectorOpcode);
-        msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        if (getChild(0).getType().isComplexType()) {
+            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        } else {
+            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+        }
     }
 
     @Override

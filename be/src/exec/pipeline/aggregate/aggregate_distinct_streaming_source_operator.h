@@ -24,7 +24,7 @@ class AggregateDistinctStreamingSourceOperator : public SourceOperator {
 public:
     AggregateDistinctStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                              int32_t driver_sequence, AggregatorPtr aggregator)
-            : SourceOperator(factory, id, "aggregate_distinct_streaming_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "aggregate_distinct_streaming_source", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();
     }
@@ -41,7 +41,7 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    void _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
+    Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSinkOperator. It is

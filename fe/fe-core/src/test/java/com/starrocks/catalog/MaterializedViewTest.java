@@ -98,7 +98,7 @@ public class MaterializedViewTest {
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
         Assert.assertEquals(true, mv2.isActive());
-        mv2.setActive(false);
+        mv2.setInactiveAndReason("");
         Assert.assertEquals(false, mv2.isActive());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
@@ -665,7 +665,7 @@ public class MaterializedViewTest {
                         "as select k1,k2,v1 from base_table;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView baseMv = ((MaterializedView) testDb.getTable("base_mv"));
-        baseMv.setActive(false);
+        baseMv.setInactiveAndReason("");
 
         SinglePartitionInfo singlePartitionInfo = new SinglePartitionInfo();
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();

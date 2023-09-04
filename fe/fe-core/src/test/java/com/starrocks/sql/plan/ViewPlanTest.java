@@ -12,16 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -893,7 +903,7 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql196() throws Exception {
         String sql = "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), " +
-                        "((10800861)*(-9223372036854775808)), k2";
+                "((10800861)*(-9223372036854775808)), k2";
         testView(sql);
     }
 
@@ -1728,7 +1738,6 @@ public class ViewPlanTest extends PlanTestBase {
         Assert.assertEquals(sqlPlan, viewPlan);
     }
 
-
     @Test
     public void testLateralJoin() throws Exception {
         starRocksAssert.withTable("CREATE TABLE json_test (" +
@@ -1756,6 +1765,61 @@ public class ViewPlanTest extends PlanTestBase {
                 "    FROM\n" +
                 "      json_test ge\n" +
                 "      ,lateral json_each(cast (ge.v_json as json) -> '$.') ie(`key`, `value`)";
+        testView(sql);
+    }
+
+    @Test
+    public void testAlterView() throws Exception {
+        String sql = "select * from t0;";
+        String viewName = "view" + INDEX.getAndIncrement();
+        String createView = "create view " + viewName + " as " + sql;
+        starRocksAssert.withView(createView);
+
+        String viewPlan = getFragmentPlan("select * from " + viewName);
+        assertContains(viewPlan, "OlapScanNode");
+
+        Table view = MetaUtils.getTable(new TableName("test", viewName));
+
+        List<Column> t0Columns = view.getColumns();
+
+        List<Column> mockColumns =
+                t0Columns.stream().map(c -> GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(c), Column.class))
+                        .collect(Collectors.toList());
+
+        List<Column> mockColumn1 = Lists.newArrayList(mockColumns);
+        mockColumn1.remove(0);
+        new Expectations(view) {
+            {
+                view.getColumns();
+                result = mockColumn1;
+                times = 1;
+            }
+        };
+
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan("select * from " + viewName));
+
+        List<Column> mockColumn2 = Lists.newArrayList(mockColumns);
+        mockColumn2.get(0).setType(Type.STRING);
+        new Expectations(view) {
+            {
+                view.getColumns();
+                result = mockColumn2;
+                times = 1;
+            }
+        };
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan("select * from " + viewName));
+        starRocksAssert.dropView(viewName);
+    }
+
+    @Test
+    public void testArrayMapView() throws Exception {
+        String sql = "SELECT [1,2,3]";
+        testView(sql);
+        sql = "SELECT ARRAY<INT>[1,2,3]";
+        testView(sql);
+        sql = "SELECT Map<INT, INT>{1:10,2:20,3:30}";
+        testView(sql);
+        sql = "SELECT Map{1:10,2:20,3:30}";
         testView(sql);
     }
 }

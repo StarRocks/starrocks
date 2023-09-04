@@ -43,6 +43,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import javax.validation.constraints.NotNull;
 
 public class TabletCommitInfo implements Writable {
 
@@ -89,6 +90,7 @@ public class TabletCommitInfo implements Writable {
         return validDictCollectedVersions;
     }
 
+    @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
@@ -123,5 +125,23 @@ public class TabletCommitInfo implements Writable {
     public String toString() {
         Gson gson = new Gson();
         return gson.toJson(this);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(tabletId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof TabletCommitInfo)) {
+            return false;
+        }
+
+        TabletCommitInfo info = (TabletCommitInfo) obj;
+        return (tabletId == info.tabletId) && (backendId == info.backendId);
     }
 }

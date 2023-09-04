@@ -24,11 +24,18 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -100,15 +107,25 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator visitCall(CallOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
+            public ScalarOperator visitCall(CallOperator call, Void context) {
+                // 1. rewrite query's predicate
+                ScalarOperator tmp = replace(call);
                 if (tmp != null) {
                     return tmp;
                 }
 
-                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(predicate) &&
+                // 2. normalize predicate to better match mv
+                // TODO: merge into aggregateFunctionRewriter later.
+                CallOperator normalizedCall = normalizeCallOperator(call);
+                tmp = replace(normalizedCall);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
+                if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(normalizedCall) &&
                         !isUnderAggFunctionRewriteContext()) {
-                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(predicate);
+                    ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(normalizedCall);
                     if (newChooseScalarOp != null) {
                         setUnderAggFunctionRewriteContext(true);
                         // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
@@ -119,7 +136,7 @@ public class EquationRewriter {
                     }
                 }
 
-                return super.visitCall(predicate, context);
+                return super.visitCall(call, context);
             }
 
             @Override
@@ -132,6 +149,48 @@ public class EquationRewriter {
             public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
                 ScalarOperator tmp = replace(variable);
                 return tmp != null ? tmp : super.visitVariableReference(variable, context);
+            }
+
+            @Override
+            public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
+                ScalarOperator tmp = replace(operator);
+                return tmp != null ? tmp : super.visitCaseWhenOperator(operator, context);
+            }
+
+            @Override
+            public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+                ScalarOperator tmp = replace(operator);
+                return tmp != null ? tmp : super.visitIsNullPredicate(operator, context);
+            }
+
+            @Override
+            public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                ScalarOperator tmp = replace(predicate);
+                return tmp != null ? tmp : super.visitCompoundPredicate(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
+                ScalarOperator tmp = replace(predicate);
+                return tmp != null ? tmp : super.visitInPredicate(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
+                ScalarOperator tmp = replace(predicate);
+                return tmp != null ? tmp : super.visitLikePredicateOperator(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
+                ScalarOperator tmp = replace(array);
+                return tmp != null ? tmp : super.visitArraySlice(array, context);
+            }
+
+            @Override
+            public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+                ScalarOperator tmp = replace(collectionElementOp);
+                return tmp != null ? tmp : super.visitCollectionElement(collectionElementOp, context);
             }
 
             ScalarOperator replace(ScalarOperator scalarOperator) {
@@ -175,7 +234,22 @@ public class EquationRewriter {
             }
 
         };
+
         return expr.accept(shuttle, null);
+    }
+
+    private static CallOperator normalizeCallOperator(CallOperator aggFunc) {
+        String aggFuncName = aggFunc.getFnName();
+        if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
+            return aggFunc;
+        }
+
+        // unify count(*) or count(non-nullable column) to count(1) to be better for rewrite.
+        if (aggFunc.getChildren().size() == 0 || !aggFunc.getChild(0).isNullable()) {
+            return new CallOperator(FunctionSet.COUNT, aggFunc.getType(),
+                    Lists.newArrayList(ConstantOperator.createTinyInt((byte) 1)));
+        }
+        return aggFunc;
     }
 
     public boolean containsKey(ScalarOperator scalarOperator) {
@@ -184,17 +258,27 @@ public class EquationRewriter {
 
     public void addMapping(ScalarOperator expr, ColumnRefOperator col) {
         equationMap.put(expr, Pair.create(col, null));
+
+        // Convert a + 1 -> col_f => a => col_f - 1
         Pair<ScalarOperator, ScalarOperator> extendedEntry = new EquationTransformer(expr, col).getMapping();
         if (extendedEntry.second != col) {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
         }
 
-        if (expr instanceof CallOperator && ((CallOperator) expr).getFnName().equals(FunctionSet.TIME_SLICE)) {
-            // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
-            // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
-            // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
-            ScalarOperator first = expr.getChild(0);
-            predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
+        if (expr instanceof CallOperator) {
+            CallOperator aggFunc = (CallOperator) expr;
+            if (aggFunc.getFnName().equals(FunctionSet.TIME_SLICE)) {
+                // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
+                // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
+                // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
+                ScalarOperator first = expr.getChild(0);
+                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
+            } else if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
+                CallOperator newAggFunc = normalizeCallOperator(aggFunc);
+                if (newAggFunc != null && newAggFunc != aggFunc) {
+                    equationMap.put(newAggFunc,  Pair.create(col, null));
+                }
+            }
         }
     }
 

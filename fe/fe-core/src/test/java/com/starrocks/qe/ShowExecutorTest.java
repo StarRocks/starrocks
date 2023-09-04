@@ -212,7 +212,7 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
-                "default_catalog", "testDb", "testTbl");
+                "default_catalog", "testDb", "testTbl", null);
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
@@ -1064,7 +1064,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("testMv", resultSet.getString(2));
         Assert.assertEquals("ASYNC", resultSet.getString(3));
         Assert.assertEquals("true", resultSet.getString(4));
-        Assert.assertEquals("null", resultSet.getString(5));
+        Assert.assertEquals(null, resultSet.getString(5));
         Assert.assertEquals("RANGE", resultSet.getString(6));
         for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
             Assert.assertEquals("", resultSet.getString(7));
@@ -1225,6 +1225,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowCreateExternalCatalogWithMask() throws AnalysisException, DdlException {
+        // More mask logic please write in CredentialUtilTest
         new MockUp<CatalogMgr>() {
             @Mock
             public Catalog getCatalogByName(String name) {

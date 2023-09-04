@@ -60,7 +60,7 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     }
     {
         typename TypeTraits<field_type>::CppType dst_val;
-        type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
+        type->direct_copy((char*)&dst_val, (char*)&src_val);
     }
     // test min
     {
@@ -90,7 +90,7 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
+        type->direct_copy((char*)&dst_val, (char*)&src_val);
     }
     // test min
     {

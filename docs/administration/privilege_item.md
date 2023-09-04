@@ -24,7 +24,8 @@ This section describes privileges that are available on different objects.
 | BLACKLIST               | Creates, deletes, or displays SQL blacklists.                |
 | FILE                    | Creates, deletes, or views files.                            |
 | OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
-| CREATE GLOBAL FUNCTION  | Creates a global UDF.                                        |
+| CREATE GLOBAL FUNCTION  | Creates a global UDF.                           |
+| CREATE STORAGE VOLUME  | Creates a storage volume for a remote storage system.    |
 
 ### RESOURCE GROUP
 
@@ -89,7 +90,7 @@ This section describes privileges that are available on different objects.
 | ALTER     | Modifies a table or refreshes metadata in an external table. |
 | DROP      | Drops a table.                                               |
 | SELECT    | Queries data in a table.                                     |
-| INSERT    | Inserts data into a StarRocks table.                         |
+| INSERT    | Inserts data into a table.                                   |
 | UPDATE    | Updates data in a table.                                     |
 | EXPORT    | Exports data from a StarRocks table.                         |
 | DELETE    | Deletes data from a table based on the specified condition or deletes all the data from a table. |
@@ -116,10 +117,20 @@ This section describes privileges that are available on different objects.
 
 ### FUNCTION (Database-level UDFs)
 
+| Privilege | Description                             |
+| ------- | ------------------------------------------|
 | USAGE | Uses a function.                            |
-| ----- | ------------------------------------------- |
 | DROP  | Deletes a function.                         |
 | ALL   | Has all the above privileges on a function. |
+
+### STORAGE VOLUME
+
+| Privilege | Description                             |
+| ------- | ------------------------------------------------------------ |
+| ALTER | Alters the credential properties, comment, or status (enabled) of a storage volume.      |
+| DROP  | Drops a storage volume.               |
+| USAGE | Describes a storage volume and sets a storage volume as the default storage volume.   |
+| ALL   | Has all the above privileges on a storage volume.  |
 
 ## Upgrade notes
 

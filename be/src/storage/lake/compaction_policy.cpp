@@ -121,10 +121,6 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const TabletMetadataPtr& tablet_metadata);
-
-private:
-    static const size_t kCompactionResultBytesThreashold = 1000000000;
-    static const size_t kCompactionResultRowsThreashold = 10000000;
 };
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
@@ -151,16 +147,14 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
         const auto& rowset_candidate = rowset_queue.top();
         cur_compaction_result_bytes += rowset_candidate.stat.bytes;
         cur_compaction_result_rows += rowset_candidate.stat.num_rows;
-        if (input_rowsets.size() > 0 && ((cur_compaction_result_bytes > kCompactionResultBytesThreashold * 3 / 2) ||
-                                         (cur_compaction_result_rows > kCompactionResultRowsThreashold * 3 / 2))) {
+        if (input_rowsets.size() > 0 && cur_compaction_result_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
         input_rowsets.emplace_back(
                 std::make_shared<Rowset>(_tablet.get(), std::move(rowset_candidate.rowset_meta_ptr)));
         input_infos << input_rowsets.back()->id() << "|";
 
-        if (cur_compaction_result_bytes > kCompactionResultBytesThreashold ||
-            cur_compaction_result_rows > kCompactionResultRowsThreashold ||
+        if (cur_compaction_result_bytes > config::update_compaction_result_bytes ||
             input_rowsets.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }

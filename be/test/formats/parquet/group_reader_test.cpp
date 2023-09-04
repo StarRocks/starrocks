@@ -39,7 +39,7 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) override {
+    Status prepare_batch(size_t* num_records, Column* column) override {
         if (_step > 1) {
             *num_records = 0;
             return Status::EndOfFile("");
@@ -74,6 +74,11 @@ public:
     }
 
     Status finish_batch() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+        size_t rows = static_cast<size_t>(range.span_size());
+        return prepare_batch(&rows, dst);
+    }
 
     void set_need_parse_levels(bool need_parse_levels) override{};
 
@@ -378,12 +383,18 @@ TEST_F(GroupReaderTest, TestInit) {
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices.clear();
-    group_reader->_dict_filter_ctx.init(param->read_cols.size());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
         group_reader->_active_column_indices.push_back(i);
     }
+}
+
+static void prepare_row_range(GroupReader* group_reader) {
+    group_reader->_range =
+            SparseRange<uint64_t>(group_reader->_row_group_first_row,
+                                  group_reader->_row_group_first_row + group_reader->_row_group_metadata->num_rows);
+    group_reader->_range_iter = group_reader->_range.new_iterator();
 }
 
 TEST_F(GroupReaderTest, TestGetNext) {
@@ -413,6 +424,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     group_reader->_read_chunk = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
+
+    prepare_row_range(group_reader);
     // get next
     size_t row_count = 8;
     status = group_reader->get_next(&chunk, &row_count);

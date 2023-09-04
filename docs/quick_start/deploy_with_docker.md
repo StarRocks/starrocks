@@ -29,7 +29,7 @@ Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker
 
 ```Bash
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd registry.starrocks.io/starrocks/allin1-ubuntu
+    -itd starrocks/allin1-ubuntu
 ```
 
 > **TROUBLESHOOTING**

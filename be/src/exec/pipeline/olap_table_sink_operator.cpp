@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/olap_table_sink_operator.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -23,7 +24,7 @@
 
 namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
+    RETURN_IF_ERROR(Operator::prepare(state));
 
     state->set_per_fragment_instance_idx(_sender_id);
 
@@ -137,6 +138,7 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
+    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close
         return _sink->try_close(state);

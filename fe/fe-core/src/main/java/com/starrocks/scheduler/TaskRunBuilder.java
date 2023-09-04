@@ -67,12 +67,8 @@ public class TaskRunBuilder {
             return task.getProperties();
         }
         Map<String, String> result = new HashMap<>();
-        for (Map.Entry<String, String> entry : task.getProperties().entrySet()) {
-            result.put(entry.getKey(), entry.getValue());
-        }
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            result.put(entry.getKey(), entry.getValue());
-        }
+        result.putAll(task.getProperties());
+        result.putAll(properties);
         return result;
     }
 

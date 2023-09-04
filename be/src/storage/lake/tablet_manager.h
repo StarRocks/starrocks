@@ -16,6 +16,7 @@
 
 #include <bthread/types.h>
 
+#include <shared_mutex>
 #include <variant>
 
 #include "common/statusor.h"
@@ -105,16 +106,14 @@ public:
 
     [[nodiscard]] Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
+    [[nodiscard]] Status delete_del(int64_t tablet_id, std::string_view del_name);
+
     // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
     [[nodiscard]] Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
 
     [[nodiscard]] Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
     [[nodiscard]] Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
-
-    // put tablet_metadata and delvec to meta file. Only in PK table
-    [[nodiscard]] Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
-                                                    const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
 
     void prune_metacache();
 
@@ -145,9 +144,6 @@ public:
 
     const LocationProvider* location_provider() const { return _location_provider; }
 
-    // Return a set of tablet that owned by this TabletManager.
-    std::set<int64_t> owned_tablets();
-
     UpdateManager* update_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
@@ -155,6 +151,12 @@ public:
     void update_metacache_limit(size_t limit);
 
     Cache* metacache() { return _metacache.get(); }
+
+    int64_t in_writing_data_size(int64_t tablet_id);
+
+    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+
+    void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
 
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
@@ -190,6 +192,9 @@ private:
     std::unique_ptr<Cache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
+
+    std::shared_mutex _meta_lock;
+    std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
 };
 
 } // namespace starrocks::lake

@@ -39,13 +39,17 @@ public:
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+    static Status list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
-    static Status show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
+    static Status show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& var_params,
                                  TShowVariableResult* var_result);
 
     static std::string extract_db_name(const std::string& full_name);

@@ -1,5 +1,96 @@
 # StarRocks version 2.5
 
+## 2.5.11
+
+Release date: August 28, 2023
+
+### Improvements
+
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
+- Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
+- Dynamic partitioning further supports the partitioning unit to be `year`. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When data is loaded into tables with multiple replicas, a large number of invalid log records are written if some partitions of the tables are empty. [#28824](https://github.com/StarRocks/starrocks/issues/28824)
+- The DELETE operation fails if the field in the WHERE condition is a BITMAP or HLL field. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- Manually refreshing an asynchronous materialized view via a synchronous call (SYNC MODE) results in multiple INSERT OVERWRITE records in the `information_schema.task_runs` table. [#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- If CLONE operations are triggered on tablets in an ERROR state, disk usage increases. [#28488](https://github.com/StarRocks/starrocks/pull/28488)
+- When Join Reorder is enabled, the query result is incorrect if the column to query is a constant. [#29239](https://github.com/StarRocks/starrocks/pull/29239)
+- During tablet migration between SSDs and HDDs, if the FE sends excessive migration tasks to BEs, BEs will encounter OOM issues. [#29055](https://github.com/StarRocks/starrocks/pull/29055)
+- The security vulnerability in `/apache_hdfs_broker/lib/log4j-1.2.17.jar`. [#28866](https://github.com/StarRocks/starrocks/pull/28866)
+- During data queries through Hive Catalog, if a partitioning column and an OR operator are used in the WHERE clause, the query result is incorrect. [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- The error "java.util.ConcurrentModificationException: null" occasionally occurs during data queries. [#29296](https://github.com/StarRocks/starrocks/pull/29296)
+- FEs cannot be restarted if the base table of an asynchronous materialized view is dropped. [#29318](https://github.com/StarRocks/starrocks/pull/29318)
+- For an asynchronous materialized view that is created across databases, the Leader FE occasionally encounters a deadlock when data is being written into base tables of this materialized view. [#29432](https://github.com/StarRocks/starrocks/pull/29432)
+
+## 2.5.10
+
+Release date: August 7, 2023
+
+### New features
+
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+### Improvements
+
+- Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- When Schema Change and Routine Load occur simultaneously, Routine Load jobs may fail if Schema Change completes first. The error message reported in this situation is optimized. [#28425](https://github.com/StarRocks/starrocks/pull/28425)
+- Users are prohibited from defining NOT NULL columns when they create external tables (If NOT NULL columns are defined, errors will occur after an upgrade and the table must be created again). External catalogs are recommended starting from v2.3.0 to replace external tables. [#25485](https://github.com/StarRocks/starrocks/pull/25441)
+- Added an error message when Broker Load retries encounter an error. This facilitates troubleshooting and debugging during data loading. [#21982](https://github.com/StarRocks/starrocks/pull/21982)
+- Supports large-scale data writes when a load job involves both UPSERT and DELETE operations. [#17264](https://github.com/StarRocks/starrocks/pull/17264)
+- Optimized query rewrite using materialized views. [#27934](https://github.com/StarRocks/starrocks/pull/27934) [#25542](https://github.com/StarRocks/starrocks/pull/25542) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#27557](https://github.com/StarRocks/starrocks/pull/27557) [#22300](https://github.com/StarRocks/starrocks/pull/22300) [#26957](https://github.com/StarRocks/starrocks/pull/26957) [#27728](https://github.com/StarRocks/starrocks/pull/27728) [#27900](https://github.com/StarRocks/starrocks/pull/27900)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When CAST is used to convert a string into an array, the result may be incorrect if the input includes constants. [#19793](https://github.com/StarRocks/starrocks/pull/19793)
+- SHOW TABLET returns incorrect results if it contains ORDER BY and LIMIT. [#23375](https://github.com/StarRocks/starrocks/pull/23375)
+- Outer join and Anti join rewrite errors for materialized views. [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- `An exception occurred when using the current long link to access metastore. msg: Failed to get next notification based on last event id: 707602` is reported in FE logs if event listener is configured on the HMS to incrementally update Hive metadata. [#21056](https://github.com/StarRocks/starrocks/pull/21056)
+- The query result is not stable if the sort key is modified for a partitioned table. [#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- Data loaded using Spark Load may be distributed to the wrong buckets if the bucketing column is a DATE, DATETIME, or DECIMAL column. [#27005](https://github.com/StarRocks/starrocks/pull/27005)
+- The regex_replace function may cause BEs to crash in some scenarios. [#27117](https://github.com/StarRocks/starrocks/pull/27117)
+- BE crashes if the input of the sub_bitmap function is not a BITMAP value. [#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- "Unknown error" is returned for a query when Join Reorder is enabled. [#27472](https://github.com/StarRocks/starrocks/pull/27472)
+- Inaccurate estimation of average row size causes Primary Key partial updates to occupy excessively large memory. [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- If users specify `"hadoop.security.authentication" = "simple"` in their Broker Load jobs created to load data from HDFS, the job fails. [#27774](https://github.com/StarRocks/starrocks/pull/27774)
+- Modifying the refresh mode of materialized views causes inconsistent metadata between the leader FE and follower FE. [#28082](https://github.com/StarRocks/starrocks/pull/28082) [#28097](https://github.com/StarRocks/starrocks/pull/28097)
+- Passwords are not hidden when SHOW CREATE CATALOG and SHOW RESOURCES are used to query specific information. [#28059](https://github.com/StarRocks/starrocks/pull/28059)
+- FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311)
+
+## 2.5.9
+
+Release date: July 19, 2023
+
+### New features
+
+- Queries that contain a different type of join than the materialized view can be rewritten. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### Improvements
+
+- StarRocks external tables whose destination cluster is the current StarRocks cluster cannot be created. [#25441](https://github.com/StarRocks/starrocks/pull/25441)
+- If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- Added a new field `table_id` to the table `tables_config` in the database `Information_schema`. You can join `tables_config` with `be_tablets` on the column `table_id` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Count Distinct result is incorrect for Duplicate Key tables. [#24222](https://github.com/StarRocks/starrocks/pull/24222)
+- BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- The INSERT operation hangs if the length of CHAR data in a STRUCT to be inserted exceeds the maximum CHAR length defined in the STRUCT column. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- The result of coalesce() is incorrect. [#26250](https://github.com/StarRocks/starrocks/pull/26250)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created for recovered tables. [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+
 ## 2.5.8
 
 Release date: June 30, 2023
@@ -9,7 +100,7 @@ Release date: June 30, 2023
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 - Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - Optimized the default comments in the CREATE TABLE statement. [#24803](https://github.com/StarRocks/starrocks/pull/24803)
-- You can initiate synchronous manual refresh tasks for asynchronous materialized views using REFRESH MATERIALIZED VIEW WITH SYNC MODE. [#25910](https://github.com/StarRocks/starrocks/pull/25910pr)
+- Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
 ### Bug Fixes
 
@@ -236,7 +327,7 @@ Release date: January 22, 2023
 - Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](../administration/resource_group.md). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](../table_design/data_compression.md). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
 - Supports [user-defined variables](../reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
-- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_filter](../sql-reference/sql-functions/array-functions/array_filter.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
+- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - Provides the QUALIFY clause that filters the results of [window functions](../sql-reference/sql-functions/Window_function.md). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
 - Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - Supports the following functions: [map_size](../sql-reference/sql-functions/map-functions/map_size.md), [map_keys](../sql-reference/sql-functions/map-functions/map_keys.md), [map_values](../sql-reference/sql-functions/map-functions/map_values.md), [max_by](../sql-reference/sql-functions/aggregate-functions/max_by.md), [sub_bitmap](../sql-reference/sql-functions/bitmap-functions/sub_bitmap.md), [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md), [host_name](../sql-reference/sql-functions/utility-functions/host_name.md), and [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md). [#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)

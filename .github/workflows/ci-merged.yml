@@ -13,6 +13,7 @@ jobs:
     if: >
       ${{ github.event.pull_request.merged == true }} && 
       github.base_ref == 'main' && 
+      github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
       contains(github.event.pull_request.labels.*.name, '3.1') ||
@@ -75,12 +76,13 @@ jobs:
           labels: '2.4'
 
   thirdparty-update-image:
-    runs-on: self-hosted
+    runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
     if: github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
     steps:
       - name: clean
         run: |
@@ -107,8 +109,11 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   close_msg:
-    runs-on: self-hosted
-    if: github.event.pull_request.merged == true && github.base_ref == 'main'
+    runs-on: [self-hosted, normal]
+    if: >
+      github.event.pull_request.merged == true && 
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks'
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -126,6 +131,8 @@ jobs:
           echo "commit_sha=${commit_sha}" >> $GITHUB_OUTPUT
 
       - name: update merged coverage
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}

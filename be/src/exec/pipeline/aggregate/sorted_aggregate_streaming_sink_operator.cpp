@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
         OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
         std::shared_ptr<SortedStreamingAggregator> aggregator)
-        : Operator(factory, id, "sorted_aggregate_streaming_sink", plan_node_id, driver_sequence),
+        : Operator(factory, id, "sorted_aggregate_streaming_sink", plan_node_id, false, driver_sequence),
           _aggregator(std::move(aggregator)) {
     _aggregator->ref();
 }
@@ -40,7 +40,7 @@ void SortedAggregateStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 bool SortedAggregateStreamingSinkOperator::need_input() const {
-    return !is_finished() && _aggregator->chunk_buffer_size() < Aggregator::MAX_CHUNK_BUFFER_SIZE;
+    return !is_finished() && !_aggregator->is_chunk_buffer_full();
 }
 
 bool SortedAggregateStreamingSinkOperator::is_finished() const {

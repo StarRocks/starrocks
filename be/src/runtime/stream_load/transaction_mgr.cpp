@@ -53,6 +53,7 @@
 #include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/metrics.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
@@ -88,7 +89,7 @@ TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
 
         while (!_is_stopped.load()) {
             _clean_stream_context();
-            sleep(interval);
+            nap_sleep(interval, [this] { return _is_stopped.load(); });
         }
     });
     Thread::set_thread_name(_transaction_clean_thread, "transaction_clean");
@@ -258,6 +259,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
 
         st = _commit_transaction(ctx, boost::iequals(TXN_PREPARE, req->param(HTTP_TXN_OP_KEY)));
         if (!st.ok()) {
+            LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
             if (ctx->need_rollback) {
                 _rollback_transaction(ctx);

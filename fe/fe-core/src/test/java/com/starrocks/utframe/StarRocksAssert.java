@@ -37,6 +37,7 @@ package com.starrocks.utframe;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -86,9 +87,11 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -105,6 +108,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
@@ -192,7 +196,6 @@ public class StarRocksAssert {
         return this;
     }
 
-
     // When you want use this func, you need write mock method 'getAllKafkaPartitions' before call this func.
     // example:
     // new MockUp<KafkaUtil>() {
@@ -235,9 +238,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (statementBase instanceof  CreateTableStmt) {
+        if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
@@ -278,6 +285,15 @@ public class StarRocksAssert {
     public StarRocksAssert alterMvProperties(String sql) throws Exception {
         AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
+        return this;
+    }
+
+    public StarRocksAssert alterTableProperties(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         return this;
     }
 
@@ -387,7 +403,7 @@ public class StarRocksAssert {
             }
         }
     }
-    
+
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -424,6 +440,29 @@ public class StarRocksAssert {
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
         return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
+    }
+
+    public String executeShowResourceUsageSql(String sql) throws DdlException, AnalysisException {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(stmt, ctx);
+
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        ShowResultSet res =  showExecutor.execute();
+        String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
+        String body = res.getResultRows().stream()
+                .map(row -> String.join("|", row))
+                .collect(Collectors.joining("\n"));
+        return header + "\n" + body;
+    }
+
+    public List<List<String>> show(String sql) throws Exception {
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof ShowStmt);
+        Analyzer.analyze(stmt, ctx);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        return showExecutor.execute().getResultRows();
     }
 
     private void checkAlterJob() throws InterruptedException {

@@ -21,7 +21,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
         ./exec/iceberg/iceberg_delete_builder_test.cpp
+        ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -121,6 +122,7 @@ set(EXEC_FILES
         ./exprs/string_fn_test.cpp
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
+        ./exprs/string_fn_url_extract_parameter_test.cpp
         ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
@@ -148,8 +150,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
-        ./formats/orc/orc_test_util/MemoryOutputStream.cc
-        ./formats/orc/orc_test_util/MemoryInputStream.cc
+        ./formats/orc/orc_column_reader_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -160,6 +161,8 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
+        ./formats/parquet/parquet_cli_reader.h
+        ./formats/parquet/parquet_cli_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -201,7 +204,7 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
-        ./storage/lake/compaction_task_test.cpp
+        ./storage/lake/rowset_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
@@ -280,6 +283,7 @@ set(EXEC_FILES
         ./storage/binlog_reader_test.cpp
         ./storage/tablet_binlog_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -314,6 +318,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+        ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
@@ -326,7 +331,10 @@ set(EXEC_FILES
         ./util/block_compression_test.cpp
         ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
+        ./util/bthreads/future_test.cpp
+        ./util/bthreads/promise_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
+        ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp
@@ -335,6 +343,7 @@ set(EXEC_FILES
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
+        ./util/fail_point_test.cpp
         ./util/faststring_test.cpp
         ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
@@ -394,30 +403,9 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 # =================================================
-# bytes_test requires tcmalloc which conflicts with sanitizer.
-# Thus we need a standalone binary without sanitizer to test it.
-add_executable(bytes_test
-        ./column/bytes_test.cpp
-        ../src/service/mem_hook.cpp
-        )
-
-set_target_properties(bytes_test PROPERTIES
-        COMPILE_OPTIONS
-        "-lpthread;-std=gnu++17;-g;-fno-sanitize=address")
-
-set_target_properties(bytes_test PROPERTIES
-        LINK_OPTIONS
-        "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
-
-TARGET_LINK_LIBRARIES(bytes_test
-        pthread
-        gtest
-        tcmalloc
-        )
-
-# =================================================
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)

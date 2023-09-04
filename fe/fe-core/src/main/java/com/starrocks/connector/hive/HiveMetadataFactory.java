@@ -17,10 +17,13 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
+import org.apache.hadoop.conf.Configuration;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
@@ -32,8 +35,12 @@ public class HiveMetadataFactory {
     private final long perQueryMetastoreMaxNum;
     private final long perQueryCacheRemotePathMaxNum;
     private final ExecutorService pullRemoteFileExecutor;
+    private final Executor updateRemoteFilesExecutor;
+    private final Executor updateStatisticsExecutor;
     private final boolean isRecursive;
     private final boolean enableHmsEventsIncrementalSync;
+    private final Configuration configuration;
+    private final MetastoreType metastoreType;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -41,31 +48,43 @@ public class HiveMetadataFactory {
                                CachingHiveMetastoreConf hmsConf,
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
+                               Executor updateRemoteFilesExecutor,
+                               Executor updateStatisticsExecutor,
                                boolean isRecursive,
-                               boolean enableHmsEventsIncrementalSync) {
+                               boolean enableHmsEventsIncrementalSync,
+                               Configuration configuration,
+                               MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
+        this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
+        this.updateStatisticsExecutor = updateStatisticsExecutor;
         this.isRecursive = isRecursive;
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
+        this.configuration = configuration;
+        this.metastoreType = metastoreType;
     }
 
     public HiveMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
+                metastore instanceof CachingHiveMetastore,
+                configuration, metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
                 CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
                 pullRemoteFileExecutor,
+                updateRemoteFilesExecutor,
                 isRecursive,
-                remoteFileIO instanceof CachingRemoteFileIO);
+                remoteFileIO instanceof CachingRemoteFileIO,
+                configuration);
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
         Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
-        return new HiveMetadata(catalogName, hiveMetastoreOperations,
-                remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
+        return new HiveMetadata(catalogName, hiveMetastoreOperations, remoteFileOperations,
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor);
     }
 
     public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {

@@ -22,6 +22,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_writer.h"
@@ -129,8 +130,13 @@ public:
     // get latest version's version
     int64_t max_version() const;
 
+    int64_t max_readable_version() const;
+
     // get total number of committed and pending rowsets
     size_t version_count() const;
+
+    // if need do apply
+    bool need_apply() const;
 
     // get num of pending rowsets
     size_t num_pending() const;
@@ -138,8 +144,6 @@ public:
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
-
-    Status save_meta();
 
     // should only called by UpdateManager's apply thread
     void do_apply();
@@ -216,7 +220,8 @@ public:
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
-    Status link_from(Tablet* base_tablet, int64_t request_version, const std::string& err_msg_header = "");
+    Status link_from(Tablet* base_tablet, int64_t request_version, ChunkChanger* chunk_changer,
+                     const std::string& err_msg_header = "");
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer, const std::string& err_msg_header = "");
@@ -315,6 +320,13 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
+    double get_pk_index_write_amp_score();
+
+    Status pk_index_major_compaction();
+
+    // get the max rowset creation time for largest major version
+    int64_t max_rowset_creation_time();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -329,6 +341,7 @@ private:
         size_t num_rows = 0;
         size_t num_dels = 0;
         size_t byte_size = 0;
+        size_t row_size = 0;
         int64_t compaction_score = 0;
         bool partial_update_by_column = false;
         std::string to_string() const;
@@ -390,7 +403,15 @@ private:
 
     void _set_error(const string& msg);
 
-    Status _load_from_pb(const TabletUpdatesPB& updates);
+    Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
+
+    Status _load_pending_rowsets();
+
+    Status _load_rowsets_and_check_consistency(std::set<uint32_t>& unapplied_rowsets);
+
+    Status _purge_versions_to_fix_rowset_missing_inconsistency();
+
+    Status _load_from_pb(const TabletUpdatesPB& tablet_updates_pb);
 
     // thread-safe
     void _remove_unused_rowsets(bool drop_tablet = false);

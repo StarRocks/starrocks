@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.parser.SqlParser;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,6 +51,9 @@ import org.apache.logging.log4j.Logger;
 public class QueryDumpAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(QueryDumpAction.class);
     private static final String DB = "db";
+
+    private static final String MOCK = "mock";
+
     private static final Gson GSON = new GsonBuilder()
             .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
@@ -71,6 +75,8 @@ public class QueryDumpAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
+        boolean enableMock = request.getSingleParameter(MOCK) == null ||
+                "true".equalsIgnoreCase(StringUtils.trim(request.getSingleParameter(MOCK)));
 
         if (!Strings.isNullOrEmpty(catalogDbName)) {
             String[] catalogDbNames = catalogDbName.split("\\.");
@@ -112,6 +118,7 @@ public class QueryDumpAction extends RestBaseAction {
 
         DumpInfo dumpInfo = context.getDumpInfo();
         if (dumpInfo != null) {
+            dumpInfo.setDesensitizedInfo(enableMock);
             response.getContent().append(GSON.toJson(dumpInfo, QueryDumpInfo.class));
             sendResult(request, response);
         } else {

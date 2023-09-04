@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -355,6 +356,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+
+        RepoCreator.getInstance().run();
     }
 
     public void createStatisticsTablesForTest() {

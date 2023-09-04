@@ -128,3 +128,10 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 ```
+
+## References
+
+- [CREATE TABLE](../data-definition/CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [DROP TABLE](DROP%20TABLE.md)

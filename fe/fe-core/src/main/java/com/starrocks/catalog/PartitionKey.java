@@ -64,6 +64,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     private static final Logger LOG = LogManager.getLogger(PartitionKey.class);
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
+    // Records the string corresponding to partition value when the partition value is null
+    // for hive, it's __HIVE_DEFAULT_PARTITION__
+    // for hudi， it's __HIVE_DEFAULT_PARTITION__ or default
+    private String nullPartitionValue = "";
 
     private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
     private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
@@ -78,6 +82,14 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     public PartitionKey(List<LiteralExpr> keyValue, List<PrimitiveType> keyType) {
         keys = keyValue;
         types = keyType;
+    }
+
+    public void setNullPartitionValue(String nullPartitionValue) {
+        this.nullPartitionValue = nullPartitionValue;
+    }
+
+    public String getNullPartitionValue() {
+        return nullPartitionValue;
     }
 
     // Factory methods

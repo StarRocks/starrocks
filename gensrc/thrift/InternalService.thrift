@@ -49,7 +49,7 @@ include "RuntimeFilter.thrift"
 
 // constants for function version
 enum TFunctionVersion {
-    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 7,
 }
 
 enum TQueryType {
@@ -102,7 +102,8 @@ enum TPipelineProfileLevel {
 
 enum TSpillMode {
   AUTO,
-  FORCE
+  FORCE,
+  NONE
 }
 
 enum TSpillableOperatorType {
@@ -192,6 +193,7 @@ struct TQueryOptions {
   76: optional i64 spill_operator_min_bytes;
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
+  79: optional i64 spill_revocable_max_bytes;
 
   85: optional TSpillMode spill_mode;
   
@@ -213,7 +215,10 @@ struct TQueryOptions {
   // used to judge whether the profile need to report to FE, only meaningful when enable_profile=true
   97: optional i64 load_profile_collect_second;
 
+  100: optional i64 group_concat_max_len = 1024;
   101: optional i64 runtime_profile_report_interval = 30;
+
+  102: optional bool enable_collect_table_level_scan_stats;
 }
 
 

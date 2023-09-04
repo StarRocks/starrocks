@@ -80,7 +80,6 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
-        this.basePath = params.get("base_path");
         this.hiveColumnNames = params.get("hive_column_names");
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
@@ -91,6 +90,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         } else {
             this.deltaFilePaths = params.get("delta_file_paths").split(",");
         }
+        this.basePath = params.get("base_path");
         this.dataFilePath = params.get("data_file_path");
         this.dataFileLength = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");

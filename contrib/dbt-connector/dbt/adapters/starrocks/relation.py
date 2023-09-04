@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
-
+from dataclasses import dataclass, field
+from typing import Optional, Type
 from dbt.adapters.base.relation import BaseRelation, Policy
-from dbt.exceptions import RuntimeException
-
+from dbt.exceptions import DbtRuntimeError
+from dbt.dataclass_schema import StrEnum
+from dbt.utils import classproperty
 
 @dataclass
 class StarRocksQuotePolicy(Policy):
@@ -25,27 +26,41 @@ class StarRocksQuotePolicy(Policy):
     schema: bool = True
     identifier: bool = True
 
-
 @dataclass
 class StarRocksIncludePolicy(Policy):
     database: bool = False
     schema: bool = True
     identifier: bool = True
 
+class StarRocksRelationType(StrEnum):
+    Table = "table"
+    View = "view"
+    MaterializedView = "materialized_view"
+    SystemView = "system_view"
+    Unknown = "unknown"
 
 @dataclass(frozen=True, eq=False, repr=False)
 class StarRocksRelation(BaseRelation):
-    quote_policy: StarRocksQuotePolicy = StarRocksQuotePolicy()
-    include_policy: StarRocksIncludePolicy = StarRocksIncludePolicy()
+    type: Optional[StarRocksRelationType] = None  # type: ignore
+    include_policy: StarRocksIncludePolicy = field(default_factory=lambda: StarRocksIncludePolicy())
+    quote_policy: StarRocksQuotePolicy = field(default_factory=lambda: StarRocksQuotePolicy())
     quote_character: str = "`"
+
+    @property
+    def is_materialized_view(self) -> bool:
+        return self.type == StarRocksRelationType.MaterializedView
 
     def __post_init__(self):
         if self.database is not None:
-            raise RuntimeException(f"Cannot set database {self.database} in StarRocks!")
+            raise DbtRuntimeError(f"Cannot set database {self.database} in StarRocks!")
 
     def render(self):
         if self.include_policy.database and self.include_policy.schema:
-            raise RuntimeException(
+            raise DbtRuntimeError(
                 "Got a StarRocks relation with schema and database set to include, but only one can be set"
             )
         return super().render()
+
+    @classproperty
+    def get_relation_type(cls) -> Type[StarRocksRelationType]:
+        return StarRocksRelationType

@@ -11,7 +11,6 @@ where
   and l_quantity < (
     select
             0.2 * avg(l_quantity)
---         0.2 * sum(l_quantity) / count(l_quantity)
     from
         lineitem
     where
@@ -25,6 +24,6 @@ AGGREGATE ([GLOBAL] aggregate [{45: sum=sum(45: sum)}] group by [[]] having [nul
                 ANALYTIC ({149: avg=avg(6: l_quantity)} [17: p_partkey] [] )
                     TOP-N (order by [[17: p_partkey ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[17]
-                            SCAN (mv[lineitem_mv] columns[98: l_extendedprice, 100: l_partkey, 101: l_quantity, 114: p_brand, 115: p_container] predicate[114: p_brand = Brand#35 AND 115: p_container = JUMBO CASE])
+                            SCAN (mv[lineitem_mv] columns[111: l_extendedprice, 113: l_partkey, 114: l_quantity, 127: p_brand, 128: p_container] predicate[127: p_brand = Brand#35 AND 128: p_container = JUMBO CASE])
 [end]
 

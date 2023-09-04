@@ -14,7 +14,7 @@ create materialized view user_tags_mv1  distributed by hash(user_id) as select u
 show create materialized view user_tags_mv1;
 -- result:
 user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 3 
+DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",
@@ -28,7 +28,7 @@ GROUP BY `user_tags`.`user_id`;
 show create table user_tags_mv1;
 -- result:
 user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 3 
+DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",
@@ -48,7 +48,7 @@ alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600
 show create materialized view user_tags_mv1;
 -- result:
 user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 3 
+DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",
@@ -64,7 +64,7 @@ GROUP BY `user_tags`.`user_id`;
 show create table user_tags_mv1;
 -- result:
 user_tags_mv1	CREATE MATERIALIZED VIEW `user_tags_mv1` (`user_id`, `bitmap_union(to_bitmap(tag_id))`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 3 
+DISTRIBUTED BY HASH(`user_id`)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1",

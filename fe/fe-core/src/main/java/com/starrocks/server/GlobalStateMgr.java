@@ -116,6 +116,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -140,7 +141,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
-import com.starrocks.credential.CloudCredentialUtil;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -155,8 +156,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
@@ -200,6 +201,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -218,8 +220,8 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -227,10 +229,14 @@ import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
+import com.starrocks.qe.scheduler.slot.SlotManager;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -292,7 +298,6 @@ import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
-import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -500,7 +505,7 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
-    private ShardDeleter shardDeleter;
+    private StarMgrMetaSyncer starMgrMetaSyncer;
 
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
@@ -536,6 +541,10 @@ public class GlobalStateMgr {
     private PipeManager pipeManager;
     private PipeListener pipeListener;
     private PipeScheduler pipeScheduler;
+
+    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+    private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
+    private final SlotProvider slotProvider = new SlotProvider();
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -747,7 +756,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
-        this.shardDeleter = new ShardDeleter();
+        this.starMgrMetaSyncer = new StarMgrMetaSyncer();
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
@@ -777,12 +786,14 @@ public class GlobalStateMgr {
         getConfigRefreshDaemon().registerListener(() -> {
             try {
                 if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
-                    loadingLoadTaskScheduler.setCorePoolSize(Config.max_broker_load_job_concurrency);
+                    loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
                 }
             } catch (Exception e) {
                 LOG.warn("check config failed", e);
             }
         });
+
+        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
     public static void destroyCheckpoint() {
@@ -1299,7 +1310,12 @@ public class GlobalStateMgr {
             throw t;
         }
 
-        createOrUpdateBuiltinStorageVolume();
+        createBuiltinStorageVolume();
+    }
+
+    public void setFrontendNodeType(FrontendNodeType newType) {
+        // just for test, don't call it directly
+        feType = newType;
     }
 
     // start all daemon threads only running on Master
@@ -1375,7 +1391,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.allowCreateLakeTable()) {
-            shardDeleter.start();
+            starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
 
@@ -1405,6 +1421,8 @@ public class GlobalStateMgr {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
+
+        slotManager.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1609,6 +1627,8 @@ public class GlobalStateMgr {
                 checksum = warehouseMgr.loadWarehouses(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStorageVolumes(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = pipeManager.getRepo().loadImage(dis, checksum);
                 remoteChecksum = dis.readLong();
@@ -1851,6 +1871,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStorageVolumes(DataInputStream in, long checksum) throws IOException {
+        storageVolumeMgr.load(in);
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1976,6 +2001,8 @@ public class GlobalStateMgr {
                 dos.writeLong(checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
+                checksum = storageVolumeMgr.saveStorageVolumes(dos, checksum);
+                dos.writeLong(checksum);
                 checksum = pipeManager.getRepo().saveImage(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
@@ -2099,6 +2126,12 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadMgr.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2413,6 +2446,14 @@ public class GlobalStateMgr {
         localMetastore.createTable(stmt.getCreateTableStmt());
     }
 
+    public void addSubPartitions(Database db, String tableName, Partition partition, int num) throws DdlException {
+        localMetastore.addSubPartitions(db, tableName, partition, num);
+    }
+
+    public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
+        localMetastore.replayAddSubPartition(info);
+    }
+
     public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException, AnalysisException {
         localMetastore.addPartitions(db, tableName, addPartitionClause);
@@ -2618,6 +2659,13 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
+                        .append("\" = \"")
+                        .append(olapTable.getAutomaticBucketSize()).append("\"");
+            }
+
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2634,6 +2682,18 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
             } else {
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
@@ -2684,6 +2744,12 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
+                // show lightSchemaChange only when it is set true
+                if (olapTable.getUseLightSchemaChange()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
+                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                }
+
                 // storage media
                 Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
@@ -2691,6 +2757,15 @@ public class GlobalStateMgr {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
+
+                String storageCoolDownTTL =
+                        olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+                if (storageCoolDownTTL != null) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+                            .append("\" = \"")
+                            .append(storageCoolDownTTL).append("\"");
                 }
 
                 // partition live number
@@ -2829,7 +2904,7 @@ public class GlobalStateMgr {
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
-            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+            CredentialUtil.maskCredential(clonedFileProperties);
             addTableComment(sb, table);
 
             sb.append("\nPROPERTIES (\n");
@@ -2990,6 +3065,10 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
     }
 
     public Optional<Database> mayGetDb(String name) {
@@ -3351,11 +3430,9 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
-
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
-
 
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
@@ -3496,9 +3573,13 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                        ctx.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
         }
         ctx.setCurrentCatalog(newCatalogName);
         ctx.setDatabase("");
@@ -3523,9 +3604,13 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                            ctx.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                }
             }
             ctx.setCurrentCatalog(newCatalogName);
             dbName = parts[1];
@@ -3538,7 +3623,10 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+        try {
+            Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
+                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
         }
@@ -3755,10 +3843,6 @@ public class GlobalStateMgr {
         localMetastore.replayTruncateTable(info);
     }
 
-    public void updateResourceUsage(long backendId, TResourceUsage usage) {
-        nodeMgr.updateResourceUsage(backendId, usage);
-    }
-
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         nodeMgr.setConfig(stmt);
     }
@@ -3963,12 +4047,6 @@ public class GlobalStateMgr {
         }
 
         try {
-            loadMgr.cleanResidualJob();
-        } catch (Throwable t) {
-            LOG.warn("load manager clean residual job failed", t);
-        }
-
-        try {
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {
             LOG.warn("export manager remove old export jobs failed", t);
@@ -4031,16 +4109,31 @@ public class GlobalStateMgr {
         return metaContext;
     }
 
-    public void createOrUpdateBuiltinStorageVolume() {
+    public void createBuiltinStorageVolume() {
         try {
-            String builtinStorageVolumeId = storageVolumeMgr.createOrUpdateBuiltinStorageVolume();
+            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
             if (!builtinStorageVolumeId.isEmpty()) {
                 authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
             }
+        } catch (InvalidConfException e) {
+            LOG.fatal(e.getMessage());
+            System.exit(-1);
         } catch (DdlException | AlreadyExistsException e) {
             LOG.warn("Failed to create or update builtin storage volume", e);
         } catch (PrivilegeException e) {
             LOG.warn("Failed to grant builtin storage volume usage to public role", e);
         }
+    }
+
+    public SlotManager getSlotManager() {
+        return slotManager;
+    }
+
+    public SlotProvider getSlotProvider() {
+        return slotProvider;
+    }
+
+    public ResourceUsageMonitor getResourceUsageMonitor() {
+        return resourceUsageMonitor;
     }
 }

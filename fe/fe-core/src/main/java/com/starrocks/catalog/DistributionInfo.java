@@ -75,6 +75,8 @@ public abstract class DistributionInfo implements Writable {
         throw new NotImplementedException("not implemented");
     }
 
+    public abstract boolean supportColocate();
+
     public String getDistributionKey() {
         return "";
     }

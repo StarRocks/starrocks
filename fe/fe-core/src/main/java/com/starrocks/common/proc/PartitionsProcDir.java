@@ -57,6 +57,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -264,13 +265,8 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isCloudNativeTableOrMaterializedView() ? getLakePartitionInfos() : getOlapPartitionInfos();
-    }
-
-    private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isOlapTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -294,44 +290,22 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (Long partitionId : partitionIds) {
                 Partition partition = table.getPartition(partitionId);
                 String partitionName = partition.getName();
-                if (partitionName != null && !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
-                } else if (Config.enable_display_shadow_partitions) {
-                    partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition));
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    if (partitionName != null &&
+                            !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                        if (table.isOlapTableOrMaterializedView()) {
+                            partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        } else {
+                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        }
+                    } else if (Config.enable_display_shadow_partitions) {
+                        if (table.isOlapTableOrMaterializedView()) {
+                            partitionInfos.add(getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        } else {
+                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                        }
+                    }
                 }
-            }
-        } finally {
-            db.readUnlock();
-        }
-        return partitionInfos;
-    }
-
-    private List<List<Comparable>> getLakePartitionInfos() {
-        Preconditions.checkNotNull(db);
-        Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
-
-        // get info
-        List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
-        try {
-            List<Long> partitionIds;
-            PartitionInfo tblPartitionInfo = table.getPartitionInfo();
-
-            // for range partitions, we return partitions in ascending range order by default.
-            // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.isRangePartition()) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
-                partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
-                        .map(Map.Entry::getKey).collect(Collectors.toList());
-            } else {
-                Collection<Partition> partitions =
-                        isTempPartition ? table.getTempPartitions() : table.getPartitions();
-                partitionIds = partitions.stream().map(Partition::getId).collect(Collectors.toList());
-            }
-
-            for (Long partitionId : partitionIds) {
-                partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, table.getPartition(partitionId)));
             }
         } finally {
             db.readUnlock();
@@ -356,12 +330,13 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
     }
 
-    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
+    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
+                                                  PhysicalPartition physicalPartition) {
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
-        partitionInfo.add(partition.getId()); // PartitionId
+        partitionInfo.add(physicalPartition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
-        partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
-        partitionInfo.add(TimeUtils.longToTimeString(partition.getVisibleVersionTime())); // VisibleVersionTime
+        partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(TimeUtils.longToTimeString(physicalPartition.getVisibleVersionTime())); // VisibleVersionTime
         partitionInfo.add(0); // VisibleVersionHash
         partitionInfo.add(partition.getState()); // State
 
@@ -375,7 +350,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
 
-        long dataSize = partition.getDataSize();
+        long dataSize = physicalPartition.storageDataSize();
         ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
         DataProperty dataProperty = tblPartitionInfo.getDataProperty(partition.getId());
         partitionInfo.add(dataProperty.getStorageMedium().name());
@@ -383,30 +358,31 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
-        partitionInfo.add(partition.getRowCount());
+        partitionInfo.add(physicalPartition.storageRowCount());
 
         return partitionInfo;
     }
 
-    private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
-        PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
+    private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
+                                                  PhysicalPartition physicalPartition) {
+        PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
         DataCacheInfo cacheInfo = tblPartitionInfo.getDataCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
 
-        partitionInfo.add(partition.getId()); // PartitionId
+        partitionInfo.add(physicalPartition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
         partitionInfo.add(statistics != null ? statistics.getCompactionVersion().getVersion() : 0); // CompactVersion
-        partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
-        partitionInfo.add(partition.getNextVersion()); // NextVersion
+        partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
         partitionInfo.add(Joiner.on(", ").join(this.findPartitionColNames(tblPartitionInfo))); // PartitionKey
         partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
-        partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
-        partitionInfo.add(partition.getRowCount()); // RowCount
+        partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
+        partitionInfo.add(physicalPartition.storageRowCount()); // RowCount
         partitionInfo.add(cacheInfo.isEnabled()); // EnableCache
         partitionInfo.add(cacheInfo.isAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS

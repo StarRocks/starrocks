@@ -22,6 +22,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -82,6 +83,8 @@ public:
     }
 
     Status finish() override { return _builder.finalize(_max_txn_id); }
+
+    std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
@@ -162,6 +165,8 @@ public:
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
+
+    std::shared_ptr<std::vector<std::string>> trash_files() override { return nullptr; }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
