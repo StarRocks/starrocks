@@ -725,7 +725,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return node;
     }
 
-    public void disablePhysicalDistributionOptimize() {
+    public void reset() {
+        // Do nothing.
+    }
+
+    public void disablePhysicalPropertyOptimize() {
         forEachNode(planRoot, PlanNode::disablePhysicalPropertyOptimize);
     }
 
