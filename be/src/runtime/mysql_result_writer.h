@@ -81,6 +81,7 @@ private:
     RuntimeProfile::Counter* _convert_tuple_timer = nullptr;
     // file write timer, child timer of _append_chunk_timer
     RuntimeProfile::Counter* _result_send_timer = nullptr;
+    RuntimeProfile::Counter* _rpc_serialize_timer = nullptr;
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 

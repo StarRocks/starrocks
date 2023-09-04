@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <butil/iobuf.h>
+
 #include <condition_variable>
 #include <deque>
 #include <list>
@@ -44,6 +46,8 @@
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
+#include "util/moodycamel/concurrentqueue.h"
+#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;
@@ -53,10 +57,19 @@ namespace brpc {
 class Controller;
 }
 
+namespace butil {
+class IOBuf;
+}
+
 namespace starrocks {
 
 class TFetchDataResult;
 class PFetchDataResult;
+
+struct SerializeRes {
+    butil::IOBuf attachment;
+    size_t row_size;
+};
 
 struct GetResultBatchCtx {
     brpc::Controller* cntl = nullptr;
@@ -69,6 +82,7 @@ struct GetResultBatchCtx {
     void on_failure(const Status& status);
     void on_close(int64_t packet_seq, QueryStatistics* statistics = nullptr);
     void on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos = false);
+    void on_data(SerializeRes* t_result, int64_t packet_seq, bool eos = false);
 };
 
 // buffer used for result customer and productor
@@ -113,19 +127,26 @@ public:
         }
     }
 
+    void set_profile(RuntimeProfile::Counter* profile) {
+        if (_rpc_serialize_timer == nullptr && profile != nullptr) {
+            _rpc_serialize_timer = profile;
+        }
+    }
+
 private:
-    void _process_batch_without_lock(std::unique_ptr<TFetchDataResult>& result);
+    void _process_batch_without_lock(std::unique_ptr<SerializeRes>& result);
 
-    typedef std::list<TFetchDataResult*> ResultQueue;
+    StatusOr<std::unique_ptr<SerializeRes>> _serialize_result(TFetchDataResult*);
 
+    typedef moodycamel::ConcurrentQueue<std::unique_ptr<SerializeRes>> ResultQueue;
     // result's query id
     TUniqueId _fragment_id;
-    bool _is_close;
-    bool _is_cancelled;
+    std::atomic_bool _is_close;
+    std::atomic_bool _is_cancelled;
     Status _status;
     int _buffer_rows;
     int _buffer_limit;
-    int64_t _packet_num;
+    std::atomic<int64_t> _packet_num;
 
     // blocking queue for batch
     ResultQueue _batch_queue;
@@ -137,6 +158,8 @@ private:
     std::condition_variable _data_removal;
 
     std::deque<GetResultBatchCtx*> _waiting_rpc;
+
+    RuntimeProfile::Counter* _rpc_serialize_timer = nullptr;
 
     // It is shared with PlanFragmentExecutor and will be called in two different
     // threads. But their calls are all at different time, there is no problem of
