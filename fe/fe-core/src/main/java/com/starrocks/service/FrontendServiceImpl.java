@@ -78,7 +78,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -140,6 +139,8 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
@@ -332,8 +333,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
-                        for (TableName tableName : allTables.keySet()) {
+                        List<TableName> allTables = view.getTableRefs();
+                        for (TableName tableName : allTables) {
                             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                                     currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
                                 ddlSql = "";
@@ -818,6 +819,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params) throws TException {
         return QeProcessorImpl.INSTANCE.reportExecStatus(params, getClientAddr());
+    }
+
+    @Override
+    public TReportAuditStatisticsResult reportAuditStatistics(TReportAuditStatisticsParams params) throws TException {
+        return QeProcessorImpl.INSTANCE.reportAuditStatistics(params, getClientAddr());
     }
 
     @Override

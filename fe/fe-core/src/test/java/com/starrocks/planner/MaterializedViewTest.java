@@ -387,6 +387,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(eventTable);
+
+        starRocksAssert.withTable("CREATE TABLE test_agg_with_having_tbl (\n" +
+                "dt date NULL,\n" +
+                "col1 varchar(240) NULL,\n" +
+                "col2 varchar(30) NULL,\n" +
+                "col3 varchar(60) NULL,\n" +
+                "col4 decimal128(22, 2) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt, col1)\n" +
+                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
@@ -690,18 +703,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggregate11() throws Exception {
-        String sql = "CREATE TABLE test_agg_with_having_tbl (\n" +
-                "dt date NULL,\n" +
-                "col1 varchar(240) NULL,\n" +
-                "col2 varchar(30) NULL,\n" +
-                "col3 varchar(60) NULL,\n" +
-                "col4 decimal128(22, 2) NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(dt, col1)\n" +
-                "DISTRIBUTED BY HASH(dt, col1) BUCKETS 1 " +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";;
         String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
                 "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
@@ -714,7 +715,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "      test_agg_with_having_tbl p1\n" +
                 "    group by\n" +
                 "      1, 2, 3";
-        starRocksAssert.withTable(sql);
         starRocksAssert.withMaterializedView(mv);
         sql("select col1 from test_agg_with_having_tbl p1\n" +
                 "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
@@ -825,6 +825,60 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(1)  as cnt\n" +
                 " from emps group by empid");
+    }
+
+    @Test
+    public void testAggregate16() throws Exception {
+        String mv = "CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1\n" +
+                "DISTRIBUTED BY HASH(col1) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select " +
+                " col1,col2, col3,\n" +
+                "      sum(col4) as sum_amt\n" +
+                "    from\n" +
+                "      test_agg_with_having_tbl p1\n" +
+                "    group by\n" +
+                "      1, 2, 3";
+        starRocksAssert.withMaterializedView(mv);
+        {
+            sql("select col1 from test_agg_with_having_tbl p1\n" +
+                    "    where p1.col2 = '02' and p1.col3 = \"2023-03-31\"\n" +
+                    "    group by 1\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .notContain("AGGREGATE")
+                    .contains("PREDICATES: 10: sum_amt >= 500000, 8: col2 = '02', 9: col3 = '2023-03-31'\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+        }
+        {
+            sql("select col1, col2 from test_agg_with_having_tbl p1\n" +
+                    "    where p1.col3 = \"2023-03-31\"\n" +
+                    "    group by 1, 2\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .notContain("AGGREGATE")
+                    .contains("PREDICATES: 10: sum_amt >= 500000, 9: col3 = '2023-03-31'\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+
+        }
+        {
+            sql("select col1, col2 from test_agg_with_having_tbl p1\n" +
+                    "    group by 1, 2\n" +
+                    "    having sum(p1.col4) >= 500000\n")
+                    .contains(":AGGREGATE (update finalize)\n" +
+                            "  |  output: sum(10: sum_amt)\n" +
+                            "  |  group by: 7: col1, 8: col2\n" +
+                            "  |  having: 11: sum >= 500000\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: test_mv1\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=1/1\n" +
+                            "     rollup: test_mv1");
+
+        }
     }
 
     @Test
@@ -3817,5 +3871,57 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query = "select * from lineorder where not lo_revenue > 0";
             testRewriteOK(mv, query);
         }
+    }
+
+    @Test
+    public void testJoinWithToBitmapRewrite() throws Exception {
+        String table1 = "CREATE TABLE test_sr_table_join(\n" +
+                "fdate int,\n" +
+                "fetl_time BIGINT ,\n" +
+                "facct_type BIGINT ,\n" +
+                "userid STRING ,\n" +
+                "fplat_form_itg2 BIGINT ,\n" +
+                "funit BIGINT ,\n" +
+                "flcnt BIGINT\n" +
+                ")PARTITION BY range(fdate) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(userid)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table1);
+        String table2 = "create table dim_test_sr_table (\n" +
+                "fplat_form_itg2 bigint,\n" +
+                "fplat_form_itg2_name string\n" +
+                ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table2);
+
+        {
+            String mv = "select t1.fdate, t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228," +
+                    " sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                    "GROUP BY fdate, fplat_form_itg2_name;";
+            String query = "select t2.fplat_form_itg2_name," +
+                    " BITMAP_UNION_COUNT(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                    "GROUP BY fplat_form_itg2_name;";
+            testRewriteOK(mv, query);
+        }
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
     }
 }

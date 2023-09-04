@@ -608,6 +608,48 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, splitChinese) {
+    /// constant source and delimiter
+    {
+        using CaseType = std::tuple<std::string, std::string, std::string>;
+        std::vector<CaseType> cases{
+                {"测隔试隔试", "", "['测','隔','试','隔','试']"},
+                {"测隔试隔试", "隔", "['测','试','试']"},
+                {"测隔试隔试", "a", "['测隔试隔试']"},
+                {"测abc隔试隔试", "", "['测','a','b','c','隔','试','隔','试']"},
+                {"测abc隔试隔试", "隔", "['测abc','试','试']"},
+                {"测abc隔试abc隔试", "a", "['测','bc隔试','bc隔试']"},
+                {"a|b|c|d", "", "['a','|','b','|','c','|','d']"},
+                {"a|b|c|d", "|", "['a','b','c','d']"},
+                {"a|b|c|d", "隔", "['a|b|c|d']"},
+        };
+
+        for (const auto& [src, delimiter, expected_out] : cases) {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            Columns columns;
+
+            auto src_const = ConstColumn::create(BinaryColumn::create());
+            auto delim_const = ConstColumn::create(BinaryColumn::create());
+
+            src_const->append_datum(Slice(src));
+            delim_const->append_datum(Slice(delimiter));
+
+            columns.clear();
+            columns.push_back(src_const);
+            columns.push_back(delim_const);
+
+            ctx->set_constant_columns(columns);
+            ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
+            ASSERT_TRUE(
+                    StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+            ASSERT_EQ(expected_out, result->debug_string());
+        }
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

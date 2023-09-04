@@ -41,6 +41,24 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     }
 }
 
+void QueryStatistics::to_params(TReportAuditStatisticsParams* params) {
+    DCHECK(params != nullptr);
+    params->__set_scan_rows(scan_rows);
+    params->__set_scan_bytes(scan_bytes);
+    params->__set_returned_rows(returned_rows);
+    params->__set_cpu_cost_ns(cpu_ns);
+    params->__set_mem_cost_bytes(mem_cost_bytes);
+    {
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : _stats_items) {
+            auto new_stats_item = params->stats_items.emplace_back();
+            new_stats_item.__set_table_id(table_id);
+            new_stats_item.__set_scan_rows(stats_item->scan_rows);
+            new_stats_item.__set_scan_bytes(stats_item->scan_bytes);
+        }
+    }
+}
+
 void QueryStatistics::clear() {
     scan_rows = 0;
     scan_bytes = 0;
@@ -109,10 +127,18 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
-    scan_rows += statistics.scan_rows();
-    scan_bytes += statistics.scan_bytes();
-    cpu_ns += statistics.cpu_cost_ns();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    if (statistics.has_scan_rows()) {
+        scan_rows += statistics.scan_rows();
+    }
+    if (statistics.has_scan_bytes()) {
+        scan_bytes += statistics.scan_bytes();
+    }
+    if (statistics.has_cpu_cost_ns()) {
+        cpu_ns += statistics.cpu_cost_ns();
+    }
+    if (statistics.has_mem_cost_bytes()) {
+        mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    }
     {
         std::lock_guard l(_lock);
         for (int i = 0; i < statistics.stats_items_size(); ++i) {

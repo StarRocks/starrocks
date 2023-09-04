@@ -44,6 +44,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -328,7 +329,7 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-        originStmt = LogUtil.removeCommentAndLineSeparator(originStmt);
+        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
@@ -584,7 +585,7 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
-        replaySql = LogUtil.removeCommentAndLineSeparator(replaySql);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase;
@@ -730,6 +731,7 @@ public class UtFrameUtils {
         protected static synchronized void setUp() {
             assert (fakeJournalWriter == null);
             GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
+            GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
 
             // simulate the process of master journal synchronizing to the follower
             fakeJournalWriter = new Thread(new Runnable() {

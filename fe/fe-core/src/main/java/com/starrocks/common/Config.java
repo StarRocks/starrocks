@@ -2097,4 +2097,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int external_table_commit_timeout_ms = 10000; // 10s
+
+    @ConfField(mutable = true)
+    public static int catalog_metadata_cache_size = 500;
 }

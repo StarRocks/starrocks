@@ -393,6 +393,11 @@ struct TReportExecStatusResult {
   1: optional Status.TStatus status
 }
 
+struct TReportAuditStatisticsResult {
+  // required in V1
+  1: optional Status.TStatus status
+}
+
 // Service Protocol Details
 enum FrontendServiceVersion {
   V1
@@ -457,6 +462,24 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+}
+
+struct TReportAuditStatisticsParams {
+    1: optional Types.TUniqueId query_id
+    2: optional Types.TUniqueId fragment_instance_id
+    3: optional i64 scan_rows
+    4: optional i64 scan_bytes
+    5: optional i64 returned_rows
+    6: optional i64 cpu_cost_ns
+    7: optional i64 mem_cost_bytes
+    8: optional i64 spill_bytes
+    9: optional list<TAuditStatisticsItem> stats_items
+}
+
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
 }
 
 struct TFeResult {
@@ -1132,6 +1155,7 @@ service FrontendService {
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)
+    TReportAuditStatisticsResult reportAuditStatistics(1:TReportAuditStatisticsParams params)
     TBatchReportExecStatusResult batchReportExecStatus(1:TBatchReportExecStatusParams params)
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)

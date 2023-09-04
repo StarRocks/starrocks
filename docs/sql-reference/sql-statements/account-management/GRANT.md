@@ -132,8 +132,6 @@ Example 8: Grant user `jack` the privilege to impersonate user `rose` to perform
 ```SQL
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
-<<<<<<< HEAD
-=======
 
 ## Best practices - Customize roles based on scenarios
 
@@ -272,4 +270,3 @@ You can only write data into Iceberg tables (since v3.1).
      ```
 
 For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).
->>>>>>> 4cf65a8b45 ([Doc] Add link to bitmap value and update sys variables (#28604))
