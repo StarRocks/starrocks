@@ -34,7 +34,7 @@ brew install protobuf
 brew install maven
 ```
 
-### Openjdk 1.8 or 11
+### Openjdk 11
 
 ```bash
 brew install openjdk@11

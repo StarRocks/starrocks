@@ -579,7 +579,7 @@ The mapping between the target database and StarRocks varies based on the type o
 
 ## (Deprecated) Hive external table
 
-Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
+Before using Hive external tables, make sure JDK 11 has been installed on your servers.
 
 ### Create a Hive resource
 

@@ -79,13 +79,13 @@ if [[ -z ${JAVA_HOME} ]]; then
       cat << EOF
 Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version 8 or higher in order to run.
 Please take the following steps to resolve this issue:
-1. Install OpenJDK 8 or higher using your Linux distribution's package manager.
+1. Install OpenJDK 11 using your Linux distribution's package manager.
 For example:
-sudo apt install openjdk-8-jdk  (on Ubuntu/Debian)
-sudo yum install java-1.8.0-openjdk-devel (on CentOS/RHEL)
+sudo apt install openjdk-11-jdk  (on Ubuntu/Debian)
+sudo yum install java-11-openjdk-devel (on CentOS/RHEL)
 2. Set the JAVA_HOME environment variable to point to your installed OpenJDK directory.
 For example:
-export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 3. Try running this script again.
 EOF
       exit 1
@@ -97,7 +97,7 @@ if [ ! -f "$JAVA_HOME/bin/javac" ]; then
   cat << EOF
 Error: It appears that your JAVA_HOME environment variable is pointing to a non-JDK path: $JAVA_HOME
 The FE program requires the full JDK to be installed and configured properly. Please check that JAVA_HOME
-is set to the installation directory of JDK 8 or higher, rather than the JRE installation directory.
+is set to the installation directory of JDK 11, rather than the JRE installation directory.
 EOF
   exit 1
 fi
