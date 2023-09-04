@@ -8,9 +8,48 @@
 {%- endmacro %}
 
 {% macro starrocks__get_create_materialized_view_as_sql(relation, sql) %}
-    create materialized view {{ relation }} refresh manual
+
+    {%- set partition_by = config.get('partition_by') -%}
+    {%- set buckets = config.get('buckets') -%}
+    {%- set distributed_by = config.get('distributed_by') -%}
+    {%- set properties = config.get('properties') -%}
+    {%- set refresh_method = config.get('refresh_method', 'manual') -%}
+
+    create materialized view {{ relation }}
+
+    {%- if partition_by is not none -%}
+        PARTITION BY (
+        {%- for col in partition_by -%}
+         {{ col }} {%- if not loop.last -%}, {%- endif -%}
+        {%- endfor -%}
+        )
+    {%- endif -%}
+
+    {%- if distributed_by is not none %}
+    DISTRIBUTED BY HASH (
+      {%- for item in distributed_by -%}
+        {{ item }} {%- if not loop.last -%}, {%- endif -%}
+      {%- endfor -%} )
+      {%- if buckets is not none %}
+        BUCKETS {{ buckets }}
+      {% endif -%}
+    {%- elif adapter.is_before_version("3.1.0") -%}
+      {%- set msg -%}
+        [distributed_by] must set before version 3.1, current version is {{ adapter.current_version() }}
+      {%- endset -%}
+      {{ exceptions.raise_compiler_error(msg) }}
+    {% endif -%}
+    refresh {{ refresh_method }}
+    {% if properties is not none %}
+    PROPERTIES (
+      {% for key, value in properties.items() %}
+        "{{ key }}" = "{{ value }}"{% if not loop.last %},{% endif %}
+      {% endfor %}
+    )
+    {% endif %}
     as
     {{ sql }};
+
 {% endmacro %}
 
 {% macro starrocks__get_drop_relation_sql(relation) %}
