@@ -566,24 +566,6 @@ public class FunctionSet {
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.CORR)
             .build();
-<<<<<<< HEAD
-=======
-
-    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
-            .add(ARRAY_SUM)
-            .add(ARRAY_AVG)
-            .add(ARRAY_MIN)
-            .add(ARRAY_MAX)
-            .add(ARRAY_DISTINCT)
-            .add(ARRAY_SORT)
-            .add(REVERSE)
-            .add(ARRAY_INTERSECT)
-            .add(ARRAY_DIFFERENCE)
-            .add(ARRAYS_OVERLAP)
-            .add(ARRAY_AGG)
-            .add(ARRAY_CONCAT)
-            .add(ARRAY_SLICE)
-            .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
             (Type itemType) -> {
@@ -593,7 +575,6 @@ public class FunctionSet {
                 return new ArrayType(new StructType(fields, true));
             };
 
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
@@ -950,18 +931,10 @@ public class FunctionSet {
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
-<<<<<<< HEAD
 
-=======
-        // Allocate session
-        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
-                Lists.newArrayList(Type.BIGINT, Type.INT), Type.BIGINT, Type.BIGINT));
-        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
-                Lists.newArrayList(Type.INT, Type.INT), Type.BIGINT, Type.BIGINT));
         // Approx top k
         registerBuiltinApproxTopKWindowFunction();
         // Dict merge
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),

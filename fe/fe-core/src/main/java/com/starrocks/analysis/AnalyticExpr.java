@@ -101,11 +101,7 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
-<<<<<<< HEAD
-=======
-    public static String SESSION_NUMBER = "SESSION_NUMBER";
     public static String APPROX_TOP_K = "approx_top_k";
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
 
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
