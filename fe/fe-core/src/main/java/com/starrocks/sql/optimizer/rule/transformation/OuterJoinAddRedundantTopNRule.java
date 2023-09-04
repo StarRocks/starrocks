@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -41,7 +42,7 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
 
-        if (topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
+        if (!topn.hasLimit() || topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
             return false;
         }
 
@@ -50,6 +51,10 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
         JoinOperator joinType = joinOperator.getJoinType();
 
         if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin()) {
+            return false;
+        }
+
+        if (!Strings.isNullOrEmpty(joinOperator.getJoinHint())) {
             return false;
         }
 
