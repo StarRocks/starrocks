@@ -91,7 +91,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.buffer.rows | NO | Integer.MAX_VALUE | Supported since version 1.1.1. The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
-| starrocks.write.max.retries                    | NO       | 3             | Supported since version 1.1.1. The number of times that the connector retries to perform the Stream Load for the same batch of data if the load fails. <br/> **NOTICE:** Because Stream Load transaction interface does not support retry. If this parameter is positive, the connector always use Stream Load interface and ingnore the value of `starrocks.write.enable.transaction-stream-load`.|
+| starrocks.write.max.retries                    | NO       | 3             | Supported since version 1.1.1. The number of times that the connector retries to perform the Stream Load for the same batch of data if the load fails. <br/> **NOTICE:** Because Stream Load transaction interface does not support retry. If this parameter is positive, the connector always use Stream Load interface and ignore the value of `starrocks.write.enable.transaction-stream-load`.|
 | starrocks.write.retry.interval.ms              | NO       | 10000         | Supported since version 1.1.1. The interval to retry the Stream Load for the same batch of data if the load fails.|
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"col0,col1,col2"`. |
 | starrocks.column.types                         | NO       | None          | Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-hll-type) type.|
@@ -405,18 +405,18 @@ DISTRIBUTED BY HASH(`id`);
 
 #### Partial updates
 
-This example will show how to load data only into columns `id` and `name`.
+This example will show how to only update data in the column `name` through loading:
 
 1. Insert initial data to StarRocks table in MySQL client.
 ```SQL
-mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
 
 mysql> select * from score_board;
 +------+-----------+-------+
 | id   | name      | score |
 +------+-----------+-------+
 |    1 | starrocks |   100 |
-|    2 | flink     |   100 |
+|    2 | spark     |   100 |
 +------+-----------+-------+
 2 rows in set (0.02 sec)
 ```
@@ -440,7 +440,7 @@ mysql> select * from score_board;
   ```
 3. Insert data into the table in Spark SQL client, and only update the column `name`.
   ```SQL
-  INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'spark-update');
   ```
 4. Query the StarRocks table in MySQL client.
    
@@ -452,7 +452,7 @@ mysql> select * from score_board;
   | id   | name             | score |
   +------+------------------+-------+
   |    1 | starrocks-update |   100 |
-  |    2 | flink-update     |   100 |
+  |    2 | spark-update     |   100 |
   +------+------------------+-------+
   2 rows in set (0.02 sec)
   ```
@@ -464,14 +464,14 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 1. Insert initial data to StarRocks table in MySQL client.
   ```SQL
-  mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+  mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
 
   mysql> select * from score_board;
   +------+-----------+-------+
   | id   | name      | score |
   +------+-----------+-------+
   |    1 | starrocks |   100 |
-  |    2 | flink     |   100 |
+  |    2 | spark     |   100 |
   +------+-----------+-------+
   2 rows in set (0.02 sec)
   ```
@@ -495,7 +495,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 3. Insert data to the table in Spark SQL client, and update the row whose `id` is 1 with a smaller score value, and the row whose `id` is 2 with a larger score value.
   ```SQL
-  INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'spark-update', 101);
   ```
 
 4. Query the StarRocks table in MySQL client.
@@ -506,14 +506,14 @@ takes effect only when the new value for `score` is has a greater or equal to th
    | id   | name         | score |
    +------+--------------+-------+
    |    1 | starrocks    |   100 |
-   |    2 | flink-update |   101 |
+   |    2 | spark-update |   101 |
    +------+--------------+-------+
    2 rows in set (0.03 sec)
   ```
 ### Load data into columns of BITMAP type 
 
 [`BITMAP`](../sql-reference/sql-statements/data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
-Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
+Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type. **`BITMAP` is supported since version 1.1.1**.
  
 1. Create a StarRocks Aggregate table.
 
