@@ -203,7 +203,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                        state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
-                        "Invalid window function plan: ($0, $1, $2, $3, $4, $5, $6)", real_fn_name, arg_type.type,
+                        "Invalid window function plan: ($0, $1, $2, $3, $4, $5)", real_fn_name, arg_type.type,
                         return_type.type, is_input_nullable, fn.binary_type, state->func_version()));
             }
             _agg_functions[i] = func;
@@ -466,7 +466,10 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
             // so we only reserve it.
             if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
                 _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY) {
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);
