@@ -540,7 +540,8 @@ void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_flush_token != nullptr) {
-        (void)_flush_token->wait();
+        auto st = _flush_token->wait();
+        LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
         VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
 
