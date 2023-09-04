@@ -219,4 +219,23 @@ public class DecimalTypeTest extends PlanTestBase {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
     }
+
+    @Test
+    public void testDecimalV2Cast() throws Exception {
+        String sql = "select cast('12.367' as decimalv2(9,0));";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast('12.367' as decimalv2(9,1));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast('12.367' as decimalv2(9,2));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "12.367");
+
+        sql = "select cast(cast('12.56' as decimalv2(9,1)) as varchar);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "'12.56'");
+    }
 }
