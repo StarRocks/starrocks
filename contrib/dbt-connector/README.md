@@ -85,16 +85,20 @@ models:
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
   properties: [{"replication_num":"1", "in_memory": "true"}]
+  refresh_method: 'async' // only for materialized view default manual
 ```
   
 ### dbt run config:
 #### Example configuration:
 ```
 {{ config(materialized='view') }}
-{{ config(materialized='materialized_view') }}        
 {{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
 {{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='materialized_view') }}
+{{ config(materialized='materialized_view', properties={"storage_medium":"SSD"}) }}
+{{ config(materialized='materialized_view', refresh_method="ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)") }}
 ```
+For materialized view only support partition_by、buckets、distributed_by、properties、refresh_method configuration.
 
 ## Test Adapter
 consult [the project](https://github.com/dbt-labs/dbt-adapter-tests)
