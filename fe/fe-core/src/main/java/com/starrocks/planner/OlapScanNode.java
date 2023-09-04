@@ -859,8 +859,11 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-            msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
-            msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
