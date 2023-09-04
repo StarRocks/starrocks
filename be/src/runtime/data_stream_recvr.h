@@ -238,6 +238,7 @@ private:
     PassThroughContext _pass_through_context;
 
     int _encode_level;
+    bool _close = false;
 };
 
 } // end namespace starrocks

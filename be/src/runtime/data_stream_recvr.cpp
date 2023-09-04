@@ -270,9 +270,13 @@ void DataStreamRecvr::close() {
     _cascade_merger.reset();
 
     _closure_block_timer->update(_closure_block_timer->value() / std::max(1, _degree_of_parallelism));
+    _close = true;
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
+    if (!_close) {
+        close();
+    }
     DCHECK(_mgr == nullptr) << "Must call close()";
 }
 
