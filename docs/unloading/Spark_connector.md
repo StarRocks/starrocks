@@ -239,12 +239,12 @@ The processing logic of the underlying storage engine used by StarRocks cannot c
 
 ## Upgrade Spark connector
 
+### Upgrade from version 1.0.0 to version 1.1.0
+
 - Since 1.1.1, the Spark connector does not provide `mysql-connector-java` which is the official JDBC driver for MySQL, because of the limitations of the GPL license used by `mysql-connector-java`.
   However, the Spark connector still needs the `mysql-connector-java` to connect to StarRocks for the table metadata, so you need to add the driver to the Spark classpath manually. You can find the
   driver on [MySQL site](https://dev.mysql.com/downloads/connector/j/) or [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
-
-### Upgrade from version 1.0.0 to version 1.1.0
-
+  
 - In version 1.1.0, the Spark connector uses JDBC to access StarRocks to obtain more detailed table information. Therefore, you must configure `starrocks.fe.jdbc.url`.
 
 - In version 1.1.0, some parameters are renamed. Both the old and new parameters are retained for now. For each pair of equivalent parameters, you only need to configure one of them, but we recommend that you use the new one because the old one may be deprecated.
