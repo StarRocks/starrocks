@@ -710,14 +710,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             if (!TimezoneUtils::find_cctz_time_zone(concrete_type->timezone(), ctz)) {
                 return Status::InternalError(strings::Substitute("Not found TimeZone($0)", concrete_type->timezone()));
             }
-            divisor = time_unit_divisor(concrete_type->unit());
-            if (divisor == 0) {
-                return Status::InternalError(strings::Substitute("Not support TimeUnit($0)", concrete_type->unit()));
-            }
-            if (divisor == 1) {
-                return convert_datetime<true>(data, arrow_data, num_elements, ctz, null_data, 1);
-            }
-            return convert_datetime<false>(data, arrow_data, num_elements, ctz, null_data, divisor);
+            return convert_datetime(data, arrow_data, num_elements, ctz, null_data, concrete_type->unit());
         }
         return Status::OK();
     }
