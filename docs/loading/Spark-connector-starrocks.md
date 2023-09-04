@@ -6,7 +6,13 @@ StarRocks provides a self-developed connector named StarRocks Connector for Apac
 
 | Spark connector | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
+| 1.1.1 | 3.2, 3.3, or 3.4 | 2.5 and later | 8 | 2.12 |
 | 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
+
+> **NOTICE**
+>
+> - Please see [Upgrade Spark connector](#upgrade-spark-connector) for behaviour changes among different versions of the Spark connector.
+> - The Spark connector does not provide MySQL JDBC driver since version 1.1.1, and you need import the driver to the spark classpath manually. You can find the driver on [MySQL site](https://dev.mysql.com/downloads/connector/j/) or [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
 
 ## Obtain Spark connector
 
@@ -75,15 +81,18 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 | Parameter                                      | Required | Default value | Description                                                  |
 | ---------------------------------------------- | -------- | ------------- | ------------------------------------------------------------ |
-| starrocks.fe.http.url                          | YES      | None          | The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a comma (,). Format: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`. |
+| starrocks.fe.http.url                          | YES      | None          | The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a comma (,). Format: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`. Since version 1.1.1, you can also add `http://` prefix to the URL, such as `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`.|
 | starrocks.fe.jdbc.url                          | YES      | None          | The address that is used to connect to the MySQL server of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. |
 | starrocks.table.identifier                     | YES      | None          | The name of the StarRocks table. Format: `<database_name>.<table_name>`. |
 | starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account.              |
 | starrocks.password                             | YES      | None          | The password of your StarRocks cluster account.              |
 | starrocks.write.label.prefix                   | NO       | spark-        | The label prefix used by Stream Load.                        |
-| starrocks.write.enable.transaction-stream-load | NO       | TRUE          | Whether to use [the transactional interface of Stream Load](../Stream_Load_transaction_interface.md) to load data. This feature is supported in StarRocks v2.4 and later. |
+| starrocks.write.enable.transaction-stream-load | NO | TRUE | Whether to use [Stream Load transaction interface](https://docs.starrocks.io/en-us/latest/loading/Stream_Load_transaction_interface) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry. |
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
+| starrocks.write.buffer.rows | NO | Integer.MAX_VALUE | Supported since version 1.1.1. The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
+| starrocks.write.max.retries                    | NO       | 3             | Supported since version 1.1.1. The number of times that the connector retries to perform the Stream Load for the same batch of data if the load fails. <br/> **NOTICE:** Because Stream Load transaction interface does not support retry. If this parameter is positive, the connector always use Stream Load interface and ingnore the value of `starrocks.write.enable.transaction-stream-load`.|
+| starrocks.write.retry.interval.ms              | NO       | 10000         | Supported since version 1.1.1. The interval to retry the Stream Load for the same batch of data if the load fails.|
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"col0,col1,col2"`. |
 | starrocks.column.types                         | NO       | None          | Supported since version 1.1.1. Customize the column data types for Spark instead of using the defaults inferred from the StarRocks table and the [default mapping](#data-type-mapping-between-spark-and-starrocks). The parameter value is a schema in DDL format same as the output of Spark [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) , such as `col0 INT, col1 STRING, col2 BIGINT`. Note that you only need to specify columns that need customization. One use case is to load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) or [HLL](#load-data-into-columns-of-hll-type) type.|
 | starrocks.write.properties.*                   | NO       | None          | The parameters that are used to control Stream Load behavior.  For example, the parameter `starrocks.write.properties.format` specifies the format of the data to be loaded, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). |
@@ -92,6 +101,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.write.properties.column_separator    | NO       | \t            | The column separator for CSV-formatted data.                 |
 | starrocks.write.num.partitions                 | NO       | None          | The number of partitions into which Spark can write data in parallel. When the data volume is small, you can reduce the number of partitions to lower the loading concurrency and frequency. The default value for this parameter is determined by Spark. However, this method may cause Spark Shuffle cost. |
 | starrocks.write.partition.columns              | NO       | None          | The partitioning columns in Spark. The parameter takes effect only when `starrocks.write.num.partitions` is specified. If this parameter is not specified, all columns being written are used for partitioning. |
+| starrocks.timezone | NO | Default timezone of JVM | Supported since 1.1.1. The timezone used to convert Spark `TimestampType` to StarRocks `DATETIME`. The default is the timezone of JVM returned by `ZoneId#systemDefault()`. The format can be a timezone name such as `Asia/Shanghai`, or a zone offset such as `+08:00`. |
 
 ## Data type mapping between Spark and StarRocks
 
@@ -118,6 +128,18 @@ Directly download the corresponding version of the Spark connector JAR from the 
 - You can also customize the data type mapping.
 
   For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-typ) and [HLL](#load-data-into-columns-of-HLL-type) types. **BITMAP and HLL are supported since version 1.1.1**.
+
+
+## Upgrade Spark connector
+
+### Upgrade from version 1.1.0 to 1.1.1
+
+- Since 1.1.1, the Spark connector does not provide `mysql-connector-java` which is the official JDBC driver for MySQL, because of the limitations of the GPL license used by `mysql-connector-java`.
+  However, the Spark connector still needs the MySQL JDBC driver to connect to StarRocks for the table metadata, so you need to add the driver to the Spark classpath manually. You can find the
+  driver on [MySQL site](https://dev.mysql.com/downloads/connector/j/) or [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/).
+- Since 1.1.1, the connector uses Stream Load interface by default rather than Stream Load transaction interface in version 1.1.0. If you still want to use Stream Load transaction interface, you
+  can set the option `starrocks.write.max.retries` to `0`. Please see the description of `starrocks.write.enable.transaction-stream-load` and `starrocks.write.max.retries`
+  for details.
 
 ## Examples
 
@@ -356,6 +378,138 @@ The following example explains how to load data with Spark SQL by using the `INS
 
 ## Best Practices
 
+### Load data to primary key table
+
+This section will show how to load data to StarRocks primary key table to achieve partial update, and conditional update.
+You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the introduction of those features.
+These examples use Spark SQL.
+
+#### Preparations
+
+Create a database `test` and create a Primary Key table `score_board` in StarRocks.
+
+```SQL
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### Partial update
+
+This example will show how to load data only to columns `id` and `name`.
+
+1. Insert initial data to StarRocks table in MySQL client
+```SQL
+mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+
+mysql> select * from score_board;
++------+-----------+-------+
+| id   | name      | score |
++------+-----------+-------+
+|    1 | starrocks |   100 |
+|    2 | flink     |   100 |
++------+-----------+-------+
+2 rows in set (0.02 sec)
+```
+
+2. Create a Spark table `score_board` in Spark SQL client
+* Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update
+* Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write
+
+  ```SQL
+  CREATE TABLE `score_board`
+  USING starrocks
+  OPTIONS(
+      "starrocks.fe.http.url"="127.0.0.1:8030",
+      "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+      "starrocks.table.identifier"="test.score_board",
+      "starrocks.user"="root",
+      "starrocks.password"="",
+      "starrocks.write.properties.partial_update"="true",
+      "starrocks.columns"="id,name"
+   );
+  ```
+3. Insert data to the table in Spark SQL client, and only update the column `name`
+  ```SQL
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
+  ```
+4. Query the StarRocks table in mysql client
+   You can see that only values for `name` change, and the values for `score` does not change.
+
+  ```SQL
+  mysql> select * from score_board;
+  +------+------------------+-------+
+  | id   | name             | score |
+  +------+------------------+-------+
+  |    1 | starrocks-update |   100 |
+  |    2 | flink-update     |   100 |
+  +------+------------------+-------+
+  2 rows in set (0.02 sec)
+  ```
+
+#### Conditional update
+
+This example will show how to do conditional update according to the value of column `score`. The update for an `id`
+takes effect only when the new value for `score` is has a greater or equal to the old value.
+
+1. Insert initial data to StarRocks table in MySQL client
+  ```SQL
+  mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
+
+  mysql> select * from score_board;
+  +------+-----------+-------+
+  | id   | name      | score |
+  +------+-----------+-------+
+  |    1 | starrocks |   100 |
+  |    2 | flink     |   100 |
+  +------+-----------+-------+
+  2 rows in set (0.02 sec)
+  ```
+
+2. Create a Spark table `score_board` in the following ways
+* Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score`
+  as the condition
+* Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
+
+  ```SQL
+  CREATE TABLE `score_board`
+  USING starrocks
+  OPTIONS(
+      "starrocks.fe.http.url"="127.0.0.1:8030",
+      "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+      "starrocks.table.identifier"="test.score_board",
+      "starrocks.user"="root",
+      "starrocks.password"="",
+      "starrocks.write.properties.merge_condition"="score"
+   );
+  ```
+
+3. Insert data to the table in Spark SQL client, and update id 1 with a smaller score, and id 2 with a larger score
+  ```SQL
+  INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
+  ```
+
+4. Query the StarRocks table in mysql client
+   You can see that only the row for id 2 changes, and the row for id 1 does not change.
+  ```SQL
+   mysql> select * from score_board;
+   +------+--------------+-------+
+   | id   | name         | score |
+   +------+--------------+-------+
+   |    1 | starrocks    |   100 |
+   |    2 | flink-update |   101 |
+   +------+--------------+-------+
+   2 rows in set (0.03 sec)
+  ```
 ### Load data into columns of BITMAP type 
 
 [`BITMAP`](../sql-reference/sql-statements/data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
