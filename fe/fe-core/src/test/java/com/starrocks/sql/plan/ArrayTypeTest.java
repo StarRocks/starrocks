@@ -395,22 +395,22 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_sort(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_sort[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(26,2)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL128(26,2)>;");
 
         sql = "select array_sort(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_sort[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(4,3)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL64(4,3)>;");
 
         sql = "select array_sort(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_sort[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]);" +
-                " args: INVALID_TYPE; result: ARRAY<DECIMAL32(8,5)>;");
+                " args: ARRAY; result: ARRAY<DECIMAL32(8,5)>;");
 
         sql = "select array_sort(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_sort[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(16,3)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL64(16,3)>;");
     }
 
     @Test
@@ -420,36 +420,36 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan,
                 "array_intersect[(cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<DECIMAL128(27,3)>), " +
                         "cast([5: d_2, ARRAY<DECIMAL64(4,3)>, true] as ARRAY<DECIMAL128(27,3)>)); " +
-                        "args: INVALID_TYPE; result: ARRAY<DECIMAL128(27,3)>;");
+                        "args: ARRAY; result: ARRAY<DECIMAL128(27,3)>;");
 
         sql = "select array_intersect(d_1, d_3) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, " array_intersect[(cast([4: d_1, ARRAY<DECIMAL128(26,2)>, false] as ARRAY<DOUBLE>), " +
-                "cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] as ARRAY<DOUBLE>)); args: INVALID_TYPE; " +
+                "cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] as ARRAY<DOUBLE>)); args: ARRAY; " +
                 "result: ARRAY<DOUBLE>;");
 
         sql = "select array_intersect(d_3, d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_intersect[([6: d_3, ARRAY<DECIMAL128(25,19)>, false], " +
-                "cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<DECIMAL128(25,19)>)); args: INVALID_TYPE; " +
+                "cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<DECIMAL128(25,19)>)); args: ARRAY; " +
                 "result: ARRAY<DECIMAL128(25,19)>;");
 
         sql = "select array_intersect(d_3, d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_intersect[([6: d_3, ARRAY<DECIMAL128(25,19)>, false], " +
-                "cast([9: d_6, ARRAY<DECIMAL128(18,6)>, false] as ARRAY<DECIMAL128(31,19)>)); args: INVALID_TYPE; " +
+                "cast([9: d_6, ARRAY<DECIMAL128(18,6)>, false] as ARRAY<DECIMAL128(31,19)>)); args: ARRAY; " +
                 "result: ARRAY<DECIMAL128(31,19)>;");
 
         sql = "select array_intersect(d_1, i_1) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "10 <-> array_intersect[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], " +
-                "cast([2: i_1, ARRAY<INT>, false] as ARRAY<DECIMAL128(26,2)>)); args: INVALID_TYPE; " +
+                "cast([2: i_1, ARRAY<INT>, false] as ARRAY<DECIMAL128(26,2)>)); args: ARRAY; " +
                 "result: ARRAY<DECIMAL128(26,2)>;");
 
         sql = "select array_intersect(d_3, s_1) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_intersect[(cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] " +
-                "as ARRAY<VARCHAR(65533)>), [3: s_1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
+                "as ARRAY<VARCHAR(65533)>), [3: s_1, ARRAY<VARCHAR(65533)>, true]); args: ARRAY; " +
                 "result: ARRAY<VARCHAR(65533)>;");
     }
 
@@ -458,22 +458,22 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_min(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_min[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: DECIMAL128(26,2)");
+                "args: ARRAY; result: DECIMAL128(26,2)");
 
         sql = "select array_min(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_min[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: DECIMAL64(4,3);");
+                "args: ARRAY; result: DECIMAL64(4,3);");
 
         sql = "select array_max(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_max[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]);" +
-                " args: INVALID_TYPE; result: DECIMAL32(8,5);");
+                " args: ARRAY; result: DECIMAL32(8,5);");
 
         sql = "select array_max(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_max[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: DECIMAL64(16,3);");
+                "args: ARRAY; result: DECIMAL64(16,3);");
     }
 
     @Test
@@ -481,32 +481,32 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_sum(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_sum[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: DECIMAL128(38,2);");
+                "args: ARRAY; result: DECIMAL128(38,2);");
 
         sql = "select array_sum(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_sum[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: DECIMAL128(38,3);");
+                "args: ARRAY; result: DECIMAL128(38,3);");
 
         sql = "select array_sum(d_3) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_sum[(cast([6: d_3, ARRAY<DECIMAL128(25,19)>, false] as" +
-                " ARRAY<DECIMAL128(38,18)>)); args: INVALID_TYPE; result: DECIMAL128(38,18);");
+                " ARRAY<DECIMAL128(38,18)>)); args: ARRAY; result: DECIMAL128(38,18);");
 
         sql = "select array_avg(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_avg[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]);" +
-                " args: INVALID_TYPE; result: DECIMAL128(38,11);");
+                " args: ARRAY; result: DECIMAL128(38,11);");
 
         sql = "select array_avg(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_avg[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: DECIMAL128(38,9);");
+                "args: ARRAY; result: DECIMAL128(38,9);");
 
         sql = "select array_avg(d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_avg[([9: d_6, ARRAY<DECIMAL128(18,6)>, false]); " +
-                "args: INVALID_TYPE; result: DECIMAL128(38,12);");
+                "args: ARRAY; result: DECIMAL128(38,12);");
     }
 
     @Test
@@ -514,32 +514,32 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_difference(d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([4: d_1, ARRAY<DECIMAL128(26,2)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,2)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL128(38,2)>;");
 
         sql = "select array_difference(d_2) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([5: d_2, ARRAY<DECIMAL64(4,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL64(18,3)>;");
 
         sql = "select array_difference(d_3) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([6: d_3, ARRAY<DECIMAL128(25,19)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,19)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL128(38,19)>;");
 
         sql = "select array_difference(d_4) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([7: d_4, ARRAY<DECIMAL32(8,5)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,5)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL64(18,5)>;");
 
         sql = "select array_difference(d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL64(18,3)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL64(18,3)>;");
 
         sql = "select array_difference(d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertContains(plan, "array_difference[([9: d_6, ARRAY<DECIMAL128(18,6)>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<DECIMAL128(38,6)>;");
+                "args: ARRAY; result: ARRAY<DECIMAL128(38,6)>;");
     }
 
     @Test
@@ -547,7 +547,7 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select arrays_overlap(d_1, d_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "arrays_overlap[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], " +
-                "[4: d_1, ARRAY<DECIMAL128(26,2)>, false]); args: INVALID_TYPE,INVALID_TYPE; result: BOOLEAN;");
+                "[4: d_1, ARRAY<DECIMAL128(26,2)>, false]); args: ARRAY,ARRAY; result: BOOLEAN;");
 
         sql = "select arrays_overlap(d_1, d_2) from adec;";
         plan = getVerboseExplain(sql);
@@ -602,7 +602,7 @@ public class ArrayTypeTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "array_concat[" +
                 "(cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<DECIMAL128(18,6)>), " +
-                "[9: d_6, ARRAY<DECIMAL128(18,6)>, false]); args: INVALID_TYPE; result: ARRAY<DECIMAL128(18,6)>;");
+                "[9: d_6, ARRAY<DECIMAL128(18,6)>, false]); args: ARRAY; result: ARRAY<DECIMAL128(18,6)>;");
     }
 
     @Test
@@ -610,50 +610,50 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select array_append(i_1, 1.0) from adec;";
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "array_append[" +
-                "(cast([2: i_1, ARRAY<INT>, false] as ARRAY<DECIMAL64(11,1)>), 1.0); args: INVALID_TYPE,DECIMAL64; " +
+                "(cast([2: i_1, ARRAY<INT>, false] as ARRAY<DECIMAL64(11,1)>), 1.0); args: ARRAY,DECIMAL64; " +
                 "result: ARRAY<DECIMAL64(11,1)>;");
 
         sql = "select array_append(d_2, 1.0) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_append[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1.0); " +
-                "args: INVALID_TYPE,DECIMAL64; result: ARRAY<DECIMAL64(4,3)>;");
+                "args: ARRAY,DECIMAL64; result: ARRAY<DECIMAL64(4,3)>;");
 
         sql = "select array_append(d_2, '1') from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_append[" +
                 "(cast([5: d_2, ARRAY<DECIMAL64(4,3)>, true] as ARRAY<VARCHAR>), '1'); " +
-                "args: INVALID_TYPE,VARCHAR; result: ARRAY<VARCHAR>;");
+                "args: ARRAY,VARCHAR; result: ARRAY<VARCHAR>;");
 
         sql = "select array_append(s_1, 1.0) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_append[([3: s_1, ARRAY<VARCHAR(65533)>, true], '1.0');" +
-                " args: INVALID_TYPE,VARCHAR; result: ARRAY<VARCHAR(65533)>;");
+                " args: ARRAY,VARCHAR; result: ARRAY<VARCHAR(65533)>;");
 
         sql = "select array_contains(i_1, 'a') from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_contains[(cast([2: i_1, ARRAY<INT>, false] as ARRAY<VARCHAR>), 'a'); " +
-                "args: INVALID_TYPE,VARCHAR;");
+                "args: ARRAY,VARCHAR;");
 
         sql = "select array_contains(s_1, 'a') from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_contains[([3: s_1, ARRAY<VARCHAR(65533)>, true], 'a'); " +
-                "args: INVALID_TYPE,VARCHAR; result: BOOLEAN;");
+                "args: ARRAY,VARCHAR; result: BOOLEAN;");
 
         sql = "select array_contains(d_1, 2) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_contains[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], 2); " +
-                "args: INVALID_TYPE,DECIMAL128; result: BOOLEAN;");
+                "args: ARRAY,DECIMAL128; result: BOOLEAN;");
 
         sql = "select array_contains(d_4, '2') from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_contains[" +
-                "(cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<VARCHAR>), '2'); args: INVALID_TYPE,VARCHAR;");
+                "(cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<VARCHAR>), '2'); args: ARRAY,VARCHAR;");
 
         sql = "select array_contains(d_4, v1) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_contains[" +
                 "(cast([7: d_4, ARRAY<DECIMAL32(8,5)>, true] as ARRAY<DECIMAL128(24,5)>), " +
-                "cast([1: v1, BIGINT, false] as DECIMAL128(24,5))); args: INVALID_TYPE,DECIMAL128;");
+                "cast([1: v1, BIGINT, false] as DECIMAL128(24,5))); args: ARRAY,DECIMAL128;");
 
         sql = "select array_position(d_4, v1) from adec;";
         plan = getVerboseExplain(sql);
@@ -670,29 +670,29 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_sortby[" +
                 "([6: d_3, ARRAY<DECIMAL128(25,19)>, false], [3: s_1, ARRAY<VARCHAR(65533)>, true]); " +
-                "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL128(25,19)>;");
+                "args: ARRAY,ARRAY; result: ARRAY<DECIMAL128(25,19)>;");
 
         sql = "select array_sortby(d_2, d_6) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_sortby[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], " +
                 "[9: d_6, ARRAY<DECIMAL128(18,6)>, false]); " +
-                "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL64(4,3)>;");
+                "args: ARRAY,ARRAY; result: ARRAY<DECIMAL64(4,3)>;");
 
         sql = "select array_sortby(d_1, d_5) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_sortby[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], " +
                 "[8: d_5, ARRAY<DECIMAL64(16,3)>, true]); " +
-                "args: INVALID_TYPE,INVALID_TYPE; result: ARRAY<DECIMAL128(26,2)>;");
+                "args: ARRAY,ARRAY; result: ARRAY<DECIMAL128(26,2)>;");
 
         sql = "select array_slice(d_1, 1) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_slice[([4: d_1, ARRAY<DECIMAL128(26,2)>, false], 1); " +
-                "args: INVALID_TYPE,BIGINT; result: ARRAY<DECIMAL128(26,2)>;");
+                "args: ARRAY,BIGINT; result: ARRAY<DECIMAL128(26,2)>;");
 
         sql = "select array_slice(d_2, 1, 3) from adec;";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "array_slice[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1, 3); " +
-                "args: INVALID_TYPE,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
+                "args: ARRAY,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
 
     }
 
@@ -701,7 +701,7 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select  array_agg(i_1) from adec;";
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "aggregate: array_agg[([2: i_1, ARRAY<INT>, false]); " +
-                "args: INVALID_TYPE; result: ARRAY<ARRAY<INT>>;");
+                "args: ARRAY; result: ARRAY<ARRAY<INT>>;");
     }
 
     @Test
@@ -709,7 +709,7 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select arrays_overlap([[],[]],[])";
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "arrays_overlap[([[],[]], []); " +
-                "args: INVALID_TYPE,INVALID_TYPE; " +
+                "args: ARRAY,ARRAY; " +
                 "result: BOOLEAN; args nullable: true; result nullable: true]");
     }
 }
