@@ -18,9 +18,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 public class EquivalenceClasses implements Cloneable {
@@ -142,6 +144,16 @@ public class EquivalenceClasses implements Cloneable {
 
     public boolean containsRedundantKey(ColumnRefOperator column) {
         return redundantColumnToEquivalenceClass.containsKey(column);
+    }
+
+    public boolean containsEquivalentKey(ColumnRefOperator column) {
+        Optional<ColumnRefOperator> opt = redundantColumnToEquivalenceClass.keySet()
+                .stream().filter(x -> ScalarOperator.isEquivalent(x, column)).findFirst();
+        if (!opt.isPresent()) {
+            return false;
+        }
+        Set<ColumnRefOperator> refOperators = redundantColumnToEquivalenceClass.get(opt.get());
+        return refOperators.size() > 1;
     }
 
     public void deleteRedundantKey(ColumnRefOperator column) {

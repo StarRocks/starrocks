@@ -232,30 +232,47 @@ public class MaterializedViewRewriter {
      * Checks whether the join-on predicate of a query is equivalent to the join-on predicate
      * of a materialized view (MV).
      */
-    boolean checkJoinOnPredicateHelper(Set<ScalarOperator> queryJoinOnPredicates, Set<ScalarOperator> diff) {
+    boolean checkJoinOnPredicateFromOnPredicates(Set<ScalarOperator> queryJoinOnPredicates, Set<ScalarOperator> diff) {
         for (ScalarOperator queryPredicate : queryJoinOnPredicates) {
-            if (!diff.removeIf(p -> ScalarOperator.isEquivalent(queryPredicate, p)))  {
-                return false;
-            }
+            diff.removeIf(p -> ScalarOperator.isEquivalent(queryPredicate, p));
         }
         return diff.isEmpty();
     }
 
-    boolean checkJoinOnPredicate(ScalarOperator mvJoinOnPredicate, ScalarOperator queryJoinOnPredicate) {
-        ScalarOperator normQueryJoinOnPredicate = MvUtils.canonizePredicateForRewrite(queryJoinOnPredicate);
-        ScalarOperator normMVJoinOnPredicate = MvUtils.canonizePredicateForRewrite(mvJoinOnPredicate);
-        Set<ScalarOperator> queryJoinOnPredicates = Sets.newHashSet(Utils.extractConjuncts(normQueryJoinOnPredicate));
-        Set<ScalarOperator> diffPredicates = Sets.newHashSet(Utils.extractConjuncts(normMVJoinOnPredicate));
+    boolean checkJoinOnPredicate(LogicalJoinOperator mvJoinOp, LogicalJoinOperator queryJoinOp) {
+        final JoinOperator mvJoinType = mvJoinOp.getJoinType();
+        final JoinOperator queryJoinType = queryJoinOp.getJoinType();
+        // ignore if join's type both are inner join or cross join
+        if ((mvJoinType.isInnerJoin() && queryJoinType.isInnerJoin()) ||
+                (mvJoinType.isCrossJoin() && queryJoinType.isCrossJoin())) {
+            return true;
+        }
+
+        final ScalarOperator mvJoinOnPredicate = mvJoinOp.getOriginalOnPredicate();
+        final ScalarOperator queryJoinOnPredicate = queryJoinOp.getOriginalOnPredicate();
+        final ScalarOperator normQueryJoinOnPredicate = MvUtils.canonizePredicateForRewrite(queryJoinOnPredicate);
+        final ScalarOperator normMVJoinOnPredicate = MvUtils.canonizePredicateForRewrite(mvJoinOnPredicate);
+        final Set<ScalarOperator> queryJoinOnPredicates = Sets.newHashSet(Utils.extractConjuncts(normQueryJoinOnPredicate));
+        final Set<ScalarOperator> diffPredicates = Sets.newHashSet(Utils.extractConjuncts(normMVJoinOnPredicate));
         // NOTE: only support use query's range predicates to compensate mv's on predicate for now.
         if (queryJoinOnPredicates.size() > diffPredicates.size()) {
             logMVRewrite(mvRewriteContext, "join predicate is different {}(query) != (mv){}, " +
                     "query's on predicates' size is greater than mv", queryJoinOnPredicate, mvJoinOnPredicate);
             return false;
         }
-        if (!checkJoinOnPredicateHelper(queryJoinOnPredicates, diffPredicates) &&
-                !checkJoinOnPredicateFromRangePredicates(diffPredicates,
-                        mvRewriteContext.getQueryPredicateSplit())) {
-            logMVRewrite(mvRewriteContext, "join predicate is different {}(query) != (mv){}, " +
+
+
+        // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
+        // of a materialized view (MV).
+        if (checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
+            return true;
+        }
+
+        // try to deduce from join's on predicates or other predicates.
+        List<ScalarOperator> queryPredicates =
+                Utils.extractConjuncts(mvRewriteContext.getQueryPredicateSplit().getRangePredicates());
+        if (!checkJoinOnPredicateFromPredicates(queryPredicates, diffPredicates)) {
+            logMVRewrite(mvRewriteContext, "join predicate is different after compensate {}(query) != (mv){}, " +
                             "diff: {}", queryJoinOnPredicate, mvJoinOnPredicate,
                     Joiner.on(",").join(diffPredicates));
             return false;
@@ -268,10 +285,8 @@ public class MaterializedViewRewriter {
      * @param diffPredicates : predicates that query join on predicates differ from the mv join on predicates
      * @return
      */
-    boolean checkJoinOnPredicateFromRangePredicates(Set<ScalarOperator> diffPredicates,
-                                                    PredicateSplit extraPredicateSplit) {
-        EquivalenceClasses queryEc = new EquivalenceClasses();
-        deduceEquivalenceClassesFromRangePredicates(extraPredicateSplit.getRangePredicates(), queryEc);
+    boolean checkJoinOnPredicateFromPredicates(List<ScalarOperator> predicates,
+                                               Set<ScalarOperator> diffPredicates) {
         for (ScalarOperator diffPredicate : diffPredicates) {
             if (!(diffPredicate instanceof BinaryPredicateOperator)) {
                 return false;
@@ -287,10 +302,21 @@ public class MaterializedViewRewriter {
             if (!left.isColumnRef() || !right.isColumnRef()) {
                 return false;
             }
+        }
 
+        EquivalenceClasses queryEc = new EquivalenceClasses();
+        deduceEquivalenceClassesFromRangePredicates(predicates, queryEc, false);
+
+        for (ScalarOperator diffPredicate : diffPredicates) {
+            BinaryPredicateOperator diffBinaryPredicate = (BinaryPredicateOperator) diffPredicate;
+            Preconditions.checkState(diffBinaryPredicate.getBinaryType().isEqual());
+
+            ScalarOperator left = diffBinaryPredicate.getChild(0);
+            ScalarOperator right = diffBinaryPredicate.getChild(1);
+            Preconditions.checkState(left.isColumnRef() && right.isColumnRef());
             ColumnRefOperator l = (ColumnRefOperator) left;
             ColumnRefOperator r = (ColumnRefOperator) right;
-            if (!queryEc.containsKey(l) || !queryEc.getEquivalenceClass(l).contains(r)) {
+            if (!queryEc.containsEquivalentKey(l) || !queryEc.containsEquivalentKey(r)) {
                 return false;
             }
         }
@@ -320,7 +346,7 @@ public class MaterializedViewRewriter {
             // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensate.
             // For non-inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
             // be some correctness bugs.
-            if (!checkJoinOnPredicate(mvJoin.getOnPredicate(), queryJoin.getOnPredicate())) {
+            if (!checkJoinOnPredicate(mvJoin, queryJoin)) {
                 return false;
             }
 
@@ -407,14 +433,14 @@ public class MaterializedViewRewriter {
         Set<ScalarOperator> queryPredicates = Sets.newHashSet();
         // extract all conjuncts
         ScalarOperator normalizedQueryPredicate =
-                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllPredicates(queryExpr.inputAt(index))));
+                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllValidPredicates(queryExpr.inputAt(index))));
         queryPredicates.addAll(Utils.extractConjuncts(normalizedQueryPredicate));
         queryPredicates =
                 queryPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
         Set<ScalarOperator> mvPredicates = Sets.newHashSet();
         // extract all conjuncts
         ScalarOperator normalizedMvPredicate =
-                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllPredicates(mvExpr.inputAt(index))));
+                MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllValidPredicates(mvExpr.inputAt(index))));
         mvPredicates.addAll(Utils.extractConjuncts(normalizedMvPredicate));
         mvPredicates = mvPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
         if (queryPredicates.isEmpty() && mvPredicates.isEmpty()) {
@@ -761,7 +787,8 @@ public class MaterializedViewRewriter {
             return null;
         }
         // deduce extra equivalence classes if possible
-        deduceEquivalenceClassesFromRangePredicates(queryPredicateSplit.getRangePredicates(), queryEc);
+        List<ScalarOperator> rangePredicates = Utils.extractConjuncts(queryPredicateSplit.getRangePredicates());
+        deduceEquivalenceClassesFromRangePredicates(rangePredicates, queryEc, true);
 
         final RewriteContext rewriteContext = new RewriteContext(
                 queryExpression, queryPredicateSplit, queryEc,
@@ -1121,7 +1148,7 @@ public class MaterializedViewRewriter {
 
     private ScalarOperator collectMvPrunePredicate(MaterializationContext mvContext) {
         final OptExpression mvExpression = mvContext.getMvExpression();
-        final List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(mvExpression);
+        final List<ScalarOperator> conjuncts = MvUtils.getAllValidPredicates(mvExpression);
         final ColumnRefSet mvOutputColumnRefSet = mvExpression.getOutputColumns();
         // conjuncts related to partition and distribution
         final List<ScalarOperator> mvPrunePredicates = Lists.newArrayList();
@@ -1980,11 +2007,12 @@ public class MaterializedViewRewriter {
         return ec;
     }
 
-    private void deduceEquivalenceClassesFromRangePredicates(ScalarOperator rangePredicates,
-                                                             EquivalenceClasses ec) {
+    private void deduceEquivalenceClassesFromRangePredicates(List<ScalarOperator> rangePredicates,
+                                                             EquivalenceClasses ec,
+                                                             boolean addIntoEC) {
         Preconditions.checkState(ec != null);
         Map<ConstantOperator, Set<ColumnRefOperator>> constantOperatorSetMap = Maps.newHashMap();
-        for (ScalarOperator rangePredicate : Utils.extractConjuncts(rangePredicates)) {
+        for (ScalarOperator rangePredicate : rangePredicates) {
             if (rangePredicate instanceof BinaryPredicateOperator) {
                 BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) rangePredicate;
                 if (binaryPredicate.getBinaryType().isEqual()) {
@@ -2009,8 +2037,12 @@ public class MaterializedViewRewriter {
                 ColumnRefOperator first = iterator.next();
                 while (iterator.hasNext()) {
                     ColumnRefOperator next = iterator.next();
-                    if (ec.addRedundantEquivalence(first, next)) {
-                        ec.addEquivalence(first, next);
+                    if (addIntoEC) {
+                        if (ec.addRedundantEquivalence(first, next)) {
+                            ec.addEquivalence(first, next);
+                        }
+                    } else {
+                        ec.addRedundantEquivalence(first, next);
                     }
                 }
             }

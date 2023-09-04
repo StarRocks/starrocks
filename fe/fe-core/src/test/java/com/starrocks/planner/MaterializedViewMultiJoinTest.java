@@ -14,390 +14,339 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticsMetaManager;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Test;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
-
-    protected static final String MATERIALIZED_DB_NAME = "test_mv";
+public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-
-        FeConstants.runningUnitTest = true;
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-        new MockUp<MaterializedView>() {
-            @Mock
-            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
-                return Sets.newHashSet();
-            }
-        };
-
-        new MockUp<UtFrameUtils>() {
-            @Mock
-            boolean isPrintPlanTableNames() {
-                return true;
-            }
-        };
-
-        new MockUp<PlanTestBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
-
-        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
-                .useDatabase(MATERIALIZED_DB_NAME);
-
-
-        String deptsTable = "" +
-                "CREATE TABLE depts(    \n" +
-                "   deptno INT NOT NULL,\n" +
-                "   name VARCHAR(20)    \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`deptno`)\n" +
-                "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"unique_constraints\" = \"deptno\"\n," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String locationsTable = "" +
-                "CREATE TABLE locations(\n" +
-                "    locationid INT NOT NULL,\n" +
-                "    state CHAR(2), \n" +
-                "   name VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`locationid`)\n" +
-                "DISTRIBUTED BY HASH(`locationid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String ependentsTable = "" +
-                "CREATE TABLE dependents(\n" +
-                "   empid INT NOT NULL,\n" +
-                "   name VARCHAR(20)   \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String empsTable = "" +
-                "CREATE TABLE emps\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsTableWithoutConstraints = "" +
-                "CREATE TABLE emps_no_constraint\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsWithBigintTable = "" +
-                "CREATE TABLE emps_bigint\n" +
-                "(\n" +
-                "    empid      BIGINT        NOT NULL,\n" +
-                "    deptno     BIGINT         NOT NULL,\n" +
-                "    locationid BIGINT         NOT NULL,\n" +
-                "    commission BIGINT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String nullableEmps = "create table emps_null (\n" +
-                "empid int null,\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null,\n" +
-                "salary double\n" +
-                ")\n" +
-                "distributed by hash(`empid`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-        String nullableDepts = "create table depts_null (\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null\n" +
-                ")\n" +
-                "distributed by hash(`deptno`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-
-        starRocksAssert
-                .withTable(deptsTable)
-                .withTable(empsTable)
-                .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(empsWithBigintTable)
-                .withTable(nullableEmps)
-                .withTable(nullableDepts)
-                .withTable(empsTableWithoutConstraints);
+        MaterializedViewTestBase.setUp();
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        prepareDatas();
     }
 
     @AfterClass
     public static void afterClass() {
         try {
-            starRocksAssert.dropDatabase(MATERIALIZED_DB_NAME);
+            starRocksAssert.dropTable("tbl_1");
+            starRocksAssert.dropTable("tbl_2");
+            starRocksAssert.dropTable("tbl_3");
+            starRocksAssert.dropTable("tbl_4");
         } catch (Exception e) {
-            LOG.warn("drop database failed:", e);
+            // ignore exceptions.
         }
     }
 
-    protected class MVRewriteChecker {
-        private String mv;
-        private final String query;
-        private String rewritePlan;
-        private Exception exception;
-        private String properties;
+    public static void prepareDatas() throws Exception {
+        starRocksAssert.withTable("" +
+                "CREATE TABLE tbl_1 (\n" +
+                " dt date NULL COMMENT \"etl\",\n" +
+                " p1_col1 varchar(60) NULL COMMENT \"\",\n" +
+                " p1_col2 varchar(240) NULL COMMENT \"\",\n" +
+                " p1_col3 varchar(30) NULL COMMENT \"\",\n" +
+                " p1_col4 decimal128(22, 2) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(dt, p1_col1)\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(PARTITION p20221230 VALUES [(\"2022-12-30\"), (\"2022-12-31\")),\n" +
+                "PARTITION p20230331 VALUES [(\"2023-03-31\"), (\"2023-04-01\")))\n" +
+                "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"" +
+                ");");
 
-        public MVRewriteChecker(String query) {
-            this.query = query;
-        }
+        starRocksAssert.withTable("CREATE TABLE tbl_2 (\n" +
+                " start_dt date NULL COMMENT \"\",\n" +
+                " end_dt date NULL COMMENT \"\",\n" +
+                " p2_col1 varchar(60) NULL COMMENT \"\",\n" +
+                " p2_col2 varchar(240) NULL COMMENT \"\",\n" +
+                " p2_col3 varchar(60) NULL COMMENT \"\",\n" +
+                " p2_col4 varchar(90) NULL COMMENT \"\",\n" +
+                " p2_col5 varchar(90) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(start_dt, end_dt)\n" +
+                "DISTRIBUTED BY HASH(start_dt, end_dt, p2_col1, p2_col2) BUCKETS 50 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"" +
+                ");");
 
-        public MVRewriteChecker(String mv, String query) {
-            this(mv, query, null);
-        }
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE tbl_3 (\n" +
+                " dt date NULL COMMENT \"\",\n" +
+                " p3_col1 varchar(900) NULL COMMENT \"\",\n" +
+                " p3_col2 varchar(240) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(dt, p3_col1)\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(PARTITION p20191230 VALUES [(\"2019-12-30\"), (\"2019-12-31\")),\n" +
+                "PARTITION p20200131 VALUES [(\"2020-01-31\"), (\"2020-02-01\")),\n" +
+                "PARTITION p20200229 VALUES [(\"2020-02-29\"), (\"2020-03-01\")))\n" +
+                "DISTRIBUTED BY HASH(dt, p3_col2) BUCKETS 25 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"" +
+                ");");
 
-        public MVRewriteChecker(String mv, String query, String properties) {
-            this.mv = mv;
-            this.query = query;
-            this.properties = properties;
-        }
-
-        public MVRewriteChecker rewrite() {
-            // Get a faked distribution name
-            this.exception = null;
-            this.rewritePlan = "";
-
-            try {
-                // create mv if needed
-                if (mv != null && !mv.isEmpty()) {
-                    LOG.info("start to create mv:" + mv);
-                    ExecPlan mvPlan = getExecPlan(mv);
-                    List<String> outputNames = mvPlan.getColNames();
-                    String properties = this.properties != null ? "PROPERTIES (\n" +
-                            this.properties + ")" : "";
-                    String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                            properties + " AS " +
-                            mv;
-                    starRocksAssert.withMaterializedView(mvSQL);
-                }
-
-                this.rewritePlan = getFragmentPlan(query);
-            } catch (Exception e) {
-                LOG.warn("test rewwrite failed:", e);
-                this.exception = e;
-            } finally {
-                if (mv != null && !mv.isEmpty()) {
-                    try {
-                        starRocksAssert.dropMaterializedView("mv0");
-                    } catch (Exception e) {
-                        LOG.warn("drop materialized view failed:", e);
-                    }
-                }
-            }
-            return this;
-        }
-
-        public MVRewriteChecker ok() {
-            return match("TABLE: mv0");
-        }
-
-        public MVRewriteChecker match(String targetMV) {
-            contains(targetMV);
-            Assert.assertTrue(this.exception == null);
-            return this;
-        }
-
-        // there may be an exception
-        public MVRewriteChecker failed() {
-            return nonMatch("TABLE: mv0");
-        }
-
-        // check plan result without any exception
-        public MVRewriteChecker nonMatch() {
-            Preconditions.checkState(exception == null);
-            return nonMatch("TABLE: mv0");
-        }
-
-        public MVRewriteChecker nonMatch(String targetMV) {
-            Assert.assertTrue(this.rewritePlan != null);
-            Assert.assertFalse(this.rewritePlan, this.rewritePlan.contains(targetMV));
-            return this;
-        }
-
-        public MVRewriteChecker contains(String expect) {
-            Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = this.rewritePlan.contains(expect);
-            if (!contained) {
-                LOG.warn("rewritePlan: \n{}", rewritePlan);
-                LOG.warn("expect: \n{}", expect);
-            }
-            Assert.assertTrue(contained);
-            return this;
-        }
-
-        public MVRewriteChecker notContain(String expect) {
-            Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = this.rewritePlan.contains(expect);
-            if (contained) {
-                LOG.warn("rewritePlan: \n{}", rewritePlan);
-                LOG.warn("expect: \n{}", expect);
-            }
-            Assert.assertFalse(contained);
-            return this;
-        }
-
-        public MVRewriteChecker contains(String... expects) {
-            for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker contains(List<String> expects) {
-            for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE tbl_4 (\n" +
+                " dt date NULL COMMENT \"\",\n" +
+                " p4_col1 varchar(240) NULL COMMENT \"\",\n" +
+                " p4_col2 varchar(240) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(dt, p4_col1)\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(PARTITION p202212 VALUES [(\"2022-12-01\"), (\"2023-01-01\")),\n" +
+                "PARTITION p202301 VALUES [(\"2023-01-01\"), (\"2023-02-01\")),\n" +
+                "PARTITION p202302 VALUES [(\"2023-02-01\"), (\"2023-03-01\")))\n" +
+                "DISTRIBUTED BY HASH(dt, p4_col2) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\",\n" +
+                "\"in_memory\"=\"false\",\n" +
+                "\"storage_format\"=\"DEFAULT\",\n" +
+                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"compression\"=\"LZ4\"\n" +
+                ")");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "PARTITION BY (dt)\n" +
+                "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT p1.p1_col3, p1.p1_col2, p1.dt, sum(p1.p1_col4) AS sum_p1_col4\n" +
+                "FROM tbl_1 AS p1\n" +
+                "GROUP BY 1, 2, 3;");
     }
 
-    protected MVRewriteChecker sql(String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(query);
-        return fixture.rewrite();
-    }
+    @Test
+    public void testPartitionPrune1() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "PARTITION BY (dt)\n" +
+                "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
+                "p2.p2_col2, p2.p2_col4, " +
+                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p5.sum_p1_col4, " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM " +
+                "tbl_1 AS p1 " +
+                "INNER JOIN test_mv1 AS p5 " +
+                "   ON p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt and p1.p1_col3=p5.p1_col3\n" +
+                "LEFT OUTER JOIN tbl_2 AS p2 " +
+                "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
+                "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
+                "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
+                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;");
+        {
+            String query = "select " +
+                    " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2 , p1.dt, p1.p1_col3\n" +
+                    " from tbl_1 p1 \n" +
+                    " group by 1, 2, 3\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt and p1.p1_col3=p5.p1_col3\n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
 
-    protected MVRewriteChecker testRewriteOK(String mv, String query) {
-        return testRewriteOK(mv, query, null);
-    }
-
-    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().ok();
-    }
-
-    protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().failed();
-    }
-
-    protected MVRewriteChecker testRewriteFail(String mv, String query) {
-        return testRewriteFail(mv, query, null);
-    }
-
-    protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
-        return fixture.rewrite().nonMatch();
-    }
-
-    protected static Table getTable(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
-        Assert.assertNotNull(table);
-        return table;
-    }
-
-    protected static MaterializedView getMv(String dbName, String mvName) {
-        Table table = getTable(dbName, mvName);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
-        return mv;
-    }
-
-    protected static void refreshMaterializedView(String dbName, String mvName) throws Exception {
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        Task task = taskManager.getTask(mvTaskName);
-        if (task == null) {
-            task = TaskBuilder.buildMvTask(mv, dbName);
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "test_mv2");
+            PlanTestBase.assertContains(plan, "sum_p1_col4 >= 500000");
         }
-        taskManager.executeTaskSync(task);
+
+        {
+            String query = "select " +
+                    " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2 , p1.dt \n" +
+                    " from tbl_1 p1 \n" +
+                    " where p1.p1_col3 = '02' \n" +
+                    " group by 1, 2\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt \n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "rollup: test_mv2");
+        }
+
+        // TODO: support pull `p1.dt = '2023-03-31'` up to join's on predicate.
+        {
+            String query = "select " +
+                    " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2  \n" +
+                    " from tbl_1 p1 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 \n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = '2023-03-31' \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = '2023-03-31' \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
+
+            String plan = getFragmentPlan(query);
+            // TODO: support deduce ec from scan's predicates
+            PlanTestBase.assertNotContains(plan, "test_mv2");
+        }
+        starRocksAssert.dropMaterializedView("test_mv2");
     }
 
-    protected static void createAndRefreshMV(String db, String sql) throws Exception {
-        Pattern createMvPattern = Pattern.compile("^create materialized view (\\w+) .*");
-        Matcher matcher = createMvPattern.matcher(sql.toLowerCase(Locale.ROOT));
-        if (!matcher.find()) {
-            throw new Exception("create materialized view syntax error.");
+    @Test
+    public void testPartitionPrune2() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "PARTITION BY (dt)\n" +
+                "DISTRIBUTED BY HASH(dt, p1_col2) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "p1.dt, p1.p1_col1, p1.p1_col2, p1.p1_col3, " +
+                "p2.p2_col2, p2.p2_col4, " +
+                "p3.p3_col1, p4.p4_col2, p4.p4_col1, " +
+                "p5.p1_col3 as p5_col3, p5.sum_p1_col4, " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM " +
+                "tbl_1 AS p1 " +
+                "INNER JOIN test_mv1 AS p5 " +
+                "   ON p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt \n" +
+                "LEFT OUTER JOIN tbl_2 AS p2 " +
+                "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
+                "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
+                "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt " +
+                "LEFT OUTER JOIN tbl_4 AS p4 ON p1.p1_col1=p4.p4_col1 AND p4.dt=p1.dt\n" +
+                "GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;");
+        {
+            String query = "select " +
+                    " p1.p1_col2, p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2 , p1.dt, p1.p1_col3\n" +
+                    " from tbl_1 p1 \n" +
+                    " group by 1, 2, 3\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt and p1.p1_col3=p5.p1_col3\n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt=p1.dt \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt=p1.dt \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' and p4.p4_col2='200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "TABLE: test_mv2\n");
         }
-        String tableName = matcher.group(1);
-        starRocksAssert.withMaterializedView(sql);
-        refreshMaterializedView(db, tableName);
+
+        {
+            String query = "select " +
+                    " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2 , p1.dt \n" +
+                    " from tbl_1 p1 \n" +
+                    " where p1.p1_col3 = '02' \n" +
+                    " group by 1, 2\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt \n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = p1.dt \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = p1.dt \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "rollup: test_mv2");
+        }
+
+        {
+            String query = "select " +
+                    " p1.p1_col2,p1.p1_col1, p3.p3_col1 \n" +
+                    " ,p2.p2_col2, p2.p2_col4 \n" +
+                    " ,p4.p4_col2 \n" +
+                    " ,SUM(p1.p1_col4) as cvt_rmb_txn_amt \n" +
+                    " from tbl_1 p1 \n" +
+                    " inner join \n" +
+                    " ( select p1_col2  \n" +
+                    " from tbl_1 p1 \n" +
+                    " where p1.p1_col3 = '02' and p1.dt='2023-03-31' \n" +
+                    " group by 1\n" +
+                    " having sum(p1.p1_col4) >= 500000 \n" +
+                    " ) p5 \n" +
+                    " on p1.p1_col2=p5.p1_col2 \n" +
+                    " left join tbl_2 p2 on p2.p2_col1 ='1' and p1.p1_col2 = p2.p2_col2 \n" +
+                    " and p2.start_dt <= p1.dt and p2.end_dt > p1.dt \n" +
+                    " left join tbl_3 p3 on p1.p1_col2 = p3.p3_col2 and p3.dt = '2023-03-31' \n" +
+                    " left join tbl_4 p4 on p1.p1_col1=p4.p4_col1 and p4.dt  = '2023-03-31' \n" +
+                    " where p1.p1_col3 = '02' and p1.dt = '2023-03-31' and p4.p4_col2 = '200105085'\n" +
+                    " group by 1,2,3,4,5,6 \n" +
+                    " order by p1.p1_col2\n" +
+                    " limit 0, 100";
+
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "AGGREGATE");
+            // TODO: support deduce ec from scan predicates.
+            PlanTestBase.assertNotContains(plan, "rollup: test_mv2");
+        }
+        starRocksAssert.dropMaterializedView("test_mv2");
     }
+
 }
