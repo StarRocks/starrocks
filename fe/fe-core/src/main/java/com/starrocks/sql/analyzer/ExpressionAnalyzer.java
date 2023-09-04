@@ -1056,6 +1056,19 @@ public class ExpressionAnalyzer {
                             " should be an array or a lambda function.");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ALL_MATCH) || fnName.equals(FunctionSet.ANY_MATCH)) {
+                if (node.getChildren().size() != 1) {
+                    throw new SemanticException(fnName + " should have a input array");
+                }
+                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                    throw new SemanticException("The first input of " + fnName + " should be an array");
+                }
+                // force the second array be of Type.ARRAY_BOOLEAN
+                if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
+                    throw new SemanticException("The second input of " + fnName +
+                            node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
                 // Default type is TINYINT, it would match to a wrong function
                 for (int i = 1; i < argumentTypes.length; i++) {
