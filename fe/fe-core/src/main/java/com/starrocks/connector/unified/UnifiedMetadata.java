@@ -20,32 +20,15 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.hive.HiveMetadata;
-import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.sql.ast.AlterTableCommentClause;
-import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.AlterViewStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.DropMaterializedViewStmt;
-import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -78,7 +61,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     private final Map<Table.TableType, ConnectorMetadata> metadataMap;
-    private final HiveMetadata hiveMetadata; // criterion to determine table type
+    private final HiveMetadata hiveMetadata; // used to determine table type
 
     public UnifiedMetadata(Map<Table.TableType, ConnectorMetadata> metadataMap) {
         requireNonNull(metadataMap, "metadataMap is null");
@@ -205,27 +188,14 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(long dbId) {
-        return hiveMetadata.getDb(dbId);
-    }
-
-    @Override
     public Database getDb(String name) {
         return hiveMetadata.getDb(name);
     }
 
     @Override
-    public List<Long> getDbIds() {
-        return hiveMetadata.getDbIds();
-    }
-
-    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        if (stmt.getEngineName() == null) {
-            throw new DdlException("create table in unified catalog requires a using engine clause");
-        }
-
-        Table.TableType type = Table.TableType.deserialize(stmt.getEngineName());
+        requireNonNull(stmt.getEngineName(), "engine name is null");
+        Table.TableType type = Table.TableType.deserialize(stmt.getEngineName().toUpperCase());
         return metadataMap.get(type).createTable(stmt);
     }
 
@@ -239,95 +209,5 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
         metadata.finishSink(dbName, table, commitInfos);
-    }
-
-    @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
-        ConnectorMetadata metadata = metadataOfTable(stmt.getTbl().getDb(), stmt.getTbl().getTbl());
-        metadata.alterTable(stmt);
-    }
-
-    @Override
-    public void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        metadata.renameTable(db, table, tableRenameClause);
-    }
-
-    @Override
-    public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        metadata.alterTableComment(db, table, clause);
-    }
-
-    @Override
-    public void truncateTable(TruncateTableStmt stmt) throws DdlException {
-        ConnectorMetadata metadata = metadataOfTable(stmt.getDbName(), stmt.getTblName());
-        metadata.truncateTable(stmt);
-    }
-
-    @Override
-    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
-        ConnectorMetadata metadata = metadataOfTable(db.getFullName(), tableName);
-        metadata.addPartitions(db, tableName, addPartitionClause);
-    }
-
-    @Override
-    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        metadata.dropPartition(db, table, clause);
-    }
-
-    @Override
-    public void renamePartition(Database db, Table table, PartitionRenameClause clause) throws DdlException {
-        ConnectorMetadata metadata = metadataOfTable(table);
-        metadata.renamePartition(db, table, clause);
-    }
-
-    @Override
-    public void createMaterializedView(CreateMaterializedViewStmt stmt) throws AnalysisException, DdlException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void alterMaterializedView(AlterMaterializedViewStmt stmt)
-            throws DdlException, MetaNotFoundException, AnalysisException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
-            throws DdlException, MetaNotFoundException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void createView(CreateViewStmt stmt) throws DdlException {
-        throw new DdlException("unsupported operation in unified connector");
-    }
-
-    @Override
-    public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
-        throw new DdlException("unsupported operation in unified connector");
     }
 }

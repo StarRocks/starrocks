@@ -14,8 +14,8 @@
 
 package com.starrocks.connector.unified;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -35,19 +36,24 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
 public class UnifiedConnector implements Connector {
-    public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
-    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
-    private final Map<String, String> properties;
-    private final String catalogName;
+    public static final String UNIFIED_METASTORE_TYPE = "unified.metastore.type";
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
     private final Map<Table.TableType, Connector> connectorMap;
 
     public UnifiedConnector(ConnectorContext context) {
-        this.properties = context.getProperties();
-        this.catalogName = context.getCatalogName();
-        this.connectorMap = ImmutableMap.of(
+        Map<String, String> properties = context.getProperties();
+        String metastoreType = properties.get(UNIFIED_METASTORE_TYPE);
+        if (!SUPPORTED_METASTORE_TYPE.contains(metastoreType)) {
+            throw new SemanticException("Unified catalog only supports hive and glue as metastore.");
+        }
+        properties.put(HIVE_METASTORE_TYPE, metastoreType);
+        properties.put(ICEBERG_CATALOG_TYPE, metastoreType);
+
+        connectorMap = ImmutableMap.of(
                 HIVE, new HiveConnector(context),
                 ICEBERG, new IcebergConnector(context),
                 HUDI, new HudiConnector(context),
