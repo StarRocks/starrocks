@@ -299,6 +299,12 @@ public:
     BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
+    void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override {
+        _morsel_queue->set_key_ranges(key_ranges);
+    }
+
+    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
+
     void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
         _morsel_queue->set_tablet_rowsets(tablet_rowsets);
     }
