@@ -219,19 +219,11 @@ public:
     }
 
     template <LogicalType LT>
-<<<<<<< HEAD
-=======
-    static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
-        return std::make_shared<SessionNumberWindowFunction<LT>>();
-    }
-
-    template <LogicalType LT>
     static AggregateFunctionPtr MakeApproxTopKAggregateFunction() {
         return std::make_shared<ApproxTopKAggregateFunction<LT>>();
     }
 
     template <LogicalType LT>
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
     }

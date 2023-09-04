@@ -1023,18 +1023,10 @@ public class FunctionSet {
         // Ntile
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
-<<<<<<< HEAD
 
-=======
-        // Allocate session
-        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
-                Lists.newArrayList(Type.BIGINT, Type.INT), Type.BIGINT, Type.BIGINT));
-        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
-                Lists.newArrayList(Type.INT, Type.INT), Type.BIGINT, Type.BIGINT));
         // Approx top k
         registerBuiltinApproxTopKWindowFunction();
         // Dict merge
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
