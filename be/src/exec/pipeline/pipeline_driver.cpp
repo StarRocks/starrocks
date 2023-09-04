@@ -81,9 +81,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     const auto use_cache = _fragment_ctx->enable_cache();
 
     // attach ticket_checker to both ScanOperator and SplitMorselQueue
-    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
-                                        _morsel_queue != nullptr && _morsel_queue->could_attch_ticket_checker() &&
-                                        (use_cache || down_cast<ScanOperator*>(source_op)->output_chunk_by_bucket());
+    auto should_attach_ticket_checker =
+            (dynamic_cast<ScanOperator*>(source_op) != nullptr) && _morsel_queue != nullptr &&
+            _morsel_queue->could_attch_ticket_checker() &&
+            (use_cache || dynamic_cast<BucketSequenceMorselQueue*>(_morsel_queue) != nullptr);
+
     if (should_attach_ticket_checker) {
         auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
