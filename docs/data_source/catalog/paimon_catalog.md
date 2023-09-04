@@ -13,8 +13,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-- The data types of Paimon that StarRocks does not support are MAP, STRUCT, and ARRAY.
-- You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
 
 ## Integration preparations
 
