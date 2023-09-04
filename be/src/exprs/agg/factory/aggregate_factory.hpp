@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_agg.h"
@@ -208,6 +209,19 @@ public:
     }
 
     template <LogicalType LT>
+<<<<<<< HEAD
+=======
+    static AggregateFunctionPtr MakeSessionNumberWindowFunction() {
+        return std::make_shared<SessionNumberWindowFunction<LT>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeApproxTopKAggregateFunction() {
+        return std::make_shared<ApproxTopKAggregateFunction<LT>>();
+    }
+
+    template <LogicalType LT>
+>>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
     }

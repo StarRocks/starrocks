@@ -220,6 +220,7 @@ public class FunctionSet {
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+    public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
@@ -498,6 +499,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_UNION_AGG)
                     .add(FunctionSet.NDV)
                     .add(FunctionSet.APPROX_COUNT_DISTINCT)
+                    .add(FunctionSet.APPROX_TOP_K)
                     .add(FunctionSet.BITMAP_UNION_INT)
                     .add(FunctionSet.BITMAP_UNION_COUNT)
                     .add(FunctionSet.BITMAP_COUNT)
@@ -564,6 +566,34 @@ public class FunctionSet {
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.CORR)
             .build();
+<<<<<<< HEAD
+=======
+
+    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
+            .add(ARRAY_SUM)
+            .add(ARRAY_AVG)
+            .add(ARRAY_MIN)
+            .add(ARRAY_MAX)
+            .add(ARRAY_DISTINCT)
+            .add(ARRAY_SORT)
+            .add(REVERSE)
+            .add(ARRAY_INTERSECT)
+            .add(ARRAY_DIFFERENCE)
+            .add(ARRAYS_OVERLAP)
+            .add(ARRAY_AGG)
+            .add(ARRAY_CONCAT)
+            .add(ARRAY_SLICE)
+            .build();
+
+    public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
+            (Type itemType) -> {
+                List<StructField> fields = Lists.newArrayList();
+                fields.add(new StructField("item", itemType));
+                fields.add(new StructField("count", Type.BIGINT));
+                return new ArrayType(new StructType(fields, true));
+            };
+
+>>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
@@ -579,22 +609,24 @@ public class FunctionSet {
     public static boolean isCastMatchAllowed(Function desc, Function candicate) {
         final String functionName = desc.getFunctionName().getFunction();
         final Type[] descArgTypes = desc.getArgs();
-        final Type[] candicateArgTypes = candicate.getArgs();
+        final Type[] candidateArgTypes = candicate.getArgs();
         if (functionName.equalsIgnoreCase(HEX)
                 || functionName.equalsIgnoreCase(LEAD)
-                || functionName.equalsIgnoreCase(LAG)) {
+                || functionName.equalsIgnoreCase(LAG)
+                || functionName.equalsIgnoreCase(APPROX_TOP_K)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
-            final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
+            final ScalarType candidateArgType = (ScalarType) candidateArgTypes[0];
             if (functionName.equalsIgnoreCase(LEAD) ||
-                    functionName.equalsIgnoreCase(LAG)) {
+                    functionName.equalsIgnoreCase(LAG) ||
+                    functionName.equalsIgnoreCase(APPROX_TOP_K)) {
                 // lead and lag function respect first arg type
-                return descArgType.isNull() || descArgType.matchesType(candicateArgType);
+                return descArgType.isNull() || descArgType.matchesType(candidateArgType);
             } else if (descArgType.isOnlyMetricType()) {
                 // Bitmap, HLL, PERCENTILE type don't allow cast
                 return false;
             } else {
                 // The implementations of hex for string and int are different.
-                return descArgType.isStringType() || !candicateArgType.isStringType();
+                return descArgType.isStringType() || !candidateArgType.isStringType();
             }
         }
 
@@ -614,8 +646,8 @@ public class FunctionSet {
                     break;
                 }
             }
-            Type candicateArgType = candicateArgTypes[arg_index];
-            if (descIsAllDateType && !candicateArgType.isDateType()) {
+            Type candidateArgType = candidateArgTypes[arg_index];
+            if (descIsAllDateType && !candidateArgType.isDateType()) {
                 return false;
             }
         }
@@ -918,10 +950,20 @@ public class FunctionSet {
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
+<<<<<<< HEAD
 
+=======
+        // Allocate session
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
+                Lists.newArrayList(Type.BIGINT, Type.INT), Type.BIGINT, Type.BIGINT));
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(SESSION_NUMBER,
+                Lists.newArrayList(Type.INT, Type.INT), Type.BIGINT, Type.BIGINT));
+        // Approx top k
+        registerBuiltinApproxTopKWindowFunction();
+        // Dict merge
+>>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
-
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
 
@@ -1132,6 +1174,31 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
+    }
+
+    private void registerBuiltinApproxTopKWindowFunction() {
+        java.util.function.Consumer<ScalarType> registerBuiltinForType = (ScalarType type) -> {
+            ArrayType retType = APPROX_TOP_N_RET_TYPE_BUILDER.apply(type);
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(APPROX_TOP_K,
+                    Lists.newArrayList(type, Type.INT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+        };
+        java.util.function.Consumer<List<ScalarType>> registerBuiltinForTypes = (List<ScalarType> types) -> {
+            for (ScalarType type : types) {
+                registerBuiltinForType.accept(type);
+            }
+        };
+        registerBuiltinForTypes.accept(Type.FLOAT_TYPES);
+        registerBuiltinForTypes.accept(Type.INTEGER_TYPES);
+        registerBuiltinForTypes.accept(Type.DECIMAL_TYPES);
+        registerBuiltinForTypes.accept(Type.STRING_TYPES);
+        registerBuiltinForTypes.accept(Type.DATE_TYPES);
     }
 
     public List<Function> getBuiltinFunctions() {
