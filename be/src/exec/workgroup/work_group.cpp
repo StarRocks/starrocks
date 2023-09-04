@@ -522,6 +522,13 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     return alive_workgroups;
 }
 
+void WorkGroupManager::for_each_workgroup(WorkGroupConsumer consumer) const {
+    std::shared_lock read_lock(_mutex);
+    for (const auto& [_, wg] : _workgroups) {
+        consumer(*wg);
+    }
+}
+
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
     static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);

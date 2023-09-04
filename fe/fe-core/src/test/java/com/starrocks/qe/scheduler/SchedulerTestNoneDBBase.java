@@ -51,11 +51,9 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     private static long prevStatisticCollectIntervalSec;
 
-    private static final String FILE_UNIT_TEST_ROOT_PATH =
-            Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-
     public static List<String> listTestFileNames(String directory) {
-        File folder = new File(FILE_UNIT_TEST_ROOT_PATH + "/" + directory);
+        String sqlRootPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File folder = new File(sqlRootPath + "/" + directory);
         return Arrays.stream(Objects.requireNonNull(folder.listFiles()))
                 .filter(file -> file.isFile() && file.getName().endsWith(".sql"))
                 .map(file -> directory + file.getName().replace(".sql", ""))

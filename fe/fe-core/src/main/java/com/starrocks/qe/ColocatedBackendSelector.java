@@ -125,7 +125,7 @@ public class ColocatedBackendSelector implements BackendSelector {
 
     public static class Assignment {
         private final Map<Integer, Long> seqToWorkerId = Maps.newHashMap();
-        // < bucket_seq -> < scannode_id -> scan_range_params >>
+        // < bucket_seq -> < scan_node_id -> scan_range_params >>
         private final ColocatedBackendSelector.BucketSeqToScanRange seqToScanRange =
                 new ColocatedBackendSelector.BucketSeqToScanRange();
         private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
