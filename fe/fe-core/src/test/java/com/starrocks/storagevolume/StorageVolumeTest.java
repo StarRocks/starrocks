@@ -62,9 +62,9 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_IN
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
