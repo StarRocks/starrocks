@@ -69,7 +69,7 @@ public class Policy {
     }
 
     public Expr getPolicyExpression() {
-        return policyExpression;
+        return policyExpression.clone();
     }
 
     public void setPolicyExpression(Expr policyExpression) {

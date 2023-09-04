@@ -50,7 +50,7 @@ public class SecurityPolicyAnalyzer {
             PolicyName policyName = stmt.getPolicyName();
             FeNameFormat.checkColumnName(policyName.getName());
             normalizationPolicyName(session, policyName);
-            analyzePolicyBody(session, stmt.getPolicyType(), stmt.getExpression().clone(),
+            analyzePolicyBody(session, stmt.getPolicyType(), stmt.getExpression(),
                     stmt.getArgTypeDefs(), stmt.getReturnType().getType(), stmt.getArgNames());
             return null;
         }
@@ -88,15 +88,17 @@ public class SecurityPolicyAnalyzer {
 
         private void analyzePolicyBody(ConnectContext context, PolicyType policyType, Expr policyBody,
                                        List<Type> argTypeDefs, Type returnType, List<String> argNames) {
+            Expr policyBodyCopy = policyBody.clone();
+
             SelectList selectList;
             Expr predicate = null;
             if (policyType.equals(PolicyType.MASKING)) {
                 selectList = new SelectList(Lists.newArrayList(
-                        new SelectListItem(policyBody.clone(), null)), false);
+                        new SelectListItem(policyBodyCopy, null)), false);
             } else {
                 selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(null)), false);
-                predicate = policyBody.clone();
+                predicate = policyBodyCopy;
             }
 
             List<Expr> row = Lists.newArrayList();

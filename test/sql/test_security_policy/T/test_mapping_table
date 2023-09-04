@@ -1,0 +1,74 @@
+-- name: test_mapping_table
+
+CREATE TABLE sales_manager (
+  region        varchar(20),
+  sales_manager varchar(20)
+)
+PRIMARY KEY(`region`)
+DISTRIBUTED BY HASH(`region`) BUCKETS 10
+PROPERTIES ("replication_num" = "1");
+
+insert into sales_manager values('BJ', 'kevin');
+insert into sales_manager values('SH', 'tony');
+insert into sales_manager values('GZ', 'tom');
+
+CREATE ROW ACCESS POLICY sales_policy
+    AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (
+            SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region
+    )
+;
+CREATE TABLE sales (
+  region     varchar(20),
+  revenue    int
+)
+WITH ROW ACCESS POLICY sales_policy on (region)
+PROPERTIES ("replication_num" = "1");
+
+drop user if exists kevin;
+create user kevin;
+grant select on table sales_manager to kevin;
+grant select on table sales to kevin;
+grant impersonate on user root to kevin;
+
+drop user if exists tony;
+create user tony;
+grant select on table sales_manager to tony;
+grant select on table sales to tony;
+grant impersonate on user root to tony;
+
+insert into sales values('BJ', 100);
+insert into sales values('SH', 200);
+insert into sales values('GZ', 300);
+
+select * from sales;
+
+execute as kevin with no revert;
+select * from sales;
+
+execute as root with no revert;
+execute as tony with no revert;
+select * from sales;
+
+execute as root with no revert;
+update sales_manager set sales_manager='tony' where region='GZ';
+
+execute as tony with no revert;
+select * from sales;
+
+execute as root with no revert;
+alter table sales drop all row access policies;
+
+create masking policy sales_masking
+    as (sales_region varchar, revenue int) returns int ->
+    case when
+        EXISTS (SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region)
+    then revenue else -1 end;
+alter table sales modify column revenue set masking policy sales_masking using(region, revenue);
+
+execute as kevin with no revert;
+select * from sales order by region;
+
+execute as root with no revert;
+execute as tony with no revert;
+select * from sales order by region;
+execute as root with no revert;

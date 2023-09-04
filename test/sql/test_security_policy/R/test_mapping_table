@@ -1,0 +1,147 @@
+-- name: test_mapping_table
+CREATE TABLE sales_manager (
+  region        varchar(20),
+  sales_manager varchar(20)
+)
+PRIMARY KEY(`region`)
+DISTRIBUTED BY HASH(`region`) BUCKETS 10
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into sales_manager values('BJ', 'kevin');
+-- result:
+-- !result
+insert into sales_manager values('SH', 'tony');
+-- result:
+-- !result
+insert into sales_manager values('GZ', 'tom');
+-- result:
+-- !result
+CREATE ROW ACCESS POLICY sales_policy
+    AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (
+            SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region
+    )
+;
+-- result:
+-- !result
+CREATE TABLE sales (
+  region     varchar(20),
+  revenue    int
+)
+WITH ROW ACCESS POLICY sales_policy on (region)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+drop user if exists kevin;
+-- result:
+-- !result
+create user kevin;
+-- result:
+-- !result
+grant select on table sales_manager to kevin;
+-- result:
+-- !result
+grant select on table sales to kevin;
+-- result:
+-- !result
+grant impersonate on user root to kevin;
+-- result:
+-- !result
+drop user if exists tony;
+-- result:
+-- !result
+create user tony;
+-- result:
+-- !result
+grant select on table sales_manager to tony;
+-- result:
+-- !result
+grant select on table sales to tony;
+-- result:
+-- !result
+grant impersonate on user root to tony;
+-- result:
+-- !result
+insert into sales values('BJ', 100);
+-- result:
+-- !result
+insert into sales values('SH', 200);
+-- result:
+-- !result
+insert into sales values('GZ', 300);
+-- result:
+-- !result
+select * from sales;
+-- result:
+-- !result
+execute as kevin with no revert;
+-- result:
+-- !result
+select * from sales;
+-- result:
+BJ	100
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as tony with no revert;
+-- result:
+-- !result
+select * from sales;
+-- result:
+SH	200
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+update sales_manager set sales_manager='tony' where region='GZ';
+-- result:
+-- !result
+execute as tony with no revert;
+-- result:
+-- !result
+select * from sales;
+-- result:
+SH	200
+GZ	300
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+alter table sales drop all row access policies;
+-- result:
+-- !result
+create masking policy sales_masking
+    as (sales_region varchar, revenue int) returns int ->
+    case when
+        EXISTS (SELECT 1 FROM sales_manager where trim(split(current_user(), '@')[1], "'") = sales_manager and region = sales_region)
+    then revenue else -1 end;
+-- result:
+-- !result
+alter table sales modify column revenue set masking policy sales_masking using(region, revenue);
+-- result:
+-- !result
+execute as kevin with no revert;
+-- result:
+-- !result
+select * from sales order by region;
+-- result:
+BJ	100
+GZ	-1
+SH	-1
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+execute as tony with no revert;
+-- result:
+-- !result
+select * from sales order by region;
+-- result:
+BJ	-1
+GZ	300
+SH	200
+-- !result
+execute as root with no revert;
+-- result:
+-- !result

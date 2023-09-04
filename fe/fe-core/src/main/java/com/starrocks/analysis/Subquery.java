@@ -36,11 +36,15 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Objects;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,7 +108,10 @@ public class Subquery extends Expr {
 
     @Override
     public Subquery clone() {
-        Subquery ret = new Subquery(queryStatement);
+        QueryStatement cloneStmt = (QueryStatement) SqlParser.parse(AstToSQLBuilder.toSQL(queryStatement),
+                ConnectContext.get() == null ? SqlModeHelper.MODE_DEFAULT
+                        : ConnectContext.get().getSessionVariable().getSqlMode()).get(0);
+        Subquery ret = new Subquery(cloneStmt);
         LOG.debug("SUBQUERY clone old={} new={}",
                 System.identityHashCode(this),
                 System.identityHashCode(ret));

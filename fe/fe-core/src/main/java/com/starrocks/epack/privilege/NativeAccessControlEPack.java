@@ -15,7 +15,7 @@ import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstRewriter;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Collections;
@@ -92,7 +92,7 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
             }
 
             RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
-            return r.visit(maskingPolicy.getPolicyExpression().clone());
+            return (Expr) r.visit(maskingPolicy.getPolicyExpression());
         } else {
             return null;
         }
@@ -118,15 +118,16 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
                 List<String> argNames = rowAccessPolicy.getArgNames();
 
                 for (int i = 0; i < rowAccessPolicyInfo.getOnColumns().size(); ++i) {
-                    onColumnsMap.put(new SlotRef(null, argNames.get(i)), new SlotRef(tableName, onColumns.get(i)));
+                    onColumnsMap.put(new SlotRef(null, argNames.get(i), argNames.get(i)),
+                            new SlotRef(tableName, onColumns.get(i)));
                 }
 
                 RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
                 if (rewriteExpr == null) {
-                    rewriteExpr = r.visit(rowAccessPolicy.getPolicyExpression().clone());
+                    rewriteExpr = (Expr) r.visit(rowAccessPolicy.getPolicyExpression());
                 } else {
                     rewriteExpr = Expr.compoundAnd(Lists.newArrayList(
-                            r.visit(rowAccessPolicy.getPolicyExpression().clone()), rewriteExpr));
+                            (Expr) r.visit(rowAccessPolicy.getPolicyExpression()), rewriteExpr));
                 }
             } else {
                 rewriteExpr = rowAccessPolicy.getPolicyExpression();
@@ -135,7 +136,7 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
         return rewriteExpr;
     }
 
-    private static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
+    private static class RewriteAliasVisitor extends AstRewriter<Void> {
         Map<SlotRef, SlotRef> map;
 
         public RewriteAliasVisitor(Map<SlotRef, SlotRef> map) {
@@ -143,20 +144,20 @@ public class NativeAccessControlEPack extends NativeAccessControl implements Acc
         }
 
         @Override
-        public Expr visit(ParseNode expr) {
-            return visit(expr, null);
+        public ParseNode visit(ParseNode node) {
+            return visit(node, null);
         }
 
         @Override
-        public Expr visitExpression(Expr expr, Void context) {
+        public ParseNode visitExpression(Expr expr, Void context) {
             for (int i = 0; i < expr.getChildren().size(); ++i) {
-                expr.setChild(i, visit(expr.getChild(i)));
+                expr.setChild(i, (Expr) visit(expr.getChild(i)));
             }
             return expr;
         }
 
         @Override
-        public Expr visitSlot(SlotRef slotRef, Void context) {
+        public ParseNode visitSlot(SlotRef slotRef, Void context) {
             return map.getOrDefault(slotRef, slotRef);
         }
     }
