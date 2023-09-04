@@ -2896,10 +2896,10 @@ public class GlobalStateMgr {
             sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
-            if (!hiveTable.getHiveProperties().isEmpty()) {
+            if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
             }
-            sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
