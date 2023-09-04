@@ -2499,4 +2499,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
+
+    /**
+     * mv plan cache expire interval in seconds
+     */
+    @ConfField(mutable = true)
+    public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 }
