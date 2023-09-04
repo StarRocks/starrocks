@@ -129,7 +129,6 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
   For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) and [HLL](#load-data-into-columns-of-hll-type) types. **BITMAP and HLL are supported since version 1.1.1**.
 
-
 ## Upgrade Spark connector
 
 ### Upgrade from version 1.1.0 to 1.1.1
@@ -182,7 +181,7 @@ Construct data in memory and load data into the StarRocks table.
 
 1. You can write the spark application using Scala or Python.
 
-   For Scala, run the following code snippet in `spark-shell`:
+  For Scala, run the following code snippet in `spark-shell`:
    
     ```Scala
     // 1. Create a DataFrame from a sequence.
@@ -201,7 +200,7 @@ Construct data in memory and load data into the StarRocks table.
         .save()
     ```
 
-   For Python, run the following code snippet in `pyspark`:
+  For Python, run the following code snippet in `pyspark`:
    
    ```python
    from pyspark.sql import SparkSession
@@ -228,7 +227,7 @@ Construct data in memory and load data into the StarRocks table.
         .save()
     ```
 
-3. Query data in the StarRocks table.
+2. Query data in the StarRocks table.
 
     ```sql
     MySQL [test]> SELECT * FROM `score_board`;
@@ -254,7 +253,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
 
 2. You can write the Spark application using Scala or Python.
 
-   For Scala, run the following code snippet in `spark-shell`:
+  For Scala, run the following code snippet in `spark-shell`:
 
     ```Scala
     import org.apache.spark.sql.types.StructType
@@ -288,7 +287,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
         )
     ```
 
-   For Python, run the following code snippet in `pyspark`:
+  For Python, run the following code snippet in `pyspark`:
    
    ```python
    from pyspark.sql import SparkSession
@@ -327,7 +326,7 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
         )
     ```
 
-4. Query data in the StarRocks table.
+3. Query data in the StarRocks table.
 
     ```SQL
     MySQL [test]> select * from score_board;
@@ -408,6 +407,7 @@ DISTRIBUTED BY HASH(`id`);
 This example will show how to only update data in the column `name` through loading:
 
 1. Insert initial data to StarRocks table in MySQL client.
+
 ```SQL
 mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
 
@@ -422,6 +422,7 @@ mysql> select * from score_board;
 ```
 
 2. Create a Spark table `score_board` in Spark SQL client.
+
 * Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update.
 * Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write.
 
@@ -439,6 +440,7 @@ mysql> select * from score_board;
    );
   ```
 3. Insert data into the table in Spark SQL client, and only update the column `name`.
+
   ```SQL
   INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'spark-update');
   ```
@@ -463,6 +465,7 @@ This example will show how to do conditional updates according to the values of 
 takes effect only when the new value for `score` is has a greater or equal to the old value.
 
 1. Insert initial data to StarRocks table in MySQL client.
+
   ```SQL
   mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
 
@@ -477,6 +480,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
   ```
 
 2. Create a Spark table `score_board` in the following ways.
+
 * Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score` as the condition.
 * Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
 
@@ -494,12 +498,15 @@ takes effect only when the new value for `score` is has a greater or equal to th
   ```
 
 3. Insert data to the table in Spark SQL client, and update the row whose `id` is 1 with a smaller score value, and the row whose `id` is 2 with a larger score value.
+
   ```SQL
   INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'spark-update', 101);
   ```
 
 4. Query the StarRocks table in MySQL client.
+
    You can see that only the row whose `id` is 2 changes, and the row whose `id` is 1 does not change.
+
   ```SQL
    mysql> select * from score_board;
    +------+--------------+-------+
