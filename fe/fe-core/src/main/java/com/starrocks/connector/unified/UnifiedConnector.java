@@ -45,19 +45,24 @@ public class UnifiedConnector implements Connector {
     private final Map<Table.TableType, Connector> connectorMap;
 
     public UnifiedConnector(ConnectorContext context) {
-        Map<String, String> properties = context.getProperties();
-        String metastoreType = properties.get(UNIFIED_METASTORE_TYPE);
+        String metastoreType = context.getProperties().get(UNIFIED_METASTORE_TYPE);
         if (!SUPPORTED_METASTORE_TYPE.contains(metastoreType)) {
             throw new SemanticException("Unified catalog only supports hive and glue as metastore.");
         }
-        properties.put(HIVE_METASTORE_TYPE, metastoreType);
-        properties.put(ICEBERG_CATALOG_TYPE, metastoreType);
+
+        ImmutableMap.Builder<String, String> derivedProperties = ImmutableMap.builder();
+        derivedProperties.putAll(context.getProperties());
+        derivedProperties.put(HIVE_METASTORE_TYPE, metastoreType);
+        derivedProperties.put(ICEBERG_CATALOG_TYPE, metastoreType);
+
+        ConnectorContext derivedContext = new ConnectorContext(context.getCatalogName(), context.getType(),
+                derivedProperties.build());
 
         connectorMap = ImmutableMap.of(
-                HIVE, new HiveConnector(context),
-                ICEBERG, new IcebergConnector(context),
-                HUDI, new HudiConnector(context),
-                DELTALAKE, new DeltaLakeConnector(context)
+                HIVE, new HiveConnector(derivedContext),
+                ICEBERG, new IcebergConnector(derivedContext),
+                HUDI, new HudiConnector(derivedContext),
+                DELTALAKE, new DeltaLakeConnector(derivedContext)
         );
     }
 
