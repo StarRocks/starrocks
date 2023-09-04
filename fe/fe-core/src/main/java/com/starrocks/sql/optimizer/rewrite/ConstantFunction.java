@@ -36,6 +36,8 @@ public @interface ConstantFunction {
      */
     boolean isMetaFunction() default false;
 
+    boolean isMonotonic() default false;
+
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.METHOD)
     @interface List {

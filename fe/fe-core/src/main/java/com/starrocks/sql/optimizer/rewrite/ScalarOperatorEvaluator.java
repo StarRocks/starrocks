@@ -96,7 +96,8 @@ public enum ScalarOperatorEvaluator {
             }
 
             FunctionSignature signature = new FunctionSignature(name, argTypes, returnType);
-            mapBuilder.put(signature, new FunctionInvoker(method, signature, annotation.isMetaFunction()));
+            mapBuilder.put(signature, new FunctionInvoker(method, signature, annotation.isMetaFunction(),
+                    annotation.isMonotonic()));
         }
     }
 
@@ -111,13 +112,17 @@ public enum ScalarOperatorEvaluator {
         return new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
     }
 
+    public ScalarOperator evaluation(CallOperator root) {
+        return evaluation(root, false);
+    }
+
     /**
      * evaluation a fe built-in function
      *
      * @param root CallOperator root
      * @return ConstantOperator if the CallOperator is effect (All child constant/FE builtin function support/....)
      */
-    public ScalarOperator evaluation(CallOperator root) {
+    public ScalarOperator evaluation(CallOperator root, boolean needMonotonic) {
         if (ConnectContext.get() != null
                 && ConnectContext.get().getSessionVariable().isDisableFunctionFoldConstants()) {
             return root;
@@ -170,6 +175,10 @@ public enum ScalarOperatorEvaluator {
 
         FunctionInvoker invoker = functions.get(signature);
 
+        if (needMonotonic && !invoker.isMonotonic) {
+            return root;
+        }
+
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
 
@@ -192,19 +201,16 @@ public enum ScalarOperatorEvaluator {
 
     private static class FunctionInvoker {
         private final boolean isMetaFunction;
+
+        private final boolean isMonotonic;
         private final Method method;
         private final FunctionSignature signature;
 
-        public FunctionInvoker(Method method, FunctionSignature signature) {
-            this.method = method;
-            this.signature = signature;
-            this.isMetaFunction = false;
-        }
-
-        public FunctionInvoker(Method method, FunctionSignature signature, boolean isMetaFunction) {
+        public FunctionInvoker(Method method, FunctionSignature signature, boolean isMetaFunction, boolean isMonotonic) {
             this.method = method;
             this.signature = signature;
             this.isMetaFunction = isMetaFunction;
+            this.isMonotonic = isMonotonic;
         }
 
         public Method getMethod() {
