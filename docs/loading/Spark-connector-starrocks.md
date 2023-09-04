@@ -127,7 +127,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 
 - You can also customize the data type mapping.
 
-  For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-typ) and [HLL](#load-data-into-columns-of-HLL-type) types. **BITMAP and HLL are supported since version 1.1.1**.
+  For example, a StarRocks table consists of the BITMAP and HLL data types, but Spark does not support the two data types. You need to customize the corresponding data types in Spark. For detailed steps, see load data into columns of [BITMAP](#load-data-into-columns-of-bitmap-type) and [HLL](#load-data-into-columns-of-HLL-type) types. **BITMAP and HLL are supported since version 1.1.1**.
 
 
 ## Upgrade Spark connector
@@ -378,10 +378,10 @@ The following example explains how to load data with Spark SQL by using the `INS
 
 ## Best Practices
 
-### Load data to primary key table
+### Load data to Primary Key table
 
-This section will show how to load data to StarRocks primary key table to achieve partial update, and conditional update.
-You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the introduction of those features.
+This section will show how to load data to StarRocks Primary Key table to achieve partial updates, and conditional updates.
+You can see [Change data through loading](https://docs.starrocks.io/en-us/latest/loading/Load_to_Primary_Key_tables) for the detailed introduction of these features.
 These examples use Spark SQL.
 
 #### Preparations
@@ -403,11 +403,11 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`);
 ```
 
-#### Partial update
+#### Partial updates
 
-This example will show how to load data only to columns `id` and `name`.
+This example will show how to load data only into columns `id` and `name`.
 
-1. Insert initial data to StarRocks table in MySQL client
+1. Insert initial data to StarRocks table in MySQL client.
 ```SQL
 mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
 
@@ -421,9 +421,9 @@ mysql> select * from score_board;
 2 rows in set (0.02 sec)
 ```
 
-2. Create a Spark table `score_board` in Spark SQL client
-* Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update
-* Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write
+2. Create a Spark table `score_board` in Spark SQL client.
+* Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update.
+* Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write.
 
   ```SQL
   CREATE TABLE `score_board`
@@ -438,11 +438,12 @@ mysql> select * from score_board;
       "starrocks.columns"="id,name"
    );
   ```
-3. Insert data to the table in Spark SQL client, and only update the column `name`
+3. Insert data into the table in Spark SQL client, and only update the column `name`.
   ```SQL
   INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'flink-update');
   ```
-4. Query the StarRocks table in mysql client
+4. Query the StarRocks table in MySQL client.
+   
    You can see that only values for `name` change, and the values for `score` does not change.
 
   ```SQL
@@ -456,12 +457,12 @@ mysql> select * from score_board;
   2 rows in set (0.02 sec)
   ```
 
-#### Conditional update
+#### Conditional updates
 
-This example will show how to do conditional update according to the value of column `score`. The update for an `id`
+This example will show how to do conditional updates according to the values of column `score`. The update for an `id`
 takes effect only when the new value for `score` is has a greater or equal to the old value.
 
-1. Insert initial data to StarRocks table in MySQL client
+1. Insert initial data to StarRocks table in MySQL client.
   ```SQL
   mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'flink', 100);
 
@@ -475,9 +476,8 @@ takes effect only when the new value for `score` is has a greater or equal to th
   2 rows in set (0.02 sec)
   ```
 
-2. Create a Spark table `score_board` in the following ways
-* Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score`
-  as the condition
+2. Create a Spark table `score_board` in the following ways.
+* Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score` as the condition.
 * Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
 
   ```SQL
@@ -493,13 +493,13 @@ takes effect only when the new value for `score` is has a greater or equal to th
    );
   ```
 
-3. Insert data to the table in Spark SQL client, and update id 1 with a smaller score, and id 2 with a larger score
+3. Insert data to the table in Spark SQL client, and update the row whose `id` is 1 with a smaller score value, and the row whose `id` is 2 with a larger score value.
   ```SQL
   INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
   ```
 
-4. Query the StarRocks table in mysql client
-   You can see that only the row for id 2 changes, and the row for id 1 does not change.
+4. Query the StarRocks table in MySQL client.
+   You can see that only the row whose `id` is 2 changes, and the row whose `id` is 1 does not change.
   ```SQL
    mysql> select * from score_board;
    +------+--------------+-------+
@@ -515,7 +515,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 [`BITMAP`](../sql-reference/sql-statements/data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
  
-1. Create a StarRocks Aggregate table
+1. Create a StarRocks Aggregate table.
 
    In the database `test`, create an Aggregate table `page_uv` where the column `visit_users` is defined as the `BITMAP` type and configured with the aggregate function `BITMAP_UNION`. 
     
@@ -529,7 +529,7 @@ Here we take the counting of UV as an example to show how to load data into colu
     DISTRIBUTED BY HASH(`page_id`);
     ```
 
-3. Create a Spark table 
+2. Create a Spark table.
 
     The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `BITMAP` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) function to convert the data of `BIGINT` type into `BITMAP` type.
     
@@ -548,7 +548,7 @@ Here we take the counting of UV as an example to show how to load data into colu
     );
     ```
 
-3. Load data into StarRocks table
+3. Load data into StarRocks table.
 
     Run the following DML in `spark-sql`:
     
@@ -643,8 +643,6 @@ DISTRIBUTED BY HASH(`page_id`);
     ```
 
 ### Load data into columns of ARRAY type
-
-
 
 The following example explains how to load data into columns of the [`ARRAY`](../sql-reference/sql-statements/data-types/Array.md) type.
 
