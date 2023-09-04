@@ -446,7 +446,70 @@ Status ExecEnv::_init_storage_page_cache() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void ExecEnv::_destroy() {
+=======
+std::string ExecEnv::token() const {
+    return get_master_token();
+}
+
+void ExecEnv::add_rf_event(const RfTracePoint& pt) {
+    std::string msg =
+            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
+}
+
+void ExecEnv::stop() {
+    if (_load_channel_mgr) {
+        // Clear load channel should be executed before stopping the storage engine,
+        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
+        // so when the ThreadPool is destroyed, it will crash.
+        _load_channel_mgr->close();
+    }
+
+    if (_load_stream_mgr) {
+        _load_stream_mgr->close();
+    }
+
+    if (_fragment_mgr) {
+        _fragment_mgr->close();
+    }
+
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
+    }
+
+    if (_pipeline_sink_io_pool) {
+        _pipeline_sink_io_pool->shutdown();
+    }
+
+    if (_wg_driver_executor) {
+        _wg_driver_executor->close();
+    }
+
+    if (_agent_server) {
+        _agent_server->stop();
+    }
+
+    if (_automatic_partition_pool) {
+        _automatic_partition_pool->shutdown();
+    }
+
+    if (_load_rpc_pool) {
+        _load_rpc_pool->shutdown();
+    }
+
+    if (_routine_load_task_executor) {
+        _routine_load_task_executor->stop();
+    }
+
+#ifndef BE_TEST
+    close_s3_clients();
+#endif
+}
+
+void ExecEnv::destroy() {
+>>>>>>> 1bbd536da5 (close StreamMgr after FragmantMgr::close (#30368))
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_profile_report_worker);
