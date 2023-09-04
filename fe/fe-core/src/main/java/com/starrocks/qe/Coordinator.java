@@ -1740,11 +1740,13 @@ public class Coordinator {
         }
 
         RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
+        long start = System.nanoTime();
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
         long maxQueryCumulativeCpuTime = 0;
         long maxQueryPeakMemoryUsage = 0;
+        long maxQueryExecutionWallTime = 0;
         long maxQuerySpillBytes = 0;
 
         List<RuntimeProfile> newFragmentProfiles = Lists.newArrayList();
@@ -1773,7 +1775,7 @@ public class Coordinator {
                     missingInstanceIds.add(instanceProfile.getInfoString("InstanceId"));
                 }
 
-                // Get query level peak memory usage and cpu cost
+                // Get query level peak memory usage, cpu cost, wall time
                 Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
                 if (toBeRemove != null) {
                     maxQueryCumulativeCpuTime = Math.max(maxQueryCumulativeCpuTime, toBeRemove.getValue());
@@ -1785,6 +1787,12 @@ public class Coordinator {
                     maxQueryPeakMemoryUsage = Math.max(maxQueryPeakMemoryUsage, toBeRemove.getValue());
                 }
                 instanceProfile.removeCounter("QueryPeakMemoryUsage");
+
+                toBeRemove = instanceProfile.getCounter("QueryExecutionWallTime");
+                if (toBeRemove != null) {
+                    maxQueryExecutionWallTime = Math.max(maxQueryExecutionWallTime, toBeRemove.getValue());
+                }
+                instanceProfile.removeCounter("QueryExecutionWallTime");
 
                 toBeRemove = instanceProfile.getCounter("QuerySpillBytes");
                 if (toBeRemove != null) {
@@ -1833,7 +1841,9 @@ public class Coordinator {
         // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
         // NetworkTime(for ExchangeOperator)
         long queryCumulativeOperatorTime = 0;
-        boolean foundResultSink = false;
+        long queryCumulativeScanTime = 0;
+        long queryCumulativeNetworkTime = 0;
+        long maxScheduleTime = 0;
         for (RuntimeProfile fragmentProfile : newFragmentProfiles) {
             Counter instanceAllocatedMemoryUsage = fragmentProfile.getCounter("InstanceAllocatedMemoryUsage");
             if (instanceAllocatedMemoryUsage != null) {
@@ -1846,17 +1856,19 @@ public class Coordinator {
 
             for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
                 RuntimeProfile pipelineProfile = pipelineProfilePair.first;
+                Counter scheduleTime = pipelineProfile.getMaxCounter("ScheduleTime");
+                if (scheduleTime != null) {
+                    maxScheduleTime = Math.max(maxScheduleTime, scheduleTime.getValue());
+                }
                 for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
-                    if (!foundResultSink && (operatorProfile.getName().contains("RESULT_SINK") ||
-                            operatorProfile.getName().contains("OLAP_TABLE_SINK"))) {
-                        newQueryProfile.getCounterTotalTime().setValue(0);
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
 
-                        long executionWallTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                        Counter executionTotalTime =
-                                newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
-                        executionTotalTime.setValue(executionWallTime);
-
+                    if (commonMetrics.containsInfoString("IsFinalSink")) {
                         Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
                         if (outputFullTime != null) {
                             long resultDeliverTime = outputFullTime.getValue();
@@ -1864,26 +1876,21 @@ public class Coordinator {
                                     newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
                             resultDeliverTimer.setValue(resultDeliverTime);
                         }
-
-                        foundResultSink = true;
                     }
 
-                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
-                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
-                    if (commonMetrics == null || uniqueMetrics == null) {
-                        continue;
-                    }
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
                     Preconditions.checkNotNull(operatorTotalTime);
                     queryCumulativeOperatorTime += operatorTotalTime.getValue();
 
                     Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
                     if (scanTime != null) {
+                        queryCumulativeScanTime += scanTime.getValue();
                         queryCumulativeOperatorTime += scanTime.getValue();
                     }
 
                     Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
                     if (networkTime != null) {
+                        queryCumulativeNetworkTime += networkTime.getValue();
                         queryCumulativeOperatorTime += networkTime.getValue();
                     }
                 }
@@ -1898,14 +1905,31 @@ public class Coordinator {
         Counter queryCumulativeOperatorTimer =
                 newQueryProfile.addCounter("QueryCumulativeOperatorTime", TUnit.TIME_NS, null);
         queryCumulativeOperatorTimer.setValue(queryCumulativeOperatorTime);
+        Counter queryCumulativeScanTimer =
+                newQueryProfile.addCounter("QueryCumulativeScanTime", TUnit.TIME_NS, null);
+        queryCumulativeScanTimer.setValue(queryCumulativeScanTime);
+        Counter queryCumulativeNetworkTimer =
+                newQueryProfile.addCounter("QueryCumulativeNetworkTime", TUnit.TIME_NS, null);
+        queryCumulativeNetworkTimer.setValue(queryCumulativeNetworkTime);
+        Counter queryPeakScheduleTime = newQueryProfile.addCounter("QueryPeakScheduleTime", TUnit.TIME_NS, null);
+        queryPeakScheduleTime.setValue(maxScheduleTime);
         newQueryProfile.getCounterTotalTime().setValue(0);
 
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
         queryCumulativeCpuTime.setValue(maxQueryCumulativeCpuTime);
         Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
+        Counter queryExecutionWallTime = newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
+        queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
         querySpillBytes.setValue(maxQuerySpillBytes);
+
+        if (execPlanSupplier != null) {
+            newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
+        }
+        Counter processTimer =
+                newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
+        processTimer.setValue(System.nanoTime() - start);
 
         return newQueryProfile;
     }
@@ -1950,7 +1974,7 @@ public class Coordinator {
             Counter minCloseTime = commonMetrics.getCounter("__MIN_OF_CloseTime");
             if (closeTime != null && closeTime.getValue() == 0 ||
                     minCloseTime != null && minCloseTime.getValue() == 0) {
-                commonMetrics.addInfoString("Status", "Running");
+                commonMetrics.addInfoString("IsRunning", "");
             }
         }
     }

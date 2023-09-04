@@ -27,17 +27,7 @@
 
 namespace starrocks::pipeline {
 
-<<<<<<< HEAD
-/// Operator.
-const int32_t Operator::s_pseudo_plan_node_id_for_memory_scratch_sink = -96;
-const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
-const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
-const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
-const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
-const int32_t Operator::s_pseudo_plan_node_id_for_iceberg_table_sink = -101;
-=======
 const int32_t Operator::s_pseudo_plan_node_id_for_final_sink = -1;
->>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
 
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
                    int32_t driver_sequence)

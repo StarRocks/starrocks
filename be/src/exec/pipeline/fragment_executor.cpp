@@ -932,42 +932,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
                     partition_expr_ctxs, source_operator_dop, desired_iceberg_sink_dop);
         }
-<<<<<<< HEAD
-=======
-    } else if (typeid(*datasink) == typeid(starrocks::HiveTableSink)) {
-        auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(datasink.get());
-        auto output_expr = hive_table_sink->get_output_expr();
-        const auto& t_hive_sink = thrift_sink.hive_table_sink;
-        const auto partition_col_size = t_hive_sink.partition_column_names.size();
-        std::vector<TExpr> partition_expr(output_exprs.end() - partition_col_size, output_exprs.end());
-        std::vector<ExprContext*> partition_expr_ctxs;
-
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
-                                                runtime_state));
-
-        auto* source_operator =
-                down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
-
-        size_t desired_hive_sink_dop = request.pipeline_sink_dop();
-        size_t source_operator_dop = source_operator->degree_of_parallelism();
-        OpFactoryPtr hive_table_sink_op = std::make_shared<HiveTableSinkOperatorFactory>(
-                context->next_operator_id(), fragment_ctx, thrift_sink.hive_table_sink,
-                hive_table_sink->get_output_expr(), partition_expr_ctxs);
-
-        if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
-            if (source_operator_dop != desired_hive_sink_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
-                        source_operator_dop, desired_hive_sink_dop);
-            } else {
-                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(hive_table_sink_op));
-            }
-        } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
-                    partition_expr_ctxs, source_operator_dop, desired_hive_sink_dop);
-        }
->>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
     }
 
     return Status::OK();

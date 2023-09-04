@@ -85,9 +85,8 @@ std::atomic<size_t> lifecycle_error_num;
 class TestOperator : public Operator {
 public:
     TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-<<<<<<< HEAD
                  int32_t driver_sequence)
-            : Operator(factory, id, name, plan_node_id, driver_sequence) {}
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence) {}
     ~TestOperator() override {
         if (!_is_prepared) {
             ++lifecycle_error_num;
@@ -102,11 +101,6 @@ public:
             ++lifecycle_error_num;
         }
     }
-=======
-                 int32_t driver_sequence, CounterPtr counter)
-            : Operator(factory, id, name, plan_node_id, false, driver_sequence), _counter(std::move(counter)) {}
-    ~TestOperator() override = default;
->>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(Operator::prepare(state));

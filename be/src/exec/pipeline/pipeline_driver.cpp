@@ -536,20 +536,6 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
                               int64_t execution_time) {
-<<<<<<< HEAD
-    if (schedule_count > 0) {
-        _global_schedule_counter->set(schedule_count - _global_schedule_counter->value());
-    } else {
-        _global_schedule_counter->set((int64_t)-1);
-    }
-    if (execution_time > 0) {
-        _global_schedule_timer->set(execution_time - _global_schedule_timer->value());
-    } else {
-        _global_schedule_timer->set((int64_t)-1);
-    }
-
-=======
->>>>>>> 69d9321028 ([Enhancement] Refine profile to support visualization refactor (#29063))
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
     // the information about the driver queue and workgroup.
