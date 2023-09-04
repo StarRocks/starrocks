@@ -2512,5 +2512,4 @@ public class AggregateTest extends PlanTestBase {
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
     }
->>>>>>> 43968b755d ([Feature] Add new agg/window function 'approx_top_k' (#29643))
 }
