@@ -85,15 +85,10 @@ public:
         return Status::OK();
     }
 
-    const DictColumnsValidMap& global_dict_columns_valid_info() const override {
-        return _global_dict_columns_valid_info;
-    }
-
     std::unique_ptr<Column> all_pks;
     vector<uint32_t> all_rssids;
 
     vector<std::unique_ptr<Column>> non_key_columns;
-    DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 class RowsetMergerTest : public testing::Test {
@@ -109,7 +104,7 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
-        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.tablet_schema = tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;

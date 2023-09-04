@@ -509,9 +509,9 @@ Status CrossJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
             });
 }
 
-Status CrossJoinNode::close(RuntimeState* state) {
+void CrossJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     if (_build_chunk != nullptr) {
@@ -522,7 +522,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
     }
 
     Expr::close(_join_conjuncts, state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 void CrossJoinNode::_init_row_desc() {
@@ -587,7 +587,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
         _build_chunks_size = (_number_of_build_rows / runtime_state()->chunk_size()) * runtime_state()->chunk_size();
     }
 
-    RETURN_IF_ERROR(child(1)->close(state));
+    child(1)->close(state);
     return Status::OK();
 }
 
@@ -689,7 +689,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                            std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
-    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
+    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
                                                                               context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
 

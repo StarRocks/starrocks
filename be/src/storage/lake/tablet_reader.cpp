@@ -132,7 +132,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
-    rs_opts.tablet_schema = _tablet_schema.get();
+    rs_opts.tablet_schema = _tablet_schema;
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
@@ -158,7 +158,7 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(*_tablet_schema);
+    PredicateParser pred_parser(_tablet_schema);
     ASSIGN_OR_RETURN(auto tablet_metadata, enhance_error_prompt(_tablet.get_metadata(_version)));
 
     for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
@@ -395,8 +395,18 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
+
+    if (sort_key_idxes.size() > 0) {
+        for (auto idx : sort_key_idxes) {
+            schema.append_sort_key_idx(idx);
+        }
+    }
+
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back();
         if (input.is_null(i)) {

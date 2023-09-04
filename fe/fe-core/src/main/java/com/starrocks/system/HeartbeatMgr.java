@@ -69,7 +69,6 @@ import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -92,12 +91,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
     }
 
-    public static long computeMinActiveTxnId() {
-        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
-    }
-
     public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
@@ -105,7 +98,6 @@ public class HeartbeatMgr extends FrontendDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -182,13 +174,10 @@ public class HeartbeatMgr extends FrontendDaemon {
         } // end for all results
 
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
-        Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
-        idToBackendRef.values().forEach(
-                backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
-                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH, backendId2cpuCores));
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
@@ -198,17 +187,6 @@ public class HeartbeatMgr extends FrontendDaemon {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-
-                // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
-                // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
-                hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                    if (be != null && be.getCpuCores() != cpuCores) {
-                        be.setCpuCores(cpuCores);
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
-                    }
-                });
-
                 Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
@@ -291,7 +269,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
@@ -302,11 +279,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                     int httpPort = tBackendInfo.getHttp_port();
                     int brpcPort = -1;
                     int starletPort = 0;
+                    boolean isSetStoragePath = false;
                     if (tBackendInfo.isSetBrpc_port()) {
                         brpcPort = tBackendInfo.getBrpc_port();
                     }
                     if (tBackendInfo.isSetStarlet_port()) {
                         starletPort = tBackendInfo.getStarlet_port();
+                    }
+                    if (tBackendInfo.isSetIs_set_storage_path()) {
+                        isSetStoragePath = tBackendInfo.isIs_set_storage_path();
                     }
                     String version = "";
                     if (tBackendInfo.isSetVersion()) {
@@ -314,15 +295,13 @@ public class HeartbeatMgr extends FrontendDaemon {
                     }
 
                     // Update number of hardware of cores of corresponding backend.
+                    // BackendCoreStat will be updated in ComputeNode.handleHbResponse.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
-                    if (tBackendInfo.isSetNum_hardware_cores()) {
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
-                    }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
-                            System.currentTimeMillis(), version, cpuCores);
+                            System.currentTimeMillis(), version, cpuCores, isSetStoragePath);
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }

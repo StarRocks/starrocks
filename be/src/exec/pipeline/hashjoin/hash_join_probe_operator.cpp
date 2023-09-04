@@ -21,7 +21,7 @@ namespace starrocks::pipeline {
 HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_prober,
                                              HashJoinerPtr join_builder)
-        : OperatorWithDependency(factory, id, name, plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, name, plan_node_id, false, driver_sequence),
           _join_prober(std::move(join_prober)),
           _join_builder(std::move(join_builder)) {}
 
@@ -95,6 +95,8 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
+    // non-broadcast join directly return as _join_prober == _join_builder,
+    // but broadcast should refer to the shared join builder
     if (_join_prober == _join_builder) {
         return Status::OK();
     }

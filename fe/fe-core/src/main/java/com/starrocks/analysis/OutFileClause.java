@@ -37,12 +37,12 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -53,9 +53,9 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.THdfsProperties;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TParquetOptions;
 import com.starrocks.thrift.TResultFileSinkOptions;
 
@@ -238,14 +238,14 @@ public class OutFileClause implements ParseNode {
             if (!isCsvFormat()) {
                 throw new SemanticException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
             }
-            columnSeparator = properties.get(PROP_COLUMN_SEPARATOR);
+            columnSeparator = Delimiter.convertDelimiter(properties.get(PROP_COLUMN_SEPARATOR));
         }
 
         if (properties.containsKey(PROP_LINE_DELIMITER)) {
             if (!isCsvFormat()) {
                 throw new SemanticException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
-            rowDelimiter = properties.get(PROP_LINE_DELIMITER);
+            rowDelimiter = Delimiter.convertDelimiter(properties.get(PROP_LINE_DELIMITER));
         }
 
         if (properties.containsKey(PARQUET_COMPRESSION_TYPE)) {
@@ -281,7 +281,7 @@ public class OutFileClause implements ParseNode {
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
             try {
-                maxFileSizeBytes = ParseUtil.analyzeDataVolumn(properties.get(PROP_MAX_FILE_SIZE));
+                maxFileSizeBytes = ParseUtil.analyzeDataVolume(properties.get(PROP_MAX_FILE_SIZE));
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

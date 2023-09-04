@@ -42,6 +42,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockExpr(*this)); }
 
+    bool is_constant() const override { return false; }
+
 private:
     ColumnPtr _column;
 };
@@ -105,6 +107,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -131,6 +134,7 @@ public:
         stop();
         return col;
     }
+    bool is_constant() const override { return false; }
 
 private:
     size_t size;
@@ -150,7 +154,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         if (only_null) {
-            return ColumnHelper::create_const_null_column(1);
+            return ColumnHelper::create_const_null_column(size);
         }
         ColumnPtr col = nullptr;
         if constexpr (lt_is_decimal<Type>) {
@@ -177,6 +181,7 @@ public:
         stop();
         return re;
     }
+    bool is_constant() const override { return only_null; }
 
 public:
     bool all_null = false;
@@ -215,7 +220,20 @@ public:
         return std::move(col);
     }
 
+    bool is_constant() const override { return false; }
+
 private:
+    ColumnPtr _column;
+};
+
+class FakeConstExpr : public starrocks::Expr {
+public:
+    explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+    Expr* clone(ObjectPool*) const override { return nullptr; }
+
     ColumnPtr _column;
 };
 

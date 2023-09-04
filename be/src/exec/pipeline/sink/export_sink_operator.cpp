@@ -17,6 +17,7 @@
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
@@ -83,13 +84,17 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
+    DeferOp op([&]() {
+        --_num_pending_chunks;
+        DCHECK(_num_pending_chunks >= 0);
+    });
+
     if (_is_finished) {
         return;
     }
 
     if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
+        if (_num_pending_chunks == 1) {
             close(_state);
         }
         return;
@@ -105,7 +110,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
+        DCHECK_EQ(_num_pending_chunks, 1);
         close(_state);
         return;
     }
@@ -187,6 +192,7 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
+    state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
     return _export_sink_buffer->set_finishing();
 }
 

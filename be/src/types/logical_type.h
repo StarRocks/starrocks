@@ -82,6 +82,14 @@ inline bool is_zone_map_key_type(LogicalType type) {
            type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
 }
 
+// The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
+// a fixed value, so these two types are ignored in calculating checksum.
+// And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+inline bool is_support_checksum_type(LogicalType type) {
+    return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
+           type != TYPE_PERCENTILE && type != TYPE_JSON;
+}
+
 template <LogicalType TYPE>
 inline constexpr LogicalType DelegateType = TYPE;
 template <>
@@ -222,6 +230,37 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
     case TYPE_JSON:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool support_column_expr_predicate(LogicalType ltype) {
+    switch (ltype) {
+    case TYPE_BOOLEAN:  /* 2 */
+    case TYPE_TINYINT:  /* 3 */
+    case TYPE_SMALLINT: /* 4 */
+    case TYPE_INT:      /* 5 */
+    case TYPE_BIGINT:   /* 6 */
+    case TYPE_LARGEINT: /* 7 */
+    case TYPE_VARCHAR:  /* 10 */
+    case TYPE_DATE:     /* 11 */
+    case TYPE_DATETIME: /* 12 */
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        /* 13 */          // Not implemented
+    case TYPE_DECIMAL:    /* 14 */
+    case TYPE_CHAR:       /* 15 */
+    case TYPE_DECIMALV2:  /* 20 */
+    case TYPE_TIME:       /* 21 */
+    case TYPE_DECIMAL32:  /* 24 */
+    case TYPE_DECIMAL64:  /* 25 */
+    case TYPE_DECIMAL128: /* 26 */
+    case TYPE_JSON:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_STRUCT:
         return true;
     default:
         return false;

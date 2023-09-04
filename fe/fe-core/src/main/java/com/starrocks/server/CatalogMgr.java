@@ -27,6 +27,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
@@ -34,7 +35,7 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.connector.Connector;
+import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
@@ -46,6 +47,9 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.NativeAccessControl;
+import com.starrocks.privilege.ranger.hive.RangerHiveAccessControl;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -106,7 +110,7 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            CatalogConnector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             if (null == connector) {
                 LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
                 throw new DdlException("connector create failed");
@@ -115,6 +119,13 @@ public class CatalogMgr {
                     ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
+            String serviceName = properties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null) {
+                Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControl());
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessControl(serviceName));
+            }
+
             catalogs.put(catalogName, catalog);
 
             if (!isResourceMappingCatalog(catalogName)) {
@@ -137,6 +148,7 @@ public class CatalogMgr {
         writeLock();
         try {
             connectorMgr.removeConnector(catalogName);
+            Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
             if (!isResourceMappingCatalog(catalogName)) {
                 DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
@@ -155,7 +167,17 @@ public class CatalogMgr {
 
         readLock();
         try {
-            return catalogs.containsKey(catalogName);
+            if (catalogs.containsKey(catalogName)) {
+                return true;
+            }
+
+            // TODO: Used for replay query dump which only supports `hive` catalog for now.
+            if (FeConstants.isReplayFromQueryDump &&
+                    catalogs.containsKey(getResourceMappingCatalogName(catalogName, "hive"))) {
+                return true;
+            }
+
+            return false;
         } finally {
             readUnlock();
         }
@@ -194,8 +216,8 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        if (null == connector) {
+        CatalogConnector catalogConnector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (catalogConnector == null) {
             LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
             throw new DdlException("connector create failed");
         }
@@ -337,6 +359,15 @@ public class CatalogMgr {
 
     private void writeUnLock() {
         this.catalogLock.writeLock().unlock();
+    }
+
+    public long getCatalogCount() {
+        readLock();
+        try {
+            return catalogs.size();
+        } finally {
+            readUnlock();
+        }
     }
 
     public class CatalogProcNode implements ProcDirInterface {

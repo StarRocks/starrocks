@@ -48,6 +48,7 @@ import java.util.List;
  * show proc "/tablet_scheduler/pending_tablets";
  * show proc "/tablet_scheduler/running_tablets";
  * show proc "/tablet_scheduler/history_tablets";
+ * show proc "/tablet_scheduler/all_tablets";
  */
 public class TabletSchedulerDetailProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -79,6 +80,12 @@ public class TabletSchedulerDetailProcDir implements ProcDirInterface {
             tabletInfos = tabletScheduler.getRunningTabletsInfo(1000);
         } else if (type.equals(ClusterBalanceProcDir.HISTORY_TABLETS)) {
             tabletInfos = tabletScheduler.getHistoryTabletsInfo(1000);
+        } else if (type.equals(ClusterBalanceProcDir.ALL_TABLETS)) {
+            ImmutableList<String> titleNames = new ImmutableList.Builder<String>()
+                    .add("TabletId")
+                    .build();
+            result.setNames(titleNames);
+            tabletInfos = tabletScheduler.getAllTabletsInfo();
         } else {
             throw new AnalysisException("invalid type: " + type);
         }

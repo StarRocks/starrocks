@@ -116,7 +116,7 @@ SpillableNLJoinProbeOperator::SpillableNLJoinProbeOperator(
         const std::string& sql_join_conjuncts, const std::vector<ExprContext*>& join_conjuncts,
         const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
         size_t probe_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context)
-        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, "spillable_nestloop_join_probe", plan_node_id, false, driver_sequence),
           _prober(join_op, join_conjuncts, conjunct_ctxs, col_types, probe_column_count),
           _cross_join_context(cross_join_context) {}
 
@@ -141,7 +141,7 @@ bool SpillableNLJoinProbeOperator::is_ready() const {
     if (res) {
         _init_chunk_stream();
     }
-    return _cross_join_context->is_right_finished();
+    return res;
 }
 
 bool SpillableNLJoinProbeOperator::is_finished() const {
@@ -149,7 +149,7 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 }
 
 bool SpillableNLJoinProbeOperator::has_output() const {
-    return _chunk_stream && _chunk_stream->has_output();
+    return !_is_current_build_probe_finished() && _chunk_stream && _chunk_stream->has_output();
 }
 
 bool SpillableNLJoinProbeOperator::need_input() const {
@@ -199,6 +199,9 @@ StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state)
 
 Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TRACE_SPILL_LOG << "push_chunk:" << _driver_sequence;
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     _set_current_build_probe_finished(false);
     RETURN_IF_ERROR(_prober.push_probe_chunk(chunk));
     RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));

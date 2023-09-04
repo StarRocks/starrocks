@@ -17,6 +17,7 @@
 #include <random>
 
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
@@ -42,7 +43,8 @@ OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFac
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
         auto pseudo_plan_node_id = -200;
-        auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+        auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(_vector_chunk_size,
+                                                                  config::local_exchange_buffer_mem_limit_per_driver);
         auto local_exchange_source =
                 std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
         auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
@@ -79,7 +81,8 @@ void PipelineTestBase::_prepare() {
     _query_ctx->set_query_expire_seconds(60);
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
-    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, false));
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
@@ -93,7 +96,7 @@ void PipelineTestBase::_prepare() {
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
-    _runtime_state->set_chunk_size(config::vector_chunk_size);
+    _runtime_state->set_chunk_size(_vector_chunk_size);
     _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);

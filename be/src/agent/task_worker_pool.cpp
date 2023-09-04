@@ -47,6 +47,7 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
+#include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
@@ -61,6 +62,7 @@
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
+#include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/task/engine_alter_tablet_task.h"
@@ -70,6 +72,7 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -172,7 +175,8 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
     std::string type_str;
     EnumToString(TTaskType, task_type, type_str);
 
-    if (register_task_info(task_type, signature)) {
+    std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);
+    if (register_pair.first) {
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
@@ -303,7 +307,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
         StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
@@ -418,7 +422,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
-                                        ExecEnv::GetInstance()->load_mem_tracker());
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
         StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
@@ -515,6 +519,10 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         const auto& publish_version_task = *priority_tasks.top();
         LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
                   << " priority queue size: " << priority_tasks.size();
+        bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
+        if (enable_sync_publish) {
+            wait_time = 0;
+        }
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
@@ -528,23 +536,40 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
-        if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
-            batch_publish_latency > config::max_batch_publish_latency_ms) {
-            int64_t t0 = MonotonicMillis();
-            StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
-            int64_t t1 = MonotonicMillis();
-            // notify FE when all tasks of group have been finished.
-            for (auto& finish_task_request : finish_task_requests) {
-                finish_task(finish_task_request);
-                remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+        if (!enable_sync_publish) {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                // notify FE when all tasks of group have been finished.
+                for (auto& finish_task_request : finish_task_requests) {
+                    finish_task(finish_task_request);
+                    remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+                }
+                int64_t t2 = MonotonicMillis();
+                LOG(INFO) << "batch flush " << finish_task_requests.size()
+                          << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
+                          << "ms finish_task_rpc:" << t2 - t1 << "ms";
+                finish_task_requests.clear();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
             }
-            int64_t t2 = MonotonicMillis();
-            LOG(INFO) << "batch flush " << finish_task_requests.size()
-                      << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
-                      << "ms finish_task_rpc:" << t2 - t1 << "ms";
-            finish_task_requests.clear();
-            affected_dirs.clear();
-            batch_publish_latency = 0;
+        } else {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t finish_task_size = finish_task_requests.size();
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
+                        std::move(finish_task_requests));
+                StorageEngine::instance()->wake_finish_publish_vesion_thread();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
+                LOG(INFO) << "batch submit " << finish_task_size << " finish publish version task "
+                          << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
+            }
         }
     }
     return nullptr;
@@ -577,7 +602,8 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
 
-        sleep(config::report_task_interval_seconds);
+        nap_sleep(config::report_task_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -717,7 +743,8 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (result.__isset.workgroup_ops) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
         }
-        sleep(config::report_workgroup_interval_seconds);
+        nap_sleep(config::report_workgroup_interval_seconds,
+                  [worker_pool_this] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -728,6 +755,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
     TReportRequest request;
     AgentStatus status = STARROCKS_SUCCESS;
+
+    ResourceGroupUsageRecorder group_usage_recorder;
 
     while ((!worker_pool_this->_stopped)) {
         auto master_address = get_master_address();
@@ -744,12 +773,14 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         TResourceUsage resource_usage;
         resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
-        resource_usage.__set_mem_used_bytes(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
-        resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
+        resource_usage.__set_mem_used_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->consumption());
+        resource_usage.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
-        request.__set_resource_usage(std::move(resource_usage));
 
+        resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
+
+        request.__set_resource_usage(std::move(resource_usage));
         TMasterResult result;
         status = report_task(request, &result);
 

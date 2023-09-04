@@ -487,6 +487,16 @@ RuntimeProfile::ThreadCounters* RuntimeProfile::add_thread_counters(const std::s
     return counter;
 }
 
+std::pair<RuntimeProfile::Counter*, std::string> RuntimeProfile::get_counter_pair(const std::string& name) {
+    std::lock_guard<std::mutex> l(_counter_lock);
+
+    if (_counter_map.find(name) != _counter_map.end()) {
+        return _counter_map[name];
+    }
+
+    return {nullptr, ROOT_COUNTER};
+}
+
 RuntimeProfile::Counter* RuntimeProfile::get_counter(const std::string& name) {
     std::lock_guard<std::mutex> l(_counter_lock);
 
@@ -497,7 +507,7 @@ RuntimeProfile::Counter* RuntimeProfile::get_counter(const std::string& name) {
     return nullptr;
 }
 
-void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
+void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const std::string& attached_counter_name) {
     DCHECK(src_profile != nullptr);
     if (this == src_profile) {
         return;
@@ -517,6 +527,10 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
         if (name != ROOT_COUNTER) {
             auto* src_counter = src_profile->_counter_map[name].first;
             DCHECK(src_counter != nullptr);
+            if (attached_counter_name != ROOT_COUNTER && parent_name == ROOT_COUNTER &&
+                this->_counter_map.find(attached_counter_name) != this->_counter_map.end()) {
+                parent_name = attached_counter_name;
+            }
             auto* new_counter = add_counter_unlock(name, src_counter->type(), src_counter->strategy(), parent_name);
             new_counter->set(src_counter->value());
         }
@@ -794,8 +808,8 @@ RuntimeProfile::EventSequence* RuntimeProfile::add_event_sequence(const std::str
     return timer;
 }
 
-RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool,
-                                                          std::vector<RuntimeProfile*>& profiles) {
+RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+                                                          bool require_identical) {
     DCHECK(!profiles.empty());
 
     static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
@@ -966,22 +980,36 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool,
 
     // merge children
     {
-        for (auto i = 0; i < profiles[0]->_children.size(); i++) {
-            auto& first_child_pair = profiles[0]->_children[0];
-            std::vector<RuntimeProfile*> sub_profiles;
-            for (auto profile : profiles) {
-                if (i >= profile->num_children()) {
-                    LOG(WARNING) << "find non-isomorphic children, profile_name=" << merged_profile->name()
-                                 << ", children_names=" << merged_profile->get_children_name_string()
-                                 << ", another profile_name=" << profile->name()
-                                 << ", another children_names=" << profile->get_children_name_string();
-                    continue;
-                }
-                auto* child = profile->get_child(i);
-                sub_profiles.push_back(child);
+        size_t max_child_size = 0;
+        RuntimeProfile* profile_with_full_child = nullptr;
+        for (auto* profile : profiles) {
+            if (profile->_children.size() > max_child_size) {
+                max_child_size = profile->_children.size();
+                profile_with_full_child = profile;
             }
-            auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles);
-            merged_profile->add_child(merged_child, first_child_pair.second, nullptr);
+        }
+        if (profile_with_full_child != nullptr) {
+            bool identical = true;
+            for (size_t i = 0; i < max_child_size; i++) {
+                auto& prototype_kv = profile_with_full_child->_children[i];
+                const std::string& child_name = prototype_kv.first->name();
+                std::vector<RuntimeProfile*> sub_profiles;
+                for (auto* profile : profiles) {
+                    auto* child = profile->get_child(child_name);
+                    if (child == nullptr) {
+                        identical = false;
+                        LOG(INFO) << "find non-isomorphic children, profile_name=" << profile->name()
+                                  << ", required_child_name=" << child_name;
+                        continue;
+                    }
+                    sub_profiles.push_back(child);
+                }
+                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles);
+                merged_profile->add_child(merged_child, prototype_kv.second, nullptr);
+            }
+            if (require_identical && !identical) {
+                merged_profile->add_info_string("NotIdentical");
+            }
         }
     }
 

@@ -166,9 +166,9 @@ Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status UnionNode::close(RuntimeState* state) {
+void UnionNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     for (auto& exprs : _child_expr_lists) {
         Expr::close(exprs, state);
@@ -176,7 +176,7 @@ Status UnionNode::close(RuntimeState* state) {
     for (auto& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
@@ -191,7 +191,7 @@ Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
@@ -218,7 +218,7 @@ Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
@@ -419,14 +419,14 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), operators_list);
+    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
     context->set_force_disable_adaptive_dop(prev_force_disable_adaptive_dop);
-    final_operators = context->maybe_interpolate_collect_stats(runtime_state(), final_operators);
+    final_operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), final_operators);
 
     return final_operators;
 }

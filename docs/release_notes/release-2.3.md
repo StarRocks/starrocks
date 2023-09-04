@@ -1,5 +1,39 @@
 # StarRocks version 2.3
 
+## 2.3.16
+
+Release date: August 4, 2023
+
+### Bug Fixes
+
+Fixed the following issue:
+
+FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311) [#28636](https://github.com/StarRocks/starrocks/pull/28636)
+
+## 2.3.15
+
+Release date: July 31, 2023
+
+## Improvements
+
+- Optimized tablet scheduling logic to prevent tablets remaining pending for a long period or an FE crashing under certain circumstances. [#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
+- Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- The partition metadata records visibleTxnId, which corresponds to the visible version of tablet replicas. When the version of a replica is inconsistent with others, it is easier to trace the transaction that created this version. [#27924](https://github.com/StarRocks/starrocks/pull/27924)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Incorrect table-level scan statistics in the FEs cause inaccurate metrics related to table queries and loading. [#28022](https://github.com/StarRocks/starrocks/pull/28022)
+- BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created after the table is recovered by using [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading. [#27140](https://github.com/StarRocks/starrocks/pull/27140)
+- Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
+- In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled. [#26594](https://github.com/StarRocks/starrocks/pull/26594)
+- The query returns no data when the query condition is `WHERE partition_column < xxx` and the value in `xxx` is only accurate to the hour, not to minute and second, for example, `2023-7-21 22`. [#27780](https://github.com/StarRocks/starrocks/pull/27780)
+
 ## 2.3.14
 
 Release date: June 28, 2023
@@ -8,7 +42,7 @@ Release date: June 28, 2023
 
 - Optimized the error message returned when CREATE TABLE times out and added parameter tuning tips. [#24510](https://github.com/StarRocks/starrocks/pull/24510)
 - Optimized the memory usage for the Primary Key tables with a large number of accumulated tablet versions. [#20760](https://github.com/StarRocks/starrocks/pull/20760)
-- The synchronization of OLAP external table metadata has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- The synchronization of StarRocks external table metadata has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
 - Removed the dependency of NetworkTime on system clocks to fix incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### Bug Fixes

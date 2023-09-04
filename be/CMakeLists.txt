@@ -222,6 +222,9 @@ set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/m
 add_library(hdfs STATIC IMPORTED GLOBAL)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
+add_library(fiu STATIC IMPORTED)
+set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
+
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
@@ -354,6 +357,12 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+# Disable libdefalte on aarch64
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    add_library(libdeflate STATIC IMPORTED GLOBAL)
+    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
+endif()
+
 # cachelib
 set(CACHELIB_DEPENDENCIES
     cachelib_common
@@ -480,6 +489,58 @@ if ("${USE_STAROS}" STREQUAL "ON")
        )
 endif()
 
+# LLVM
+# TODO(yueyang): Adjust libraries during the implementation of JIT.
+set (LLVM_LIBRARIES
+    LLVMRuntimeDyld
+    LLVMBitstreamReader
+    LLVMOption
+    LLVMAsmPrinter
+    LLVMProfileData
+    LLVMAsmParser
+    LLVMOrcTargetProcess
+    LLVMExecutionEngine
+    LLVMBinaryFormat
+    LLVMDebugInfoDWARF
+    LLVMObjCARCOpts
+    LLVMCodeGen
+    LLVMMCDisassembler
+    LLVMSupport
+    LLVMJITLink
+    LLVMCFGuard
+    LLVMInstrumentation
+    LLVMIRReader
+    LLVMCore
+    LLVMTarget
+    LLVMMC
+    LLVMAnalysis
+    LLVMGlobalISel
+    LLVMScalarOpts
+    LLVMTargetParser
+    LLVMDemangle
+    LLVMRemarks
+    LLVMDebugInfoCodeView
+    LLVMOrcShared
+    LLVMOrcJIT
+    LLVMTextAPI
+    LLVMBitWriter
+    LLVMBitReader
+    LLVMObject
+    LLVMTransformUtils
+    LLVMSelectionDAG
+    LLVMMCParser
+)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMX86CodeGen LLVMX86Desc LLVMX86Info)
+elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info)
+endif()
+
+foreach(lib IN ITEMS ${LLVM_LIBRARIES})
+    add_library(${lib} STATIC IMPORTED GLOBAL)
+    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
+endforeach()
+
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
 
@@ -511,8 +572,10 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++17 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+# disable link delete(void*, long)
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
@@ -522,7 +585,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical -Wno-inconsistent-missing-override -Wno-ambiguous-reversed-operator")
     endif()
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
@@ -594,6 +657,17 @@ if (ENABLE_QUERY_DEBUG_TRACE)
     message(STATUS "enable query debug trace")
 endif()
 
+if (ENABLE_FAULT_INJECTION)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DFIU_ENABLE")
+    message(STATUS "enable fault injection")
+endif()
+
+option(ASSERT_STATUS_CHECKED "build with assert status checked" OFF)
+if (ASSERT_STATUS_CHECKED)
+    message(STATUS "Build with assert status checked")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_ASSERT_STATUS_CHECKED")
+endif()
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
@@ -660,6 +734,7 @@ include_directories(
     SYSTEM ${GPERFTOOLS_HOME}/include
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
 
@@ -689,7 +764,6 @@ set(STARROCKS_LINK_LIBS
     Runtime
     Service
     ServiceBE
-    ServiceCN
     Types
     Udf
     Util
@@ -780,6 +854,8 @@ set(STARROCKS_DEPENDENCIES
     jansson
     avro
     serdes
+    fiu
+    ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
 
@@ -797,6 +873,7 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         breakpad
+        libdeflate
     )
 endif()
 
@@ -808,16 +885,10 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-# Add sanitize static link flags or tcmalloc
+# Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
@@ -827,14 +898,8 @@ elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
-    if (USE_JEMALLOC)
-        message("use jemalloc")
-        add_definitions(-DUSE_JEMALLOC)
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
-    else()
-        message("use tcmalloc")
-        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan tcmalloc)
-    endif()
+    message("use jemalloc")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
 else()
@@ -868,6 +933,7 @@ endif ()
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
+    add_definitions(-DFIU_ENABLE)
 else()
     # output *.a, *.so, *.dylib to output/tmp
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})

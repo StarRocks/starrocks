@@ -31,6 +31,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -70,8 +71,8 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                 bool is_incremental) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
@@ -89,6 +90,14 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
     }
 
     RETURN_IF_ERROR(_open_all_writers(params));
+
+    for (auto& [id, writer] : _delta_writers) {
+        if (writer->is_immutable()) {
+            result->add_immutable_tablet_ids(id);
+            result->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     return Status::OK();
 }
 
@@ -328,6 +337,14 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
+    for (auto tablet_id : request.tablet_ids()) {
+        auto& writer = _delta_writers[tablet_id];
+        if (writer->is_immutable()) {
+            response->add_immutable_tablet_ids(tablet_id);
+            response->add_immutable_partition_ids(writer->partition_id());
+        }
+    }
+
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
 
@@ -420,9 +437,6 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
             // Secondary replica will commit/abort by Primary replica
             if (delta_writer->replica_state() != Secondary) {
                 if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
-                    LOG(WARNING) << "Commit non-existed partition id:" << delta_writer->partition_id()
-                                 << ", tablet_id=" << tablet_id << ", registered partition_ids="
-                                 << std::string(_partition_ids.begin(), _partition_ids.end());
                     // no data load, abort txn without printing log
                     delta_writer->abort(false);
 
@@ -490,7 +504,10 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
                 Slice slice(data, dict_word.size());
                 global_dict.emplace(slice, i);
             }
-            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+            GlobalDictsWithVersion<GlobalDictMap> dict;
+            dict.dict = std::move(global_dict);
+            dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
+            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
         }
     }
 
@@ -513,6 +530,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.ptable_schema_param = params.schema();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -530,6 +548,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
         options.merge_condition = params.merge_condition();
         options.partial_update_mode = params.partial_update_mode();
+        options.min_immutable_tablet_size = params.min_immutable_tablet_size();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
@@ -594,10 +613,11 @@ void LocalTabletsChannel::abort() {
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    bool abort_with_exception = !reason.empty();
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
-            it->second->abort(true);
+            it->second->abort(abort_with_exception);
         }
     }
     string tablet_id_list_str;
@@ -605,7 +625,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str;
 
-    if (!reason.empty()) {
+    if (abort_with_exception) {
         std::lock_guard l(_status_lock);
         _status = Status::Aborted(reason);
     }
@@ -660,7 +680,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     return std::move(context);
 }
 
-Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params,
+Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                              std::shared_ptr<OlapTableSchemaParam> schema) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     std::vector<SlotDescriptor*>* index_slots = nullptr;
@@ -703,6 +723,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
+        options.min_immutable_tablet_size = params.min_immutable_tablet_size();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -746,9 +767,13 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _senders[params.sender_id()].has_incremental_open = true;
         ss << " on incremental channel _num_remaining_senders: " << _num_remaining_senders;
+        ++incremental_tablet_num;
     }
 
-    LOG(INFO) << ss.str();
+    // no update no need to log
+    if (incremental_tablet_num > 0) {
+        LOG(INFO) << ss.str();
+    }
 
     return Status::OK();
 }
@@ -779,14 +804,18 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
     }
     if (committed_info != nullptr) {
         // committed tablets from primary replica
+        // TODO: dup code with SegmentFlushToken::submit
         PTabletInfo tablet_info;
         tablet_info.set_tablet_id(committed_info->tablet->tablet_id());
         tablet_info.set_schema_hash(committed_info->tablet->schema_hash());
         const auto& rowset_global_dict_columns_valid_info =
                 committed_info->rowset_writer->global_dict_columns_valid_info();
+        const auto* rowset_global_dicts = committed_info->rowset_writer->rowset_global_dicts();
         for (const auto& item : rowset_global_dict_columns_valid_info) {
-            if (item.second) {
+            if (item.second && rowset_global_dicts != nullptr &&
+                rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
+                tablet_info.add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
             } else {
                 tablet_info.add_invalid_dict_cache_columns(item.first);
             }

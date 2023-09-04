@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
@@ -695,5 +696,68 @@ public class AnalyzeSingleTest {
 
         query = ((QueryStatement) analyzeSuccess("select t0.a, * from (values(1,2,3)) t0(a,b,c)")).getQueryRelation();
         Assert.assertEquals("a,a,b,c", String.join(",", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testRemoveLineSeparator1() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* \n" +
+                "from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(sql);
+        String expect = "#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';";
+        Assert.assertEquals(expect, res);
+    }
+
+    @Test
+    public void testRemoveLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(invalidSql);
+        Assert.assertEquals("#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
+    }
+
+    @Test
+    public void testRemoveComments() {
+        analyzeFail("select /*+ SET */ v1 from t0",
+                "Unexpected input 'SET', the most similar input is {'SET_VAR'}");
+        analyzeFail("select /*+   abc*/ v1 from t0",
+                "Unexpected input 'abc', the most similar input is {'SET_VAR'}");
+
+        analyzeSuccess("select v1 /*+*/ from t0");
+        analyzeSuccess("select v1 /*+\n*/ from t0");
+        analyzeSuccess("select v1 /*+   \n\n*/ from t0");
+        analyzeSuccess("select v1 /**/ from t0");
+        analyzeSuccess("select v1 /*    */ from t0");
+        analyzeSuccess("select v1 /*    a*/ from t0");
+        analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
+        analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
     }
 }

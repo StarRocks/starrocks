@@ -1,5 +1,5 @@
 # Build toolchains on ubuntu22.04, dev-env image can be built based on this image for ubuntu22
-#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-ubuntu.Dockerfile -t starrocks/toolchains-ubuntu:20230306 docker/dockerfiles/toolchains/
+#  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-ubuntu.Dockerfile -t toolchains-ubuntu:latest docker/dockerfiles/toolchains/
 
 FROM ubuntu:22.04
 
@@ -7,7 +7,7 @@ FROM ubuntu:22.04
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
     automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make cmake gcc g++ default-jdk git patch lld bzip2 \
-    wget unzip curl vim tree net-tools openssh-client && \
+    wget unzip curl vim tree net-tools openssh-client xz-utils && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     rm -rf /var/lib/apt/lists/*
 

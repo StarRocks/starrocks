@@ -34,6 +34,7 @@ from typing import List
 from cup import log
 from nose import tools
 
+from lib import skip
 from lib import sr_sql_lib
 from lib.sr_sql_lib import RESULT_FLAG, UNCHECK_FLAG
 from lib.sr_sql_lib import RESULT_END_FLAT
@@ -149,7 +150,14 @@ class ChooseCase(object):
         file_list = self.t if record_mode else self.r
 
         for file in file_list:
+            base_file = os.path.basename(file)
+            if base_file in skip.skip_files:
+                print('skip file {} because it is in skip_files'.format(file))
+                continue
+
             self.read_t_r_file(file, case_regex)
+
+        self.case_list = list(filter(lambda x: x.name.strip() != "", self.case_list))
 
     def read_t_r_file(self, file, case_regex):
         """read t r file and get case & result"""
@@ -184,8 +192,11 @@ class ChooseCase(object):
                     if case_regex is not None and not re.compile(case_regex).search(name):
                         # case name don't match regex
                         pass
-                    elif any(each_attr not in tags for each_attr in attr):
+                    elif attr and any(each_attr not in tags for each_attr in attr):
                         # case attrs don't match attr filter
+                        pass
+                    elif not attr and "sequential" in tags:
+                        # no attr is confirmed, skip sequential cases in default
                         pass
                     else:
                         self.case_list.append(
@@ -250,8 +261,13 @@ class ChooseCase(object):
 
         if len(tmp_sql) > 0:
             if case_regex is not None and not re.compile(case_regex).search(name):
+                # case name don't match regex
                 pass
-            elif any(each_attr not in tags for each_attr in attr):
+            elif attr and any(each_attr not in tags for each_attr in attr):
+                # case attrs don't match attr filter
+                pass
+            elif not attr and "sequential" in tags:
+                # no attr is confirmed, skip sequential cases in default
                 pass
             else:
                 self.case_list.append(

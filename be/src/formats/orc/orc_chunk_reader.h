@@ -23,7 +23,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/fill_function.h"
+#include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -57,6 +57,7 @@ public:
 
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
+    OrcChunkReader();
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -137,6 +138,8 @@ public:
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
+    Status get_schema(std::vector<SlotDescriptor>* schema);
+
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -147,6 +150,8 @@ private:
     Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+
+    void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
 
     std::unique_ptr<orc::ColumnVectorBatch> _batch;
     std::unique_ptr<orc::Reader> _reader;
@@ -164,20 +169,18 @@ private:
     // We make the same behavior as Trino & Presto.
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;
+    OrcMappingOptions _orc_mapping_options;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
-    std::vector<FillColumnFunction> _fill_functions;
-    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
-                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                    std::string* orc_column_name);
+    std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
-    Status _init_fill_functions();
+    Status _init_column_readers();
     // holding Expr* in cast_exprs;
     ObjectPool _pool;
     uint64_t _read_chunk_size;

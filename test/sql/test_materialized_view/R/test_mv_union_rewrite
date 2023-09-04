@@ -38,7 +38,9 @@ explain logical select count(event_id) from event1;
 -- result:
 [REGEX]olap_mv1
 [REGEX]UNION
+-- !result
 
 select count(event_id) from event1;
 -- result:
 3
+-- !result

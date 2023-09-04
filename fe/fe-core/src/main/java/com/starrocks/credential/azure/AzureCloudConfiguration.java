@@ -53,14 +53,11 @@ public class AzureCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support azure credential
         return azureStorageCloudCredential.toFileStoreInfo();
     }
 
     @Override
     public String getCredentialString() {
-        return "AzureCloudConfiguration{" +
-                "azureStorageCloudCredential=" + azureStorageCloudCredential +
-                '}';
+        return azureStorageCloudCredential.getCredentialString();
     }
 }

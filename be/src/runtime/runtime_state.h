@@ -54,6 +54,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -333,8 +334,9 @@ public:
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
-
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+    int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -376,6 +378,8 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
@@ -397,6 +401,11 @@ public:
 
     bool use_page_cache();
 
+    bool enable_collect_table_level_scan_stats() const {
+        return _query_options.__isset.enable_collect_table_level_scan_stats &&
+               _query_options.enable_collect_table_level_scan_stats;
+    }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -404,7 +413,8 @@ private:
 
     Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -520,6 +530,7 @@ private:
 
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;
@@ -561,8 +572,12 @@ private:
                 str << "Mem usage has exceed the limit of query pool";                                              \
             } else {                                                                                                \
                 str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
-                    << "You can change the limit by modify [mem_limit] of this group";                              \
+                    << "You can change the limit by modifying [mem_limit] of this group";                           \
             }                                                                                                       \
+            break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP_BIG_QUERY:                                                                  \
+            str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
+                << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
             break;                                                                                                  \
         default:                                                                                                    \
             break;                                                                                                  \

@@ -301,6 +301,11 @@ struct ColumnTraits<int8_t> {
 };
 
 template <>
+struct ColumnTraits<uint8_t> {
+    using ColumnType = UInt8Column;
+};
+
+template <>
 struct ColumnTraits<int16_t> {
     using ColumnType = Int16Column;
 };

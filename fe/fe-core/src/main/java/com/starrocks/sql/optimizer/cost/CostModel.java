@@ -153,6 +153,14 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView()) {
+                // If materialized view force rewrite is enabled, hack the materialized view
+                // as zero so can be chosen by the optimizer.
+                ConnectContext ctx = ConnectContext.get();
+                SessionVariable sessionVariable = ctx.getSessionVariable();
+                if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                    return CostEstimate.zero();
+                }
+
                 Statistics groupStatistics = context.getGroupStatistics();
                 Statistics mvStatistics = context.getStatistics();
                 // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
@@ -168,7 +176,7 @@ public class CostModel {
                         // we will add a projection on top of rewritten mv plan to keep the output columns the same as
                         // original query.
                         // excludes this projection keys when costing mv,
-                        // or the cost of mv may be larger than origal query,
+                        // or the cost of mv may be larger than original query,
                         // which will lead to mismatch of mv
                         usedColumns.except(projection.getColumnRefMap().keySet());
                     }
@@ -227,7 +235,7 @@ public class CostModel {
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()) &&
+                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
                         callOperator.isDistinct())) {
                     return false;
                 }

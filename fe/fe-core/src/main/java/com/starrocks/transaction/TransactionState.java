@@ -44,7 +44,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
@@ -301,6 +301,7 @@ public class TransactionState implements Writable {
     private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
+    private Set<TabletCommitInfo> tabletCommitInfos = null;
 
     public TransactionState() {
         this.dbId = -1;
@@ -357,6 +358,21 @@ public class TransactionState implements Writable {
 
     public boolean isRunning() {
         return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
+    }
+
+    public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
+        this.tabletCommitInfos = Sets.newHashSet();
+        this.tabletCommitInfos.addAll(infos);
+    }
+
+    public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
+        TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
+        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+            // if tabletCommitInfos is null, skip this check and return true
+            return true;
+        } else {
+            return false;
+        }
     }
 
     // Only for OlapTable
@@ -646,7 +662,7 @@ public class TransactionState implements Writable {
         indexIds.addAll(table.getIndexIdToMeta().keySet());
     }
 
-    public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, Partition partition) {
+    public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, PhysicalPartition partition) {
         List<MaterializedIndex> loadedIndex;
         if (loadedTblIndexes.isEmpty()) {
             loadedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -919,7 +935,8 @@ public class TransactionState implements Writable {
                     traceParent,
                     txnSpan,
                     createTime,
-                    this);
+                    this,
+                    Config.enable_sync_publish);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

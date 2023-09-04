@@ -84,7 +84,7 @@ AvroScanner::~AvroScanner() {
     avro_file_reader_close(_dbreader);
 #else
     if (_serdes != nullptr) {
-        free(_serdes);
+        serdes_destroy(_serdes);
     }
 #endif
 }

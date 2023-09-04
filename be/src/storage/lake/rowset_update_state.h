@@ -34,6 +34,8 @@ struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::unique_ptr<Column> write_column;
     std::shared_ptr<TabletSchema> schema;
+    // auto increment column id in partial segment file
+    // but not in full tablet schema
     uint32_t id;
     uint32_t segment_id;
     std::vector<uint32_t> rowids;
@@ -58,7 +60,8 @@ public:
     Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
                 const MetaFileBuilder* builder, bool need_check_conflict);
 
-    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
+    Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
+                           std::vector<std::string>* orphan_files);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -78,11 +81,11 @@ public:
 private:
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
-    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema, Tablet* tablet,
-                                    Rowset* rowset_ptr);
+    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
+                                    Tablet* tablet, Rowset* rowset_ptr);
 
     Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, const TabletSchema& tablet_schema);
+                                          Tablet* tablet, const TabletSchemaCSPtr& tablet_schema);
 
     Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
                              Tablet* tablet, const MetaFileBuilder* builder);
@@ -90,15 +93,16 @@ private:
     Status _resolve_conflict_partial_update(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                             Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
                                             std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
-                                            size_t& total_conflicts, TabletSchema* tablet_schema);
+                                            size_t& total_conflicts, const TabletSchemaCSPtr& tablet_schema);
 
     Status _resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                             Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
-                                            uint32_t segment_id, size_t& total_conflicts, TabletSchema* tablet_schema);
+                                            uint32_t segment_id, size_t& total_conflicts,
+                                            const TabletSchemaCSPtr& tablet_schema);
 
     Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                          const TabletMetadata& metadata, Tablet* tablet,
-                                                         const TabletSchema& tablet_schema);
+                                                         const TabletSchemaCSPtr& tablet_schema);
 
     std::once_flag _load_once_flag;
     Status _status;

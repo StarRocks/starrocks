@@ -1017,12 +1017,12 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
 
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
-    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
@@ -1164,7 +1164,7 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
-        const uint8_t* keys = pks.raw_data();
+        const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
             keys += _key_size;
@@ -1383,6 +1383,28 @@ std::string PrimaryIndex::to_string() const {
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
+}
+
+void PrimaryIndex::get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard) {
+    if (_persistent_index != nullptr) {
+        guard->acquire_meta_lock(_persistent_index.get());
+    }
+}
+
+double PrimaryIndex::get_write_amp_score() {
+    if (_persistent_index != nullptr) {
+        return _persistent_index->get_write_amp_score();
+    } else {
+        return 0.0;
+    }
+}
+
+Status PrimaryIndex::major_compaction(Tablet* tablet) {
+    if (_persistent_index != nullptr) {
+        return _persistent_index->major_compaction(tablet);
+    } else {
+        return Status::OK();
+    }
 }
 
 } // namespace starrocks

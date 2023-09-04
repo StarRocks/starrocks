@@ -34,13 +34,7 @@ public class MetaScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalMetaScanOperator logical = (LogicalMetaScanOperator) input.getOp();
-        PhysicalMetaScanOperator physical = new PhysicalMetaScanOperator(
-                logical.getAggColumnIdToNames(),
-                logical.getTable(),
-                logical.getColRefToColumnMetaMap(),
-                logical.getLimit(),
-                logical.getPredicate(),
-                logical.getProjection());
+        PhysicalMetaScanOperator physical = new PhysicalMetaScanOperator(logical);
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);
     }

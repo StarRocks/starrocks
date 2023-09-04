@@ -98,8 +98,7 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& cont
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller)
-            : _chunks(std::move(chunks)), _spiller(spiller) {}
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller) : _chunks(std::move(chunks)) {}
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
@@ -115,10 +114,11 @@ public:
 private:
     size_t read_idx{};
     std::vector<ChunkPtr> _chunks;
-    Spiller* _spiller = nullptr;
+    DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
+    RACE_DETECT(detect_get_next, var1);
     if (read_idx >= _chunks.size()) {
         return Status::EndOfFile("eos");
     }
@@ -378,6 +378,10 @@ StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, 
 
 StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                        const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {
+    if (_blocks.empty()) {
+        return as_unordered_stream(serde, spiller);
+    }
+
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
     RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
     return stream;

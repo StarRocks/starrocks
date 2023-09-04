@@ -385,7 +385,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     }
 
     // bloom runtime filter
-    for (const auto it : runtime_filters->descriptors()) {
+    for (const auto& it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
         using RangeType = ColumnValueRange<RangeValueType>;
@@ -750,18 +750,16 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         // otherwise we don't need this limitation.
         const SlotDescriptor* slot_desc = slots[index];
         LogicalType ltype = slot_desc->type().type;
-        if (!is_scalar_logical_type(ltype)) continue;
-        // disable on float/double type because min/max value may lose precision
-        // The fix should be on storage layer, and this is just a temporary fix.
-        if (ltype == LogicalType::TYPE_FLOAT || ltype == LogicalType::TYPE_DOUBLE) continue;
-        {
-            auto iter = slot_index_to_expr_ctxs.find(index);
-            if (iter == slot_index_to_expr_ctxs.end()) {
-                slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
-                iter = slot_index_to_expr_ctxs.find(index);
-            }
-            iter->second.emplace_back(ctx);
+        if (!support_column_expr_predicate(ltype)) {
+            continue;
         }
+
+        auto iter = slot_index_to_expr_ctxs.find(index);
+        if (iter == slot_index_to_expr_ctxs.end()) {
+            slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
+            iter = slot_index_to_expr_ctxs.find(index);
+        }
+        iter->second.emplace_back(ctx);
         normalized_conjuncts[i] = true;
     }
 }

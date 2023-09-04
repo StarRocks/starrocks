@@ -17,7 +17,6 @@
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
-#include <aws/core/utils/threading/Executor.h>
 #include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/CreateBucketRequest.h>
@@ -60,7 +59,7 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
     case Aws::S3::S3Errors::NO_SUCH_UPLOAD:
         return Status::NotFound(fmt::format("no such upload: {}", msg));
     default:
-        return Status::InternalError(fmt::format(msg));
+        return Status::InternalError(msg);
     }
 }
 
@@ -89,6 +88,8 @@ public:
 
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
+
+    void close();
 
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
@@ -132,30 +133,34 @@ S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
         const AWSCloudCredential& aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
+    // Create a base credentials provider
     if (aws_cloud_credential.use_aws_sdk_default_behavior) {
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
+    } else if (aws_cloud_credential.use_instance_profile) {
+        credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+    } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
+        credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
+                aws_cloud_credential.access_key, aws_cloud_credential.secret_key, aws_cloud_credential.session_token);
     } else {
-        // Create a base credentials provider
-        if (aws_cloud_credential.use_instance_profile) {
-            credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
-        } else if (!aws_cloud_credential.access_key.empty() && !aws_cloud_credential.secret_key.empty()) {
-            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key,
-                    aws_cloud_credential.session_token);
-        } else {
-            DCHECK(false) << "Unreachable!";
-            credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
-        }
+        DCHECK(false) << "Unreachable!";
+        credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
+    }
 
-        if (!aws_cloud_credential.iam_role_arn.empty()) {
-            // Do assume role
-            auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
-            credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
-                    aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
-                    Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
-        }
+    if (!aws_cloud_credential.iam_role_arn.empty()) {
+        // Do assume role
+        auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+        credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
+                aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
+                Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
     }
     return credential_provider;
+}
+
+void S3ClientFactory::close() {
+    std::lock_guard l(_lock);
+    for (auto& item : _clients) {
+        item.reset();
+    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
@@ -178,6 +183,12 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.endpointOverride = aws_cloud_credential.endpoint;
     }
     config.maxConnections = config::object_storage_max_connection;
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    }
 
     ClientCacheKey client_cache_key{config, aws_cloud_configuration};
     {
@@ -303,6 +314,13 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
             config.region = config::object_storage_region;
         }
         config.maxConnections = config::object_storage_max_connection;
+    }
+    if (config::object_storage_connect_timeout_ms > 0) {
+        config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    // 0 is meaningful for object_storage_request_timeout_ms
+    if (config::object_storage_request_timeout_ms >= 0) {
+        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
     return S3ClientFactory::instance().new_client(config, opts);
 }
@@ -801,6 +819,10 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
+}
+
+void close_s3_clients() {
+    S3ClientFactory::instance().close();
 }
 
 } // namespace starrocks

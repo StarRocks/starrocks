@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline.h"
 
+#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -113,6 +114,11 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->runtime_profile(), true, nullptr);
+        if (curr_op->is_combinatorial_operator()) {
+            curr_op->for_each_child_operator([&](Operator* child) {
+                driver->runtime_profile()->add_child(child->runtime_profile(), true, nullptr);
+            });
+        }
     }
 }
 

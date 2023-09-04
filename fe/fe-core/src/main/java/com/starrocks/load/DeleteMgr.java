@@ -508,6 +508,11 @@ public class DeleteMgr implements Writable {
                         "is not duplicate or column type is float or double.");
             }
 
+            if (column.getType().isComplexType()) {
+                throw new DdlException(
+                        "unsupported delete condition on Array/Map/Struct type column[" + columnName + "]");
+            }
+
             if (condition instanceof BinaryPredicate) {
                 try {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
@@ -812,6 +817,19 @@ public class DeleteMgr implements Writable {
             } finally {
                 lock.writeLock().unlock();
             }
+        }
+    }
+
+    public long getDeleteJobCount() {
+        return this.idToDeleteJob.size();
+    }
+
+    public long getDeleteInfoCount() {
+        lock.readLock().lock();
+        try {
+            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+        } finally {
+            lock.readLock().unlock();
         }
     }
 

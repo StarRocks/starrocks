@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AzBlobCredentialInfo;
+import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.io.Text;
@@ -42,13 +44,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
-        HDFS
+        HDFS,
+        AZBLOB
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -76,6 +80,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("e")
     private boolean enabled;
 
+    public static String CREDENTIAL_MASK = "******";
+
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) {
         this.id = id;
@@ -84,12 +90,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
-        setEmptyAuthenticationIfNeeded(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
-        }
         this.params = new HashMap<>(params);
+        Map<String, String> configurationParams = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        if (!isValidCloudConfiguration()) {
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+        }
     }
 
     public StorageVolume(StorageVolume sv) {
@@ -108,7 +116,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid");
+            Gson gson = new Gson();
+            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
         }
         this.params = newParams;
     }
@@ -147,6 +156,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.S3;
             case "hdfs":
                 return StorageVolumeType.HDFS;
+            case "azblob":
+                return StorageVolumeType.AZBLOB;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -158,19 +169,30 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.AWS;
             case HDFS:
                 return cloudConfiguration.getCloudType() == CloudType.HDFS;
+            case AZBLOB:
+                return cloudConfiguration.getCloudType() == CloudType.AZURE;
             default:
                 return false;
         }
     }
 
+    public static void addMaskForCredential(Map<String, String> params) {
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+    }
+
     public void getProcNodeData(BaseProcResult result) {
         Gson gson = new Gson();
+        Map<String, String> p = new HashMap<>(params);
+        addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
                 String.valueOf(svt.name()),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
                 String.valueOf(Strings.join(locations, ", ")),
-                String.valueOf(gson.toJson(params)),
+                String.valueOf(gson.toJson(p)),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
     }
@@ -228,16 +250,31 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return params;
             case HDFS:
                 // TODO
+                return params;
             case AZBLOB:
-                // TODO
+                AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
+                params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());
+                AzBlobCredentialInfo azBlobcredentialInfo = azBlobFileStoreInfo.getCredential();
+                String sharedKey = azBlobcredentialInfo.getSharedKey();
+                if (!Strings.isNullOrEmpty(sharedKey)) {
+                    params.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, sharedKey);
+                }
+                String sasToken = azBlobcredentialInfo.getSasToken();
+                if (!Strings.isNullOrEmpty(sasToken)) {
+                    params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
+                }
+                return params;
             default:
                 return params;
         }
     }
 
-    private void setEmptyAuthenticationIfNeeded(Map<String, String> params) {
+    private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
         if (svt == StorageVolumeType.HDFS) {
             params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
+        } else if (svt == StorageVolumeType.AZBLOB) {
+            String container = locations.get(0).split("/")[0];
+            params.put(AZURE_BLOB_CONTAINER, container);
         }
     }
 

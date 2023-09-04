@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -89,7 +90,6 @@ public abstract class AstVisitor<R, C> {
     public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
-
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
@@ -343,6 +343,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -449,6 +453,12 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ---------------------------------------- Analyze Profile Statement ----------------------------------------------
+
+    public R visitAnalyzeProfileStatement(AnalyzeProfileStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
     public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
@@ -536,6 +546,18 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRunningQueriesStatement(ShowRunningQueriesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowResourceGroupUsageStatement(ShowResourceGroupUsageStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -749,10 +771,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitSetWarehouseStatement(SetWarehouseStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ---------------------------------------- Storage Volume Statement ----------------------------------------------------
 
     public R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
@@ -814,6 +832,11 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDescPipeStatement(DescPipeStmt statement, C context) {
         return visitNode(statement, context);
+    }
+
+    // ---------------------------------------- FailPoint Statement ----------------------------------------------------
+    public R visitUpdateFailPointStatusStatement(UpdateFailPointStatusStatement statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
@@ -952,6 +975,15 @@ public abstract class AstVisitor<R, C> {
 
     // Alter View
     public R visitAlterViewClause(AlterViewClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    // Alter Materialized View
+    public R visitRefreshSchemeClause(RefreshSchemeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -1167,5 +1199,9 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
+    }
+
+    public R visitDictQueryExpr(DictQueryExpr node, C context) {
+        return visitExpression(node, context);
     }
 }

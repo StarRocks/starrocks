@@ -20,6 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/olap_type_infra.h"
+#include "tablet_schema.h"
 
 namespace starrocks {
 
@@ -36,19 +37,19 @@ public:
     static Field convert_field(ColumnId id, const TabletColumn& c);
 
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
-    static Schema convert_schema(const TabletSchema& schema);
+    static Schema convert_schema(const TabletSchemaCSPtr& schema);
 
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
-    static Schema convert_schema(const TabletSchema& schema, const std::vector<ColumnId>& cids);
+    static Schema convert_schema(const TabletSchemaCSPtr& schema, const std::vector<ColumnId>& cids);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
-    static Schema get_short_key_schema(const TabletSchema& schema);
+    static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
 
     // Get schema with format v2 type containing sort key columns from TabletSchema.
-    static Schema get_sort_key_schema(const TabletSchema& schema);
+    static Schema get_sort_key_schema(const TabletSchemaCSPtr& schema);
 
     // Get schema with format v2 type containing sort key columns filled by primary key columns from TabletSchema.
-    static Schema get_sort_key_schema_by_primary_key(const starrocks::TabletSchema& tablet_schema);
+    static Schema get_sort_key_schema_by_primary_key(const starrocks::TabletSchemaCSPtr& tablet_schema);
 
     static ColumnId max_column_id(const Schema& schema);
 
@@ -75,7 +76,7 @@ public:
 
     // Padding char columns
     static void padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
-                                     const TabletSchema& tschema, Chunk* chunk);
+                                     const TabletSchemaCSPtr& tschema, Chunk* chunk);
 
     // Reorder columns of `chunk` according to the order of |tuple_desc|.
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);

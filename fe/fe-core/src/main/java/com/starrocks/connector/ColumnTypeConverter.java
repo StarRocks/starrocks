@@ -16,6 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
@@ -30,17 +31,21 @@ import io.delta.standalone.types.DataType;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.hadoop.hive.common.type.HiveChar;
+import org.apache.hadoop.hive.common.type.HiveVarchar;
+import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.types.Types;
 import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
-import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
-import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
@@ -54,6 +59,34 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Type.BIGINT;
+import static com.starrocks.catalog.Type.BOOLEAN;
+import static com.starrocks.catalog.Type.DATE;
+import static com.starrocks.catalog.Type.DATETIME;
+import static com.starrocks.catalog.Type.DOUBLE;
+import static com.starrocks.catalog.Type.FLOAT;
+import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.catalog.Type.SMALLINT;
+import static com.starrocks.catalog.Type.TINYINT;
+import static com.starrocks.catalog.Type.VARBINARY;
+import static java.util.Objects.requireNonNull;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.binaryTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.booleanTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.byteTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.dateTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.doubleTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.floatTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.getCharTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.getListTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.getMapTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.getStructTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.getVarcharTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.intTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.longTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.shortTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.stringTypeInfo;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory.timestampTypeInfo;
 
 public class ColumnTypeConverter {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+), *(\\d+)\\)";
@@ -142,6 +175,74 @@ public class ColumnTypeConverter {
             int[] parts = getPrecisionAndScale(hiveType);
             return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
+    }
+
+    public static String toHiveType(Type type) {
+        TypeInfo typeInfo = toTypeInfo(type);
+        return typeInfo.getTypeName();
+    }
+
+    public static TypeInfo toTypeInfo(Type type) {
+        requireNonNull(type, "type is null");
+        if (type.equals(TINYINT)) {
+            return byteTypeInfo;
+        } else if (type.equals(SMALLINT)) {
+            return shortTypeInfo;
+        } else if (type.equals(INT)) {
+            return intTypeInfo;
+        } else if (type.equals(BIGINT)) {
+            return longTypeInfo;
+        } else if (type.equals(FLOAT)) {
+            return floatTypeInfo;
+        } else if (type.equals(DOUBLE)) {
+            return doubleTypeInfo;
+        } else if (type.isDecimalOfAnyVersion()) {
+            return new DecimalTypeInfo(type.getPrecision(), type.getDecimalDigits());
+        } else if (type.equals(BOOLEAN)) {
+            return booleanTypeInfo;
+        } else if (type.equals(VARBINARY)) {
+            return binaryTypeInfo;
+        } else if (type.equals(DATE)) {
+            return dateTypeInfo;
+        } else if (type.equals(DATETIME)) {
+            return timestampTypeInfo;
+        } else if (type.isChar()) {
+            int charLength = type.getColumnSize();
+            if (charLength <= HiveChar.MAX_CHAR_LENGTH) {
+                return getCharTypeInfo(charLength);
+            }
+            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
+                    type, HiveChar.MAX_CHAR_LENGTH);
+        } else if (type.isVarchar()) {
+            if (type.getColumnSize() == -1) {
+                return stringTypeInfo;
+            }
+            if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
+                return getVarcharTypeInfo(type.getColumnSize());
+            }
+            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported VARCHAR types: VARCHAR(<=%d).",
+                    type, HiveVarchar.MAX_VARCHAR_LENGTH);
+        } else if (type.isArrayType()) {
+            TypeInfo itemType = toTypeInfo(((ArrayType) type).getItemType());
+            return getListTypeInfo(itemType);
+        } else if (type.isMapType()) {
+            TypeInfo keyType = toTypeInfo(((MapType) type).getKeyType());
+            TypeInfo valueType = toTypeInfo(((MapType) type).getValueType());
+            return getMapTypeInfo(keyType, valueType);
+        } else if (type.isStructType()) {
+            StructType structType = (StructType) type;
+            ImmutableList.Builder<String> fieldNames = ImmutableList.builder();
+            for (StructField structField : structType.getFields()) {
+                fieldNames.add(structField.getName());
+            }
+            return getStructTypeInfo(
+                    fieldNames.build(),
+                    structType.getFields().stream()
+                            .map(subType -> toTypeInfo(subType.getType()))
+                            .collect(Collectors.toList()));
+        }
+
+        throw new StarRocksConnectorException("Unsupported Hive type: %s", type);
     }
 
     // this func targets at convert hudi column type(avroSchema) to starrocks column type(primitiveType)
@@ -367,19 +468,18 @@ public class ColumnTypeConverter {
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
-            case ARRAY:
-                Type type = convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
-                if (type.isArrayType()) {
-                    return type;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
             case NULL:
                 primitiveType = PrimitiveType.NULL_TYPE;
                 break;
             case BINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
+            case ARRAY:
+                return convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
             case MAP:
+                return convertToMapTypeForDeltaLake((io.delta.standalone.types.MapType) dataType);
             case STRUCT:
+                return convertToStructTypeForDeltaLake(((io.delta.standalone.types.StructType) dataType));
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
@@ -393,6 +493,14 @@ public class ColumnTypeConverter {
     private static class PaimonToHiveTypeVisitor extends DataTypeDefaultVisitor<Type> {
 
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
+
+        public Type visit(BinaryType binaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
+        public Type visit(CharType charType) {
+            return ScalarType.createCharType(charType.getLength());
+        }
 
         public Type visit(VarCharType varCharType) {
             return ScalarType.createDefaultExternalTableString();
@@ -446,16 +554,17 @@ public class ColumnTypeConverter {
             return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
         }
 
-        public Type visit(RowType rowType) {
-            List<DataField> fields = rowType.getFields();
-            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-            for (DataField field : fields) {
-                String fieldName = field.name();
-                Type fieldType = fromPaimonType(field.type());
-                structFields.add(new StructField(fieldName, fieldType));
-            }
-            return new StructType(structFields);
-        }
+        // TODO: uncomment this and unit test case when this type is supported in paimon connector
+        //public Type visit(RowType rowType) {
+        //    List<DataField> fields = rowType.getFields();
+        //    ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+        //    for (DataField field : fields) {
+        //        String fieldName = field.name();
+        //        Type fieldType = fromPaimonType(field.type());
+        //        structFields.add(new StructField(fieldName, fieldType));
+        //    }
+        //    return new StructType(structFields);
+        //}
 
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {
@@ -553,8 +662,40 @@ public class ColumnTypeConverter {
         return new MapType(keyType, valueType);
     }
 
-    private static ArrayType convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
+    private static Type convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
+        Type itemType = fromDeltaLakeType(arrayType.getElementType());
+        if (itemType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new ArrayType(itemType);
+    }
+
+    private static Type convertToMapTypeForDeltaLake(io.delta.standalone.types.MapType mapType) {
+        Type keyType = fromDeltaLakeType(mapType.getKeyType());
+        // do not support complex type as key in map type
+        if (keyType.isComplexType() || keyType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        Type valueType = fromDeltaLakeType(mapType.getValueType());
+        if (valueType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new MapType(keyType, valueType);
+    }
+
+    private static Type convertToStructTypeForDeltaLake(io.delta.standalone.types.StructType structType) {
+        io.delta.standalone.types.StructField[] fields = structType.getFields();
+        Preconditions.checkArgument(fields.length > 0);
+        ArrayList<StructField> structFields = new ArrayList<>(fields.length);
+        for (io.delta.standalone.types.StructField field : fields) {
+            String fieldName = field.getName();
+            Type fieldType = fromDeltaLakeType(field.getDataType());
+            if (fieldType.isUnknown()) {
+                return Type.UNKNOWN_TYPE;
+            }
+            structFields.add(new StructField(fieldName, fieldType));
+        }
+        return new StructType(structFields);
     }
 
     public static String getTypeKeyword(String type) {

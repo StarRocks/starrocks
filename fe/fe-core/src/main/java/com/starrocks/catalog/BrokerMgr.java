@@ -346,8 +346,16 @@ public class BrokerMgr implements GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        for (Map.Entry<String, ArrayListMultimap<String, FsBroker>> brokers : brokersMap.entrySet()) {
-            brokerListMap.put(brokers.getKey(), Lists.newArrayList(brokers.getValue().values()));
+        for (Map.Entry<String, List<FsBroker>> brokers : brokerListMap.entrySet()) {
+            String name = brokers.getKey();
+            ArrayListMultimap<String, FsBroker> brokerAddrsMap = brokersMap.get(name);
+            if (brokerAddrsMap == null) {
+                brokerAddrsMap = ArrayListMultimap.create();
+                brokersMap.put(name, brokerAddrsMap);
+            }
+            for (FsBroker address : brokers.getValue()) {
+                brokerAddrsMap.put(address.ip, address);
+            }
         }
     }
 

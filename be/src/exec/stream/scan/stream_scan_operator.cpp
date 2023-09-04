@@ -165,7 +165,6 @@ bool StreamScanOperator::has_output() const {
             _unpluging = false;
         }
         if (chunk_number >= _buffer_unplug_threshold()) {
-            COUNTER_UPDATE(_buffer_unplug_counter, 1);
             _unpluging = true;
             return true;
         }

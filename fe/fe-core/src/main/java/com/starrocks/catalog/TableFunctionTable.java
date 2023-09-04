@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -41,11 +41,13 @@ import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -55,6 +57,8 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 public class TableFunctionTable extends Table {
+
+    private static final Logger LOG = LogManager.getLogger(TableFunctionTable.class);
 
     public static final String FAKE_PATH = "fake://";
     public static final String PROPERTY_PATH = "path";
@@ -135,7 +139,7 @@ public class TableFunctionTable extends Table {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
 
-        if (!format.equalsIgnoreCase("parquet")) {
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
     }
@@ -146,9 +150,13 @@ public class TableFunctionTable extends Table {
             if (path.startsWith("fake://")) {
                 return;
             }
-            HdfsUtil.parseFile(path, new BrokerDesc(properties), fileStatuses);
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
+            }
         } catch (UserException e) {
-            throw new DdlException("failed to parse files: " + e.getMessage());
+            LOG.error("parse files error", e);
+            throw new DdlException("failed to parse files", e);
         }
 
         if (fileStatuses.isEmpty()) {
@@ -174,10 +182,22 @@ public class TableFunctionTable extends Table {
         brokerScanRange.setParams(params);
         brokerScanRange.setBroker_addresses(Lists.newArrayList());
 
+        TFileFormatType fileFormat;
+        switch (format.toLowerCase()) {
+            case "parquet":
+                fileFormat = TFileFormatType.FORMAT_PARQUET;
+                break;
+            case "orc":
+                fileFormat = TFileFormatType.FORMAT_ORC;
+                break;
+            default:
+                throw new TException("unsupported format: " + format);
+        }
+
         for (int i = 0; i < filelist.size(); ++i) {
             TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
             rangeDesc.setFile_type(TFileType.FILE_BROKER);
-            rangeDesc.setFormat_type(TFileFormatType.FORMAT_PARQUET);
+            rangeDesc.setFormat_type(fileFormat);
             rangeDesc.setPath(filelist.get(i).path);
             rangeDesc.setSplittable(filelist.get(i).isSplitable);
             rangeDesc.setStart_offset(0);
@@ -220,11 +240,10 @@ public class TableFunctionTable extends Table {
             result = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         } catch (Exception e) {
-            throw new DdlException("failed to get file schema: " + e.getMessage());
+            throw new DdlException("failed to get file schema", e);
         }
-
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
@@ -234,10 +253,7 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("non-scalar type is not supported: " + slot.colName);
             }
             PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-
-            TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-
-            columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+            columns.add(new Column(slot.colName, ScalarType.createType(scalarType), true));
         }
         return columns;
     }

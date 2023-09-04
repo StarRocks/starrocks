@@ -63,7 +63,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* statue) override;
+    void close(RuntimeState* statue) override;
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
@@ -94,6 +94,8 @@ public:
         }
         return starrocks::ScanNode::io_tasks_per_scan_operator();
     }
+
+    bool output_chunk_by_bucket() const override { return _output_chunk_by_bucket; }
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
@@ -198,6 +200,7 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _sorted_by_keys_per_tablet = false;
+    bool _output_chunk_by_bucket = false;
 
     std::vector<ExprContext*> _bucket_exprs;
 

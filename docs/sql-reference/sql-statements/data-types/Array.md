@@ -17,7 +17,7 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
+`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE, JSON, ARRAY (since v3.1), MAP (since v3.1), and STRUCT (since v3.1).
 
 Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, such as the third example in the following code snippet.
 
@@ -193,7 +193,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Use Broker Load to load arrays from ORC or Parquet files
 
-  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../../../loading/BrokerLoad.md).
+  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../data-manipulation/BROKER%20LOAD.md).
 
 ### Use Stream Load or Routine Load to load CSV-formatted arrays
 

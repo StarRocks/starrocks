@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
@@ -44,6 +45,7 @@ public class StorageVolumeTest {
         Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 " +
                         "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.region\" = \"us-west-2\")",
                 stmt.toSql());
+        Assert.assertEquals(false, stmt.needAuditEncryption());
 
         sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 "  +
                 "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
@@ -54,6 +56,35 @@ public class StorageVolumeTest {
                 "TYPE = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("
                 + "\"aws.s3.endpoint\" = \"endpoint\", \"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")",
                 stmt.toSql());
+
+        sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 "  +
+                "LOCATIONS = ('') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                "\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
+        AnalyzeTestUtil.analyzeFail(sql, "'location' field is required to create the storage volume");
+
+        sql = "CREATE STORAGE VOLUME IF NOT EXISTS builtin_storage_volume type = s3 "  +
+                "LOCATIONS = ('') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                "\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
+        AnalyzeTestUtil.analyzeFail(sql,
+                "builtin_storage_volume is a reserved storage volume name, please choose a different name for the storage volume");
+
+        sql = "CREATE STORAGE VOLUME storage_volume_1 type = s3 " +
+                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.secret_key\"=\"secret_key\", \"aws.s3.access_key\"=\"access_key\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
+        Assert.assertEquals(true, stmt.needAuditEncryption());
+        Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 " +
+                "LOCATIONS = ('s3://xxx', 's3://yyy') PROPERTIES (\"aws.s3.access_key\" = \"******\", \"aws.s3.secret_key\" = \"******\")",
+                AstToStringBuilder.toString(stmt));
+
+        sql = "CREATE STORAGE VOLUME storage_volume_1 type = azblob " +
+                "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\"=\"shared_key\", \"azure.blob.sas_token\"=\"sas_token\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
+        Assert.assertEquals(true, stmt.needAuditEncryption());
+        Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = azblob " +
+                        "LOCATIONS = ('azblob://xxx', 'azblob://yyy') PROPERTIES (\"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+                AstToStringBuilder.toString(stmt));
     }
 
     @Test
@@ -67,6 +98,7 @@ public class StorageVolumeTest {
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
         Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment' SET " +
                 "(\"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")", stmt.toSql());
+        Assert.assertEquals(false, stmt.needAuditEncryption());
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
@@ -80,6 +112,15 @@ public class StorageVolumeTest {
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
         Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.endpoint\" = \"endpoint\", " +
                         "\"aws.s3.region\" = \"us-west-2\")", stmt.toSql());
+
+        sql = "ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\"=\"access_key\", " +
+                "\"aws.s3.secret_key\"=\"secret_key\", \"azure.blob.shared_key\"=\"shared_key\", \"azure.blob.sas_token\"=\"sas_token\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
+        Assert.assertEquals(true, stmt.needAuditEncryption());
+        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"******\", " +
+                "\"aws.s3.secret_key\" = \"******\", \"azure.blob.shared_key\" = \"******\", \"azure.blob.sas_token\" = \"******\")",
+                AstToStringBuilder.toString(stmt));
     }
 
     @Test

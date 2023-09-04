@@ -55,10 +55,15 @@ http_port = 8034
 [replace]
 url = http://${mysql-client:host}:${mysql-client:http_port}
 ```
+### 5. Test Data
+To use the data `${DATA}` like ssb/tpcds/tpch, you need to download them to the dir: `common/data/[ssb|tpch|tpcds]`. Then you can load them in case like: `function: prepare_data("${DATA}", "${db[0]}")`
 
 ## Running your test
 ```shell
+# run concurrent cases
 $ python3 run.py 
+# run sequential cases
+$ python3 run.py -a sequential -c 1 -v
 ```
 
 # <span id="Parameters">Run Parameters<span>

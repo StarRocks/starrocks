@@ -1,0 +1,32 @@
+-- name: test_truncate_with_insert
+
+CREATE TABLE `allstring` (
+  `v1` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+-- prepare init data and analyze
+insert into allstring select * from (select 'C4' union select 'A10' union select 1 )tb;
+[UC]analyze full table allstring;
+
+function: wait_global_dict_ready('v1', 'allstring')
+-- truncate
+truncate table allstring;
+-- session 1
+[UC]submit task etl_${uuid0} as insert into allstring select * from (select 'C8' union select 'A10' union select sleep(10) ) tb;
+-- session 2
+insert into allstring select * from (select 'C8' union select 'A10' union select 1 ) tb;
+function: wait_global_dict_ready('v1', 'allstring')
+-- session 1
+function: wait_submit_task_ready('etl_${uuid0}')
+-- session 2
+select distinct v1 from allstring order by v1;

@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 
@@ -49,6 +50,7 @@ import java.util.List;
  */
 public class RandomDistributionInfo extends DistributionInfo {
 
+    @SerializedName("b")
     private int bucketNum;
 
     public RandomDistributionInfo() {
@@ -64,6 +66,11 @@ public class RandomDistributionInfo extends DistributionInfo {
     public DistributionDesc toDistributionDesc() {
         DistributionDesc distributionDesc = new RandomDistributionDesc(bucketNum);
         return distributionDesc;
+    }
+
+    @Override
+    public boolean supportColocate() {
+        return false;
     }
 
     @Override

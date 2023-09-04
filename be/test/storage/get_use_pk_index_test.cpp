@@ -55,7 +55,7 @@ public:
         writer_context.partition_id = 0;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
-        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.tablet_schema = tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = overlap;
@@ -201,7 +201,7 @@ public:
             std::vector<RowsetSharedPtr> rowsets;
             EditVersion full_version;
             ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version, &rowsets, &full_version).ok());
-            if (full_version.major() >= version) {
+            if (full_version.major_number() >= version) {
                 break;
             }
             std::cerr << "waiting for version " << version << std::endl;
@@ -209,7 +209,7 @@ public:
     }
 
     void read_using_pk_index(int64_t key, int64_t version, bool multi_column_pk, bool expect_exist) {
-        const Schema& schema = *_tablet->tablet_schema().schema();
+        const Schema& schema = *_tablet->tablet_schema()->schema();
         TabletReader reader(_tablet, Version(0, version), schema);
         TabletReaderParams params;
         params.is_pipeline = true;

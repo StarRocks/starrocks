@@ -88,11 +88,11 @@ public:
     }
 
     void SetUp() override {
-        _tablet_mgr->delete_tablet(_tablet_id);
+        ASSERT_OK(_tablet_mgr->delete_tablet(_tablet_id));
         create_tablet();
     }
 
-    void TearDown() override { _tablet_mgr->delete_tablet(_tablet_id); }
+    void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
 
 protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
@@ -217,6 +217,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     ASSERT_EQ("1.dat", metadata->rowsets(0).segments(0));
     ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
 
+    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
     // TxnLog`s should have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1000).status().is_not_found());
     ASSERT_TRUE(tablet.get_txn_log(1001).status().is_not_found());
@@ -262,8 +263,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         ASSERT_EQ(0, response.compaction_scores_size());
     }
     // Delete old version metadata then send publish version again
-    tablet.delete_metadata(1);
-    tablet.delete_metadata(2);
+    ASSERT_OK(tablet.delete_metadata(1));
+    ASSERT_OK(tablet.delete_metadata(2));
     {
         lake::PublishVersionRequest request;
         lake::PublishVersionResponse response;
@@ -740,7 +741,59 @@ TEST_F(LakeServiceTest, test_abort_compaction) {
         ASSERT_EQ(TStatusCode::NOT_FOUND, response.status().status_code());
     }
 
+    SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// https://github.com/StarRocks/starrocks/issues/28244
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_publish_version_issue28244) {
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(102301);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("xxxxx.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("publish_version:delete_txn_log",
+                                          [](void* st) { *(Status*)st = Status::InternalError("injected"); });
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"LakeServiceImpl::publish_version:return", "publish_version:delete_txn_log"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(102301);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 102301).status().is_not_found());
+
+    SyncPoint::GetInstance()->ClearCallBack("publish_version:delete_txn_log");
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats) {
+    lake::TabletStatRequest request;
+    lake::TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    ASSERT_EQ(0, response.tablet_stats(0).num_rows());
+    ASSERT_EQ(0, response.tablet_stats(0).data_size());
 }
 
 } // namespace starrocks

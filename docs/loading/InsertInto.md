@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md).
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT. You can insert one or more rows directly with the VALUES clause to test a function or a DEMO. You can also insert data defined by the results of a query into an internal table from an [external table](../data_source/External_table.md). From StarRocks v3.1 onwards, you can directly load data from files on cloud storage using the INSERT command and the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md).
 
 StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
@@ -35,20 +35,19 @@ CREATE DATABASE IF NOT EXISTS load_test;
 USE load_test;
 CREATE TABLE insert_wiki_edit
 (
-    event_time DATETIME,
-    channel VARCHAR(32) DEFAULT '',
-    user VARCHAR(128) DEFAULT '',
-    is_anonymous TINYINT DEFAULT '0',
-    is_minor TINYINT DEFAULT '0',
-    is_new TINYINT DEFAULT '0',
-    is_robot TINYINT DEFAULT '0',
-    is_unpatrolled TINYINT DEFAULT '0',
-    delta INT DEFAULT '0',
-    added INT DEFAULT '0',
-    deleted INT DEFAULT '0'
+    event_time      DATETIME,
+    channel         VARCHAR(32)      DEFAULT '',
+    user            VARCHAR(128)     DEFAULT '',
+    is_anonymous    TINYINT          DEFAULT '0',
+    is_minor        TINYINT          DEFAULT '0',
+    is_new          TINYINT          DEFAULT '0',
+    is_robot        TINYINT          DEFAULT '0',
+    is_unpatrolled  TINYINT          DEFAULT '0',
+    delta           INT              DEFAULT '0',
+    added           INT              DEFAULT '0',
+    deleted         INT              DEFAULT '0'
 )
-DUPLICATE KEY
-(
+DUPLICATE KEY(
     event_time,
     channel,
     user,
@@ -58,8 +57,7 @@ DUPLICATE KEY
     is_robot,
     is_unpatrolled
 )
-PARTITION BY RANGE(event_time)
-(
+PARTITION BY RANGE(event_time)(
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
     PARTITION p12 VALUES LESS THAN ('2015-09-12 12:00:00'),
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
@@ -69,31 +67,28 @@ DISTRIBUTED BY HASH(user);
 
 CREATE TABLE source_wiki_edit
 (
-    event_time DATETIME,
-    channel VARCHAR(32) DEFAULT '',
-    user VARCHAR(128) DEFAULT '',
-    is_anonymous TINYINT DEFAULT '0',
-    is_minor TINYINT DEFAULT '0',
-    is_new TINYINT DEFAULT '0',
-    is_robot TINYINT DEFAULT '0',
-    is_unpatrolled TINYINT DEFAULT '0',
-    delta INT DEFAULT '0',
-    added INT DEFAULT '0',
-    deleted INT DEFAULT '0'
+    event_time      DATETIME,
+    channel         VARCHAR(32)      DEFAULT '',
+    user            VARCHAR(128)     DEFAULT '',
+    is_anonymous    TINYINT          DEFAULT '0',
+    is_minor        TINYINT          DEFAULT '0',
+    is_new          TINYINT          DEFAULT '0',
+    is_robot        TINYINT          DEFAULT '0',
+    is_unpatrolled  TINYINT          DEFAULT '0',
+    delta           INT              DEFAULT '0',
+    added           INT              DEFAULT '0',
+    deleted         INT              DEFAULT '0'
 )
-DUPLICATE KEY
-(
+DUPLICATE KEY(
     event_time,
-    channel,
-    user,
+    channel,user,
     is_anonymous,
     is_minor,
     is_new,
     is_robot,
     is_unpatrolled
 )
-PARTITION BY RANGE(event_time)
-(
+PARTITION BY RANGE(event_time)(
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
     PARTITION p12 VALUES LESS THAN ('2015-09-12 12:00:00'),
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
@@ -126,7 +121,9 @@ VALUES
 
 ## Insert data via INSERT INTO SELECT
 
-You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+You can load the result of a query on a data source table into the target table via INSERT INTO SELECT command. INSERT INTO SELECT command performs ETL operations on the data from the data source table, and loads the data into an internal table in StarRocks. The data source can be one or more internal or external tables, or even data files on cloud storage. The target table MUST be an internal table in StarRocks. For detailed instructions and parameter references, see [SQL Reference - INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+
+### Insert data from an internal or external table into an internal table
 
 > **NOTE**
 >
@@ -181,6 +178,23 @@ WITH LABEL insert_load_wikipedia_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+### Insert data directly from files in an external source using FILES()
+
+From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the INSERT command and the [FILES()](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
+
+The following example inserts data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
+
+```Plain
+INSERT INTO insert_wiki_edit
+    SELECT * FROM FILES(
+        "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+        "format" = "parquet",
+        "aws.s3.access_key" = "XXXXXXXXXX",
+        "aws.s3.secret_key" = "YYYYYYYYYY",
+        "aws.s3.region" = "us-west-2"
+);
 ```
 
 ## Overwrite data via INSERT OVERWRITE VALUES
@@ -304,6 +318,47 @@ WITH LABEL insert_load_wikipedia_ow_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+## Insert data into a table with generated columns
+
+A generated column is a special column whose value is derived from a pre-defined expression or evaluation based on other columns. Generated columns are especially useful when your query requests involve evaluations of expensive expressions, for example, querying a certain field from a JSON value, or calculating ARRAY data. StarRocks evaluates the expression and stores the results in the generated columns while data is being loaded into the table, thereby avoiding the expression evaluation during queries and improving the query performance.
+
+You can load data into a table with generated columns using INSERT.
+
+The following example creates a table `insert_generated_columns` and inserts a row into it. The table contains two generated columns: `avg_array` and `get_string`. `avg_array` calculates the average value of ARRAY data in `data_array`, and `get_string` extracts the strings from the JSON path `a` in `data_json`.
+
+```SQL
+CREATE TABLE insert_generated_columns (
+  id           INT(11)           NOT NULL    COMMENT "ID",
+  data_array   ARRAY<INT(11)>    NOT NULL    COMMENT "ARRAY",
+  data_json    JSON              NOT NULL    COMMENT "JSON",
+  avg_array    DOUBLE            NULL 
+      AS array_avg(data_array)               COMMENT "Get the average of ARRAY",
+  get_string   VARCHAR(65533)    NULL 
+      AS get_json_string(json_string(data_json), '$.a') COMMENT "Extract JSON string"
+) ENGINE=OLAP 
+PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id);
+
+INSERT INTO insert_generated_columns 
+VALUES (1, [1,2], parse_json('{"a" : 1, "b" : 2}'));
+```
+
+> **NOTE**
+>
+> Directly loading data into generated columns is not supported.
+
+You can query the table to check the data within it.
+
+```Plain
+mysql> SELECT * FROM insert_generated_columns;
++------+------------+------------------+-----------+------------+
+| id   | data_array | data_json        | avg_array | get_string |
++------+------------+------------------+-----------+------------+
+|    1 | [1,2]      | {"a": 1, "b": 2} |       1.5 | 1          |
++------+------------+------------------+-----------+------------+
+1 row in set (0.02 sec)
+```
+
 ## Load data asynchronously using INSERT
 
 Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). This feature is supported since StarRocks v2.5.
@@ -346,11 +401,11 @@ The following example checks the status of the INSERT task `async`.
 SELECT * FROM information_schema.task_runs WHERE task_name = 'async';
 ```
 
-## Check the INSERT transaction status
+## Check the INSERT job status
 
 ### Check via the result
 
-The INSERT transaction returns different status in accordance with the result of the transaction.
+A synchronous INSERT transaction returns different status in accordance with the result of the transaction.
 
 - **Transaction succeeds**
 
@@ -371,42 +426,57 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 You can locate the problem by checking the log with `tracking_url`.
 
-### Check via SHOW LOAD
+### Check via Information Schema
 
-You can check the INSERT transaction status by using [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) command.
+You can use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
-The following example checks the status of the transaction with label `insert_load_wikipedia`.
+Example 1: Query the results of load jobs executed on the `load_test` database, sort the results by creation time (`CREATE_TIME`) in descending order, and only return the top result.
 
 ```SQL
-SHOW LOAD WHERE label="insert_load_wikipedia"\G
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test'
+ORDER BY create_time DESC
+LIMIT 1\G
+```
+
+Example 2: Query the result of the load job (whose label is `insert_load_wikipedia`) executed on the `load_test` database:
+
+```SQL
+SELECT * FROM information_schema.loads
+WHERE database_name = 'load_test' and label = 'insert_load_wikipedia'\G
 ```
 
 The return is as follows:
 
 ```Plain
 *************************** 1. row ***************************
-         JobId: 10278
-         Label: insert_load_wikipedia
-         State: FINISHED
-      Progress: ETL:100%; LOAD:100%
-          Type: INSERT
-      Priority: NORMAL
-      ScanRows: 0
-  FilteredRows: 0
-UnselectedRows: 0
-      SinkRows: 2
-       EtlInfo: NULL
-      TaskInfo: resource:N/A; timeout(s):300; max_filter_ratio:0.0
-      ErrorMsg: NULL
-    CreateTime: 2023-06-12 18:31:07
-  EtlStartTime: 2023-06-12 18:31:07
- EtlFinishTime: 2023-06-12 18:31:07
- LoadStartTime: 2023-06-12 18:31:07
-LoadFinishTime: 2023-06-12 18:31:08
-   TrackingSQL: 
-    JobDetails: {"All backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[10142]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[]}}
-1 row in set (0.00 sec)
+              JOB_ID: 21319
+               LABEL: insert_load_wikipedia
+       DATABASE_NAME: load_test
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: INSERT
+            PRIORITY: NORMAL
+           SCAN_ROWS: 0
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 2
+            ETL_INFO: 
+           TASK_INFO: resource:N/A; timeout(s):300; max_filter_ratio:0.0
+         CREATE_TIME: 2023-08-09 10:42:23
+      ETL_START_TIME: 2023-08-09 10:42:23
+     ETL_FINISH_TIME: 2023-08-09 10:42:23
+     LOAD_START_TIME: 2023-08-09 10:42:23
+    LOAD_FINISH_TIME: 2023-08-09 10:42:24
+         JOB_DETAILS: {"All backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[10006]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"5ebf11b5-365e-11ee-9e4a-7a563fb695da":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+1 row in set (0.01 sec)
 ```
+
+For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
 
 ### Check via curl command
 

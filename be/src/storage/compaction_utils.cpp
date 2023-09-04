@@ -52,7 +52,8 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
 
 Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
                                                        CompactionAlgorithm algorithm, Version version,
-                                                       std::unique_ptr<RowsetWriter>* output_rowset_writer) {
+                                                       std::unique_ptr<RowsetWriter>* output_rowset_writer,
+                                                       const TabletSchemaCSPtr* tablet_schema) {
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = tablet->tablet_uid();
@@ -60,7 +61,7 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.partition_id = tablet->partition_id();
     context.tablet_schema_hash = tablet->schema_hash();
     context.rowset_path_prefix = tablet->schema_hash_path();
-    context.tablet_schema = &tablet->tablet_schema();
+    context.tablet_schema = !tablet_schema ? tablet->tablet_schema() : *tablet_schema;
     context.rowset_state = VISIBLE;
     context.version = version;
     context.segments_overlap = NONOVERLAPPING;
@@ -97,8 +98,10 @@ void CompactionUtils::split_column_into_groups(size_t num_columns, const std::ve
     for (ColumnId i = 0; i < num_columns; ++i) {
         all_columns.push_back(i);
     }
+    std::vector<ColumnId> tmp_sort_key_idxes(sort_key_idxes.begin(), sort_key_idxes.end());
+    std::sort(tmp_sort_key_idxes.begin(), tmp_sort_key_idxes.end());
     std::vector<ColumnId> non_sort_columns;
-    std::set_difference(all_columns.begin(), all_columns.end(), sort_key_idxes.begin(), sort_key_idxes.end(),
+    std::set_difference(all_columns.begin(), all_columns.end(), tmp_sort_key_idxes.begin(), tmp_sort_key_idxes.end(),
                         std::back_inserter(non_sort_columns));
     for (auto i = 0; i < non_sort_columns.size(); ++i) {
         if (i % max_columns_per_group == 0) {

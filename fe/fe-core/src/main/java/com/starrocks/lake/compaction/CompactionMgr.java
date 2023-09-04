@@ -34,6 +34,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -170,7 +171,11 @@ public class CompactionMgr {
 
     @NotNull
     public List<CompactionRecord> getHistory() {
-        return compactionScheduler.getHistory();
+        if (compactionScheduler != null) {
+            return compactionScheduler.getHistory();
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     public void cancelCompaction(long txnId) {
@@ -197,5 +202,9 @@ public class CompactionMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
         partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
+    }
+
+    public long getPartitionStatsCount() {
+        return partitionStatisticsHashMap.size();
     }
 }

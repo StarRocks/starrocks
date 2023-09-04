@@ -1,0 +1,90 @@
+{
+  "statement": "SELECT tbl_mock_045.mock_047, sum(tbl_mock_020.mock_024 * (1 - tbl_mock_020.mock_023)) AS mock_054\nFROM db_mock_000.tbl_mock_001 , db_mock_000.tbl_mock_010  , db_mock_000.tbl_mock_020  , db_mock_000.tbl_mock_037  , db_mock_000.tbl_mock_045  , db_mock_000.tbl_mock_050 \nWHERE ((((((((tbl_mock_001.mock_005 \u003d tbl_mock_010.mock_013) AND (tbl_mock_020.mock_027 \u003d tbl_mock_010.mock_015)) AND (tbl_mock_020.mock_035 \u003d tbl_mock_037.mock_044)) AND (tbl_mock_001.mock_008 \u003d tbl_mock_037.mock_042)) AND (tbl_mock_037.mock_042 \u003d tbl_mock_045.mock_048)) AND (tbl_mock_045.mock_049 \u003d tbl_mock_050.mock_053)) AND (tbl_mock_050.mock_052 \u003d \u0027AFRICA\u0027)) AND (tbl_mock_010.mock_014 \u003e\u003d \u00271995-01-01\u0027)) AND (tbl_mock_010.mock_014 \u003c \u00271996-01-01\u0027)\nGROUP BY tbl_mock_045.mock_047 ORDER BY mock_054 DESC ",
+  "resources": {
+    "emr_test": "{\"clazz\":\"HiveResource\",\"metastoreURIs\":\"thrift://172.26.194.238:9083\",\"properties\":{\"type\":\"HIVE\",\"hive.metastore.uris\":\"thrift://172.26.194.238:9083\"},\"name\":\"emr_test\",\"type\":\"HIVE\"}"
+  },
+  "table_meta": {
+    "db_mock_000.tbl_mock_001": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_001 (\nmock_005 int(11) ,\nmock_007 varchar(65533) ,\nmock_003 varchar(65533) ,\nmock_008 int(11) ,\nmock_009 varchar(65533) ,\nmock_002 decimal64(15, 2) ,\nmock_006 varchar(65533) ,\nmock_004 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_001\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);",
+    "db_mock_000.tbl_mock_010": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_010 (\nmock_015 int(11) ,\nmock_013 int(11) ,\nmock_017 varchar(65533) ,\nmock_019 decimal64(15, 2) ,\nmock_014 date ,\nmock_016 varchar(65533) ,\nmock_011 varchar(65533) ,\nmock_018 int(11) ,\nmock_012 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_010\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);",
+    "db_mock_000.tbl_mock_020": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_020 (\nmock_027 int(11) ,\nmock_028 int(11) ,\nmock_035 int(11) ,\nmock_025 int(11) ,\nmock_029 decimal64(15, 2) ,\nmock_024 decimal64(15, 2) ,\nmock_023 decimal64(15, 2) ,\nmock_036 decimal64(15, 2) ,\nmock_031 varchar(65533) ,\nmock_026 varchar(65533) ,\nmock_032 date ,\nmock_022 date ,\nmock_030 date ,\nmock_033 varchar(65533) ,\nmock_034 varchar(65533) ,\nmock_021 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_020\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);",
+    "db_mock_000.tbl_mock_037": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_037 (\nmock_044 int(11) ,\nmock_041 varchar(65533) ,\nmock_039 varchar(65533) ,\nmock_042 int(11) ,\nmock_043 varchar(65533) ,\nmock_038 decimal64(15, 2) ,\nmock_040 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_037\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);",
+    "db_mock_000.tbl_mock_045": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_045 (\nmock_048 int(11) ,\nmock_047 varchar(65533) ,\nmock_049 int(11) ,\nmock_046 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_045\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);",
+    "db_mock_000.tbl_mock_050": "CREATE EXTERNAL TABLE db_mock_000.tbl_mock_050 (\nmock_053 int(11) ,\nmock_052 varchar(65533) ,\nmock_051 varchar(65533) \n) ENGINE\u003d HIVE \nPROPERTIES (\n\"database\" \u003d \"db_mock_000\",\n\"table\" \u003d \"tbl_mock_050\",\n\"resource\" \u003d \"emr_test\",\n\"hive.metastore.uris\"  \u003d  \"thrift://172.26.194.238:9083\"\n);"
+  },
+  "hms_table": {
+    "emr_test%db_mock_000%tbl_mock_020": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_027\",\"mock_028\",\"mock_035\",\"mock_025\",\"mock_029\",\"mock_024\",\"mock_023\",\"mock_036\",\"mock_031\",\"mock_026\",\"mock_032\",\"mock_022\",\"mock_030\",\"mock_033\",\"mock_034\",\"mock_021\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%db_mock_000%tbl_mock_045": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_048\",\"mock_047\",\"mock_049\",\"mock_046\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%db_mock_000%tbl_mock_037": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_044\",\"mock_041\",\"mock_039\",\"mock_042\",\"mock_043\",\"mock_038\",\"mock_040\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%db_mock_000%tbl_mock_010": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_015\",\"mock_013\",\"mock_017\",\"mock_019\",\"mock_014\",\"mock_016\",\"mock_011\",\"mock_018\",\"mock_012\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%db_mock_000%tbl_mock_050": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_053\",\"mock_052\",\"mock_051\"],\"PartitionNames\":[]}"
+    ],
+    "emr_test%db_mock_000%tbl_mock_001": [
+      {
+        "type": "hive"
+      },
+      "{\"OutputRowCount\":\"0.0\",\"PartitionColumns\":[],\"DataColumns\":[\"mock_005\",\"mock_007\",\"mock_003\",\"mock_008\",\"mock_009\",\"mock_002\",\"mock_006\",\"mock_004\"],\"PartitionNames\":[]}"
+    ]
+  },
+  "table_row_count": {},
+  "column_statistics": {
+    "db_mock_000.tbl_mock_001": {
+      "mock_005": "[1.0, 1.5E7, 0.0, 4.0, 1.5E7] ESTIMATE",
+      "mock_008": "[0.0, 24.0, 0.0, 4.0, 19.0] ESTIMATE"
+    },
+    "db_mock_000.tbl_mock_045": {
+      "mock_048": "[0.0, 24.0, 0.0, 4.0, 19.0] ESTIMATE",
+      "mock_049": "[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE",
+      "mock_047": "[0.0, 0.0, 0.0, 7.08, 24.0] ESTIMATE"
+    },
+    "db_mock_000.tbl_mock_010": {
+      "mock_014": "[6.94224E8, 9.02016E8, 0.0, 4.0, 2427.0] ESTIMATE",
+      "mock_013": "[1.0, 1.4999999E7, 0.0, 4.0, 1.084486E7] ESTIMATE",
+      "mock_015": "[1.0, 6.0E8, 0.0, 4.0, 1.03174281E8] ESTIMATE"
+    },
+    "db_mock_000.tbl_mock_037": {
+      "mock_042": "[0.0, 24.0, 0.0, 4.0, 19.0] ESTIMATE",
+      "mock_044": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE"
+    },
+    "db_mock_000.tbl_mock_050": {
+      "mock_053": "[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE",
+      "mock_052": "[0.0, 0.0, 0.0, 6.8, 5.0] ESTIMATE"
+    },
+    "db_mock_000.tbl_mock_020": {
+      "mock_027": "[1.0, 6.0E8, 0.0, 4.0, 1.03174281E8] ESTIMATE",
+      "mock_035": "[1.0, 1000000.0, 0.0, 4.0, 1190394.0] ESTIMATE",
+      "mock_024": "[900.05, 104948.5, 0.0, 8.0, 4366385.0] ESTIMATE",
+      "mock_023": "[0.0, 0.1, 0.0, 8.0, 15.0] ESTIMATE"
+    }
+  },
+  "session_variables": "{\"partial_update_mode\":\"auto\",\"cbo_cte_reuse\":true,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"enable_connector_adaptive_io_tasks\":true,\"tx_isolation\":\"REPEATABLE-READ\",\"enable_hive_metadata_cache_with_insert\":false,\"cbo_cte_reuse_rate_v2\":1.15,\"character_set_results\":\"utf8\",\"enable_count_star_optimization\":true,\"query_excluding_mv_names\":\"\",\"enable_rewrite_simple_agg_to_meta_scan\":false,\"enable_adaptive_sink_dop\":true,\"consistent_hash_virtual_number\":32,\"enable_profile\":false,\"load_mem_limit\":0,\"sql_safe_updates\":0,\"runtime_filter_early_return_selectivity\":0.05,\"enable_local_shuffle_agg\":false,\"disable_function_fold_constants\":false,\"select_ratio_threshold\":0.15,\"query_delivery_timeout\":300,\"collation_database\":\"utf8_general_ci\",\"spill_mem_table_size\":104857600,\"cbo_use_lock_db\":false,\"new_planner_agg_stage\":0,\"use_compute_nodes\":-1,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"\",\"profile_limit_fold\":true,\"spill_operator_max_bytes\":1048576000,\"cbo_max_reorder_node_use_dp\":10,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"forward_to_leader\":false,\"count_distinct_column_buckets\":1024,\"query_cache_agg_cardinality_limit\":5000000,\"cboPushDownAggregateMode_v1\":-1,\"window_partition_mode\":1,\"enable_tablet_internal_parallel_v2\":true,\"interpolate_passthrough\":true,\"enable_incremental_mv\":false,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"max_pipeline_dop\":64,\"broadcast_right_table_scale_factor\":10,\"materialized_view_rewrite_mode\":\"DEFAULT\",\"enable_simplify_case_when\":true,\"runtime_join_filter_push_down_limit\":1024000,\"big_query_log_cpu_second_threshold\":480,\"div_precision_increment\":4,\"runtime_adaptive_dop_max_block_rows_per_driver_seq\":16384,\"log_rejected_record_num\":0,\"cbo_push_down_distinct_below_window\":true,\"sql_mode_v2\":32,\"prefer_cte_rewrite\":false,\"hdfs_backend_selector_scan_range_shuffle\":false,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"hive_partition_stats_sample_size\":3000,\"enable_mv_planner\":false,\"enable_collect_table_level_scan_stats\":true,\"profile_timeout\":2,\"cbo_push_down_aggregate\":\"global\",\"spill_encode_level\":7,\"enable_query_dump\":false,\"global_runtime_filter_build_max_size\":67108864,\"enable_rewrite_sum_by_associative_rule\":true,\"query_cache_hot_partition_num\":3,\"enable_prune_complex_types\":true,\"query_cache_type\":0,\"max_parallel_scan_instance_num\":-1,\"query_cache_entry_max_rows\":409600,\"enable_mv_optimizer_trace_log\":false,\"connector_io_tasks_per_scan_operator\":16,\"enable_materialized_view_union_rewrite\":true,\"sql_quote_show_create\":true,\"scan_or_to_union_threshold\":50000000,\"enable_exchange_pass_through\":true,\"runtime_profile_report_interval\":10,\"query_cache_entry_max_bytes\":4194304,\"enable_exchange_perf\":false,\"workgroup_id\":0,\"enable_rewrite_groupingsets_to_union_all\":false,\"transmission_compression_type\":\"LZ4\",\"interactive_timeout\":3600,\"use_page_cache\":true,\"big_query_log_scan_bytes_threshold\":10737418240,\"collation_server\":\"utf8_general_ci\",\"tablet_internal_parallel_mode\":\"auto\",\"enable_pipeline\":true,\"spill_mode\":\"auto\",\"enable_query_debug_trace\":false,\"enable_show_all_variables\":false,\"full_sort_max_buffered_bytes\":16777216,\"wait_timeout\":28800,\"transmission_encode_level\":0,\"query_including_mv_names\":\"\",\"transaction_isolation\":\"REPEATABLE-READ\",\"enable_global_runtime_filter\":true,\"enable_load_profile\":false,\"enable_plan_validation\":true,\"load_transmission_compression_type\":\"NO_COMPRESSION\",\"cbo_enable_low_cardinality_optimize\":true,\"scan_use_query_mem_ratio\":0.3,\"new_planner_optimize_timeout\":30000000,\"enable_outer_join_reorder\":true,\"force_schedule_local\":false,\"hudi_mor_force_jni_reader\":false,\"cbo_enable_greedy_join_reorder\":true,\"range_pruner_max_predicate\":100,\"enable_rbo_table_prune\":false,\"spillable_operator_mask\":-1,\"rpc_http_min_size\":2147482624,\"cbo_debug_alive_backend_number\":0,\"global_runtime_filter_probe_min_size\":102400,\"scan_or_to_union_limit\":4,\"enable_cbo_table_prune\":false,\"enable_parallel_merge\":true,\"nested_mv_rewrite_max_level\":3,\"net_write_timeout\":60,\"cbo_prune_shuffle_column_rate\":0.1,\"spill_revocable_max_bytes\":0,\"hash_join_push_down_right_table\":true,\"pipeline_sink_dop\":0,\"broadcast_row_limit\":15000000,\"enable_populate_block_cache\":true,\"exec_mem_limit\":2147483648,\"enable_sort_aggregate\":false,\"query_cache_force_populate\":false,\"runtime_filter_on_exchange_node\":false,\"disable_join_reorder\":false,\"enable_rule_based_materialized_view_rewrite\":true,\"connector_scan_use_query_mem_ratio\":0.3,\"net_buffer_length\":16384,\"cbo_prune_subfield\":true,\"full_sort_max_buffered_rows\":1024000,\"query_timeout\":300,\"connector_io_tasks_slow_io_latency_ms\":50,\"cbo_max_reorder_node\":50,\"enable_distinct_column_bucketization\":false,\"enable_big_query_log\":true,\"analyze_mv\":\"sample\",\"runtime_filter_scan_wait_time\":20,\"enable_sync_materialized_view_rewrite\":true,\"prefer_compute_node\":false,\"enable_strict_type\":false,\"group_concat_max_len\":65535,\"parse_tokens_limit\":3500000,\"chunk_size\":4096,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_filter_unused_columns_in_scan_stage\":false,\"enable_scan_block_cache\":false,\"enable_materialized_view_single_table_view_delta_rewrite\":false,\"auto_increment_increment\":1,\"sql_dialect\":\"StarRocks\",\"big_query_log_scan_rows_threshold\":1000000000,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":true,\"enable_runtime_adaptive_dop\":false,\"cbo_cte_max_limit\":10,\"storage_engine\":\"olap\",\"enable_optimizer_trace_log\":false,\"spill_operator_min_bytes\":52428800,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"enable_materialized_view_view_delta_rewrite\":true,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"spill_mem_table_num\":2,\"enable_spill\":false,\"pipeline_dop\":0,\"single_node_exec_plan\":false,\"full_sort_late_materialization_v2\":true,\"join_implementation_mode_v2\":\"auto\",\"sql_select_limit\":9223372036854775807,\"enable_materialized_view_rewrite\":true,\"statistic_collect_parallel\":1,\"hdfs_backend_selector_hash_algorithm\":\"consistent\",\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"default_table_compression\":\"lz4_frame\",\"runtime_adaptive_dop_max_output_amplification_factor\":0,\"innodb_read_only\":true,\"spill_mem_limit_threshold\":0.8,\"cbo_reorder_threshold_use_exhaustive\":6,\"enable_predicate_reorder\":false,\"enable_query_cache\":false,\"max_allowed_packet\":1048576,\"time_zone\":\"Asia/Shanghai\",\"enable_multicolumn_global_runtime_filter\":false,\"character_set_server\":\"utf8\",\"cbo_use_nth_exec_plan\":0,\"io_tasks_per_scan_operator\":4,\"parallel_exchange_instance_num\":-1,\"enable_shared_scan\":false,\"allow_default_partition\":false}",
+  "be_number": 1,
+  "be_core_stat": {
+    "numOfHardwareCoresPerBe": "{\"13003\":104}",
+    "cachedAvgNumOfHardwareCores": 104
+  },
+  "exception": []
+}

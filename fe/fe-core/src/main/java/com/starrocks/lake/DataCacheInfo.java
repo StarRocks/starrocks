@@ -32,7 +32,7 @@ public class DataCacheInfo implements GsonPreProcessable, GsonPostProcessable {
     }
 
     public DataCacheInfo(boolean enableCache, boolean asyncWriteBack) {
-        long ttl = enableCache ? Long.MAX_VALUE : 0;
+        long ttl = enableCache ? -1 /* -1 means no TTL */ : 0;
         this.cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(ttl)
                 .setAsyncWriteBack(asyncWriteBack).build();
     }

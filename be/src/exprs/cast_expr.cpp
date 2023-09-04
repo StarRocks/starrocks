@@ -1447,9 +1447,14 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
 }
 
 StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    // only null
     auto column = ColumnHelper::create_column(_type, true);
-    column->append_nulls(ptr->num_rows());
-    return std::move(column);
+    column->append_nulls(1);
+    auto only_null = ConstColumn::create(column, 1);
+    if (ptr != nullptr) {
+        only_null->resize(ptr->num_rows());
+    }
+    return only_null;
 }
 
 Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,

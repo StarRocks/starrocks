@@ -150,20 +150,24 @@ public class TypeChecker implements PlanValidator.Checker {
         private void checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations, AggType aggType, boolean isSplit,
                                   int singleDistinctFunctionPos) {
             int index = -1;
+            boolean hasSingleDistinct = singleDistinctFunctionPos != - 1;
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
                 index++;
                 ColumnRefOperator outputCol = entry.getKey();
                 CallOperator aggCall = entry.getValue();
                 boolean isMergeAggFn = false;
-                if (aggType.isGlobal() || (aggType.isLocal() && !isSplit)) {
-                    if (singleDistinctFunctionPos != -1 && index != singleDistinctFunctionPos) {
+                switch (aggType) {
+                    case LOCAL:
+                        isMergeAggFn = isSplit && hasSingleDistinct && (index != singleDistinctFunctionPos);
+                        break;
+                    case GLOBAL:
+                        isMergeAggFn = isSplit && (!hasSingleDistinct || index != singleDistinctFunctionPos);
+                        break;
+                    case DISTINCT_GLOBAL:
                         isMergeAggFn = true;
-                    } else if (isSplit) {
-                        isMergeAggFn = true;
-                    }
-                } else if (aggType.isDistinctGlobal() ||
-                        (aggType.isDistinctLocal() && index != singleDistinctFunctionPos)) {
-                    isMergeAggFn = true;
+                        break;
+                    case DISTINCT_LOCAL:
+                        isMergeAggFn = index != singleDistinctFunctionPos;
                 }
 
                 if (aggType.isGlobal()) {

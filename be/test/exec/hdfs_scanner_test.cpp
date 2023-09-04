@@ -85,7 +85,7 @@ Status HdfsScannerTest::_init_block_cache(size_t mem_size, const std::string& en
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
     cache_options.block_size = starrocks::config::block_cache_block_size;
-    cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
     cache_options.engine = engine;
     return cache->init(cache_options);
 }
@@ -107,6 +107,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
                                                   const TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
+    auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
@@ -132,6 +133,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->materialize_index_in_chunk = materialize_index_in_chunk;
     param->materialize_slots = mat_slots;
     param->partition_slots = part_slots;
+    param->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return param;
 }
 
@@ -333,10 +335,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         for (;;) {                                                                        \
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
-            if (status.is_end_of_file()) {                                                \
-                break;                                                                    \
-            }                                                                             \
-            if (!status.ok()) {                                                           \
+            if (!status.ok() && !status.is_end_of_file()) {                               \
                 std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
                 break;                                                                    \
             }                                                                             \
@@ -351,6 +350,9 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
             }                                                                             \
             records += chunk->num_rows();                                                 \
+            if (status.is_end_of_file()) {                                                \
+                break;                                                                    \
+            }                                                                             \
         }                                                                                 \
     } while (0)
 
@@ -983,9 +985,9 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
                                                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                                                {""}};
 
-    const std::string timzone_datetime_shanghai_orc_file =
+    const std::string timezone_datetime_shanghai_orc_file =
             "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
-    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+    const std::string timezone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
 
     struct Case {
         std::string file;
@@ -994,12 +996,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         int exp;
     };
     std::vector<Case> cases = {
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
-            {timzone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
-            {timzone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
-            {timzone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_shanghai_orc_file, "2022-04-09 07:13:00", "UTC", 0},
+            {timezone_datetime_shanghai_orc_file, "2022-04-08 23:13:00", "UTC", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "Asia/Shanghai", 0},
+            {timezone_datetime_utc_orc_file, "2022-04-09 15:13:00", "Asia/Shanghai", 1},
+            {timezone_datetime_utc_orc_file, "2022-04-09 07:13:00", "UTC", 1},
     };
 
     for (const Case& c : cases) {

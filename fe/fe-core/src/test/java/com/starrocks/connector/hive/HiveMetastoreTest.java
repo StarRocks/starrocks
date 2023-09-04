@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -36,6 +37,8 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -112,6 +115,56 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testPartitionExists() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        Assert.assertTrue(metastore.partitionExists("db1", "tbl1", new ArrayList<>()));
+    }
+
+    @Test
+    public void testAddPartitions() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HivePartition hivePartition = HivePartition.builder()
+                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setDatabaseName("db")
+                .setTableName("table")
+                .setLocation("location")
+                .setValues(Lists.newArrayList("p1=1"))
+                .setParameters(new HashMap<>()).build();
+
+        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
+        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
+        metastore.addPartitions("db", "table", Lists.newArrayList(hivePartitionWithStats));
+    }
+
+    @Test
+    public void testDropPartition() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        metastore.dropPartition("db", "table", Lists.newArrayList("k1=1"), false);
+    }
+
+    @Test
+    public void testAlterPartition() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HivePartition hivePartition = HivePartition.builder()
+                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setDatabaseName("db")
+                .setTableName("table")
+                .setLocation("location")
+                .setValues(Lists.newArrayList("p1=1"))
+                .setParameters(new HashMap<>()).build();
+
+        HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
+        HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
+        metastore.alterPartition(hivePartitionWithStats);
+    }
+
+    @Test
     public void testGetPartitionByNames() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
@@ -171,6 +224,22 @@ public class HiveMetastoreTest {
         Assert.assertEquals(5, columnStatistics2.getNdv());
     }
 
+    @Test
+    public void testUpdateTableStatistics() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        metastore.updateTableStatistics("db", "table", ignore -> partitionStats);
+    }
+
+    @Test
+    public void testUpdatePartitionStatistics() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        HivePartitionStats partitionStats = HivePartitionStats.empty();
+        metastore.updatePartitionStatistics("db", "table", "p1=1", ignore -> partitionStats);
+    }
+
     public static class MockedHiveMetaClient extends HiveMetaClient {
 
         public MockedHiveMetaClient() {
@@ -185,8 +254,27 @@ public class HiveMetastoreTest {
             return Lists.newArrayList("db1", "db2");
         }
 
+        public void createDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
+
+        }
+
+        public void dropDatabase(String dbName, boolean deleteData) {
+        }
+
+        public void createTable(Table table) {
+
+        }
+
+        public void dropTable(String dbName, String tableName) {
+
+        }
+
         public List<String> getAllTableNames(String dbName) {
-            return Lists.newArrayList("table1", "table2");
+            if (dbName.equals("empty_db")) {
+                return Lists.newArrayList();
+            } else {
+                return Lists.newArrayList("table1", "table2");
+            }
         }
 
         public org.apache.hadoop.hive.metastore.api.Database getDb(String dbName) {
@@ -211,15 +299,33 @@ public class HiveMetastoreTest {
             Table msTable1 = new Table();
             msTable1.setDbName(dbName);
             msTable1.setTableName(tblName);
-            msTable1.setPartitionKeys(partKeys);
+
             msTable1.setSd(sd);
             msTable1.setTableType("MANAGED_TABLE");
             msTable1.setParameters(ImmutableMap.of(ROW_COUNT, "50", TOTAL_SIZE, "100"));
+
+            if (!tblName.equals("unpartitioned_table")) {
+                msTable1.setPartitionKeys(partKeys);
+            } else {
+                msTable1.setPartitionKeys(new ArrayList<>());
+            }
+
             return msTable1;
+        }
+
+        public void alterTable(String dbName, String tableName, Table newTable) {
+
         }
 
         public List<String> getPartitionKeys(String dbName, String tableName) {
             return Lists.newArrayList("col1");
+        }
+
+        public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
+            return Lists.newArrayList("col1");
+        }
+
+        public void addPartitions(String dbName, String tableName, List<Partition> partitions) {
         }
 
         public Partition getPartition(HiveTableName name, List<String> partitionValues) {
@@ -248,6 +354,12 @@ public class HiveMetastoreTest {
             partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100", ROW_COUNT, "50"));
             partition.setValues(partitionValues);
             return partition;
+        }
+
+        public void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData) {
+        }
+
+        public void alterPartition(String dbName, String tableName, Partition newPartition) {
         }
 
         public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {

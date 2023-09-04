@@ -23,8 +23,10 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class ColumnPrivilegesSystemTable {
-    public static SystemTable create() {
-        return new SystemTable(SystemId.COLUMN_PRIVILEGES_ID,
+    public static SystemTable create(String catalogName) {
+        return new SystemTable(
+                catalogName,
+                SystemId.COLUMN_PRIVILEGES_ID,
                 "column_privileges",
                 Table.TableType.SCHEMA,
                 builder()

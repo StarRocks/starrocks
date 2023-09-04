@@ -65,6 +65,9 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
     }
     // get all database
     TGetDbsParams db_params;
+    if (nullptr != _param->catalog) {
+        db_params.__set_catalog_name(*(_param->catalog));
+    }
     if (nullptr != _param->db) {
         db_params.__set_pattern(*(_param->db));
     }
@@ -277,7 +280,13 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // COLUMN_DEFAULT
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                fill_data_column_with_null(column.get());
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnDefault) {
+                    std::string* str = &_desc_result.columns[_column_index].columnDesc.columnDefault;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    fill_data_column_with_null(column.get());
+                }
             }
             break;
         }
@@ -285,8 +294,14 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // IS_NULLABLE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const char* str = "NO";
-                Slice value(str, strlen(str));
+                bool allowNull = _desc_result.columns[_column_index].columnDesc.allowNull;
+                string str;
+                if (allowNull) {
+                    str = "YES";
+                } else {
+                    str = "NO";
+                }
+                Slice value(str.c_str(), str.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
@@ -488,6 +503,9 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
 
 Status SchemaColumnsScanner::get_new_desc() {
     TDescribeTableParams desc_params;
+    if (nullptr != _param->catalog) {
+        desc_params.__set_catalog_name(*(_param->catalog));
+    }
     if (!_param->without_db_table) {
         desc_params.__set_db(_db_result.dbs[_db_index - 1]);
         desc_params.__set_table_name(_table_result.tables[_table_index++]);
@@ -523,6 +541,9 @@ Status SchemaColumnsScanner::get_new_table() {
     }
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
+    if (nullptr != _param->catalog) {
+        table_params.__set_catalog_name(*(_param->catalog));
+    }
     if (nullptr != _param->table) {
         table_params.__set_pattern(*(_param->table));
     }

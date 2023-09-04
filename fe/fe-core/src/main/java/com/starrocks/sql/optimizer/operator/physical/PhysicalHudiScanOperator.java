@@ -12,34 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.Map;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 
 public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalHudiScanOperator(Table table,
-                                    Map<ColumnRefOperator, Column> columnRefMap,
-                                    ScanOperatorPredicates predicates,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
-        super(OperatorType.PHYSICAL_HUDI_SCAN, table, columnRefMap, limit, predicate, projection);
-        this.predicates = predicates;
+    public PhysicalHudiScanOperator(LogicalHudiScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_HUDI_SCAN, scanOperator);
+        this.predicates = scanOperator.getScanOperatorPredicates();
     }
 
     @Override
@@ -61,7 +49,6 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalHudiScan(optExpression, context);
     }
-
 
     @Override
     public ColumnRefSet getUsedColumns() {

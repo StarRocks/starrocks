@@ -63,6 +63,10 @@ Status HiveDataSource::_check_all_slots_nullable() {
     return Status::OK();
 }
 
+std::string HiveDataSource::name() const {
+    return "HiveDataSource";
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -207,6 +211,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.case_sensitive) {
         _case_sensitive = hdfs_scan_node.case_sensitive;
     }
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
+    if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
+        _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -227,7 +237,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
         for (SlotId slot_id : slot_ids) {
-            _conjunct_slots.insert(slot_id);
+            _slots_in_conjunct.insert(slot_id);
         }
 
         // For some conjunct like (a < 1) or (a > 7)
@@ -239,8 +249,11 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
                 break;
             }
         }
-        if (!single_slot) {
+        if (!single_slot || slot_ids.empty()) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
+            for (SlotId slot_id : slot_ids) {
+                _slots_of_mutli_slot_conjunct.insert(slot_id);
+            }
             continue;
         }
 
@@ -260,6 +273,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+    _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -301,6 +315,10 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
@@ -401,7 +419,7 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     return scanner;
 }
 
-HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
     const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
 
     std::string required_fields;
@@ -421,12 +439,35 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner() {
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
 
+    string option_info = "";
+    if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {
+        const AWSCloudConfiguration aws_cloud_configuration =
+                CloudConfigurationFactory::create_aws(*options.cloud_configuration);
+        AWSCloudCredential aws_cloud_credential = aws_cloud_configuration.aws_cloud_credential;
+        if (!aws_cloud_credential.endpoint.empty()) {
+            option_info += "s3.endpoint=" + aws_cloud_credential.endpoint + ",";
+        }
+        if (!aws_cloud_credential.access_key.empty()) {
+            option_info += "s3.access-key=" + aws_cloud_credential.access_key + ",";
+        }
+        if (!aws_cloud_credential.secret_key.empty()) {
+            option_info += "s3.secret-key=" + aws_cloud_credential.secret_key + ",";
+        }
+        string enable_ssl = aws_cloud_configuration.enable_ssl ? "true" : "false";
+        option_info += "s3.connection.ssl.enabled=" + enable_ssl + ",";
+        string enable_path_style_access = aws_cloud_configuration.enable_path_style_access ? "true" : "false";
+        option_info += "s3.path.style.access=" + enable_path_style_access;
+    }
+    jni_scanner_params["option_info"] = option_info;
+
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
+    SCOPED_TIMER(_profile.open_file_timer);
+
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
     if (_hive_table != nullptr && _hive_table->has_partition()) {
@@ -436,9 +477,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                     "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
                     scan_range.partition_id));
         }
-
-        SCOPED_TIMER(_profile.open_file_timer);
-
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
@@ -457,6 +495,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -466,13 +505,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
-    scanner_params.conjunct_slots = _conjunct_slots;
+    scanner_params.slots_in_conjunct = _slots_in_conjunct;
+    scanner_params.slots_of_mutli_slot_conjunct = _slots_of_mutli_slot_conjunct;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
@@ -482,6 +523,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
+    scanner_params.can_use_any_column = _can_use_any_column;
+    scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -496,7 +539,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     if (use_paimon_jni_reader) {
-        scanner = _create_paimon_jni_scanner();
+        scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
     } else if (format == THdfsFileFormat::PARQUET) {
@@ -513,6 +556,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {
+        if (scanner->is_jni_scanner()) {
+            return st;
+        }
+
         auto msg = fmt::format("file = {}", native_file_path);
 
         // After catching the AWS 404 file not found error and returning it to the FE,

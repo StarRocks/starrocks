@@ -37,6 +37,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -97,7 +98,7 @@ public class MaterializedViewTest {
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
         Assert.assertEquals(true, mv2.isActive());
-        mv2.setActive(false);
+        mv2.setInactiveAndReason("");
         Assert.assertEquals(false, mv2.isActive());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
@@ -610,7 +611,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(Strings.isNullOrEmpty(connectContext.getState().getErrorMessage()));
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testNonPartitionMvSupportedProperties() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -664,7 +665,7 @@ public class MaterializedViewTest {
                         "as select k1,k2,v1 from base_table;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView baseMv = ((MaterializedView) testDb.getTable("base_mv"));
-        baseMv.setActive(false);
+        baseMv.setInactiveAndReason("");
 
         SinglePartitionInfo singlePartitionInfo = new SinglePartitionInfo();
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();

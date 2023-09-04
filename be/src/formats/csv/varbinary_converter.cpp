@@ -19,6 +19,7 @@
 #include <sstream>
 
 #include "column/binary_column.h"
+#include "common/config.h"
 #include "gutil/strings/escaping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -52,7 +53,7 @@ Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& c
     return os->write('"');
 }
 
-bool VarBinaryConverter::read_string(Column* column, Slice s, const Options& options) const {
+bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     int max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
@@ -69,7 +70,8 @@ bool VarBinaryConverter::read_string(Column* column, Slice s, const Options& opt
 
     // hex's length should not greater than MAX_VARCHAR_LENGTH.
     int hex_len = len / 2;
-    if (UNLIKELY((hex_len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && hex_len > max_size))) {
+    if (config::enable_check_string_lengths &&
+        ((hex_len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && hex_len > max_size))) {
         LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varbinary length.";
         return false;
     }
@@ -93,7 +95,8 @@ bool VarBinaryConverter::read_string(Column* column, Slice s, const Options& opt
     return true;
 }
 
-bool VarBinaryConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
+bool VarBinaryConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+    Slice s = tmp_s;
     // TODO: need write quote for binary?
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;

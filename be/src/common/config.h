@@ -55,16 +55,6 @@ CONF_Int32(brpc_num_threads, "-1");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 
-////
-//// tcmalloc gc parameter
-////
-// Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "0");
-// free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "0");
-// tcmalloc gc period, default 60, it should be between [1, 180]
-CONF_mInt64(tc_gc_period, "60");
-
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
 // the Pagecache immediately, it should be between (memory_high_level, 100].
@@ -76,17 +66,6 @@ CONF_mInt64(memory_high_level, "75");
 CONF_mInt64(pagecache_adjust_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
 CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
-
-// Bound on the total amount of bytes allocated to thread caches.
-// This bound is not strict, so it is possible for the cache to go over this bound
-// in certain circumstances. The maximum value of this flag is capped to 1GB.
-// This value defaults to 1GB.
-// If you suspect your application is not scaling to many threads due to lock contention in TCMalloc,
-// you can try increasing this value. This may improve performance, at a cost of extra memory
-// use by TCMalloc.
-// reference: https://gperftools.github.io/gperftools/tcmalloc.html: TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES
-//            https://github.com/gperftools/gperftools/issues/1111
-CONF_Int64(tc_max_total_thread_cache_bytes, "1073741824");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
@@ -507,8 +486,12 @@ CONF_mBool(sync_tablet_meta, "false");
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
+CONF_Bool(thrift_rpc_strict_mode, "true");
+// rpc max string body size. 0 means unlimited
+CONF_Int32(thrift_rpc_max_body_size, "0");
+
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -519,17 +502,13 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 // Max pulsar consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
-// The size of thread pool for routine load task.
-// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
-CONF_Int32(routine_load_thread_pool_size, "10");
-
-// kafka reqeust timeout
+// kafka request timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
-// pulsar reqeust timeout
+// pulsar request timeout
 CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
-// Is set to true, index loading failure will not causing BE exit,
+// Is set to true, index loading failure will not cause BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
 
@@ -573,6 +552,10 @@ CONF_mInt32(path_scan_interval_second, "86400");
 CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
+// When choosing storage root path for tablet creation, disks with usage larger than the
+// average value by `storage_high_usage_disk_protect_ratio` won't be chosen at first.
+CONF_mDouble(storage_high_usage_disk_protect_ratio, "0.1"); // 10%
+
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 
@@ -586,21 +569,21 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
 // Max number of txns for every txn_partition_map in txn manager.
-// this is a self protection to avoid too many txns saving in manager.
+// this is a self-protection to avoid too many txns saving in manager.
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is a an enhancement for better performance to manage tablet.
+// this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
 // txn_map_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to manage txn.
+// this is an enhancement for better performance to manage txn.
 CONF_Int32(txn_map_shard_size, "128");
 
 // txn_lock shard size, the value is 2^n, n=0,1,2,3,4
-// this is a an enhancement for better performance to commit and publish txn.
+// this is an enhancement for better performance to commit and publish txn.
 CONF_Int32(txn_shard_size, "1024");
 
 // Whether to continue to start be when load tablet from header failed.
@@ -646,7 +629,7 @@ CONF_mInt16(storage_format_version, "2");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-// Do pre-aggregate if effect great than the factor, factor range:[1-100].
+// Do pre-aggregate if effect greater than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
 #ifdef __x86_64__
@@ -745,6 +728,7 @@ CONF_Bool(rewrite_partial_segment, "true");
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
+CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
@@ -754,21 +738,36 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://github.com/aws/aws-sdk-cpp/issues/587
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
+// Socket connect timeout for object storage.
+// Default is -1, indicate to use the default value in sdk (1000ms)
+// Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
+CONF_Int64(object_storage_connect_timeout_ms, "-1");
+// Request timeout for object storage
+// Default is -1, indicate to use the default value in sdk.
+// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
+// below "lowSpeedLimit" for the library to consider it too slow and abort.
+// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
+// value is greater than 0 and less than 1000.
+// When it's 0, low speed limit check will be disabled.
+CONF_Int64(object_storage_request_timeout_ms, "-1");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
-// orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
+CONF_Int32(orc_row_index_cache_max_size, "1048576");
+CONF_Int32(orc_stripe_cache_max_size, "8388608");
+CONF_Bool(enable_orc_libdeflate_decompression, "true");
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
+CONF_Bool(parquet_late_materialization_v2_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
+CONF_mBool(io_coalesce_adaptive_lazy_active, "true");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(connector_io_tasks_min_size, "2");
@@ -778,6 +777,15 @@ CONF_Int32(connector_io_tasks_adjust_smooth, "4");
 CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
+
+// hdfs hedged read
+CONF_Bool(hdfs_client_enable_hedged_read, "false");
+// dfs.client.hedged.read.threadpool.size
+CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
+// dfs.client.hedged.read.threshold.millis
+CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
+CONF_Int32(hdfs_client_max_cache_size, "8");
+CONF_Int32(hdfs_client_io_read_retry, "0");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -801,7 +809,7 @@ CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
 
-CONF_Bool(enable_load_colocate_mv, "false");
+CONF_Bool(enable_load_colocate_mv, "true");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
@@ -843,7 +851,18 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_Bool(starlet_use_star_cache, "false");
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
+// domain list separated by comma, e.g. '.example.com,.helloworld.com'
+CONF_String(starlet_s3_virtual_address_domainlist, "");
+// number of caches allowed from s3client factory
+CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
+// number of instances per cache item
+CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
+// whether turn on read prefetch feature
+CONF_Bool(starlet_fs_read_prefetch_enable, "false");
+// prefetch threadpool size
+CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -851,6 +870,11 @@ CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
+CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
+CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+CONF_mBool(lake_enable_publish_version_trace_log, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -884,10 +908,10 @@ CONF_mInt32(spill_init_partition, "16");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
-
-// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
-// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
-CONF_Int32(internal_service_async_thread_num, "10");
+// The maximum size of a single spill directory, for some case the spill directory may
+// be the same with storage path. Spill will return with error when used size has exceeded
+// the limit.
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 
@@ -933,14 +957,33 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
+CONF_Bool(block_cache_direct_io_enable, "false");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
+CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
 // if l0_mem_size exceeds this value, l0 need snapshot
 CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
+// Control if using the minor compaction strategy
+CONF_Bool(enable_pindex_minor_compaction, "true");
+// if l2 num is larger than this, stop doing async compaction,
+// add this config to prevent l2 grow too large.
+CONF_mInt64(max_allow_pindex_l2_num, "5");
+// control the background compaction threads
+CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// control the persistent index schedule compaction interval
+CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -966,7 +1009,11 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000");                                // 6s
+// only used for test. default: 128M
+CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
+// pipeline streaming aggregate chunk buffer size
+CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+CONF_mInt64(wait_apply_time, "6000"); // 6s
 
 // Max size of a binlog file. The default is 512MB.
 CONF_Int64(binlog_file_max_size, "536870912");
@@ -996,5 +1043,10 @@ CONF_mInt32(primary_key_limit_size, "128");
 CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
+CONF_mInt32(finish_publish_version_internal, "100");
+
+CONF_mInt32(get_txn_status_internal_sec, "30");
+
+CONF_mBool(dump_metrics_with_bvar, "true");
 
 } // namespace starrocks::config

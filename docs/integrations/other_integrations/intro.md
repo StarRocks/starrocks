@@ -24,7 +24,7 @@ This topic introduces the other tools and systems with which StarRocks can integ
 
 [Kubernetes](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
-[Helm](https://github.com/StarRocks/helm-charts)
+[Helm](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts)
 
 ## Monitor
 

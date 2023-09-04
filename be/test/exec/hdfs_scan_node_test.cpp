@@ -370,8 +370,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         ASSERT_FALSE(eos);
         ASSERT_EQ(chunk->num_rows(), 4);
 
-        status = hdfs_scan_node->close(_runtime_state.get());
-        ASSERT_TRUE(status.ok());
+        hdfs_scan_node->close(_runtime_state.get());
     }
 
     // test filter partition
@@ -406,8 +405,7 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         status = hdfs_scan_node->get_next(_runtime_state.get(), &chunk, &eos);
         ASSERT_TRUE(eos);
 
-        status = hdfs_scan_node->close(_runtime_state.get());
-        ASSERT_TRUE(status.ok());
+        hdfs_scan_node->close(_runtime_state.get());
     }
 }
 } // namespace starrocks

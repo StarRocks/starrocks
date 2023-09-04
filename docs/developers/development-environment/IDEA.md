@@ -5,14 +5,12 @@ Even if you are not using macOS, you can also refer to this tutorial.
 
 ## Requirements
 
-**Thrift 0.13**
+### Thrift 0.13
 
-If you installed Thrift directly with brew, you will find that there is no version 0.13, you can use the following command:
+There is no 0.13 version of Thrift in the official brew repository; one of our committers created a version in their repo to install. 
 
 ```bash
-brew tap-new $USER/local-tap
-brew extract --version='0.13.0' thrift $USER/local-tap
-brew install thrift@0.13.0
+brew install alberttwong/thrift/thrift@0.13
 ```
 
 After installing Thrift successfully, you can check by executing following command:
@@ -22,7 +20,7 @@ $ thrift -version
 Thrift version 0.13.0
 ```
 
-**Protobuf**
+### Protobuf
 
 Just use the latest version v3, because the latest version of Protobuf is compatible with the v2 version of the Protobuf used in StarRocks.
 
@@ -30,19 +28,19 @@ Just use the latest version v3, because the latest version of Protobuf is compat
 brew install protobuf
 ```
 
-**Maven**
+### Maven
 
 ```
 brew install maven
 ```
 
-**Openjdk 1.8 or 11**
+### Openjdk 1.8 or 11
 
 ```bash
 brew install openjdk@11
 ```
 
-**Python3**
+### Python3
 
 MacOS is already installed by default.
 
@@ -56,13 +54,13 @@ brew list protobuf
 
 ## Configure the StarRocks
 
-**Download the StarRocks**
+### Download the StarRocks
 
 ```
 git clone https://github.com/StarRocks/starrocks.git
 ```
 
-**Setup thirdparty directory**
+### Setup thirdparty directory
 
 Create `installed/bin` directory in `thirdparty`.
 
@@ -77,7 +75,7 @@ ln -s /opt/homebrew/bin/thrift thirdparty/installed/bin/thrift
 ln -s /opt/homebrew/bin/protoc thirdparty/installed/bin/protoc
 ```
 
-**Setting environment variables**
+### Setting environment variables
 
 ```bash
 export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15" # Caution: The jdk version may be different in you desktop

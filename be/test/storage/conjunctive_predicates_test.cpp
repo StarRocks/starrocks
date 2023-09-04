@@ -377,7 +377,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     ASSERT_EQ(1, cm.column_value_ranges.count(slot->col_name()));
 
     {
-        PredicateParser pp(*tablet_schema);
+        PredicateParser pp(tablet_schema);
         std::unique_ptr<ColumnPredicate> predicate(pp.parse_thrift_cond(cm.olap_filters[0]));
         ASSERT_TRUE(!!predicate);
 

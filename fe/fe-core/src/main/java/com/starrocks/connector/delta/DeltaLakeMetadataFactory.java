@@ -16,6 +16,7 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
@@ -29,19 +30,23 @@ public class DeltaLakeMetadataFactory {
     private final IHiveMetastore metastore;
     private final long perQueryMetastoreMaxNum;
     private final HdfsEnvironment hdfsEnvironment;
+    private final MetastoreType metastoreType;
 
     public DeltaLakeMetadataFactory(String catalogName, IHiveMetastore metastore, CachingHiveMetastoreConf hmsConf,
-                                    String uri, HdfsEnvironment hdfsEnvironment) {
+                                    String uri, HdfsEnvironment hdfsEnvironment, MetastoreType metastoreType) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
         this.hdfsEnvironment = hdfsEnvironment;
         this.hdfsEnvironment.getConfiguration().set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), uri);
+        this.metastoreType = metastoreType;
     }
 
     public DeltaLakeMetadata create() {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
-                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
+                createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
+                metastore instanceof CachingHiveMetastore,
+                hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
 
         return new DeltaLakeMetadata(hdfsEnvironment.getConfiguration(), catalogName, hiveMetastoreOperations);
     }

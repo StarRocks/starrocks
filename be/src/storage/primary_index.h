@@ -27,6 +27,7 @@ namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class PersistentIndexMetaLockGuard;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -111,6 +112,12 @@ public:
 
     Status on_commited();
 
+    void get_persistent_index_meta_lock_guard(PersistentIndexMetaLockGuard* guard);
+
+    double get_write_amp_score();
+
+    Status major_compaction(Tablet* tablet);
+
     Status abort();
 
     // [not thread-safe]
@@ -166,6 +173,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
+    std::unique_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;
@@ -173,7 +181,6 @@ private:
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
-    std::unique_ptr<PersistentIndex> _persistent_index;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {

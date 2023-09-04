@@ -85,6 +85,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public abstract class StarRocksHttpTestCase {
@@ -108,7 +109,7 @@ public abstract class StarRocksHttpTestCase {
     private static long testReplicaId2 = 2001;
     private static long testReplicaId3 = 2002;
 
-    private static long testDbId = 100L;
+    protected static long testDbId = 100L;
     private static long testTableId = 200L;
     private static long testPartitionId = 201L;
     public static long testIndexId = testTableId; // the base indexid == tableid
@@ -120,6 +121,7 @@ public abstract class StarRocksHttpTestCase {
     public static int HTTP_PORT;
 
     protected static String URI;
+    protected static String BASE_URL;
 
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -216,6 +218,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
             db.registerTableUnlocked(esTable);
+            ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
+            nameToDb.put(db.getFullName(), db);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -262,6 +266,10 @@ public abstract class StarRocksHttpTestCase {
 
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
+
+                    globalStateMgr.getFullNameToDb();
+                    minTimes = 0;
+                    result = nameToDb;
                 }
             };
 
@@ -365,6 +373,7 @@ public abstract class StarRocksHttpTestCase {
             socket = new ServerSocket(0);
             socket.setReuseAddress(true);
             HTTP_PORT = socket.getLocalPort();
+            BASE_URL = "http://localhost:" + HTTP_PORT;
             URI = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/" + TABLE_NAME;
         } catch (Exception e) {
             throw new IllegalStateException("Could not find a free TCP/IP port to start HTTP Server on");
@@ -465,7 +474,7 @@ public abstract class StarRocksHttpTestCase {
                 };
 
                 return new GlobalTransactionMgr(null);
-            } 
+            }
         };
         assignBackends();
         doSetUp();

@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
@@ -52,6 +53,9 @@ public class ExecPlan {
 
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
+    private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+
+    private volatile ProfilingExecPlan profilingPlan;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -128,6 +132,35 @@ public class ExecPlan {
 
     public List<ColumnRefOperator> getOutputColumns() {
         return outputColumns;
+    }
+
+    public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+        optExpressions.put(id, optExpression);
+    }
+
+    public OptExpression getOptExpression(int planNodeId) {
+        return optExpressions.get(planNodeId);
+    }
+
+    public ProfilingExecPlan getProfilingPlan() {
+        if (profilingPlan == null) {
+            synchronized (this) {
+                if (profilingPlan == null) {
+                    boolean needSetCtx = ConnectContext.get() == null && this.connectContext != null;
+                    try {
+                        if (needSetCtx) {
+                            this.connectContext.setThreadLocalInfo();
+                        }
+                        profilingPlan = ProfilingExecPlan.buildFrom(this);
+                    } finally {
+                        if (needSetCtx) {
+                            ConnectContext.remove();
+                        }
+                    }
+                }
+            }
+        }
+        return profilingPlan;
     }
 
     public String getExplainString(TExplainLevel level) {

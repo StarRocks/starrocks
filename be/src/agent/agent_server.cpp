@@ -58,6 +58,7 @@ namespace starrocks {
 
 namespace {
 constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
+constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
 } // namespace
 
 using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
@@ -226,7 +227,8 @@ void AgentServer::Impl::init_or_die() {
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
         BUILD_DYNAMIC_TASK_THREAD_POOL("clone", 0,
-                                       _exec_env->store_paths().size() * config::parallel_clone_task_per_path,
+                                       std::max(_exec_env->store_paths().size() * config::parallel_clone_task_per_path,
+                                                MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 #endif
 
@@ -391,8 +393,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
     for (auto* task : all_tasks) {                                                                                 \
         auto pool = get_thread_pool(t_task_type);                                                                  \
         auto signature = task->signature;                                                                          \
-        if (register_task_info(task_type, signature)) {                                                            \
-            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature;               \
+        std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);                          \
+        if (register_pair.first) {                                                                                 \
+            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature                \
+                      << ", task_count_in_queue=" << register_pair.second;                                         \
             ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
         } else {                                                                                                   \
@@ -536,13 +540,15 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
 }
 
 void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
+    Status st;
     switch (type) {
     case TTaskType::CLONE:
-        _thread_pool_clone->update_max_threads(new_val);
+        st = _thread_pool_clone->update_max_threads(new_val);
         break;
     default:
         break;
     }
+    LOG_IF(ERROR, !st.ok()) << st;
 }
 
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {

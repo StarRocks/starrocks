@@ -63,7 +63,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     TSchemaHash new_schema_hash = 0;
     new_tablet_id = agent_task_req.new_tablet_id;
     new_schema_hash = agent_task_req.new_schema_hash;
-    EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
     Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
     AgentStatus status;
     if (!sc_status.ok()) {
@@ -144,7 +144,9 @@ static void unify_finish_agent_task(TStatusCode::type status_code, const std::ve
     finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
-    remove_task_info(task_type, signature);
+    size_t task_queue_size = remove_task_info(task_type, signature);
+    LOG(INFO) << "Remove task success. type=" << task_type << ", signature=" << signature
+              << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
@@ -314,7 +316,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             }
         }
     } else {
-        EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
+        EngineCloneTask engine_task(GlobalEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
@@ -429,14 +431,14 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
     TStatus task_status;
     uint32_t checksum = 0;
 
-    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
         status_code = TStatusCode::MEM_LIMIT_EXCEEDED;
     } else {
-        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.schema_hash,
-                                       check_consistency_req.version, &checksum);
+        EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id, check_consistency_req.version,
+                                       &checksum);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             LOG(WARNING) << "check consistency failed. status: " << res << ", signature: " << agent_task_req->signature;
@@ -469,7 +471,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     TStatus task_status;
 
     for (auto tablet_id : compaction_req.tablet_ids) {
-        EngineManualCompactionTask engine_task(ExecEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
+        EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
         StorageEngine::instance()->execute_task(&engine_task);
     }
@@ -716,6 +718,8 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
             case TTabletMetaType::WRITE_QUORUM:
                 break;
             case TTabletMetaType::REPLICATED_STORAGE:
+                break;
+            case TTabletMetaType::BUCKET_SIZE:
                 break;
             case TTabletMetaType::DISABLE_BINLOG:
                 break;

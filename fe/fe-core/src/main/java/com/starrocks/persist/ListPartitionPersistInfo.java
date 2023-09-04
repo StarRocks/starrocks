@@ -18,6 +18,7 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
+import com.starrocks.lake.DataCacheInfo;
 
 import java.util.List;
 
@@ -31,8 +32,8 @@ public class ListPartitionPersistInfo extends PartitionPersistInfoV2 {
     public ListPartitionPersistInfo(Long dbId, Long tableId, Partition partition,
                                     DataProperty dataProperty, short replicationNum,
                                     boolean isInMemory, boolean isTempPartition,
-                                    List<String> values, List<List<String>> multiValues) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition);
+                                    List<String> values, List<List<String>> multiValues, DataCacheInfo dataCacheInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, dataCacheInfo);
         this.multiValues = multiValues;
         this.values = values;
     }

@@ -1,0 +1,25 @@
+-- name: test_partial_update_rowset_link
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+set partial_update_mode = "column";
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+select * from tab1;
+update tab1 set v1 = 123456;
+select * from tab1;
+alter table tab1 add column (v6 INTEGER DEFAULT "100");
+function: wait_alter_table_finish()
+select * from tab1;

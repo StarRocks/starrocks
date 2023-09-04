@@ -26,15 +26,18 @@ import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprId;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
@@ -52,17 +55,25 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
@@ -89,14 +100,20 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.thrift.TDictQueryExpr;
+import com.starrocks.thrift.TFunctionBinaryType;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -109,6 +126,10 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -119,6 +140,16 @@ public class ExpressionAnalyzer {
 
     public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
         IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
+    public void analyzeWithoutUpdateState(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        Visitor visitor = new Visitor(analyzeState, session) {
+            @Override
+            protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+                // do not put the slotRef in analyzeState
+            }
+        };
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -347,7 +378,7 @@ public class ExpressionAnalyzer {
                     node.getPos());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+        protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
         }
 
@@ -363,6 +394,7 @@ public class ExpressionAnalyzer {
             }
 
             List<String> fieldNames = node.getFieldNames();
+            List<String> rightNames = Lists.newArrayList();
             Type tmpType = child.getType();
             for (String fieldName : fieldNames) {
                 StructType structType = (StructType) tmpType;
@@ -371,9 +403,12 @@ public class ExpressionAnalyzer {
                     throw new SemanticException(String.format("Struct subfield '%s' cannot be resolved", fieldName),
                             node.getPos());
                 }
+                rightNames.add(structField.getName());
                 tmpType = structField.getType();
             }
 
+            // set right field names
+            node.setFieldNames(rightNames);
             node.setType(tmpType);
             return null;
         }
@@ -398,7 +433,6 @@ public class ExpressionAnalyzer {
                     node.resetStructInfo();
                 }
             }
-
             handleResolvedField(node, resolvedField);
             return null;
         }
@@ -796,10 +830,15 @@ public class ExpressionAnalyzer {
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
 
+            if (compatibleType == Type.INVALID) {
+                throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
+                        Collectors.joining(",")) + ") of in predict are not compatible", node.getPos());
+            }
+
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType()) {
-                    throw new SemanticException("InPredicate of JSON is not supported", child.getPos());
+                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                    throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
                     throw new SemanticException(
@@ -900,7 +939,8 @@ public class ExpressionAnalyzer {
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
-                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
+                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
+                                !(node instanceof InPredicate))) {
                     throw new SemanticException(
                             "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate", node.getPos());
                 }
@@ -952,7 +992,7 @@ public class ExpressionAnalyzer {
                 fn = fn.copy();
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
-            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG) || fnName.equals(FunctionSet.GROUP_CONCAT)) {
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -969,6 +1009,9 @@ public class ExpressionAnalyzer {
                 Type[] argsTypes = new Type[argumentTypes.length];
                 for (int i = 0; i < argumentTypes.length; ++i) {
                     argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < node.getChildren().size() - isAscOrder.size()) {
+                        argsTypes[i] = Type.VARCHAR;
+                    }
                 }
                 fn.setArgsType(argsTypes); // as accepting various types
                 ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
@@ -978,7 +1021,22 @@ public class ExpressionAnalyzer {
                 ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
                 ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
                 ((AggregateFunction) fn).setNullsFirst(nullsFirst);
-                fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                boolean outputConst = true;
+                if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                    fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
+                    outputConst = node.getChild(0).isConstant();
+                } else {
+                    fn.setRetType(Type.VARCHAR);
+                    for (int i = 0; i < node.getChildren().size() - isAscOrder.size() - 1; i++) {
+                        if (!node.getChild(i).isConstant()) {
+                            outputConst = false;
+                            break;
+                        }
+                    }
+                }
+                // need to distinct output columns in finalize phase
+                ((AggregateFunction) fn).setIsDistinct(node.getParams().isDistinct() &&
+                        (!isAscOrder.isEmpty() || outputConst));
             } else if (FunctionSet.PERCENTILE_DISC.equals(fnName)) {
                 argumentTypes[1] = Type.DOUBLE;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
@@ -1061,6 +1119,9 @@ public class ExpressionAnalyzer {
 
             if (fn == null) {
                 fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
+            }
+            if (fn == null) {
+                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
             }
 
             if (fn == null) {
@@ -1198,11 +1259,23 @@ public class ExpressionAnalyzer {
                                 node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
                     }
                     break;
+                case FunctionSet.GROUP_CONCAT:
                 case FunctionSet.ARRAY_AGG: {
-                    for (int i = 1; i < argumentTypes.length; ++i) {
-                        if (argumentTypes[i].isComplexType()) {
-                            throw new SemanticException("array_agg can't support order by nested types, " +
-                                    "but " + i + "-th input is " + argumentTypes[i].toSql());
+                    if (node.getChildren().size() == 0) {
+                        throw new SemanticException(fnName + " should have at least one input", node.getPos());
+                    }
+                    int start = argumentTypes.length - node.getParams().getOrderByElemNum();
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
+                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                node.getPos());
+                    } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
+                        throw new SemanticException(fnName + " should have exact one output expressions before" +
+                                " [ORDER BY]", node.getPos());
+                    }
+                    for (int i = start; i < argumentTypes.length; ++i) {
+                        if (!argumentTypes[i].canOrderBy()) {
+                            throw new SemanticException(fnName + " can't support order by the " + i +
+                                    "-th input with type of " + argumentTypes[i].toSql(), node.getPos());
                         }
                     }
                     break;
@@ -1224,12 +1297,12 @@ public class ExpressionAnalyzer {
                         }
 
                         String name = ((StringLiteral) node.getChild(i)).getValue();
-                        if (check.contains(name)) {
+                        if (check.contains(name.toLowerCase())) {
                             throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
 
-                        check.add(name);
+                        check.add(name.toLowerCase());
                     }
                     break;
                 }
@@ -1580,6 +1653,158 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCloneExpr(CloneExpr node, Scope context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDictQueryExpr(DictQueryExpr node, Scope context) {
+            List<Expr> params = node.getParams().exprs();
+            if (!(params.get(0) instanceof StringLiteral)) {
+                throw new SemanticException("dict_mapping function first param table_name should be string literal");
+            }
+            String[] dictTableFullName = ((StringLiteral) params.get(0)).getStringValue().split("\\.");
+            TableName tableName;
+            if (dictTableFullName.length == 1) {
+                tableName = new TableName(null, dictTableFullName[0]);
+                tableName.normalization(session);
+            } else if (dictTableFullName.length == 2) {
+                tableName = new TableName(dictTableFullName[0], dictTableFullName[1]);
+            } else {
+                throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
+            }
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = db.getTable(tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("dict table %s is not found", tableName.getTbl());
+            }
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("dict table type is not OlapTable, type=" + table.getClass());
+            }
+            if (table instanceof MaterializedView) {
+                throw new SemanticException("dict table can't be materialized view");
+            }
+            OlapTable dictTable = (OlapTable) table;
+
+            if (dictTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw new SemanticException("dict table " + tableName + " should be primary key table");
+            }
+
+            // verify keys length and type
+            List<Column> keyColumns = new ArrayList<>();
+            Column valueColumn = null;
+            for (Column column : dictTable.getBaseSchema()) {
+                if (column.isKey()) {
+                    keyColumns.add(column);
+                }
+                if (column.isAutoIncrement()) {
+                    valueColumn = column;
+                }
+            }
+            // (table, keys..., value_column, strict_mode)
+            int valueColumnIdx;
+            int strictModeIdx;
+            if (params.size() == keyColumns.size() + 1) {
+                valueColumnIdx = -1;
+                strictModeIdx = -1;
+            } else if (params.size() == keyColumns.size() + 2) {
+                if (params.get(params.size() - 1).getType().getPrimitiveType().isStringType()) {
+                    valueColumnIdx = params.size() - 1;
+                    strictModeIdx = -1;
+                } else {
+                    strictModeIdx = params.size() - 1;
+                    valueColumnIdx = -1;
+                }
+            } else if (params.size() == keyColumns.size() + 3) {
+                valueColumnIdx = params.size() - 2;
+                strictModeIdx = params.size() - 1;
+            } else {
+                throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
+                    keyColumns.size() + 1, keyColumns.size() + 3));
+            }
+
+            String valueField;
+            if (valueColumnIdx >= 0) {
+                Expr valueFieldExpr = params.get(valueColumnIdx);
+                if (!(valueFieldExpr instanceof StringLiteral)) {
+                    throw new SemanticException("dict_mapping function value_column param should be STRING constant");
+                }
+                valueField = ((StringLiteral) valueFieldExpr).getStringValue();
+                valueColumn = dictTable.getBaseColumn(valueField);
+                if (valueColumn == null) {
+                    throw new SemanticException("dict_mapping function can't find value column " + valueField + " in dict table");
+                }
+            } else {
+                if (valueColumn == null) {
+                    throw new SemanticException("dict_mapping function can't find auto increment column in dict table");
+                }
+                valueField = valueColumn.getName();
+            }
+
+            boolean strictMode = false;
+            if (strictModeIdx >= 0) {
+                Expr strictModeExpr = params.get(strictModeIdx);
+                if (!(strictModeExpr instanceof BoolLiteral)) {
+                    throw new SemanticException("dict_mapping function strict_mode param should be bool constant");
+                }
+                strictMode = ((BoolLiteral) strictModeExpr).getValue();
+            }
+
+            List<Type> expectTypes = new ArrayList<>();
+            expectTypes.add(Type.VARCHAR);
+            for (Column keyColumn : keyColumns) {
+                expectTypes.add(ScalarType.createType(keyColumn.getType().getPrimitiveType()));
+            }
+            if (valueColumnIdx >= 0) {
+                expectTypes.add(Type.VARCHAR);
+            }
+            if (strictModeIdx >= 0) {
+                expectTypes.add(Type.BOOLEAN);
+            }
+            List<Type> actualTypes = params.stream()
+                    .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
+            if (!Objects.equals(expectTypes, actualTypes)) {
+                List<String> expectTypeNames = new ArrayList<>();
+                expectTypeNames.add("VARCHAR dict_table");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    expectTypeNames.add(expectTypes.get(i + 1).canonicalName() + " " + keyColumns.get(i).getName());
+                }
+                if (valueColumnIdx >= 0) {
+                    expectTypeNames.add("VARCHAR value_field_name");
+                }
+                if (strictModeIdx >= 0) {
+                    expectTypeNames.add("BOOLEAN strict_mode");
+                }
+                List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
+                throw new SemanticException(
+                        String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
+                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+            }
+
+            Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());
+
+            final TDictQueryExpr dictQueryExpr = new TDictQueryExpr();
+            dictQueryExpr.setDb_name(tableName.getDb());
+            dictQueryExpr.setTbl_name(tableName.getTbl());
+
+            Map<Long, Long> partitionVersion = new HashMap<>();
+            dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+            dictQueryExpr.setPartition_version(partitionVersion);
+
+            List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
+            dictQueryExpr.setKey_fields(keyFields);
+            dictQueryExpr.setValue_field(valueField);
+            dictQueryExpr.setStrict_mode(strictMode);
+            node.setType(valueType);
+
+            Function fn = new Function(FunctionName.createFnName(FunctionSet.DICT_MAPPING), actualTypes, valueType, false);
+            fn.setBinaryType(TFunctionBinaryType.BUILTIN);
+            node.setFn(fn);
+
+            node.setDictQueryExpr(dictQueryExpr);
             return null;
         }
     }

@@ -49,6 +49,7 @@ import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,9 +71,10 @@ import java.util.stream.Collectors;
 public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
-    private static final String ROOT_COUNTER = "";
-    private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
-    private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+    public static final String ROOT_COUNTER = "";
+    public static final String TOTAL_TIME_COUNTER = "TotalTime";
+    public static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    public static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
     private final Counter counterTotalTime;
 
@@ -96,7 +98,7 @@ public class RuntimeProfile {
     public RuntimeProfile() {
         this.counterTotalTime = new Counter(TUnit.TIME_NS, null, 0);
         this.localTimePercent = 0;
-        this.counterMap.put("TotalTime", Pair.create(counterTotalTime, ROOT_COUNTER));
+        this.counterMap.put(TOTAL_TIME_COUNTER, Pair.create(counterTotalTime, ROOT_COUNTER));
     }
 
     public Counter getCounterTotalTime() {
@@ -186,6 +188,10 @@ public class RuntimeProfile {
             return pair.first;
         }
         return null;
+    }
+
+    public Pair<Counter, String> getCounterPair(String name) {
+        return counterMap.get(name);
     }
 
     public Counter getMaxCounter(String name) {
@@ -334,77 +340,73 @@ public class RuntimeProfile {
     //  3. Counters
     //  4. Children
     public void prettyPrint(StringBuilder builder, String prefix) {
-        ProfileFormater formater = new DefaultProfileFormater(builder);
-        formater.format(this, prefix);
+        ProfileFormatter formatter = new DefaultProfileFormatter(builder);
+        formatter.format(this, prefix);
     }
 
     public String toString() {
-        ProfileFormater formater = new DefaultProfileFormater();
+        ProfileFormatter formater = new DefaultProfileFormatter();
         return formater.format(this);
     }
 
-    private String printCounter(long value, TUnit type) {
+    public static String printCounter(Counter counter) {
+        if (counter == null) {
+            return null;
+        }
+        return printCounter(counter.getValue(), counter.getType());
+    }
+
+    private static String printCounter(long value, TUnit type) {
         StringBuilder builder = new StringBuilder();
-        long tmpValue = value;
-        switch (type) {
-            case UNIT: {
-                Pair<Double, String> pair = DebugUtil.getUint(tmpValue);
+        try (Formatter fmt = new Formatter()) {
+            if (type == TUnit.UNIT || type == TUnit.UNIT_PER_SECOND) {
+                Pair<Double, String> pair = DebugUtil.getUint(value);
                 if (pair.second.isEmpty()) {
-                    builder.append(tmpValue);
+                    builder.append(value);
                 } else {
-                    builder.append(pair.first).append(pair.second)
-                            .append(" (").append(tmpValue).append(")");
+                    builder.append(fmt.format("%.3f", pair.first)).append(pair.second)
+                            .append(" (").append(value).append(")");
                 }
-                break;
-            }
-            case TIME_NS: {
-                if (tmpValue >= DebugUtil.BILLION) {
+                if (type == TUnit.UNIT_PER_SECOND) {
+                    builder.append(" /sec");
+                }
+            } else if (type == TUnit.BYTES || type == TUnit.BYTES_PER_SECOND) {
+                Pair<Double, String> pair = DebugUtil.getByteUint(value);
+                builder.append(fmt.format("%.3f", pair.first)).append(" ").append(pair.second);
+                if (type == TUnit.BYTES_PER_SECOND) {
+                    builder.append("/sec");
+                }
+            } else if (type == TUnit.TIME_NS) {
+                if (value >= DebugUtil.BILLION) {
                     // If the time is over a second, print it up to ms.
-                    tmpValue /= DebugUtil.MILLION;
-                    DebugUtil.printTimeMs(tmpValue, builder);
-                } else if (tmpValue >= DebugUtil.MILLION) {
+                    value /= DebugUtil.MILLION;
+                    DebugUtil.printTimeMs(value, builder);
+                } else if (value >= DebugUtil.MILLION) {
                     // if the time is over a ms, print it up to microsecond in the unit of ms.
-                    tmpValue /= 1000;
-                    builder.append(tmpValue / 1000).append(".").append(tmpValue % 1000).append("ms");
-                } else if (tmpValue > 1000) {
+                    value /= DebugUtil.THOUSAND;
+                    long remain = value % DebugUtil.THOUSAND;
+                    if (remain == 0) {
+                        builder.append(value / DebugUtil.THOUSAND).append("ms");
+                    } else {
+                        builder.append(value / DebugUtil.THOUSAND).append(".")
+                                .append(String.format("%03d", remain)).append("ms");
+                    }
+                } else if (value >= DebugUtil.THOUSAND) {
                     // if the time is over a microsecond, print it using unit microsecond
-                    builder.append(tmpValue / 1000).append(".").append(tmpValue % 1000).append("us");
+                    long remain = value % DebugUtil.THOUSAND;
+                    if (remain == 0) {
+                        builder.append(value / DebugUtil.THOUSAND).append("us");
+                    } else {
+                        builder.append(value / DebugUtil.THOUSAND).append(".")
+                                .append(String.format("%03d", remain)).append("us");
+                    }
                 } else {
-                    builder.append(tmpValue).append("ns");
+                    builder.append(value).append("ns");
                 }
-                break;
-            }
-            case BYTES: {
-                Pair<Double, String> pair = DebugUtil.getByteUint(tmpValue);
-                Formatter fmt = new Formatter();
-                builder.append(fmt.format("%.2f", pair.first)).append(" ").append(pair.second);
-                fmt.close();
-                break;
-            }
-            case BYTES_PER_SECOND: {
-                Pair<Double, String> pair = DebugUtil.getByteUint(tmpValue);
-                builder.append(pair.first).append(" ").append(pair.second).append("/sec");
-                break;
-            }
-            case DOUBLE_VALUE: {
-                Formatter fmt = new Formatter();
-                builder.append(fmt.format("%.2f", (double) tmpValue));
-                fmt.close();
-                break;
-            }
-            case UNIT_PER_SECOND: {
-                Pair<Double, String> pair = DebugUtil.getUint(tmpValue);
-                if (pair.second.isEmpty()) {
-                    builder.append(tmpValue);
-                } else {
-                    builder.append(pair.first).append(pair.second)
-                            .append(" ").append("/sec");
-                }
-                break;
-            }
-            default: {
+            } else if (type == TUnit.DOUBLE_VALUE) {
+                builder.append(fmt.format("%.3f", (double) value));
+            } else {
                 Preconditions.checkState(false, "type=" + type);
-                break;
             }
         }
         return builder.toString();
@@ -477,12 +479,15 @@ public class RuntimeProfile {
     }
 
     // Copy all info strings from src profile
-    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile) {
+    public void copyAllInfoStringsFrom(RuntimeProfile srcProfile, Set<String> excludedInfoStrings) {
         if (srcProfile == null || this == srcProfile) {
             return;
         }
 
         srcProfile.infoStrings.forEach((key, value) -> {
+            if (CollectionUtils.isNotEmpty(excludedInfoStrings) && excludedInfoStrings.contains(key)) {
+                return;
+            }
             if (!this.infoStrings.containsKey(key)) {
                 this.infoStrings.put(key, value);
             } else if (!Objects.equals(value, this.infoStrings.get(key))) {
@@ -523,6 +528,10 @@ public class RuntimeProfile {
         return localTimePercent;
     }
 
+    public boolean containsInfoString(String key) {
+        return infoStrings.containsKey(key);
+    }
+
     // Returns the value to which the specified key is mapped;
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
@@ -531,7 +540,8 @@ public class RuntimeProfile {
 
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
-    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles) {
+    public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles,
+                                                         Set<String> excludedInfoStrings) {
         if (CollectionUtils.isEmpty(profiles)) {
             return null;
         }
@@ -539,7 +549,7 @@ public class RuntimeProfile {
         RuntimeProfile mergedProfile = new RuntimeProfile(profiles.get(0).getName());
 
         for (RuntimeProfile runtimeProfile : profiles) {
-            mergedProfile.copyAllInfoStringsFrom(runtimeProfile);
+            mergedProfile.copyAllInfoStringsFrom(runtimeProfile, excludedInfoStrings);
         }
 
         // Find all counters, although these profiles are expected to be isomorphic,
@@ -655,7 +665,7 @@ public class RuntimeProfile {
                 }
                 counters.add(counter);
             }
-            Counter mergedCounter = null;
+            Counter mergedCounter;
             if (!Objects.equals(ROOT_COUNTER, parentName) && mergedProfile.getCounter(parentName) != null) {
                 mergedCounter = mergedProfile.addCounter(name, type, strategy, parentName);
             } else {
@@ -689,23 +699,36 @@ public class RuntimeProfile {
         }
 
         // merge children
-        for (int i = 0; i < profiles.get(0).childList.size(); i++) {
-            List<RuntimeProfile> subProfiles = Lists.newArrayList();
-            for (RuntimeProfile profile : profiles) {
-                if (i >= profile.childList.size()) {
-                    LOG.warn("find non-isomorphic children, profileName={}, childProfileNames={}" +
-                                    ", another profileName={}, another childProfileNames={}",
-                            mergedProfile.name,
-                            mergedProfile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
-                            profile.name,
-                            profile.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()));
-                    continue;
-                }
-                RuntimeProfile child = profile.childList.get(i).first;
-                subProfiles.add(child);
+        int maxChildSize = 0;
+        RuntimeProfile profileWithFullChild = null;
+        for (RuntimeProfile profile : profiles) {
+            if (profile.getChildList().size() > maxChildSize) {
+                maxChildSize = profile.getChildList().size();
+                profileWithFullChild = profile;
             }
-            RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles);
-            mergedProfile.addChild(mergedChild);
+        }
+        if (profileWithFullChild != null) {
+            boolean identical = true;
+            for (int i = 0; i < maxChildSize; i++) {
+                Pair<RuntimeProfile, Boolean> prototypeKv = profileWithFullChild.getChildList().get(i);
+                String childName = prototypeKv.first.getName();
+                List<RuntimeProfile> subProfiles = Lists.newArrayList();
+                for (RuntimeProfile profile : profiles) {
+                    RuntimeProfile child = profile.getChild(childName);
+                    if (child == null) {
+                        identical = false;
+                        LOG.info("find non-isomorphic children, profileName={}, requiredChildName={}",
+                                profile.name, childName);
+                        continue;
+                    }
+                    subProfiles.add(child);
+                }
+                RuntimeProfile mergedChild = mergeIsomorphicProfiles(subProfiles, excludedInfoStrings);
+                mergedProfile.addChild(mergedChild);
+            }
+            if (!identical) {
+                mergedProfile.addInfoString("NotIdentical", "");
+            }
         }
 
         return mergedProfile;
@@ -730,7 +753,7 @@ public class RuntimeProfile {
         profile.getChildList().forEach(pair -> removeRedundantMinMaxMetrics(pair.first));
     }
 
-    interface ProfileFormater {
+    interface ProfileFormatter {
 
         // Print the profile:
         //  1. Profile Name
@@ -742,21 +765,32 @@ public class RuntimeProfile {
         String format(RuntimeProfile profile);
     }
 
-    static class DefaultProfileFormater implements ProfileFormater {
+    static class DefaultProfileFormatter implements ProfileFormatter {
 
         private final StringBuilder builder;
 
-        DefaultProfileFormater(StringBuilder builder) {
+        DefaultProfileFormatter(StringBuilder builder) {
             this.builder = builder;
         }
 
-        DefaultProfileFormater() {
+        DefaultProfileFormatter() {
             this.builder = new StringBuilder();
         }
 
         @Override
         public String format(RuntimeProfile profile, String prefix) {
-            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            this.doFormat(profile, prefix);
+            return builder.toString();
+        }
+
+        @Override
+        public String format(RuntimeProfile profile) {
+            this.doFormat(profile, "");
+            return builder.toString();
+        }
+
+        private void doFormat(RuntimeProfile profile, String prefix) {
+            Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
             builder.append(prefix).append(profile.getName()).append(":");
@@ -764,7 +798,7 @@ public class RuntimeProfile {
             if (totalTimeCounter.getValue() != 0) {
                 try (Formatter fmt = new Formatter()) {
                     builder.append("(Active: ")
-                            .append(profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                            .append(printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
                     if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
                         // TotalTime in nanosecond concated if it's larger than 1000ns
                         builder.append("[").append(totalTimeCounter.getValue()).append("ns]");
@@ -778,8 +812,12 @@ public class RuntimeProfile {
             // 2. info String
             for (Map.Entry<String, String> infoPair : profile.getInfoStrings().entrySet()) {
                 String key = infoPair.getKey();
-                builder.append(prefix).append("   - ").append(key).append(": ")
-                        .append(profile.getInfoString(key)).append("\n");
+                String value = infoPair.getValue();
+                builder.append(prefix).append("   - ").append(key);
+                if (StringUtils.isNotBlank(value)) {
+                    builder.append(": ").append(profile.getInfoString(key));
+                }
+                builder.append("\n");
             }
 
             // 3. counters
@@ -789,14 +827,8 @@ public class RuntimeProfile {
             for (Pair<RuntimeProfile, Boolean> childPair : profile.getChildList()) {
                 boolean indent = childPair.second;
                 RuntimeProfile childProfile = childPair.first;
-                format(childProfile, prefix + (indent ? "  " : ""));
+                doFormat(childProfile, prefix + (indent ? "  " : ""));
             }
-            return builder.toString();
-        }
-
-        @Override
-        public String format(RuntimeProfile profile) {
-            return this.format(profile, "");
         }
 
         private void printChildCounters(RuntimeProfile profile, String prefix, String counterName) {
@@ -826,16 +858,16 @@ public class RuntimeProfile {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
                 builder.append(prefix).append("   - ").append(childName).append(": ")
-                        .append(profile.printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
+                        .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
                 this.printChildCounters(profile, prefix + "  ", childName);
             }
         }
     }
 
-    static class JsonProfileFormater implements ProfileFormater {
+    static class JsonProfileFormatter implements ProfileFormatter {
         private final JsonObject builder;
 
-        JsonProfileFormater() {
+        JsonProfileFormatter() {
             this.builder = new JsonObject();
         }
 
@@ -853,7 +885,7 @@ public class RuntimeProfile {
         }
 
         public void addRuntimeProfile(RuntimeProfile profile, JsonObject jsonObject) {
-            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            Counter totalTimeCounter = profile.getCounterMap().get(TOTAL_TIME_COUNTER);
             Preconditions.checkState(totalTimeCounter != null);
             // 1. profile name
             JsonObject innerJsonObject = new JsonObject();
@@ -862,7 +894,7 @@ public class RuntimeProfile {
             if (totalTimeCounter.getValue() != 0) {
                 try (Formatter fmt = new Formatter()) {
                     innerJsonObject.addProperty("Active",
-                            profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                            printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
                     if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
                         innerJsonObject.addProperty("Active_ns", totalTimeCounter.getValue());
                     }
@@ -917,7 +949,7 @@ public class RuntimeProfile {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
                 childJsonObject.addProperty(childName,
-                        profile.printCounter(childCounter.getValue(), childCounter.getType()));
+                        printCounter(childCounter.getValue(), childCounter.getType()));
                 this.addChildCounters(profile, childName, childJsonObject);
             }
         }

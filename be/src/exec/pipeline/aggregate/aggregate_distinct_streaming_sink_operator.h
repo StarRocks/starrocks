@@ -21,11 +21,12 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::pipeline {
+// TODO: think about refactor
 class AggregateDistinctStreamingSinkOperator : public Operator {
 public:
     AggregateDistinctStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                            int32_t driver_sequence, AggregatorPtr aggregator)
-            : Operator(factory, id, "aggregate_distinct_streaming_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "aggregate_distinct_streaming_sink", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
@@ -33,7 +34,9 @@ public:
     ~AggregateDistinctStreamingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return !is_finished(); }
+    bool need_input() const override {
+        return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
+    }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
     Status set_finishing(RuntimeState* state) override;
 
@@ -57,6 +60,9 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
 
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
+    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
@@ -65,6 +71,7 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
+    LimitedMemAggState _limited_mem_state;
 };
 
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {

@@ -371,7 +371,7 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             }
         }
     } else {
-        if (!_build_eos) {
+        if (_right_table_has_remain) {
             if (_join_type == TJoinOp::RIGHT_OUTER_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
                 _join_type == TJoinOp::FULL_OUTER_JOIN) {
                 // fetch the remain data of hash table
@@ -415,9 +415,9 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status HashJoinNode::close(RuntimeState* state) {
+void HashJoinNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     Expr::close(_build_expr_ctxs, state);
@@ -426,7 +426,7 @@ Status HashJoinNode::close(RuntimeState* state) {
 
     _ht.close();
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
@@ -437,14 +437,14 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
-        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
         // partitions in this case. Otherwise, NULL value in right table will only occur
         // in some partition hash table, and other partition hash table can output chunk.
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
+            rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
         } else {
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
@@ -453,7 +453,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
+            rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
                                                                               _build_equivalence_partition_expr_ctxs);
         }
     }
@@ -503,16 +503,16 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism());
     } else {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators);
         } else {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
             DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
-            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
+            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), lhs_operators,
                                                                               _probe_equivalence_partition_expr_ctxs);
         }
     }
@@ -716,29 +716,19 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
 Status HashJoinNode::_probe_remain(ChunkPtr* chunk, bool& eos) {
     ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
 
-    while (!_build_eos) {
+    while (_right_table_has_remain) {
         TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.probe_remain(runtime_state(), chunk, &_right_table_has_remain)));
 
         eval_join_runtime_filters(chunk);
-
-        if ((*chunk)->num_rows() <= 0) {
-            // right table already have no remain data
-            _build_eos = true;
-            eos = true;
-            return Status::OK();
-        }
-
         if (!_conjunct_ctxs.empty()) {
             RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        }
 
-            if (check_chunk_zero_and_create_new(chunk)) {
-                _build_eos = !_right_table_has_remain;
-                continue;
-            }
+        if (check_chunk_zero_and_create_new(chunk)) {
+            continue;
         }
 
         eos = false;
-        _build_eos = !_right_table_has_remain;
         return Status::OK();
     }
 

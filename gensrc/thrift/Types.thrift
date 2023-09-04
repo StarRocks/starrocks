@@ -309,6 +309,7 @@ struct TAggregateFunction {
   // Indicates, for each expr, if nulls should be listed first or last. This is
   // independent of is_asc_order.
   13: optional list<bool> nulls_first
+  14: optional bool is_distinct = false
 }
 
 struct TTableFunction {
@@ -336,7 +337,7 @@ struct TFunction {
   // Optional comment to attach to the function
   6: optional string comment
 
-  7: optional string signature
+  7: optional string signature // Deprecated
 
   // HDFS path for the function binary. This binary must exist at the time the
   // function is created.
@@ -435,6 +436,7 @@ struct TTabletCommitInfo {
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
+    5: optional list<i64> valid_dict_collected_versions
 }
 
 struct TTabletFailInfo {
@@ -459,15 +461,17 @@ enum TOpType {
     DELETE,
 }
 
+struct TUserRoles {
+    1: optional list<i64> role_id_list
+}
+
 // represent a user identity
 struct TUserIdentity {
     1: optional string username
     2: optional string host
     3: optional bool is_domain
-}
-
-struct TUserRoles {
-    1: optional list<i64> role_id_list
+    4: optional bool is_ephemeral
+    5: optional TUserRoles current_role_ids
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset
@@ -511,8 +515,9 @@ struct TBinlogOffset {
 enum TPartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
-    COLUMN_MODE = 2;
+    COLUMN_UPSERT_MODE = 2;
     AUTO_MODE = 3;
+    COLUMN_UPDATE_MODE = 4;
 }
 
 enum TRunMode {
@@ -540,9 +545,18 @@ struct TIcebergDataFile {
     7: optional TIcebergColumnStats column_stats;
 }
 
+struct THiveFileInfo {
+    1: optional string file_name
+    2: optional string partition_path
+    4: optional i64 record_count
+    5: optional i64 file_size_in_bytes
+}
+
 struct TSinkCommitInfo {
     1: optional TIcebergDataFile iceberg_data_file
+    2: optional THiveFileInfo hive_file_info
     // ... for other tables sink commit info
 
     100: optional bool is_overwrite;
+    101: optional string staging_dir
 }

@@ -38,6 +38,7 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "tablet_schema.proto";
 
 message PSlotDescriptor {
     required int32 id = 1;
@@ -51,6 +52,7 @@ message PSlotDescriptor {
     required int32 slot_idx = 9;
     required bool is_materialized = 10;
     repeated string global_dict_words = 11; 
+    optional int64 global_dict_version = 12;
 };
 
 message PTupleDescriptor {
@@ -65,6 +67,7 @@ message POlapTableIndexSchema {
     required int64 id = 1;
     repeated string columns = 2;
     required int32 schema_hash = 3;
+    repeated ColumnPB columns_desc = 4;
 };
 
 message POlapTableSchemaParam {

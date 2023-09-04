@@ -54,8 +54,6 @@ const std::string TABLET_ID = "tablet_id";
 const std::string TABLET_VERSION = "version";
 const std::string SCHEMA_HASH = "schema_hash";
 
-ChecksumAction::ChecksumAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
-
 void ChecksumAction::handle(HttpRequest* req) {
     LOG(INFO) << "accept one request " << req->debug_string();
 
@@ -76,31 +74,21 @@ void ChecksumAction::handle(HttpRequest* req) {
         return;
     }
 
-    // Get schema hash
-    const std::string& schema_hash_str = req->param(SCHEMA_HASH);
-    if (schema_hash_str.empty()) {
-        std::string error_msg = std::string("parameter " + SCHEMA_HASH + " not specified in url.");
-        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, error_msg);
-        return;
-    }
-
     // valid str format
     int64_t tablet_id;
     int64_t version;
-    int32_t schema_hash;
     try {
         tablet_id = boost::lexical_cast<int64_t>(tablet_id_str);
         version = boost::lexical_cast<int64_t>(version_str);
-        schema_hash = boost::lexical_cast<int64_t>(schema_hash_str);
     } catch (boost::bad_lexical_cast& e) {
         std::string error_msg = std::string("param format is invalid: ") + std::string(e.what());
         HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, error_msg);
         return;
     }
 
-    VLOG_ROW << "get checksum tablet info: " << tablet_id << "-" << version << "-" << schema_hash;
+    VLOG_ROW << "get checksum tablet info: " << tablet_id << "-" << version;
 
-    int64_t checksum = do_checksum(tablet_id, version, schema_hash, req);
+    int64_t checksum = _do_checksum(tablet_id, version);
     if (checksum == -1L) {
         std::string error_msg = std::string("checksum failed");
         HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, error_msg);
@@ -115,8 +103,8 @@ void ChecksumAction::handle(HttpRequest* req) {
     LOG(INFO) << "deal with checksum request finished! tablet id: " << tablet_id;
 }
 
-int64_t ChecksumAction::do_checksum(int64_t tablet_id, int64_t version, int32_t schema_hash, HttpRequest* req) {
-    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+int64_t ChecksumAction::_do_checksum(int64_t tablet_id, int64_t version) {
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "checksum failed: " << check_limit_st.message();
@@ -125,7 +113,7 @@ int64_t ChecksumAction::do_checksum(int64_t tablet_id, int64_t version, int32_t 
 
     Status res = Status::OK();
     uint32_t checksum;
-    EngineChecksumTask engine_task(mem_tracker, tablet_id, schema_hash, version, &checksum);
+    EngineChecksumTask engine_task(mem_tracker, tablet_id, version, &checksum);
     res = engine_task.execute();
     if (!res.ok()) {
         LOG(WARNING) << "checksum failed. status: " << res << ", signature: " << tablet_id;

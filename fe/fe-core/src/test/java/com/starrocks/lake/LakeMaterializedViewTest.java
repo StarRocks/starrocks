@@ -22,7 +22,6 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -62,7 +61,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.hadoop.util.ThreadUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -72,7 +70,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
 public class LakeMaterializedViewTest {
     private static final String DB = "db_for_lake_mv";
@@ -129,16 +128,27 @@ public class LakeMaterializedViewTest {
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
+            S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                    .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                    .setCredential(AwsCredentialInfo.newBuilder()
+                            .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+            FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                    .setFsKey("1").setFsType(FileStoreType.S3)
+                    .setS3FsInfo(s3FileStoreInfo).build();
+
             @Mock
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                        .setCredential(AwsCredentialInfo.newBuilder()
-                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                        .setFsKey("1").setFsType(FileStoreType.S3)
-                        .setS3FsInfo(s3FileStoreInfo).build();
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
             }
         };
 
@@ -250,7 +260,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         FileCacheInfo cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         Partition p1 = newMv.getPartition(partitionId);
@@ -270,7 +280,7 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // Test appendUniqueProperties
@@ -306,7 +316,7 @@ public class LakeMaterializedViewTest {
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
-        Assert.assertEquals(Long.MAX_VALUE, cacheInfo.getTtlSeconds());
+        Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
         Assert.assertTrue(cacheInfo.getAsyncWriteBack());
 
         // replication num
@@ -318,6 +328,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
 
         // check task
         String mvTaskName = "mv-" + mv.getId();
@@ -381,19 +392,6 @@ public class LakeMaterializedViewTest {
 
         starRocksAssert.dropMaterializedView("mv3");
         Assert.assertNull(db.getTable("mv3"));
-    }
-
-    private void waitForSchemaChangeAlterJobFinish() throws Exception {
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-        }
     }
 
     @Test

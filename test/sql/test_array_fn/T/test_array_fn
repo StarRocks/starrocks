@@ -777,5 +777,37 @@ select bitmap_to_array(array_to_bitmap(cast ('null' as array<int>)));
 select REVERSE( cast ('null' as array<int>));
 
 
-
-
+select array_length([map{1:2, 2:3, 3:4}]);
+select array_append([map{1:2, 2:3, 3:4}], map{3: null, 4:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 5:5});
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:null}], map{3:4, 4:null});
+select array_remove([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_position([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+select array_distinct([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+select reverse([map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+select array_slice([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], 2, 3);
+select array_concat([map{1:2, 2:3, 3:4}], [map{null:3, 4:null}]);
+select arrays_overlap([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+select array_intersect([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+select array_contains_all([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+select array_filter([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [1,0,0,0]);
+select cardinality([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+select array_length([row(1,2,3), row(3,4,5)]);
+select array_append([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_contains([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_contains([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_contains([row(1,2,3), row(3,4,null)], row(3,4,null));
+select array_remove([row(1,2,3), row(3,4,5)], row(5,6,7));
+select array_remove([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_remove([row(1,2,3), row(3,4,null)], row(3,4,null));
+select array_position([row(1,2,3), row(3,4,5)], row(3,4,5));
+select array_distinct([row(1,2,3), row(3,4,5), row(3,4,5)]);
+select reverse([row(1,2,3), row(3,4,5)]);
+select array_slice([row(1,2,3), row(3,4,5),row(4,5,6)] ,1,2);
+select array_concat([row(1,2,3), row(3,4,5)], [row(4,5,6), row(5,6,7)]);
+select arrays_overlap([row(1,2,3), row(3,4,5), row(4,5,6)], [row(3,4,5)]);
+select array_intersect([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+select array_contains_all([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+select array_filter([row(1,2,3), row(3,4,5), row(4,5,6)], [0,1,0]);
+select cardinality([row(1,2,3), row(3,4,5)]);

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <string_view>
+#include <unordered_map>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -302,9 +303,11 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
-    if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone_obj())) {
+    auto timestamp_ms = state->timestamp_ms();
+    if (dtv.from_unixtime(timestamp_ms / 1000, state->timezone_obj())) {
         TimestampValue ts;
-        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_ms % 1000);
         return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
     } else {
         return ColumnHelper::create_const_null_column(1);
@@ -471,6 +474,13 @@ DEFINE_UNARY_FN_WITH_IMPL(day_of_weekImpl, v) {
     return day + 1;
 }
 DEFINE_TIME_UNARY_FN(day_of_week, TYPE_DATETIME, TYPE_INT);
+
+// day_of_week_iso
+DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
+    int day = ((DateValue)v).weekday();
+    return (day + 6) % 7 + 1;
+}
+DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
 
 DEFINE_UNARY_FN_WITH_IMPL(time_to_secImpl, v) {
     return static_cast<int64_t>(v);
@@ -884,25 +894,80 @@ Status TimeFunctions::time_slice_close(FunctionContext* context, FunctionContext
 
 // years_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
-    int year1, month1, day1, hour1, mintue1, second1, usec1;
-    int year2, month2, day2, hour2, mintue2, second2, usec2;
-    l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
-    r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    l.to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    r.to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
 
     int year = (year1 - year2);
 
     if (year >= 0) {
-        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) <
+                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     } else {
-        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
-                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + minute1 * 100 + second1) >
+                 (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + minute2 * 100 + second2));
     }
-
     return year;
 }
 
 DEFINE_TIME_BINARY_FN(years_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+// years_diff_v2
+DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diff_v2Impl, to_timestamp, from_timestamp) {
+    int8_t sign = from_timestamp < to_timestamp ? 1 : -1;
+
+    int year1, month1, day1, hour1, minute1, second1, usec1;
+    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &minute1, &second1, &usec1);
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + minute1 * 60000 + second1 * 1000 + usec1;
+    int32_t last_day_of_month1 = DAYS_IN_MONTH[date::is_leap(year1)][month1];
+
+    int year2, month2, day2, hour2, minute2, second2, usec2;
+    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &minute2, &second2, &usec2);
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + minute2 * 60000 + second2 * 1000 + usec2;
+    int32_t last_day_of_month2 = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+
+    int64_t diff = year2 - year1;
+
+    // too many special cases, need handle it carefully
+    // @TODO(silverbullet233): how to simplify so many if-else
+    if (month1 > month2) {
+        diff--;
+    } else if (month1 == month2) {
+        if (last_day_of_month1 != last_day_of_month2) {
+            DCHECK_EQ(month1, 2);
+            // The number of days in Feb is different in normal years and leap years,
+            // and requires special handling
+            if (day1 > day2) {
+                if (day2 != last_day_of_month2) {
+                    diff--;
+                } else {
+                    if (day1 == last_day_of_month1 && us_of_day1 > us_of_day2) {
+                        // date_diff('year', '2017-02-28', '2016-02-29 00:00:00.01') should return 0
+                        diff--;
+                    }
+                    // date_diff('year', '2017-02-28', '2016-02-29') should return 1
+                }
+            } else if (day1 == day2) {
+                if (day2 != last_day_of_month2) {
+                    if (us_of_day1 > us_of_day2) {
+                        // date_diff('year', '2016-02-28', '2015-02-28 00:00:00.01') should return 0
+                        diff--;
+                    }
+                    // date_diff('year', '2016-02-28', '2015-02-28') should return 1
+                }
+            }
+        } else {
+            if ((day1 > day2) || (day1 == day2 && us_of_day1 > us_of_day2)) {
+                diff--;
+            }
+        }
+    }
+
+    return diff * sign;
+}
+
+DEFINE_TIME_BINARY_FN(years_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // months_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
@@ -926,12 +991,77 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
 
 DEFINE_TIME_BINARY_FN(months_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
+// months_diff_v2
+DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diff_v2Impl, to_timestamp, from_timestamp) {
+    int8_t sign = from_timestamp < to_timestamp ? 1 : -1;
+
+    int year1, month1, day1, hour1, mintue1, second1, usec1;
+    std::min(from_timestamp, to_timestamp).to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
+    int64_t us_of_day1 = 1LL * hour1 * 3600000 + mintue1 * 60000 + second1 * 1000 + usec1;
+    int32_t last_day_of_month1 = DAYS_IN_MONTH[date::is_leap(year1)][month1];
+
+    int year2, month2, day2, hour2, mintue2, second2, usec2;
+    std::max(from_timestamp, to_timestamp).to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+    int64_t us_of_day2 = 1LL * hour2 * 3600000 + mintue2 * 60000 + second2 * 1000 + usec2;
+
+    int32_t last_day_of_month2 = DAYS_IN_MONTH[date::is_leap(year2)][month2];
+
+    int64_t diff = (year2 - year1) * 12 + (month2 - month1);
+
+    // too many special cases, need handle it carefully
+    // @TODO(silverbullet233): how to simplify so many if-else
+    if (day1 > day2) {
+        if (day2 != last_day_of_month2) {
+            // the most common cases
+            diff--;
+        } else {
+            if (day1 == last_day_of_month1 && us_of_day1 > us_of_day2) {
+                // both are the last day of their respective month
+                // date_diff('month', '2017-02-28', '2016-02-29 00:00:00.01') should return 11
+                diff--;
+            }
+            // other cases
+            // date_diff('month', '2017-02-28', '2016-02-29') should return 12
+            // date_diff('month', '2017-02-28', '2016-02-28 00:00:00.01') should return 12
+        }
+    } else if (day1 == day2) {
+        if (day2 == last_day_of_month2) {
+            if (day1 == last_day_of_month1) {
+                // both are the last day of their respective month
+                if (us_of_day1 > us_of_day2) {
+                    // date_diff('month', '2016-06-30', '2016-04-30 00:00:00.01') should return 1
+                    diff--;
+                }
+                // date_diff('month', '2016-06-30', '2016-04-30') should return 2
+            }
+            // date_diff('month', '2017-02-28', '2016-02-28') should return 12
+            // date_diff('month', '2016-06-30', '2016-05-30 00:00:00.01') should return 1
+            // date_diff('month', '2016-02-29', '2016-01-29 00:00:00.01') should return 1
+        } else {
+            if (us_of_day1 > us_of_day2) {
+                // date_diff('month', '2016-02-28', '2016-01-28 00:00:00.01') should return 0
+                diff--;
+            }
+            // date_diff('month', '2016-02-28', '2016-01-28') should return 1
+        }
+    }
+
+    return sign * diff;
+}
+
+DEFINE_TIME_BINARY_FN(months_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
 // quarters_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(quarters_diffImpl, l, r) {
     auto diff = months_diffImpl::apply<LType, RType, ResultType>(l, r);
     return diff / 3;
 }
 DEFINE_TIME_BINARY_FN(quarters_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(quarters_diff_v2Impl, l, r) {
+    return months_diff_v2Impl::apply<LType, RType, ResultType>(l, r) / 3;
+}
+DEFINE_TIME_BINARY_FN(quarters_diff_v2, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 // weeks_diff
 DEFINE_BINARY_FUNCTION_WITH_IMPL(weeks_diffImpl, l, r) {
@@ -974,6 +1104,12 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(seconds_diffImpl, l, r) {
     return l.diff_microsecond(r) / USECS_PER_SEC;
 }
 DEFINE_TIME_BINARY_FN(seconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
+
+// milliseconds_diff
+DEFINE_BINARY_FUNCTION_WITH_IMPL(milliseconds_diffImpl, l, r) {
+    return l.diff_microsecond(r) / USECS_PER_MILLIS;
+}
+DEFINE_TIME_BINARY_FN(milliseconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
@@ -1354,7 +1490,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(Function
 
 // from_days
 DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
-    //return 00-00-00 if the argument is negative or too large, according to MySQL
+    // return 00-00-00 if the argument is negative or too large, according to MySQL
     DateValue dv{date::BC_EPOCH_JULIAN + v};
     if (!dv.is_valid()) {
         return DateValue{date::ZERO_EPOCH_JULIAN};
@@ -1785,6 +1921,10 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyyImpl, v) {
     return format_for_yyyyImpl((DateValue)v);
 }
 
+DEFINE_STRING_UNARY_FN_WITH_IMPL(to_iso8601Impl, v) {
+    return timestamp::to_string<true>(((TimestampValue)v).timestamp());
+}
+
 bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, const std::string& fmt) {
     int year, month, day, hour, minute, second, microsecond;
     timestamp_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
@@ -1914,9 +2054,212 @@ StatusOr<ColumnPtr> TimeFunctions::date_format(FunctionContext* context, const C
 
             common_format_process(&viewer_date, &viewer_format, &builder, i);
         }
-
         return builder.build(ColumnHelper::is_all_const(columns));
     }
+}
+
+Status TimeFunctions::jodatime_format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    auto* fc = new FormatCtx();
+    context->set_function_state(scope, fc);
+
+    if (column->only_null()) {
+        fc->is_valid = false;
+        return Status::OK();
+    }
+
+    Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    fc->fmt = slice.to_string();
+
+    fc->len = DateTimeValue::compute_format_len(slice.data, slice.size);
+    if (fc->len >= 128) {
+        fc->is_valid = false;
+        return Status::OK();
+    }
+
+    if (fc->fmt == "yyyyMMdd") {
+        fc->fmt_type = TimeFunctions::yyyyMMdd;
+    } else if (fc->fmt == "yyyy-MM-dd") {
+        fc->fmt_type = TimeFunctions::yyyy_MM_dd;
+    } else if (fc->fmt == "yyyy-MM-dd HH:mm:ss") {
+        fc->fmt_type = TimeFunctions::yyyy_MM_dd_HH_mm_ss;
+    } else if (fc->fmt == "yyyy-MM") {
+        fc->fmt_type = TimeFunctions::yyyy_MM;
+    } else if (fc->fmt == "yyyyMM") {
+        fc->fmt_type = TimeFunctions::yyyyMM;
+    } else if (fc->fmt == "yyyy") {
+        fc->fmt_type = TimeFunctions::yyyy;
+    } else {
+        fc->fmt_type = TimeFunctions::None;
+    }
+
+    fc->is_valid = true;
+    return Status::OK();
+}
+
+Status TimeFunctions::jodatime_format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (fc != nullptr) {
+        delete fc;
+    }
+
+    return Status::OK();
+}
+
+bool joda_standard_format_one_row(const TimestampValue& timestamp_value, char* buf, const std::string& fmt) {
+    int year, month, day, hour, minute, second, microsecond;
+    timestamp_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
+    DateTimeValue dt(TIME_DATETIME, year, month, day, hour, minute, second, microsecond);
+    bool b = dt.to_joda_format_string(fmt.c_str(), fmt.size(), buf);
+    return b;
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> joda_standard_format(const std::string& fmt, int len, const starrocks::Columns& columns) {
+    if (fmt.size() <= 0) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+
+    auto ts_viewer = ColumnViewer<Type>(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    char buf[len];
+    for (size_t i = 0; i < size; ++i) {
+        if (ts_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            auto ts = (TimestampValue)ts_viewer.value(i);
+            bool b = joda_standard_format_one_row(ts, buf, fmt);
+            result.append(Slice(std::string(buf)), !b);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> joda_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
+    if (ctx->fmt_type == TimeFunctions::yyyyMMdd) {
+        return date_format_func<yyyyMMddImpl, Type>(cols, 8);
+    } else if (ctx->fmt_type == TimeFunctions::yyyy_MM_dd) {
+        return date_format_func<yyyy_MM_dd_Impl, Type>(cols, 10);
+    } else if (ctx->fmt_type == TimeFunctions::yyyy_MM_dd_HH_mm_ss) {
+        return date_format_func<yyyyMMddHHmmssImpl, Type>(cols, 28);
+    } else if (ctx->fmt_type == TimeFunctions::yyyy_MM) {
+        return date_format_func<yyyy_MMImpl, Type>(cols, 7);
+    } else if (ctx->fmt_type == TimeFunctions::yyyyMM) {
+        return date_format_func<yyyyMMImpl, Type>(cols, 6);
+    } else if (ctx->fmt_type == TimeFunctions::yyyy) {
+        return date_format_func<yyyyImpl, Type>(cols, 4);
+    } else {
+        return joda_standard_format<Type>(ctx->fmt, 128, cols);
+    }
+}
+
+template <LogicalType Type>
+void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VARCHAR>* viewer_format,
+                                ColumnBuilder<TYPE_VARCHAR>* builder, int i) {
+    if (viewer_format->is_null(i) || viewer_format->value(i).empty()) {
+        builder->append_null();
+        return;
+    }
+
+    auto format = viewer_format->value(i).to_string();
+    if (format == "yyyyMMdd") {
+        builder->append(format_for_yyyyMMdd(viewer_date->value(i)));
+    } else if (format == "yyyy-MM-dd") {
+        builder->append(format_for_yyyy_MM_dd_Impl(viewer_date->value(i)));
+    } else if (format == "yyyy-MM-dd HH:mm:ss") {
+        builder->append(format_for_yyyyMMddHHmmssImpl(viewer_date->value(i)));
+    } else if (format == "yyyy-MM") {
+        builder->append(format_for_yyyy_MMImpl(viewer_date->value(i)));
+    } else if (format == "yyyyMM") {
+        builder->append(format_for_yyyyMMImpl(viewer_date->value(i)));
+    } else if (format == "yyyy") {
+        builder->append(format_for_yyyyImpl(viewer_date->value(i)));
+    } else {
+        char buf[128];
+        auto ts = (TimestampValue)viewer_date->value(i);
+        bool b = joda_standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
+        builder->append(Slice(std::string(buf)), !b);
+    }
+}
+
+// format datetime using joda format
+StatusOr<ColumnPtr> TimeFunctions::jodadatetime_format(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (fc != nullptr && fc->is_valid) {
+        return joda_format<TYPE_DATETIME>(fc, columns);
+    } else {
+        auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
+        ColumnViewer<TYPE_DATETIME> viewer_date(columns[0]);
+        ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
+
+        ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+        for (int i = 0; i < num_rows; ++i) {
+            if (viewer_date.is_null(i)) {
+                builder.append_null();
+                continue;
+            }
+
+            common_joda_format_process(&viewer_date, &viewer_format, &builder, i);
+        }
+
+        return builder.build(all_const);
+    }
+}
+
+// format date using joda format
+StatusOr<ColumnPtr> TimeFunctions::jodadate_format(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    if (fc != nullptr && fc->is_valid) {
+        return joda_format<TYPE_DATE>(fc, columns);
+    } else {
+        int num_rows = columns[0]->size();
+        ColumnViewer<TYPE_DATE> viewer_date(columns[0]);
+        ColumnViewer<TYPE_VARCHAR> viewer_format(columns[1]);
+
+        ColumnBuilder<TYPE_VARCHAR> builder(columns[0]->size());
+
+        for (int i = 0; i < num_rows; ++i) {
+            if (viewer_date.is_null(i)) {
+                builder.append_null();
+                continue;
+            }
+
+            common_joda_format_process(&viewer_date, &viewer_format, &builder, i);
+        }
+        return builder.build(ColumnHelper::is_all_const(columns));
+    }
+}
+
+StatusOr<ColumnPtr> TimeFunctions::date_to_iso8601(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return date_format_func<yyyy_MM_dd_Impl, TYPE_DATE>(columns, 10);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::datetime_to_iso8601(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    return date_format_func<to_iso8601Impl, TYPE_DATETIME>(columns, 26);
 }
 
 Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -1931,6 +2274,10 @@ Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionC
     ColumnPtr column = context->get_constant_column(0);
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     auto format_value = slice.to_string();
+
+    // to lower case
+    std::transform(format_value.begin(), format_value.end(), format_value.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     ScalarFunction function;
     if (format_value == "second") {
@@ -2047,6 +2394,10 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 
     Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     auto format_value = slice.to_string();
+
+    // to lower case
+    std::transform(format_value.begin(), format_value.end(), format_value.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     ScalarFunction function;
     if (format_value == "day") {
@@ -2369,6 +2720,81 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// date_diff
+using DateDiffFunctionImpl = int64_t (*)(const TimestampValue&, const TimestampValue&);
+const static std::unordered_map<std::string, std::pair<ScalarFunction, DateDiffFunctionImpl>> date_diff_func_map = {
+        {"millisecond",
+         {&TimeFunctions::milliseconds_diff, &milliseconds_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"second", {&TimeFunctions::seconds_diff, &seconds_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"minute", {&TimeFunctions::minutes_diff, &minutes_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"hour", {&TimeFunctions::hours_diff, &hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"day", {&TimeFunctions::days_diff, &days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"week", {&TimeFunctions::weeks_diff, &weeks_diffImpl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"month",
+         {&TimeFunctions::months_diff_v2, &months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"quarter",
+         {&TimeFunctions::quarters_diff_v2, &quarters_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}},
+        {"year", {&TimeFunctions::years_diff_v2, &years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>}}};
+
+StatusOr<ColumnPtr> TimeFunctions::datediff(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (context->is_notnull_constant_column(DateDiffCtx::TYPE_INDEX)) {
+        auto ctx = reinterpret_cast<DateDiffCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        return ctx->function(context, {columns[DateDiffCtx::LHS_INDEX], columns[DateDiffCtx::RHS_INDEX]});
+    }
+
+    ColumnViewer<TYPE_VARCHAR> type_column(columns[DateDiffCtx::TYPE_INDEX]);
+    ColumnViewer<TYPE_DATETIME> lv_column(columns[DateDiffCtx::LHS_INDEX]);
+    ColumnViewer<TYPE_DATETIME> rv_column(columns[DateDiffCtx::RHS_INDEX]);
+    auto size = columns[DateDiffCtx::TYPE_INDEX]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (lv_column.is_null(row) || rv_column.is_null(row) || type_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue l = (TimestampValue)lv_column.value(row);
+        TimestampValue r = (TimestampValue)rv_column.value(row);
+        auto type_str = type_column.value(row).to_string();
+        transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
+        auto iter = date_diff_func_map.find(type_str);
+        if (iter != date_diff_func_map.end()) {
+            result.append(iter->second.second(l, r));
+        } else {
+            return Status::InvalidArgument(
+                    "unit of date_diff must be one of year/month/quarter/day/hour/minute/second/millisecond");
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::datediff_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(DateDiffCtx::TYPE_INDEX)) {
+        return Status::OK();
+    }
+    ColumnPtr column = context->get_constant_column(DateDiffCtx::TYPE_INDEX);
+    auto type_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column).to_string();
+    transform(type_str.begin(), type_str.end(), type_str.begin(), ::tolower);
+    auto iter = date_diff_func_map.find(type_str);
+    if (iter == date_diff_func_map.end()) {
+        return Status::InvalidArgument("type column should be one of day/hour/minute/second/millisecond");
+    }
+    auto fc = new TimeFunctions::DateDiffCtx();
+    fc->function = iter->second.first;
+
+    context->set_function_state(scope, fc);
+    return Status::OK();
+}
+
+Status TimeFunctions::datediff_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto fc = reinterpret_cast<DateDiffCtx*>(context->get_function_state(scope));
+        delete fc;
+    }
+    return Status::OK();
 }
 
 // last_day

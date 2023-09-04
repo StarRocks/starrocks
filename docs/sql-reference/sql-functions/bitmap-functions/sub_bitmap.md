@@ -6,6 +6,8 @@ Intercepts `len` elements from a BITMAP value `src` starting from the position s
 
 This function is mainly used for scenarios such as paginated queries. It is supported from v2.5.
 
+This function is similar to [bitmap_subset_limit](./bitmap_subset_limit.md). The difference is that this function intercepts elements starting from an offset whereas bitmap_subset_limit intercepts elements starting from an element value (`start_range`).
+
 ## Syntax
 
 ```Haskell
@@ -15,22 +17,19 @@ BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ## Parameters
 
 - `src`: the BITMAP value from which you want to obtain elements.
-- `offset`: the starting position. It must be a BIGINT value. If the starting position specified by this parameter exceeds the actual length of the BITMAP value, NULL is returned. See Example 6.
+- `offset`: the starting position. It must be a BIGINT value. Note the following points when you use `offset`:
+  - Offsets start from 0.
+  - Negative offsets are counted from right to left. See Examples 3 and 4.
+  - If the starting position specified by `offset` exceeds the actual length of the BITMAP value, NULL is returned. See Example 6.
 - `len`: the number of elements to obtain. It must be a BIGINT value greater than or equal to 1. If the number of matching elements is less than the value of `len`, all the matching elements are returned. See Examples 2, 3, and 7.
 
 ## Return value
 
 Returns a value of the BITMAP type. NULL is returned if any of the input parameters is invalid.
 
-## Usage notes
-
-- Offsets start from 0.
-- Negative offsets are counted from right to left.
-- If the starting position specified by `offset` exceeds the actual length of the BITMAP value, NULL is returned.
-
 ## Examples
 
-In the following examples, the input of sub_bitmap() is the output of bitmap_from_string(). For example, `bitmap_from_string('1,1,3,1,5,3,5,7,7,9')` returns `1, 3, 5, 7, 9`. sub_bitmap() takes this BITMAP value as the input. For more information about bitmap_from_string(), see [bitmap_from_string](./bitmap_from_string.md).
+In the following examples, the input of sub_bitmap() is the output of [bitmap_from_string](./bitmap_from_string.md). For example, `bitmap_from_string('1,1,3,1,5,3,5,7,7,9')` returns `1, 3, 5, 7, 9`. sub_bitmap() takes this BITMAP value as the input.
 
 Example 1: Obtain two elements from the BITMAP value with the offset set to 0.
 
@@ -65,7 +64,7 @@ select bitmap_to_string(sub_bitmap(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), -3
 +-------+
 ```
 
-Example 4: Obtain two elements from the BITMAP value with the offset set to -3. 
+Example 4: Obtain two elements from the BITMAP value with the offset set to -3.
 
 ```Plaintext
 select bitmap_to_string(sub_bitmap(bitmap_from_string('1,1,3,1,5,3,5,7,7,9'), -3, 2)) value;

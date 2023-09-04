@@ -105,6 +105,13 @@ select ifnull(ass, ai), ass,ai from tc order by i;
 ["a","b"]	["a","b"]	None
 None	None	None
 -- !result
+select ifnull(ai, null) from tc order by i;
+-- result:
+[1,2]
+[1,2]
+None
+None
+-- !result
 select if(i>2, ms, mi) from tc order by i;
 -- result:
 {1:"1",null:"2"}
@@ -117,6 +124,13 @@ select if(i>2, ass, ai) from tc order by i;
 ["1","2"]
 ["1","2"]
 ["a","b"]
+None
+-- !result
+select if(ai is not null, map_from_arrays(['a', 'b'], [1, 2]), null) from tc order by i;
+-- result:
+{"a":1,"b":2}
+{"a":1,"b":2}
+None
 None
 -- !result
 select nullif(ms, mi), ms,mi from tc order by i;

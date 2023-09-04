@@ -85,18 +85,10 @@ public class RemoteScanRangeLocations {
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
         do {
-            if (remainingBytes <= splitSize) {
+            if (remainingBytes < 2 * splitSize) {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
                         blockDesc, offset + length - remainingBytes,
                         remainingBytes);
-                remainingBytes = 0;
-            } else if (remainingBytes <= 2 * splitSize) {
-                long mid = (remainingBytes + 1) / 2;
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes, mid);
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
-                        blockDesc, offset + length - remainingBytes + mid,
-                        remainingBytes - mid);
                 remainingBytes = 0;
             } else {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
@@ -119,6 +111,7 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setLength(length);
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
+        hdfsScanRange.setModification_time(fileDesc.getModificationTime());
         hdfsScanRange.setFile_format(partition.getFormat().toThrift());
         if (isTextFormat(hdfsScanRange.getFile_format())) {
             hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());

@@ -34,12 +34,14 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -111,6 +113,7 @@ public class ConnectContext {
 
     // mysql net
     protected MysqlChannel mysqlChannel;
+
     // state
     protected QueryState state;
     protected long returnRows;
@@ -180,9 +183,12 @@ public class ConnectContext {
     // used to set mysql result package
     protected boolean isLastStmt;
     // set true when user dump query through HTTP
-    protected boolean isQueryDump = false;
+    protected boolean isHTTPQueryDump = false;
 
     protected boolean isStatisticsConnection = false;
+    protected boolean isStatisticsJob = false;
+    protected boolean isStatisticsContext = false;
+    protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
 
@@ -190,6 +196,7 @@ public class ConnectContext {
     protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     protected PlannerProfile plannerProfile;
+    protected StatementBase.ExplainLevel explainLevel;
 
     protected TWorkGroup resourceGroup;
 
@@ -236,7 +243,6 @@ public class ConnectContext {
         userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
 
         mysqlChannel = new MysqlChannel(channel);
@@ -245,6 +251,10 @@ public class ConnectContext {
         }
 
         this.sslContext = sslContext;
+
+        if (shouldDumpQuery()) {
+            this.dumpInfo = new QueryDumpInfo(this);
+        }
     }
 
     public long getStmtId() {
@@ -458,7 +468,7 @@ public class ConnectContext {
     }
 
     public void setErrorCodeOnce(String errorCode) {
-        if (this.errorCode == null || this.errorCode.isEmpty()) {
+        if (Strings.isNullOrEmpty(this.errorCode)) {
             this.errorCode = errorCode;
         }
     }
@@ -546,12 +556,16 @@ public class ConnectContext {
         this.isLastStmt = isLastStmt;
     }
 
-    public void setIsQueryDump(boolean isQueryDump) {
-        this.isQueryDump = isQueryDump;
+    public void setIsHTTPQueryDump(boolean isHTTPQueryDump) {
+        this.isHTTPQueryDump = isHTTPQueryDump;
     }
 
-    public boolean isQueryDump() {
-        return this.isQueryDump;
+    public boolean isHTTPQueryDump() {
+        return isHTTPQueryDump;
+    }
+
+    public boolean shouldDumpQuery() {
+        return this.isHTTPQueryDump || sessionVariable.getEnableQueryDump();
     }
 
     public DumpInfo getDumpInfo() {
@@ -572,6 +586,14 @@ public class ConnectContext {
 
     public PlannerProfile getPlannerProfile() {
         return plannerProfile;
+    }
+
+    public StatementBase.ExplainLevel getExplainLevel() {
+        return explainLevel;
+    }
+
+    public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
+        this.explainLevel = explainLevel;
     }
 
     public TWorkGroup getResourceGroup() {
@@ -613,6 +635,26 @@ public class ConnectContext {
         isStatisticsConnection = statisticsConnection;
     }
 
+    public boolean isStatisticsJob() {
+        return isStatisticsJob || isStatisticsContext;
+    }
+
+    public void setStatisticsJob(boolean statisticsJob) {
+        isStatisticsJob = statisticsJob;
+    }
+
+    public void setStatisticsContext(boolean isStatisticsContext) {
+        this.isStatisticsContext = isStatisticsContext;
+    }
+
+    public boolean isNeedQueued() {
+        return needQueued;
+    }
+
+    public void setNeedQueued(boolean needQueued) {
+        this.needQueued = needQueued;
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -634,7 +676,6 @@ public class ConnectContext {
         if (killConnection) {
             isKilled = true;
         }
-        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }
@@ -678,9 +719,6 @@ public class ConnectContext {
             }
         } else {
             long timeoutSecond = sessionVariable.getQueryTimeoutS();
-            if (isPending) {
-                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
-            }
             if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
@@ -767,7 +805,13 @@ public class ConnectContext {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
-            row.add(getMysqlChannel().getRemoteHostPortString());
+            // Ip + port
+            if (ConnectContext.this instanceof HttpConnectContext) {
+                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddres();
+                row.add(remoteAddress);
+            } else {
+                row.add(getMysqlChannel().getRemoteHostPortString());
+            }
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());

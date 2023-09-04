@@ -56,6 +56,18 @@ Status SchemaHelper::list_materialized_view_status(const std::string& ip, const 
                                                        });
 }
 
+Status SchemaHelper::list_pipes(const std::string& ip, int32_t port, const TListPipesParams& req,
+                                TListPipesResult* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listPipes(*res, req); });
+}
+
+Status SchemaHelper::list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
+                                     TListPipeFilesResult* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listPipeFiles(*res, req); });
+}
+
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                      TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -70,7 +82,7 @@ Status SchemaHelper::describe_table(const std::string& ip, const int32_t port, c
             [&request, &result](FrontendServiceConnection& client) { client->describeTable(*result, request); });
 }
 
-Status SchemaHelper::show_varialbes(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
+Status SchemaHelper::show_variables(const std::string& ip, const int32_t port, const TShowVariableRequest& request,
                                     TShowVariableResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,

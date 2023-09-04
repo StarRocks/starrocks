@@ -45,7 +45,8 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
 
     auto io_executor = _aggregator->spill_channel()->io_executor();
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+        auto spiller = _aggregator->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
@@ -56,7 +57,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
                     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
@@ -174,8 +175,14 @@ bool SpillableAggregateDistinctBlockingSourceOperator::has_output() const {
     if (!_aggregator->spiller()->spilled()) {
         return false;
     }
+    if (_accumulator.has_output()) {
+        return true;
+    }
     // has output data from spiller.
     if (_aggregator->spiller()->has_output_data()) {
+        return true;
+    }
+    if (_aggregator->spiller()->is_cancel()) {
         return true;
     }
     // has eos chunk
@@ -191,6 +198,12 @@ bool SpillableAggregateDistinctBlockingSourceOperator::is_finished() const {
     }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateDistinctBlockingSourceOperator::is_finished();
+    }
+    if (_accumulator.has_output()) {
+        return false;
+    }
+    if (_aggregator->spiller()->is_cancel()) {
+        return true;
     }
     return _aggregator->is_spilled_eos() && !_has_last_chunk;
 }
@@ -221,11 +234,15 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
     DCHECK(_accumulator.need_input());
     ChunkPtr res;
 
+    if (_accumulator.has_output()) {
+        auto accumulated = std::move(_accumulator.pull());
+        return accumulated;
+    }
+
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk,
-                         _aggregator->spiller()->restore(state, *executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
-
+        auto& spiller = _aggregator->spiller();
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

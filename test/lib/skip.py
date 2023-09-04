@@ -59,4 +59,10 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "refresh materialized view.*",
+    "REFRESH MATERIALIZED VIEW.*"
 ]
+
+skip_files = set([
+    # 'test_parquet_dict_null_predicate'
+])

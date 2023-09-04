@@ -28,9 +28,11 @@ select coalesce(null,ms, mi) from tc order by i;
 
 select ifnull(ms, mi), ms,mi from tc order by i;
 select ifnull(ass, ai), ass,ai from tc order by i;
+select ifnull(ai, null) from tc order by i;
 
 select if(i>2, ms, mi) from tc order by i;
 select if(i>2, ass, ai) from tc order by i;
+select if(ai is not null, map_from_arrays(['a', 'b'], [1, 2]), null) from tc order by i;
 
 select nullif(ms, mi), ms,mi from tc order by i;
 select nullif(ai, ass), ai, ass from tc order by i;

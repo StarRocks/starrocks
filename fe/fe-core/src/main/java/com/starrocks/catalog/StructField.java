@@ -20,6 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
@@ -112,7 +113,7 @@ public class StructField {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(name, type);
+        return Objects.hashCode(name.toLowerCase(), type);
     }
 
     @Override
@@ -122,7 +123,7 @@ public class StructField {
         }
         StructField otherStructField = (StructField) other;
         // Both are named struct field
-        return Objects.equal(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
+        return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type);
     }
 
     @Override

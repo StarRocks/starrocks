@@ -57,7 +57,8 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+        auto& spiller = _aggregator->spiller();
+        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
@@ -68,7 +69,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
+                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
@@ -106,6 +107,14 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
     }
+    return Status::OK();
+}
+
+Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
     return Status::OK();
 }
 

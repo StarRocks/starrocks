@@ -1,0 +1,741 @@
+-- name: test_date_diff
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-29');
+-- result:
+1
+-- !result
+select date_diff('year', '2017-02-28', '2016-02-29 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', '2017-02-28', '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('year', '2016-02-29', '2015-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-29', '2015-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-28', '2015-02-28');
+-- result:
+1
+-- !result
+select date_diff('year', '2016-02-28', '2015-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', '2017-06-30', '2016-05-30');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-02-29');
+-- result:
+1
+-- !result
+select date_diff('quarter', '2016-05-29', '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-28');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-28 00:00:00.001');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-29');
+-- result:
+3
+-- !result
+select date_diff('month', '2016-05-29', '2016-02-29 00:00:00.001');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-05-29', '2016-03-01');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-02-29', '2015-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-29', '2015-02-28 00:00:00.01');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-28', '2015-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2016-02-28', '2015-02-28 00:00:00.01');
+-- result:
+11
+-- !result
+select date_diff('month', '2016-06-30', '2016-04-30');
+-- result:
+2
+-- !result
+select date_diff('month', '2016-06-30', '2016-04-30 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-28');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-28 00:00:00.001');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-29');
+-- result:
+12
+-- !result
+select date_diff('month', '2017-02-28', '2016-02-29 00:00:00.001');
+-- result:
+11
+-- !result
+select date_diff('day', '2016-02-29', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29', '2016-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.01', '2016-02-28');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.01');
+-- result:
+1
+-- !result
+select date_diff('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.02');
+-- result:
+1
+-- !result
+select date_diff('hour', '2016-02-29', '2016-02-28');
+-- result:
+24
+-- !result
+select date_diff('hour', '2016-02-29', '2016-02-28 00:00:00.001');
+-- result:
+23
+-- !result
+select date_diff('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001');
+-- result:
+24
+-- !result
+select date_diff('minute', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+4319
+-- !result
+select date_diff('second', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+259199
+-- !result
+select date_diff('millisecond', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001');
+-- result:
+259199999
+-- !result
+select date_diff(NULL, '2016-03-01', '2016-02-27');
+-- result:
+None
+-- !result
+select date_diff('unknown_unit', '2016-03-01', '2016-02-27');
+-- result:
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
+-- !result
+select date_diff('day', NULL, '2016-02-27');
+-- result:
+None
+-- !result
+select date_diff('day', '2016-02-27', NULL);
+-- result:
+None
+-- !result
+set sql_dialect='Trino';
+-- result:
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-28 00:00:00.01');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-29');
+-- result:
+-1
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-02-29 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('year', timestamp '2017-02-28', timestamp '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-02-29');
+-- result:
+-1
+-- !result
+select date_diff('quarter', timestamp '2016-05-29', timestamp '2016-03-01');
+-- result:
+0
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-28');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-29');
+-- result:
+-3
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-02-29 00:00:00.001');
+-- result:
+-2
+-- !result
+select date_diff('month', timestamp '2016-05-29', timestamp '2016-03-01');
+-- result:
+-2
+-- !result
+select date_diff('month', timestamp '2016-05-30', timestamp '2016-06-30');
+-- result:
+1
+-- !result
+select date_diff('month', timestamp '2016-05-31', timestamp '2016-06-30');
+-- result:
+1
+-- !result
+select date_diff('day', timestamp '2016-02-29', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29', timestamp '2016-02-28 00:00:00.01');
+-- result:
+0
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.01', timestamp '2016-02-28');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.02', timestamp '2016-02-28 00:00:00.01');
+-- result:
+-1
+-- !result
+select date_diff('day', timestamp '2016-02-29 00:00:00.02', timestamp '2016-02-28 00:00:00.02');
+-- result:
+-1
+-- !result
+select date_diff('hour', timestamp '2016-02-29', timestamp '2016-02-28');
+-- result:
+-24
+-- !result
+select date_diff('hour', timestamp '2016-02-29', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-23
+-- !result
+select date_diff('hour', timestamp '2016-02-29 00:00:00.002', timestamp '2016-02-28 00:00:00.001');
+-- result:
+-24
+-- !result
+select date_diff('minute', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-4319
+-- !result
+select date_diff('second', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-259199
+-- !result
+select date_diff('millisecond', timestamp '2016-03-01 00:00:00.000', timestamp '2016-02-27 00:00:00.001');
+-- result:
+-259199999
+-- !result
+-- name: test_date_diff_mixed_const_and_non_const
+CREATE TABLE t1 (
+  t String NULL,
+  lhs String NULL,
+  rhs String NULL
+) ENGINE=OLAP
+DUPLICATE KEY(t)
+DISTRIBUTED BY HASH(t) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+select date_diff(t, lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('day', lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('month', lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff('invalid-type', lhs, rhs) from t1;
+-- result:
+[REGEX].*type column should be one of day/hour/minute/second/millisecond*
+-- !result
+select date_diff(NULL, lhs, rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, '2017-02-28', rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, NULL, rhs) from t1;
+-- result:
+-- !result
+select date_diff(t, lhs, '2016-02-28') from t1;
+-- result:
+-- !result
+select date_diff(t, lhs, NULL) from t1;
+-- result:
+-- !result
+INSERT INTO t1 
+VALUES 
+    ('year', '2017-02-28', '2016-02-28'),
+    ('year', '2017-02-28', '2016-02-28 00:00:00.01'),
+    ('year', '2017-02-28', '2016-02-29'),
+    ('year', '2017-02-28', '2016-02-29 00:00:00.01'),
+    ('year', '2017-02-28', '2016-03-01'),
+
+    ('year', '2016-02-29', '2015-02-28'),
+    ('year', '2016-02-29', '2015-02-28 00:00:00.01'),
+    ('year', '2016-02-28', '2015-02-28'),
+    ('year', '2016-02-28', '2015-02-28 00:00:00.01'),
+
+    ('year', '2017-06-30', '2016-05-30'),
+
+    ('quarter', '2016-05-29', '2016-02-28'),
+    ('quarter', '2016-05-29', '2016-02-29'),
+    ('quarter', '2016-05-29', '2016-03-01'),
+
+    ('month', '2016-05-29', '2016-02-28'),
+    ('month', '2016-05-29', '2016-02-28 00:00:00.001'),
+    ('month', '2016-05-29', '2016-02-29'),
+    ('month', '2016-05-29', '2016-02-29 00:00:00.001'),
+    ('month', '2016-05-29', '2016-03-01'),
+    ('month', '2016-02-29', '2015-02-28'),
+    ('month', '2016-02-29', '2015-02-28 00:00:00.01'),
+    ('month', '2016-02-28', '2015-02-28'),
+    ('month', '2016-02-28', '2015-02-28 00:00:00.01'),
+
+    ('month', '2016-06-30', '2016-04-30'),
+    ('month', '2016-06-30', '2016-04-30 00:00:00.01'),
+
+    ('month', '2017-02-28', '2016-02-28'),
+    ('month', '2017-02-28', '2016-02-28 00:00:00.001'),
+    ('month', '2017-02-28', '2016-02-29'),
+    ('month', '2017-02-28', '2016-02-29 00:00:00.001'),
+
+
+    ('day', '2016-02-29', '2016-02-28'),
+    ('day', '2016-02-29', '2016-02-28 00:00:00.01'),
+    ('day', '2016-02-29 00:00:00.01', '2016-02-28'),
+    ('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.01'),
+    ('day', '2016-02-29 00:00:00.02', '2016-02-28 00:00:00.02'),
+
+    ('hour', '2016-02-29', '2016-02-28'),
+    ('hour', '2016-02-29', '2016-02-28 00:00:00.001'),
+    ('hour', '2016-02-29 00:00:00.002', '2016-02-28 00:00:00.001'),
+
+    ('minute', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+    ('second', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+    ('millisecond', '2016-03-01 00:00:00.000', '2016-02-27 00:00:00.001'),
+
+    (NULL, '2016-03-01', '2016-02-27'),
+    ('day', NULL, '2016-02-27'),
+    ('day', '2016-02-27', NULL);
+-- result:
+-- !result
+select date_diff(t, lhs, rhs), t, lhs, rhs from t1 order by t, lhs, rhs;
+-- result:
+None	None	2016-03-01	2016-02-27
+None	day	None	2016-02-27
+None	day	2016-02-27	None
+1	day	2016-02-29	2016-02-28
+0	day	2016-02-29	2016-02-28 00:00:00.01
+1	day	2016-02-29 00:00:00.01	2016-02-28
+1	day	2016-02-29 00:00:00.02	2016-02-28 00:00:00.01
+1	day	2016-02-29 00:00:00.02	2016-02-28 00:00:00.02
+24	hour	2016-02-29	2016-02-28
+23	hour	2016-02-29	2016-02-28 00:00:00.001
+24	hour	2016-02-29 00:00:00.002	2016-02-28 00:00:00.001
+259199999	millisecond	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+4319	minute	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+12	month	2016-02-28	2015-02-28
+11	month	2016-02-28	2015-02-28 00:00:00.01
+12	month	2016-02-29	2015-02-28
+12	month	2016-02-29	2015-02-28 00:00:00.01
+3	month	2016-05-29	2016-02-28
+3	month	2016-05-29	2016-02-28 00:00:00.001
+3	month	2016-05-29	2016-02-29
+2	month	2016-05-29	2016-02-29 00:00:00.001
+2	month	2016-05-29	2016-03-01
+2	month	2016-06-30	2016-04-30
+1	month	2016-06-30	2016-04-30 00:00:00.01
+12	month	2017-02-28	2016-02-28
+12	month	2017-02-28	2016-02-28 00:00:00.001
+12	month	2017-02-28	2016-02-29
+11	month	2017-02-28	2016-02-29 00:00:00.001
+1	quarter	2016-05-29	2016-02-28
+1	quarter	2016-05-29	2016-02-29
+0	quarter	2016-05-29	2016-03-01
+259199	second	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+1	year	2016-02-28	2015-02-28
+0	year	2016-02-28	2015-02-28 00:00:00.01
+1	year	2016-02-29	2015-02-28
+1	year	2016-02-29	2015-02-28 00:00:00.01
+1	year	2017-02-28	2016-02-28
+1	year	2017-02-28	2016-02-28 00:00:00.01
+1	year	2017-02-28	2016-02-29
+0	year	2017-02-28	2016-02-29 00:00:00.01
+0	year	2017-02-28	2016-03-01
+1	year	2017-06-30	2016-05-30
+-- !result
+select date_diff('day', lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
+-- result:
+3	2016-03-01	2016-02-27
+None	None	2016-02-27
+None	2016-02-27	None
+1	2016-02-29	2016-02-28
+0	2016-02-29	2016-02-28 00:00:00.01
+1	2016-02-29 00:00:00.01	2016-02-28
+1	2016-02-29 00:00:00.02	2016-02-28 00:00:00.01
+1	2016-02-29 00:00:00.02	2016-02-28 00:00:00.02
+1	2016-02-29	2016-02-28
+0	2016-02-29	2016-02-28 00:00:00.001
+1	2016-02-29 00:00:00.002	2016-02-28 00:00:00.001
+2	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+2	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+365	2016-02-28	2015-02-28
+364	2016-02-28	2015-02-28 00:00:00.01
+366	2016-02-29	2015-02-28
+365	2016-02-29	2015-02-28 00:00:00.01
+91	2016-05-29	2016-02-28
+90	2016-05-29	2016-02-28 00:00:00.001
+90	2016-05-29	2016-02-29
+89	2016-05-29	2016-02-29 00:00:00.001
+89	2016-05-29	2016-03-01
+61	2016-06-30	2016-04-30
+60	2016-06-30	2016-04-30 00:00:00.01
+366	2017-02-28	2016-02-28
+365	2017-02-28	2016-02-28 00:00:00.001
+365	2017-02-28	2016-02-29
+364	2017-02-28	2016-02-29 00:00:00.001
+91	2016-05-29	2016-02-28
+90	2016-05-29	2016-02-29
+89	2016-05-29	2016-03-01
+2	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+365	2016-02-28	2015-02-28
+364	2016-02-28	2015-02-28 00:00:00.01
+366	2016-02-29	2015-02-28
+365	2016-02-29	2015-02-28 00:00:00.01
+366	2017-02-28	2016-02-28
+365	2017-02-28	2016-02-28 00:00:00.01
+365	2017-02-28	2016-02-29
+364	2017-02-28	2016-02-29 00:00:00.01
+364	2017-02-28	2016-03-01
+396	2017-06-30	2016-05-30
+-- !result
+select date_diff('month', lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
+-- result:
+0	2016-03-01	2016-02-27
+None	None	2016-02-27
+None	2016-02-27	None
+0	2016-02-29	2016-02-28
+0	2016-02-29	2016-02-28 00:00:00.01
+0	2016-02-29 00:00:00.01	2016-02-28
+0	2016-02-29 00:00:00.02	2016-02-28 00:00:00.01
+0	2016-02-29 00:00:00.02	2016-02-28 00:00:00.02
+0	2016-02-29	2016-02-28
+0	2016-02-29	2016-02-28 00:00:00.001
+0	2016-02-29 00:00:00.002	2016-02-28 00:00:00.001
+0	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+0	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+12	2016-02-28	2015-02-28
+11	2016-02-28	2015-02-28 00:00:00.01
+12	2016-02-29	2015-02-28
+12	2016-02-29	2015-02-28 00:00:00.01
+3	2016-05-29	2016-02-28
+3	2016-05-29	2016-02-28 00:00:00.001
+3	2016-05-29	2016-02-29
+2	2016-05-29	2016-02-29 00:00:00.001
+2	2016-05-29	2016-03-01
+2	2016-06-30	2016-04-30
+1	2016-06-30	2016-04-30 00:00:00.01
+12	2017-02-28	2016-02-28
+12	2017-02-28	2016-02-28 00:00:00.001
+12	2017-02-28	2016-02-29
+11	2017-02-28	2016-02-29 00:00:00.001
+3	2016-05-29	2016-02-28
+3	2016-05-29	2016-02-29
+2	2016-05-29	2016-03-01
+0	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+12	2016-02-28	2015-02-28
+11	2016-02-28	2015-02-28 00:00:00.01
+12	2016-02-29	2015-02-28
+12	2016-02-29	2015-02-28 00:00:00.01
+12	2017-02-28	2016-02-28
+12	2017-02-28	2016-02-28 00:00:00.01
+12	2017-02-28	2016-02-29
+11	2017-02-28	2016-02-29 00:00:00.01
+11	2017-02-28	2016-03-01
+13	2017-06-30	2016-05-30
+-- !result
+select date_diff(NULL, lhs, rhs), lhs, rhs from t1 order by t, lhs, rhs;
+-- result:
+None	2016-03-01	2016-02-27
+None	None	2016-02-27
+None	2016-02-27	None
+None	2016-02-29	2016-02-28
+None	2016-02-29	2016-02-28 00:00:00.01
+None	2016-02-29 00:00:00.01	2016-02-28
+None	2016-02-29 00:00:00.02	2016-02-28 00:00:00.01
+None	2016-02-29 00:00:00.02	2016-02-28 00:00:00.02
+None	2016-02-29	2016-02-28
+None	2016-02-29	2016-02-28 00:00:00.001
+None	2016-02-29 00:00:00.002	2016-02-28 00:00:00.001
+None	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+None	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+None	2016-02-28	2015-02-28
+None	2016-02-28	2015-02-28 00:00:00.01
+None	2016-02-29	2015-02-28
+None	2016-02-29	2015-02-28 00:00:00.01
+None	2016-05-29	2016-02-28
+None	2016-05-29	2016-02-28 00:00:00.001
+None	2016-05-29	2016-02-29
+None	2016-05-29	2016-02-29 00:00:00.001
+None	2016-05-29	2016-03-01
+None	2016-06-30	2016-04-30
+None	2016-06-30	2016-04-30 00:00:00.01
+None	2017-02-28	2016-02-28
+None	2017-02-28	2016-02-28 00:00:00.001
+None	2017-02-28	2016-02-29
+None	2017-02-28	2016-02-29 00:00:00.001
+None	2016-05-29	2016-02-28
+None	2016-05-29	2016-02-29
+None	2016-05-29	2016-03-01
+None	2016-03-01 00:00:00.000	2016-02-27 00:00:00.001
+None	2016-02-28	2015-02-28
+None	2016-02-28	2015-02-28 00:00:00.01
+None	2016-02-29	2015-02-28
+None	2016-02-29	2015-02-28 00:00:00.01
+None	2017-02-28	2016-02-28
+None	2017-02-28	2016-02-28 00:00:00.01
+None	2017-02-28	2016-02-29
+None	2017-02-28	2016-02-29 00:00:00.01
+None	2017-02-28	2016-03-01
+None	2017-06-30	2016-05-30
+-- !result
+select date_diff(t, '2017-02-28', rhs), t, rhs from t1 order by t, lhs, rhs;
+-- result:
+None	None	2016-02-27
+367	day	2016-02-27
+None	day	None
+366	day	2016-02-28
+365	day	2016-02-28 00:00:00.01
+366	day	2016-02-28
+365	day	2016-02-28 00:00:00.01
+365	day	2016-02-28 00:00:00.02
+8784	hour	2016-02-28
+8783	hour	2016-02-28 00:00:00.001
+8783	hour	2016-02-28 00:00:00.001
+31708799999	millisecond	2016-02-27 00:00:00.001
+528479	minute	2016-02-27 00:00:00.001
+24	month	2015-02-28
+23	month	2015-02-28 00:00:00.01
+24	month	2015-02-28
+23	month	2015-02-28 00:00:00.01
+12	month	2016-02-28
+12	month	2016-02-28 00:00:00.001
+12	month	2016-02-29
+11	month	2016-02-29 00:00:00.001
+11	month	2016-03-01
+10	month	2016-04-30
+9	month	2016-04-30 00:00:00.01
+12	month	2016-02-28
+12	month	2016-02-28 00:00:00.001
+12	month	2016-02-29
+11	month	2016-02-29 00:00:00.001
+4	quarter	2016-02-28
+4	quarter	2016-02-29
+3	quarter	2016-03-01
+31708799	second	2016-02-27 00:00:00.001
+2	year	2015-02-28
+1	year	2015-02-28 00:00:00.01
+2	year	2015-02-28
+1	year	2015-02-28 00:00:00.01
+1	year	2016-02-28
+1	year	2016-02-28 00:00:00.01
+1	year	2016-02-29
+0	year	2016-02-29 00:00:00.01
+0	year	2016-03-01
+0	year	2016-05-30
+-- !result
+select date_diff(t, NULL, rhs), t, rhs from t1 order by t, lhs, rhs;
+-- result:
+None	None	2016-02-27
+None	day	2016-02-27
+None	day	None
+None	day	2016-02-28
+None	day	2016-02-28 00:00:00.01
+None	day	2016-02-28
+None	day	2016-02-28 00:00:00.01
+None	day	2016-02-28 00:00:00.02
+None	hour	2016-02-28
+None	hour	2016-02-28 00:00:00.001
+None	hour	2016-02-28 00:00:00.001
+None	millisecond	2016-02-27 00:00:00.001
+None	minute	2016-02-27 00:00:00.001
+None	month	2015-02-28
+None	month	2015-02-28 00:00:00.01
+None	month	2015-02-28
+None	month	2015-02-28 00:00:00.01
+None	month	2016-02-28
+None	month	2016-02-28 00:00:00.001
+None	month	2016-02-29
+None	month	2016-02-29 00:00:00.001
+None	month	2016-03-01
+None	month	2016-04-30
+None	month	2016-04-30 00:00:00.01
+None	month	2016-02-28
+None	month	2016-02-28 00:00:00.001
+None	month	2016-02-29
+None	month	2016-02-29 00:00:00.001
+None	quarter	2016-02-28
+None	quarter	2016-02-29
+None	quarter	2016-03-01
+None	second	2016-02-27 00:00:00.001
+None	year	2015-02-28
+None	year	2015-02-28 00:00:00.01
+None	year	2015-02-28
+None	year	2015-02-28 00:00:00.01
+None	year	2016-02-28
+None	year	2016-02-28 00:00:00.01
+None	year	2016-02-29
+None	year	2016-02-29 00:00:00.01
+None	year	2016-03-01
+None	year	2016-05-30
+-- !result
+select date_diff(t, lhs, '2016-02-28'), t, lhs from t1 order by t, lhs, rhs;
+-- result:
+None	None	2016-03-01
+None	day	None
+-1	day	2016-02-27
+1	day	2016-02-29
+1	day	2016-02-29
+1	day	2016-02-29 00:00:00.01
+1	day	2016-02-29 00:00:00.02
+1	day	2016-02-29 00:00:00.02
+24	hour	2016-02-29
+24	hour	2016-02-29
+24	hour	2016-02-29 00:00:00.002
+172800000	millisecond	2016-03-01 00:00:00.000
+2880	minute	2016-03-01 00:00:00.000
+0	month	2016-02-28
+0	month	2016-02-28
+0	month	2016-02-29
+0	month	2016-02-29
+3	month	2016-05-29
+3	month	2016-05-29
+3	month	2016-05-29
+3	month	2016-05-29
+3	month	2016-05-29
+4	month	2016-06-30
+4	month	2016-06-30
+12	month	2017-02-28
+12	month	2017-02-28
+12	month	2017-02-28
+12	month	2017-02-28
+1	quarter	2016-05-29
+1	quarter	2016-05-29
+1	quarter	2016-05-29
+172800	second	2016-03-01 00:00:00.000
+0	year	2016-02-28
+0	year	2016-02-28
+0	year	2016-02-29
+0	year	2016-02-29
+1	year	2017-02-28
+1	year	2017-02-28
+1	year	2017-02-28
+1	year	2017-02-28
+1	year	2017-02-28
+1	year	2017-06-30
+-- !result
+select date_diff(t, lhs, NULL), t, lhs from t1 order by t, lhs, rhs;
+-- result:
+None	None	2016-03-01
+None	day	None
+None	day	2016-02-27
+None	day	2016-02-29
+None	day	2016-02-29
+None	day	2016-02-29 00:00:00.01
+None	day	2016-02-29 00:00:00.02
+None	day	2016-02-29 00:00:00.02
+None	hour	2016-02-29
+None	hour	2016-02-29
+None	hour	2016-02-29 00:00:00.002
+None	millisecond	2016-03-01 00:00:00.000
+None	minute	2016-03-01 00:00:00.000
+None	month	2016-02-28
+None	month	2016-02-28
+None	month	2016-02-29
+None	month	2016-02-29
+None	month	2016-05-29
+None	month	2016-05-29
+None	month	2016-05-29
+None	month	2016-05-29
+None	month	2016-05-29
+None	month	2016-06-30
+None	month	2016-06-30
+None	month	2017-02-28
+None	month	2017-02-28
+None	month	2017-02-28
+None	month	2017-02-28
+None	quarter	2016-05-29
+None	quarter	2016-05-29
+None	quarter	2016-05-29
+None	second	2016-03-01 00:00:00.000
+None	year	2016-02-28
+None	year	2016-02-28
+None	year	2016-02-29
+None	year	2016-02-29
+None	year	2017-02-28
+None	year	2017-02-28
+None	year	2017-02-28
+None	year	2017-02-28
+None	year	2017-02-28
+None	year	2017-06-30
+-- !result

@@ -233,95 +233,62 @@ E: (1064, 'Getting analyzing error. Detail message: Not support exists correlati
 -- !result
 select s2 from struct_test t where s2 in (select s0 from struct_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s3 from struct_test t where s3 in (select s0 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: The input types (struct<c0 int(11), c1 array<varchar(65533)>>,struct<c0 int(11), c1 varchar(65533)>) of in predict are not compatible.')
 -- !result
 select s4 from struct_test t where s4 in (select s1 from struct_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s0 from struct_test t where s0 in (select s4 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s4 from struct_test t where s4 in (select s4 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+{"c0":null,"c1":null}
 -- !result
 select s0 from struct_test t where s0 in (select s5 from struct_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
-select s5 from struct_test t where s5 not in (select s0 from struct_test s);
+select s5 from struct_test t where s5 not in (select s5 from struct_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s0 from struct_test t where s0 not in (select s1 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s0 from struct_test t where s0 not in (select s2 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s2 from struct_test t where s2 not in (select s3 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s5 from struct_test t where s5 not in (select s4 from struct_test s);
--- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
 -- !result
 select s0 from struct_test t where s0 not in (select s5 from struct_test s);
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select s0 in (select s0 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+1
+1
+1
+1
+None
 -- !result
 select s0 in (select s1 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s4 in (select s2 from struct_test s) from struct_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s5 in (select s2 from struct_test s) from struct_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s0 in (select s3 from struct_test s) from struct_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+None
+1
+1
+1
+None
 -- !result
 select s5 in (select s5 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 42. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+1
+None
+1
+1
+1
 -- !result
 select s0 not in (select s0 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+0
+None
+0
+0
+0
 -- !result
 select s0 not in (select s2 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s5 not in (select s3 from struct_test s) from struct_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
--- !result
-select s4 not in (select s4 from struct_test s) from struct_test;
--- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 array<varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select s0 not in (select s5 from struct_test s) from struct_test;
 -- result:
-E: (1064, "Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate.")
+E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
 select t.s4, s.s5 from struct_test t left join struct_test s where s.s4 <=> t.s5 order by t.pk;
 -- result:

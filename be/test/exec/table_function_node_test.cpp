@@ -65,6 +65,6 @@ void TableFunctionNodeTest::SetUp() {
 
 TEST_F(TableFunctionNodeTest, close_after_not_init) {
     TableFunctionNode table_function_node(&_object_pool, _tnode, *_desc_tbl);
-    ASSERT_TRUE(table_function_node.close(&_runtime_state).ok());
+    table_function_node.close(&_runtime_state);
 }
 } // namespace starrocks

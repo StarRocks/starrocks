@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
@@ -47,6 +48,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
@@ -64,7 +66,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -74,8 +75,10 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -98,7 +101,9 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 
@@ -111,6 +116,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
 
@@ -164,8 +172,8 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
-                                             Type[] argTypes) {
+    public static Function getDBUdfFunction(ConnectContext context, FunctionName fnName,
+                                            Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = context.getDatabase();
@@ -181,10 +189,9 @@ public class AnalyzerUtils {
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
-            if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
-                        ErrorType.USER_ERROR);
+            if (fn != null) {
+                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        db, fn, PrivilegeType.USAGE);
             }
 
             return fn;
@@ -197,11 +204,9 @@ public class AnalyzerUtils {
         Function search = new Function(fnName, argTypes, Type.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
-                fn, PrivilegeType.USAGE)) {
-            throw new StarRocksPlannerException(String.format("Access denied. " +
-                    "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
-                    ErrorType.USER_ERROR);
+        if (fn != null) {
+            Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    fn, PrivilegeType.USAGE);
         }
 
         return fn;
@@ -209,12 +214,13 @@ public class AnalyzerUtils {
 
     public static Function getUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
         Function fn = getDBUdfFunction(context, fnName, argTypes);
-        if (fn == null) {
+        if (fn == null && context.getGlobalStateMgr() != null) {
             fn = getGlobalUdfFunction(context, fnName, argTypes);
         }
         if (fn != null) {
             if (!Config.enable_udf) {
-                throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
+                throw new StarRocksPlannerException(
+                        "UDF is not enabled in FE, please configure enable_udf=true in fe/conf/fe.conf",
                         ErrorType.USER_ERROR);
             }
         }
@@ -226,6 +232,11 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    public static boolean isStatisticsJob(ConnectContext context, StatementBase stmt) {
+        Map<String, Database> dbs = collectAllDatabase(context, stmt);
+        return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
     }
 
     public static CallOperator getCallOperator(ScalarOperator operator) {
@@ -456,6 +467,15 @@ public class AnalyzerUtils {
         return subQueryRelations;
     }
 
+    /**
+     * Only collect one level table name and the corresponding sub query relation.
+     */
+    public static Map<TableName, SubqueryRelation> collectOneLevelSubQueryRelation(QueryStatement queryStatement) {
+        Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
+        new AnalyzerUtils.SubQueryOneLevelRelationCollector(subQueryRelations).visit(queryStatement);
+        return subQueryRelations;
+    }
+
     public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
@@ -662,6 +682,64 @@ public class AnalyzerUtils {
         }
     }
 
+    private static class SubQueryOneLevelRelationCollector extends TableCollector {
+        Map<TableName, SubqueryRelation> subQueryRelations;
+
+        public SubQueryOneLevelRelationCollector(Map<TableName, SubqueryRelation> subQueryRelations) {
+            super(null);
+            this.subQueryRelations = subQueryRelations;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            // no recursive
+            subQueryRelations.put(node.getResolveTableName(), node);
+            return null;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            return null;
+        }
+    }
+
+    public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
+        Set<TableName> tableNames = Sets.newHashSet();
+        if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                Table table = db.getTable(tableId);
+                if (table != null && table.isOlapOrCloudNativeTable()) {
+                    tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getFullName(), table.getName()));
+                }
+            }
+        } else if (StatsConstants.DEFAULT_ALL_ID == tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            getTableNamesInDb(tableNames, dbId);
+        } else {
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            for (Long id : dbIds) {
+                getTableNamesInDb(tableNames, id);
+            }
+        }
+
+        return tableNames;
+    }
+
+    private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(id);
+        if (db != null && !db.isSystemDatabase()) {
+            for (Table table : db.getTables()) {
+                if (table == null || !table.isOlapOrCloudNativeTable()) {
+                    continue;
+                }
+                TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(), table.getName());
+                tableNames.add(tableNameNew);
+            }
+        }
+    }
+
     public static Type transformTableColumnType(Type srcType) {
         return transformTableColumnType(srcType, true);
     }
@@ -832,8 +910,8 @@ public class AnalyzerUtils {
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
-                if (partitionName.length() > 64) {
-                    partitionName = partitionName.substring(0, 64);
+                if (partitionName.length() > 50) {
+                    partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
                 MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                         partitionName, Collections.singletonList(partitionValue), partitionProperties);
@@ -853,12 +931,16 @@ public class AnalyzerUtils {
     @VisibleForTesting
     public static String getFormatPartitionValue(String value) {
         StringBuilder sb = new StringBuilder();
+        // When the value is negative
+        if (value.length() > 0 && value.charAt(0) == '-') {
+            sb.append("_");
+        }
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
             if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
                 sb.append(ch);
             } else if (ch == '-' || ch == ':' || ch == ' ') {
-                // remove;
+                // Main user remove characters in time
             } else {
                 int unicodeValue = value.codePointAt(i);
                 String unicodeString = Integer.toHexString(unicodeValue);
@@ -1041,21 +1123,158 @@ public class AnalyzerUtils {
         }.visit(node);
     }
 
+    public static void checkAutoPartitionTableLimit(FunctionCallExpr functionCallExpr, String prePartitionGranularity) {
+        if (prePartitionGranularity == null) {
+            return;
+        }
+        String functionName = functionCallExpr.getFnName().getFunction();
+        if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
+            Expr expr = functionCallExpr.getParams().exprs().get(0);
+            String functionGranularity = ((StringLiteral) expr).getStringValue();
+            if (!prePartitionGranularity.equalsIgnoreCase(functionGranularity)) {
+                throw new ParsingException("The partition granularity of automatic partition table " +
+                        "batch creation in advance should be consistent", functionCallExpr.getPos());
+            }
+        } else if (FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName)) {
+            throw new ParsingException("time_slice does not support pre-created partitions", functionCallExpr.getPos());
+        }
+    }
+
+    // check the partition expr is legal and extract partition columns
+    public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs) {
+        String functionName = expr.getFnName().getFunction();
+        NodePosition pos = expr.getPos();
+        List<String> columnList = Lists.newArrayList();
+        List<Expr> paramsExpr = expr.getParams().exprs();
+        if (FunctionSet.DATE_TRUNC.equals(functionName)) {
+            if (paramsExpr.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            Expr secondExpr = paramsExpr.get(1);
+            String partitionColumnName;
+            if (secondExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) secondExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+            if (firstExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) firstExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+
+        } else if (FunctionSet.TIME_SLICE.equals(functionName)) {
+            if (paramsExpr.size() != 4) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr firstExpr = paramsExpr.get(0);
+            String partitionColumnName;
+            if (firstExpr instanceof SlotRef) {
+                partitionColumnName = ((SlotRef) firstExpr).getColumnName();
+                columnList.add(partitionColumnName);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr secondExpr = paramsExpr.get(1);
+            Expr thirdExpr = paramsExpr.get(2);
+            if (secondExpr instanceof IntLiteral && thirdExpr instanceof StringLiteral) {
+                StringLiteral stringLiteral = (StringLiteral) thirdExpr;
+                String fmt = stringLiteral.getValue();
+                if (!AnalyzerUtils.SUPPORTED_PARTITION_FORMAT.contains(fmt.toLowerCase())) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
+                }
+                // For materialized views currently columnDefs == null
+                checkPartitionColumnTypeValid(expr, columnDefs, pos, partitionColumnName, fmt);
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            Expr fourthExpr = paramsExpr.get(3);
+            if (fourthExpr instanceof StringLiteral) {
+                StringLiteral boundaryLiteral = (StringLiteral) fourthExpr;
+                String boundary = boundaryLiteral.getValue();
+                if (!"floor".equalsIgnoreCase(boundary)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                            "PARTITION BY", "Automatic partitioning does not support the ceil parameter"), pos);
+                }
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+        }
+        return columnList;
+    }
+
+    private static void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
+                                               NodePosition pos, String partitionColumnName, String fmt) {
+        // For materialized views currently columnDefs == null
+        if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
+            ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);
+            if (partitionDef == null) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+            }
+            if (partitionDef.getType() != Type.DATETIME) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(expr.toSql(),
+                        "PARTITION BY", "The hour parameter only supports datetime type"), pos);
+            }
+        }
+    }
+
+    private static ColumnDef findPartitionDefByName(List<ColumnDef> columnDefs, String partitionName) {
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionName.equalsIgnoreCase(columnDef.getName())) {
+                return columnDef;
+            }
+        }
+        return null;
+    }
+
+
     public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
         AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
             @Override
             public Expr visitSelect(SelectRelation node, Void context) {
                 for (SelectListItem selectListItem : node.getSelectList().getItems()) {
-                    if (selectListItem.getAlias() == null) {
-                        if (selectListItem.getExpr() instanceof SlotRef) {
-                            SlotRef slot = (SlotRef) selectListItem.getExpr();
-                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
-                                return slot;
+                    if (selectListItem.isStar()) {
+                        // `select *` expr
+                        for (Expr expr : node.getOutputExpression()) {
+                            if (expr instanceof SlotRef) {
+                                SlotRef slot = (SlotRef) expr;
+                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return slot;
+                                }
+                            } else if (expr instanceof FieldReference) {
+                                FieldReference fieldReference = (FieldReference) expr;
+                                Field field = node.getScope().getRelationFields()
+                                        .getFieldByIndex(fieldReference.getFieldIndex());
+                                if (field.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return new SlotRef(field.getRelationAlias(), field.getName());
+                                }
                             }
                         }
+                        return null;
                     } else {
-                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
-                            return selectListItem.getExpr();
+                        if (selectListItem.getAlias() == null) {
+                            if (selectListItem.getExpr() instanceof SlotRef) {
+                                SlotRef slot = (SlotRef) selectListItem.getExpr();
+                                if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                    return slot;
+                                }
+                            }
+                        } else {
+                            if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return selectListItem.getExpr();
+                            }
                         }
                     }
                 }
@@ -1079,6 +1298,15 @@ public class AnalyzerUtils {
             }
         };
         return queryStatement.getQueryRelation().accept(slotRefResolver, null);
+    }
+
+    public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
+        for (String current : list) {
+            if (current.equalsIgnoreCase(soughtFor)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

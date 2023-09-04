@@ -265,10 +265,10 @@ CROARINGBITMAP_SOURCE=CRoaring-1.1.3
 CROARINGBITMAP_MD5SUM="605924d21c14c760e66466799215868f"
 
 # jemalloc
-JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2"
-JEMALLOC_NAME="jemalloc-5.2.1.tar.bz2"
-JEMALLOC_SOURCE="jemalloc-5.2.1"
-JEMALLOC_MD5SUM="3d41fbf006e6ebffd489bdb304d009ae"
+JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"
+JEMALLOC_NAME="jemalloc-5.3.0.tar.bz2"
+JEMALLOC_SOURCE="jemalloc-5.3.0"
+JEMALLOC_MD5SUM="09a8328574dab22a7df848eae6dbbf53"
 
 # CCTZ
 CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
@@ -277,10 +277,10 @@ CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 # FMT
-FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/7.0.3/fmt-7.0.3.zip"
-FMT_NAME="fmt-7.0.3.zip"
-FMT_SOURCE="fmt-7.0.3"
-FMT_MD5SUM="60c8803eb36a6ff81a4afde33c0f621a"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
+FMT_NAME="fmt-8.1.1.zip"
+FMT_SOURCE="fmt-8.1.1"
+FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
 
 # RYU
 RYU_DOWNLOAD="https://github.com/ulfjack/ryu/archive/aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -391,9 +391,27 @@ DATASKETCHES_NAME="datasketches-cpp-4.0.0.tar.gz"
 DATASKETCHES_SOURCE="datasketches-cpp-4.0.0"
 DATASKETCHES_MD5SUM="724cd1df9735de2b8939d298f0d95ea2"
 
+# libfiu
+FIU_DOWNLOAD="https://blitiri.com.ar/p/libfiu/files/1.1/libfiu-1.1.tar.gz"
+FIU_NAME="libfiu-1.1.tar.gz"
+FIU_SOURCE="libfiu-1.1"
+FIU_MD5SUM="51092dcb7801efb511b7b962388d9ff4"
+
+# libdeflate
+LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip"
+LIBDEFLATE_NAME="libdeflate-1.18.zip"
+LIBDEFLATE_SOURCE="libdeflate-1.18"
+LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
+
+# llvm
+LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz"
+LLVM_NAME="llvm-project-16.0.6.src.tar.xz"
+LLVM_SOURCE="llvm-project-16.0.6.src"
+LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER"
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM"

@@ -73,6 +73,7 @@ private:
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
+            int64_t prev_reserved = _reserved_bytes;
             size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
@@ -83,6 +84,7 @@ private:
                     _cache_size = 0;
                     return true;
                 } else {
+                    _reserved_bytes = prev_reserved;
                     _cache_size -= size;
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
@@ -95,7 +97,6 @@ private:
 
         bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
             MemTracker* cur_tracker = _loader();
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -212,9 +213,9 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
-    void set_custom_coredump_msg(const std::string custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
+    void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
-    const std::string get_custom_coredump_msg() const { return _custom_coredump_msg; }
+    const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {

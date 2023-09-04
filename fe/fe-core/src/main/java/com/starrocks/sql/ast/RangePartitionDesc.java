@@ -69,6 +69,10 @@ public class RangePartitionDesc extends PartitionDesc {
         return this.singleRangePartitionDescs;
     }
 
+    public List<MultiRangePartitionDesc> getMultiRangePartitionDescs() {
+        return multiRangePartitionDescs;
+    }
+
     public List<String> getPartitionColNames() {
         return partitionColNames;
     }
@@ -149,7 +153,7 @@ public class RangePartitionDesc extends PartitionDesc {
             } else if (partitionType != desc.getPartitionKeyDesc().getPartitionType()) {
                 throw new AnalysisException("You can only use one of these methods to create partitions");
             }
-            desc.analyze(columnDefs.size(), givenProperties);
+            desc.analyze(partitionColNames.size(), givenProperties);
         }
     }
 

@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -82,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -315,7 +317,7 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
             ScalarOperator child = visit(node.getChild(0), context);
-            return SubfieldOperator.build(child, node);
+            return new SubfieldOperator(child, node.getType(), node.getFieldNames());
         }
 
         @Override
@@ -340,7 +342,7 @@ public final class SqlToScalarOperatorTranslator {
             for (Expr expr : node.getChildren()) {
                 mapElements.add(visit(expr, context.clone(node)));
             }
-            return new MapOperator(node.getType(), node.isNullable(), mapElements);
+            return new MapOperator(node.getType(), mapElements);
         }
 
         @Override
@@ -540,7 +542,8 @@ public final class SqlToScalarOperatorTranslator {
             }
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() != leftExprs.size()) {
-                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+                throw new SemanticException(
+                        "subquery must return the same number of columns as provided by the IN predicate");
             }
             ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
             ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
@@ -717,6 +720,11 @@ public final class SqlToScalarOperatorTranslator {
                         ConstantOperator.createBigint(node.getIntValue())));
             }
 
+            if (node.getFuncType().equalsIgnoreCase("DATABASE") ||
+                    node.getFuncType().equalsIgnoreCase("SCHEMA")) {
+                return ConstantOperator.createVarchar(node.getStrValue());
+            }
+
             return new CallOperator(node.getFuncType(), node.getType(), Lists.newArrayList(
                     ConstantOperator.createVarchar(node.getStrValue()),
                     ConstantOperator.createBigint(node.getIntValue())));
@@ -814,6 +822,15 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCloneExpr(CloneExpr node, Context context) {
             return new CloneOperator(visit(node.getChild(0), context.clone(node)));
+        }
+
+        @Override
+        public ScalarOperator visitDictQueryExpr(DictQueryExpr node, Context context) {
+            List<ScalarOperator> arguments = node.getChildren()
+                    .stream()
+                    .map(child -> visit(child, context.clone(node)))
+                    .collect(Collectors.toList());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
         }
     }
 

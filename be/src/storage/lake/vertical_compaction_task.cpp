@@ -34,6 +34,9 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
+
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
+
     ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
@@ -106,8 +109,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // load segments (footer and column index) every time if segments are not in the cache.
         //
         // test case: 4k columns, 150 segments, 60w rows
-        // compaction task cost: 272s (fill cache) vs 2400s (not fill cache)
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(true));
+        // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
@@ -130,7 +133,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
-    Schema schema = ChunkHelper::convert_schema(*_tablet_schema, column_group);
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
@@ -163,7 +166,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             return st;
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, *_tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
         chunk->reset();
 

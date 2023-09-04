@@ -248,6 +248,35 @@ public class CreateTableTest {
                         "    \"replication_num\" = \"1\"\n" +
                         ");"));
 
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.dynamic_partition_without_prefix (\n" +
+                        "event_day DATE,\n" +
+                        "site_id INT DEFAULT '10',\n" +
+                        "city_code VARCHAR(\n" +
+                        "100\n" +
+                        "),\n" +
+                        "user_name VARCHAR(\n" +
+                        "32\n" +
+                        ") DEFAULT '',\n" +
+                        "pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY RANGE(event_day)(\n" +
+                        "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                        "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                        "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                        "PARTITION p20200324 VALUES LESS THAN (\"2020-03-25\")\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
@@ -354,13 +383,13 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column must be nullable column.",
                 () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
@@ -386,13 +415,13 @@ public class CreateTableTest {
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other generated columns",
                 () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE AS (array_avg(array_data)), \n"
                         + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column don't support aggregation function",
                 () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc BIGINT AS (sum(id)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
@@ -408,6 +437,25 @@ public class CreateTableTest {
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
                         "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {abc=def}",
+                () -> createTable("CREATE TABLE test.lake_table\n" +
+                        "(\n" +
+                        "    k1 DATE,\n" +
+                        "    k2 INT,\n" +
+                        "    k3 SMALLINT,\n" +
+                        "    v1 VARCHAR(2048),\n" +
+                        "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1, k2, k3)\n" +
+                        "PARTITION BY RANGE (k1, k2, k3)\n" +
+                        "(\n" +
+                        "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                        "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
     }
 
     @Test
@@ -1166,8 +1214,8 @@ public class CreateTableTest {
         ));
 
         // column types do not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "column:k3 type does mot match referenced column:k2 type",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +
@@ -1191,8 +1239,8 @@ public class CreateTableTest {
                 ));
 
         // key size does not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "columns:[k1, k2] are not dup table:parent_table2's unique constraint",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +
@@ -1213,8 +1261,8 @@ public class CreateTableTest {
                                 ");"
                 ));
 
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "processing constraint failed when creating table",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "invalid foreign key constraint:(k3,k4) REFERENCES parent_table2(k1)",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
                                 "k1 INT,\n" +
@@ -1232,6 +1280,19 @@ public class CreateTableTest {
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\",\n" +
                                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
+                                ");"
+                ));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Not support MAXVALUE in multi partition range values.",
+                () -> createTable(
+                        "create table test_multi_partition_max_value (\n" +
+                                "f1 bigint, f2 date, f3 string, f4 bigint\n" +
+                                ")\n" +
+                                "partition by range(f1, f2, f4) (\n" +
+                                "        partition p1 values less than('10', '2020-01-01', '100'),\n" +
+                                "        partition p2 values less than('20', '2020-01-01', '200'),\n" +
+                                "        partition p3 values less than(MAXVALUE)\n" +
                                 ");"
                 ));
     }
@@ -1367,7 +1428,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableInSystemDb() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Can't create table 'goods' (errno: create denied)",
+                "Can't create table 'goods' (errno: cannot create table in system database)",
                 () -> createTable(
                         "CREATE TABLE information_schema.goods(\n" +
                                 "    item_id1          INT,\n" +
@@ -1465,4 +1526,90 @@ public class CreateTableTest {
         // colocate groups in different db should have same `GroupId.grpId`
         Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
     }
+
+    @Test
+    public void testRandomColocateTable() {
+        String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY RANDOM " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\"" +
+                ");";
+        Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testPrimaryKeyNotSupportCoolDown() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Primary key table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.`primary_table_not_support_cool_down`\n" +
+                                "             ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "             primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "             PARTITION BY range(k1)\n" +
+                                "             (\n" +
+                                "                 PARTITION p1 VALUES LESS THAN (\"2021-01-02\"),\n" +
+                                "                 PARTITION p2 VALUES LESS THAN (\"2021-08-18\"),\n" +
+                                "                 PARTITION p3 VALUES LESS THAN (\"2022-08-17\"),\n" +
+                                "                 PARTITION p4 VALUES LESS THAN (\"2022-08-18\"),\n" +
+                                "                 PARTITION p5 VALUES LESS THAN (\"2022-08-19\"),\n" +
+                                "                 PARTITION p6 VALUES LESS THAN (\"2023-08-18\"),\n" +
+                                "                 PARTITION p7 VALUES LESS THAN (\"2024-08-18\")\n" +
+                                "             ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "  PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 year\");"
+                ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "List partition table does not support storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.list_partition_table_not_support_cool_down (\n" +
+                                "                    `k1`  date not null, `k2`  datetime,`k3`  char(20), " +
+                                "`k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, " +
+                                "`k9`  bigint, `k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9)\n" +
+                                "                )\n" +
+                                "                DUPLICATE KEY(k1)\n" +
+                                "                PARTITION BY LIST (k1) (\n" +
+                                "                   PARTITION p1 VALUES IN (\"2020-01-01\",\"2020-01-02\"),\n" +
+                                "                   PARTITION p2 VALUES IN (\"2021-01-01\")\n" +
+                                "                )\n" +
+                                "                DISTRIBUTED BY HASH(k1)\n" +
+                                "    PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
+                ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Only support partition is date type for storage medium cool down currently.",
+                () -> createTable(
+                        "CREATE TABLE test.t_partition_table_only_support_date (\n" +
+                                "                        `k1` int, v1 int, v2 int\n" +
+                                "                    )\n" +
+                                "                    DUPLICATE KEY(k1)\n" +
+                                "                    PARTITION BY range (k1) (\n" +
+                                "                       PARTITION p1 VALUES less than (\"20200101\"),\n" +
+                                "                       PARTITION p2 VALUES less than (\"20210101\")\n" +
+                                "                    )\n" +
+                                "                    DISTRIBUTED BY HASH(k1)\n" +
+                                " PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 day\");"
+                ));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid data property. storage medium property is not found",
+                () -> createTable(
+                        "CREATE TABLE `cooldown_ttl_month1_table_with_null`\n" +
+                                "        ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
+                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
+                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
+                                "        unique KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                                "        PARTITION BY time_slice(k2, interval 1 month)\n" +
+                                "        DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
+                                "        PROPERTIES (\"storage_cooldown_ttl\" = \"1 month\");"
+                ));
+    }
+
+
+
 }

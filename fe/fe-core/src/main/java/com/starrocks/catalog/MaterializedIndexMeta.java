@@ -78,6 +78,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private long dbId;
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
+    @SerializedName(value = "isColocateMVIndex")
+    private boolean isColocateMVIndex = false;
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -172,6 +174,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
+    public boolean isColocateMVIndex() {
+        return isColocateMVIndex;
+    }
+
+    public void setColocateMVIndex(boolean colocateMVIndex) {
+        isColocateMVIndex = colocateMVIndex;
+    }
+
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
     @VisibleForTesting
     public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -188,6 +198,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @Override
     public int hashCode() {
         return Long.hashCode(indexId);
+    }
+
+    public void setSchema(List<Column> newSchema) {
+        this.schema = newSchema;
+    }
+
+    public void setSchemaVersion(int newSchemaVersion) {
+        this.schemaVersion = newSchemaVersion;
     }
 
     @Override

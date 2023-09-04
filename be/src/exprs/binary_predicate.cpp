@@ -154,6 +154,7 @@ private:
     EvalCmpZero _comparator;
 };
 
+template <bool is_equal>
 class CommonEqualsPredicate final : public Predicate {
 public:
     explicit CommonEqualsPredicate(const TExprNode& node) : Predicate(node) {}
@@ -168,14 +169,15 @@ public:
         if (l->only_null() || r->only_null()) {
             return ColumnHelper::create_const_null_column(l->size());
         }
-        auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
-        auto& const2 = FunctionHelper::get_data_column_of_nullable(r);
+        // a nullable column must not contain const columns
+        size_t lstep = l->is_constant() ? 0 : 1;
+        size_t rstep = r->is_constant() ? 0 : 1;
 
-        size_t lstep = const1->is_constant() ? 0 : 1;
-        size_t rstep = const2->is_constant() ? 0 : 1;
+        auto& const1 = FunctionHelper::get_data_column_of_const(l);
+        auto& const2 = FunctionHelper::get_data_column_of_const(r);
 
-        auto& data1 = FunctionHelper::get_data_column_of_const(const1);
-        auto& data2 = FunctionHelper::get_data_column_of_const(const2);
+        auto& data1 = FunctionHelper::get_data_column_of_nullable(const1);
+        auto& data2 = FunctionHelper::get_data_column_of_nullable(const2);
 
         size_t size = l->size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
@@ -187,7 +189,7 @@ public:
                 if (res == -1) {
                     builder.append_null();
                 } else {
-                    builder.append(res);
+                    builder.append(!(res ^ is_equal));
                 }
             }
 
@@ -342,7 +344,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
 
     if (type == TYPE_ARRAY) {
         if (node.opcode == TExprOpcode::EQ) {
-            return new CommonEqualsPredicate(node);
+            return new CommonEqualsPredicate<true>(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
             return new CommonNullSafeEqualsPredicate(node);
         } else {
@@ -350,9 +352,11 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         }
     } else if (type == TYPE_MAP || type == TYPE_STRUCT) {
         if (node.opcode == TExprOpcode::EQ) {
-            return new CommonEqualsPredicate(node);
+            return new CommonEqualsPredicate<true>(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
             return new CommonNullSafeEqualsPredicate(node);
+        } else if (node.opcode == TExprOpcode::NE) {
+            return new CommonEqualsPredicate<false>(node);
         } else {
             return nullptr;
         }

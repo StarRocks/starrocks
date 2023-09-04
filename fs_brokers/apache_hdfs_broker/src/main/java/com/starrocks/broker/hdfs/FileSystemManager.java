@@ -390,48 +390,52 @@ public class FileSystemManager {
                     }
                 }
                 if (!Strings.isNullOrEmpty(dfsNameServices)) {
-                    // ha hdfs arguments
-                    final String dfsHaNameNodesKey = DFS_HA_NAMENODES_PREFIX + dfsNameServices;
-                    if (!properties.containsKey(dfsHaNameNodesKey)) {
-                        throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                "load request missed necessary arguments for ha mode");
-                    }
-                    String dfsHaNameNodes = properties.get(dfsHaNameNodesKey);
                     conf.set(DFS_NAMESERVICES_KEY, dfsNameServices);
-                    conf.set(dfsHaNameNodesKey, dfsHaNameNodes);
-                    String[] nameNodes = dfsHaNameNodes.split(",");
-                    if (nameNodes == null) {
-                        throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                "invalid " + dfsHaNameNodesKey + " configuration");
-                    } else {
-                        for (String nameNode : nameNodes) {
-                            nameNode = nameNode.trim();
-                            String nameNodeRpcAddress =
-                                    DFS_HA_NAMENODE_RPC_ADDRESS_PREFIX + dfsNameServices + "." + nameNode;
-                            if (!properties.containsKey(nameNodeRpcAddress)) {
-                                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                                        "missed " + nameNodeRpcAddress + " configuration");
-                            } else {
-                                conf.set(nameNodeRpcAddress, properties.get(nameNodeRpcAddress));
+                    logger.info("dfs.name.services:" + dfsNameServices);
+                    String[] dfsNameServiceArray = dfsNameServices.split("\\s*,\\s*");
+                    for (String dfsNameService : dfsNameServiceArray) {
+                        // ha hdfs arguments
+                        dfsNameService = dfsNameService.trim();
+                        final String dfsHaNameNodesKey = DFS_HA_NAMENODES_PREFIX + dfsNameService;
+                        if (!properties.containsKey(dfsHaNameNodesKey)) {
+                            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                    "load request missed necessary arguments for ha mode");
+                        }
+                        String dfsHaNameNodes = properties.get(dfsHaNameNodesKey);
+                        conf.set(dfsHaNameNodesKey, dfsHaNameNodes);
+                        String[] nameNodes = dfsHaNameNodes.split(",");
+                        if (nameNodes == null) {
+                            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                    "invalid " + dfsHaNameNodesKey + " configuration");
+                        } else {
+                            for (String nameNode : nameNodes) {
+                                nameNode = nameNode.trim();
+                                String nameNodeRpcAddress =
+                                        DFS_HA_NAMENODE_RPC_ADDRESS_PREFIX + dfsNameService + "." + nameNode;
+                                if (!properties.containsKey(nameNodeRpcAddress)) {
+                                    throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                                            "missed " + nameNodeRpcAddress + " configuration");
+                                } else {
+                                    conf.set(nameNodeRpcAddress, properties.get(nameNodeRpcAddress));
+                                }
                             }
                         }
-                    }
-
-                    final String dfsClientFailoverProxyProviderKey =
-                            DFS_CLIENT_FAILOVER_PROXY_PROVIDER_PREFIX + dfsNameServices;
-                    if (properties.containsKey(dfsClientFailoverProxyProviderKey)) {
-                        conf.set(dfsClientFailoverProxyProviderKey,
-                                properties.get(dfsClientFailoverProxyProviderKey));
-                    } else {
-                        conf.set(dfsClientFailoverProxyProviderKey,
-                                DEFAULT_DFS_CLIENT_FAILOVER_PROXY_PROVIDER);
-                    }
-                    if (properties.containsKey(FS_DEFAULTFS_KEY)) {
-                        conf.set(FS_DEFAULTFS_KEY, properties.get(FS_DEFAULTFS_KEY));
-                    }
-                    if (properties.containsKey(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN)) {
-                        conf.set(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN,
-                                properties.get(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN));
+                        final String dfsClientFailoverProxyProviderKey =
+                                DFS_CLIENT_FAILOVER_PROXY_PROVIDER_PREFIX + dfsNameService;
+                        if (properties.containsKey(dfsClientFailoverProxyProviderKey)) {
+                            conf.set(dfsClientFailoverProxyProviderKey,
+                                    properties.get(dfsClientFailoverProxyProviderKey));
+                        } else {
+                            conf.set(dfsClientFailoverProxyProviderKey,
+                                    DEFAULT_DFS_CLIENT_FAILOVER_PROXY_PROVIDER);
+                        }
+                        if (properties.containsKey(FS_DEFAULTFS_KEY)) {
+                            conf.set(FS_DEFAULTFS_KEY, properties.get(FS_DEFAULTFS_KEY));
+                        }
+                        if (properties.containsKey(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN)) {
+                            conf.set(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN,
+                                    properties.get(DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN));
+                        }
                     }
                 }
 
@@ -901,6 +905,13 @@ public class FileSystemManager {
             logger.info("file not found: " + e.getMessage());
             throw new BrokerException(TBrokerOperationStatusCode.FILE_NOT_FOUND,
                     e, "file not found");
+        } catch (IllegalArgumentException e) {
+            logger.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                      "the arguments like region, IAM, instance profile and so on.");
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+                e, "The arguments of blob store(S3/Azure) may be wrong. " +
+                   "You can check the arguments like region, IAM, " +
+                   "instance profile and so on.");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,

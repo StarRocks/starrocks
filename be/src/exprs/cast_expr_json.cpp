@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <velocypack/Exception.h>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -40,7 +42,14 @@ public:
 
     static Status cast_datum_to_json(const ColumnPtr& col, int row, const std::string& name, vpack::Builder* builder) {
         CastColumnItemVisitor visitor(row, name, builder);
-        return col->accept(&visitor);
+        try {
+            return col->accept(&visitor);
+        } catch (const arangodb::velocypack::Exception& e) {
+            std::string data = col->debug_item(row);
+            LOG(WARNING) << "cast to json failed: error_code=" << e.errorCode() << ", error_msg=" << e.what()
+                         << ", data=" << data;
+            return Status::DataQualityError("cast to json failed: " + data);
+        }
     }
 
     template <class T>
@@ -59,7 +68,7 @@ public:
             auto value = col.get(_row).template get<T>();
             std::string str = CastToString::apply<T, std::string>(value);
             _add_element(std::move(str));
-        } else if constexpr (std::is_integral_v<T>) {
+        } else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
             auto value = col.get(_row).template get<T>();
             _add_element(std::move(value));
         } else {
@@ -143,7 +152,12 @@ public:
                 // TODO(murphy) cast to string instead of debug
                 name = key_col->debug_item(i);
             }
-            // VLOG(2) << "map key: " << key_col->debug_item(i) << " , name=" << name;
+
+            // JSON doesn't support empty key, so just skip it
+            if (name.empty()) {
+                continue;
+            }
+            // VLOG(2) << "map key " << i << ": " << key_col->debug_item(i) << " , name=" << name;
             RETURN_IF_ERROR(cast_datum_to_json(val_col, i, name, _builder));
         }
 
@@ -206,6 +220,15 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
         column_builder.append(std::move(json));
     }
     return column_builder.build(false);
+}
+
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx) {
+    vpack::Builder json_builder;
+    json_builder.clear();
+    RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, idx, "", &json_builder));
+    JsonValue json(json_builder.slice());
+
+    return json.to_string();
 }
 
 } // namespace starrocks

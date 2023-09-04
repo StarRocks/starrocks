@@ -92,12 +92,14 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
-                         uint32_t next_unique_id,
-                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                         TabletMetaSharedPtr* tablet_meta);
+    [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                                       uint32_t next_unique_id,
+                                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                                       TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create();
+
+    static RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets);
 
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
@@ -109,16 +111,16 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    Status create_from_file(const std::string& file_path);
-    Status save(const std::string& file_path);
-    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    static Status reset_tablet_uid(const std::string& file_path);
+    [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status save(const std::string& file_path);
+    [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    Status save_meta(DataDir* data_dir);
+    [[nodiscard]] Status save_meta(DataDir* data_dir);
 
-    Status serialize(std::string* meta_binary);
-    Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
+    [[nodiscard]] Status serialize(std::string* meta_binary);
+    [[nodiscard]] Status deserialize(std::string_view data);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -153,9 +155,9 @@ public:
 
     const TabletSchema& tablet_schema() const;
 
-    void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
 
-    std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
+    TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -172,13 +174,15 @@ public:
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
 
+    void reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb);
+
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     void remove_delete_predicate_by_version(const Version& version);
     const DelPredicateArray& delete_predicates() const;
     bool version_for_delete_predicate(const Version& version);
     std::string full_name() const;
 
-    Status set_partition_id(int64_t partition_id);
+    void set_partition_id(int64_t partition_id);
 
     // used when create new tablet
     void create_inital_updates_meta();
@@ -234,7 +238,7 @@ private:
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
-    std::shared_ptr<const TabletSchema> _schema = nullptr;
+    TabletSchemaCSPtr _schema = nullptr;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;

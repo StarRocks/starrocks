@@ -21,14 +21,15 @@
 
 namespace starrocks {
 
-MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
-                                     std::vector<ColumnAccessPath*> paths)
-        : _nulls(std::move(nulls)),
+MapColumnIterator::MapColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> nulls,
+                                     std::unique_ptr<ColumnIterator> offsets, std::unique_ptr<ColumnIterator> keys,
+                                     std::unique_ptr<ColumnIterator> values, const ColumnAccessPath* path)
+        : _reader(reader),
+          _nulls(std::move(nulls)),
           _offsets(std::move(offsets)),
           _keys(std::move(keys)),
           _values(std::move(values)),
-          _paths(std::move(paths)) {}
+          _path(std::move(path)) {}
 
 Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_nulls != nullptr) {
@@ -38,7 +39,7 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(_keys->init(opts));
     RETURN_IF_ERROR(_values->init(opts));
 
-    if (_paths.empty()) {
+    if (_path == nullptr || _path->children().empty()) {
         _access_keys = true;
         _access_values = true;
         return Status::OK();
@@ -47,13 +48,17 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     _access_keys = false;
     _access_values = false;
 
-    for (const auto& p : _paths) {
+    // KEY: read key & offset
+    // OFFSET: read offset
+    // ALL/INDEX: read key & value & offset
+    for (const auto& p : _path->children()) {
         if (p->is_key()) {
             _access_keys |= true;
         }
 
-        if (p->is_offset()) {
-            _access_keys |= false;
+        if (p->is_all() || p->is_index()) {
+            _access_values |= true;
+            _access_keys |= true;
         }
     }
 
@@ -114,7 +119,7 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     return Status::OK();
 }
 
-Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     MapColumn* map_column = nullptr;
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -134,15 +139,15 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator<> iter = range.new_iterator();
     size_t to_read = range.span_size();
 
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _offsets->get_current_ordinal()));
     SparseRange element_read_range;
-    size_t num_to_read = 0;
+    size_t read_rows = 0;
     while (iter.has_more()) {
-        Range r = iter.next(to_read);
+        Range<> r = iter.next(to_read);
 
         RETURN_IF_ERROR(_offsets->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _offsets->element_ordinal();
@@ -161,18 +166,19 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
-        SparseRange size_read_range(r);
+        SparseRange<> size_read_range(r);
         RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
-        num_to_read = end_offset;
+        size_t num_to_read = end_offset;
         for (size_t i = prev_array_size; i < curr_array_size; ++i) {
             end_offset += data[i];
             data[i] = end_offset;
         }
         num_to_read = end_offset - num_to_read;
+        read_rows += num_to_read;
 
-        element_read_range.add(Range(element_ordinal, element_ordinal + num_to_read));
+        element_read_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
     }
 
     // if array column is nullable, element_read_range may be empty
@@ -180,13 +186,13 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     if (_access_keys) {
         RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
     } else {
-        map_column->keys_column()->append_default(num_to_read);
+        map_column->keys_column()->append_default(read_rows);
     }
 
     if (_access_values) {
         RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
     } else {
-        map_column->values_column()->append_default(num_to_read);
+        map_column->values_column()->append_default(read_rows);
     }
 
     return Status::OK();
@@ -269,6 +275,12 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     size_t element_ordinal = _offsets->element_ordinal();
     RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
     RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
+    return Status::OK();
+}
+
+Status MapColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+    row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
 

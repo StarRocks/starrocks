@@ -135,6 +135,11 @@ public class DropPartitionTest {
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
+
+            @Mock
+            public String getStorageVolumeIdOfTable(long tableId) {
+                return fsInfo.getFsKey();
+            }
         };
 
         Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);

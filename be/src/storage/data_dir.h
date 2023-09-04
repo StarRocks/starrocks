@@ -89,6 +89,9 @@ public:
 
     int64_t available_bytes() const { return _available_bytes; }
     int64_t disk_capacity_bytes() const { return _disk_capacity_bytes; }
+    double disk_usage(int64_t incoming_data_size) const {
+        return (double)(_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
+    }
 
     // save a cluster_id file under data path to prevent
     // invalid be config for example two be use the same
@@ -111,6 +114,7 @@ public:
     std::string get_absolute_shard_path(int64_t shard_id);
     std::string get_absolute_tablet_path(int64_t shard_id, int64_t tablet_id, int32_t schema_hash);
 
+    Status create_dir_if_path_not_exists(const std::string& path);
     void find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* paths);
 
     static std::string get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash);
@@ -126,15 +130,23 @@ public:
 
     void perform_path_gc_by_tablet();
 
+    void perform_delta_column_files_gc();
+
     // check if the capacity reach the limit after adding the incoming data
     // return true if limit reached, otherwise, return false.
     // TODO(cmy): for now we can not precisely calculate the capacity StarRocks used,
     // so in order to avoid running out of disk capacity, we currently use the actual
     // disk available capacity and total capacity to do the calculation.
-    // So that the capacity StarRocks actually used may exceeds the user specified capacity.
+    // So that the capacity StarRocks actually used may exceed the user specified capacity.
     bool capacity_limit_reached(int64_t incoming_data_size);
 
     Status update_capacity();
+
+    std::string get_persistent_index_path() { return _path + "/" + PERSISTENT_INDEX_PREFIX; }
+    Status init_persistent_index_dir();
+
+    // for test
+    size_t get_all_check_dcg_files_cnt() const { return _all_check_dcg_files.size(); }
 
 private:
     Status _init_data_dir();
@@ -144,6 +156,9 @@ private:
     Status _read_and_write_test_file();
 
     void _process_garbage_path(const std::string& path);
+
+    bool _need_gc_delta_column_files(const std::string& path, int64_t tablet_id,
+                                     std::unordered_map<int64_t, std::unordered_set<std::string>>& delta_column_files);
 
     bool _stop_bg_worker = false;
 
@@ -175,6 +190,7 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
+    std::set<std::string> _all_check_dcg_files;
 };
 
 } // namespace starrocks

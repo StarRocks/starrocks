@@ -157,15 +157,15 @@ public:
     }
 
     Status next_batch(size_t* n, Column* dst) override {
-        SparseRange read_range;
+        SparseRange<> read_range;
         uint32_t begin = current_index();
-        read_range.add(Range(begin, begin + *n));
+        read_range.add(Range<>(begin, begin + *n));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *n = current_index() - begin;
         return Status::OK();
     }
 
-    Status next_batch(const SparseRange& range, Column* dst) override {
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
         DCHECK(_parsed) << "Must call init() firstly";
         if (PREDICT_FALSE(range.span_size() == 0 || _cur_index >= _num_elements)) {
             return Status::OK();
@@ -189,10 +189,10 @@ public:
         // clang-format on
         size_t to_read =
                 std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-        SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator<> iter = range.new_iterator();
         while (to_read > 0 && _cur_index < _num_elements) {
             seek_to_position_in_page(iter.begin());
-            Range r = iter.next(to_read);
+            Range<> r = iter.next(to_read);
             const size_t ori_size = dst->size();
             dst->resize(ori_size + r.span_size());
             auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;

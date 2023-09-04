@@ -23,14 +23,23 @@ import com.starrocks.catalog.Table;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 public interface IHiveMetastore {
 
     List<String> getAllDatabaseNames();
 
-    List<String> getAllTableNames(String dbName);
+    void createDb(String dbName, Map<String, String> properties);
+
+    void dropDb(String dbName, boolean deleteData);
 
     Database getDb(String dbName);
+
+    List<String> getAllTableNames(String dbName);
+
+    void createTable(String dbName, Table table);
+
+    void dropTable(String dbName, String tableName);
 
     Table getTable(String dbName, String tableName);
 
@@ -46,11 +55,24 @@ public interface IHiveMetastore {
 
     Partition getPartition(String dbName, String tableName, List<String> partitionValues);
 
+    void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions);
+
+    void alterPartition(HivePartitionWithStats partition);
+
+    void dropPartition(String dbName, String tableName, List<String> partValues, boolean deleteData);
+
+    boolean partitionExists(String dbName, String tableName, List<String> partitionValues);
+
     Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
 
     HivePartitionStats getTableStatistics(String dbName, String tableName);
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
+
+    void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update);
+
+    void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                   Function<HivePartitionStats, HivePartitionStats> update);
 
     // return refreshed partitions in cache for partitioned table, return empty list for unpartitioned table
     default List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {

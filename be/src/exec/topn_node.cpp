@@ -204,14 +204,14 @@ Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status TopNNode::close(RuntimeState* state) {
+void TopNNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     _chunks_sorter = nullptr;
 
     _sort_exec_exprs.close(state);
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
@@ -274,12 +274,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     if (need_merge) {
         if (enable_parallel_merge) {
             ops_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state(), ops_sink_with_sort, context->degree_of_parallelism());
+                    runtime_state(), id(), ops_sink_with_sort, context->degree_of_parallelism());
         }
     } else {
         // prepend local shuffle to PartitionSortSinkOperator
-        ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_sink_with_sort,
-                                                                               _analytic_partition_exprs);
+        ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), id(), ops_sink_with_sort, _analytic_partition_exprs);
     }
 
     // define a runtime filter holder
@@ -353,8 +353,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
         if (enable_parallel_merge) {
             // This particular source will be executed in a concurrent way, and finally we need to gather them into one
             // stream to satisfied the ordering property
-            operators_source_with_sort =
-                    context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_source_with_sort);
+            operators_source_with_sort = context->maybe_interpolate_local_passthrough_exchange(
+                    runtime_state(), id(), operators_source_with_sort);
         }
     }
 

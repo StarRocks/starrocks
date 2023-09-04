@@ -37,6 +37,8 @@ class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
+    // late materialization
+    int64_t skip_read_rows = 0;
     int64_t num_rows_read = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
@@ -63,12 +65,18 @@ struct HdfsScanStats {
     int64_t group_dict_decode_ns = 0;
     // iceberg pos-delete filter
     int64_t build_iceberg_pos_filter_ns = 0;
-    // late materialization
-    int64_t skip_read_rows = 0;
+    // io coalesce
+    int64_t group_active_lazy_coalesce_together = 0;
+    int64_t group_active_lazy_coalesce_seperately = 0;
+    // page statistics
+    bool has_page_statistics = false;
+    // page skip
+    int64_t page_skip = 0;
 
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
+    std::vector<int64_t> stripe_sizes;
 };
 
 class HdfsParquetProfile;
@@ -76,6 +84,7 @@ class HdfsParquetProfile;
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
+    RuntimeProfile::Counter* rows_skip_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
@@ -92,6 +101,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -117,7 +128,9 @@ struct HdfsScannerParams {
 
     // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
-    std::unordered_set<SlotId> conjunct_slots;
+    std::unordered_set<SlotId> slots_in_conjunct;
+    // slot used by conjunct_ctxs
+    std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
     bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
@@ -129,6 +142,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+
+    int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -167,6 +182,10 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
+    bool can_use_any_column = false;
+    bool can_use_min_max_count_opt = false;
 };
 
 struct HdfsScannerContext {
@@ -176,6 +195,7 @@ struct HdfsScannerContext {
         SlotId slot_id;
         std::string col_name;
         SlotDescriptor* slot_desc;
+        bool decode_needed = true;
 
         std::string formated_col_name(bool case_sensitive) {
             return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
@@ -206,7 +226,13 @@ struct HdfsScannerContext {
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+    std::vector<std::string>* hive_column_names = nullptr;
+
     bool case_sensitive = false;
+
+    bool can_use_any_column = false;
+
+    bool can_use_min_max_count_opt = false;
 
     std::string timezone;
 
@@ -214,10 +240,12 @@ struct HdfsScannerContext {
 
     HdfsScanStats* stats = nullptr;
 
-    // set column names from file.
+    std::atomic<int32_t>* lazy_column_coalesce_counter;
+
+    // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
-    void set_columns_from_file(const std::unordered_set<std::string>& names);
+    void update_materialized_columns(const std::unordered_set<std::string>& names);
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
@@ -293,6 +321,7 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
+    virtual bool is_jni_scanner() { return false; }
 
     void enter_pending_queue();
     // how long it stays inside pending queue.

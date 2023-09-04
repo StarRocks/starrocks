@@ -199,7 +199,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             if (!res.ok()) {
                 return res.status();
             }
-            LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
+            LOG(INFO) << "finished to write the file: " << local_file_path << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
@@ -401,7 +401,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download file via broker. file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_len;
         } // end for all remote files
 
         // finally, delete local files which are not in remote
@@ -548,17 +548,17 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
-    // We just replace the table_schema in tabletMeta using the schema
-    // in snapshot_meta.
-    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
-    std::shared_lock rdlock(tablet->get_header_lock());
-    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
-    rdlock.unlock();
-
-    TabletMetaPB metapb;
-    new_tablet_meta->to_meta_pb(&metapb);
-    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
-    tablet->set_tablet_meta(new_tablet_meta);
+    /*
+     * just reset the tablet_schema using the schema in snapshot_meta
+     * 
+     * we do not use tablet_meta copy to avoid the TabletUpdates
+     * inconsistent problem.
+     * 
+     * we also do not use the snapshot_meta to construct a new
+     * tablet to replace the old one here, because it may easy
+     * to forget reset some variable in the snapshot_meta.
+    */
+    tablet->tablet_meta()->reset_tablet_schema_for_restore(snapshot_meta.tablet_meta().schema());
     tablet->save_meta();
 
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
@@ -655,7 +655,13 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
         // link files one by one
         // files in snapshot dir will be moved in snapshot clean process
         std::vector<std::string> linked_files;
+        std::string dcg_file;
         for (auto& file : snapshot_files) {
+            // A tablet can have at most one dcgs snapshot file
+            if (_end_with(file, ".dcgs_snapshot")) {
+                dcg_file = file;
+                continue;
+            }
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
@@ -671,6 +677,47 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
             }
             linked_files.push_back(full_dest_path);
             VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+        }
+
+        if (dcg_file.size() != 0) {
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            std::string full_path = snapshot_path + "/" + dcg_file;
+            auto st = DeltaColumnGroupListHelper::parse_snapshot(full_path, dcg_snapshot_pb);
+            if (!st.ok()) {
+                return Status::InternalError("failed to parse dcgs meta");
+            }
+
+            if (dcg_snapshot_pb.dcg_lists().size() != 0) {
+                int idx = 0;
+                auto data_dir = tablet->data_dir();
+                rocksdb::WriteBatch wb;
+
+                RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(data_dir, &wb, tablet_id));
+
+                for (const auto& dcg_list_pb : dcg_snapshot_pb.dcg_lists()) {
+                    // dcgs for each segment
+                    DeltaColumnGroupList dcgs;
+                    RETURN_IF_ERROR(
+                            DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
+
+                    if (dcgs.size() == 0) {
+                        continue;
+                    }
+
+                    // tablet id and rowsetid in PB have been replace by the new one here.
+                    RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(
+                            data_dir, &wb, dcg_snapshot_pb.tablet_id(idx), dcg_snapshot_pb.rowset_id(idx),
+                            dcg_snapshot_pb.segment_id(idx), dcgs));
+                    ++idx;
+                }
+                st = data_dir->get_meta()->write_batch(&wb);
+                if (!st.ok()) {
+                    std::stringstream ss;
+                    ss << "save dcgs meta failed, tablet id: " << tablet->tablet_id();
+                    LOG(WARNING) << ss.str();
+                    return Status::InternalError(ss.str());
+                }
+            }
         }
 
     } else {
@@ -940,6 +987,11 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
     if (_end_with(file_name, ".hdr")) {
         std::stringstream ss;
         ss << tablet_id << ".hdr";
+        *new_file_name = ss.str();
+        return Status::OK();
+    } else if (_end_with(file_name, ".dcgs_snapshot")) {
+        std::stringstream ss;
+        ss << tablet_id << ".dcgs_snapshot";
         *new_file_name = ss.str();
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||

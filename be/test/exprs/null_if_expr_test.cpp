@@ -42,7 +42,7 @@ public:
         ttype_desc.types.emplace_back();
         ttype_desc.types.back().__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types.back().__set_scalar_type(TScalarType());
-        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::VARCHAR);
+        ttype_desc.types.back().scalar_type.__set_type(TPrimitiveType::INT);
         ttype_desc.types.back().scalar_type.__set_len(10);
         tttype_desc.push_back(ttype_desc);
     }
@@ -66,9 +66,9 @@ TEST_F(VectorizedNullIfExprTest, nullIfArray) {
     auto array_expr0 = MockExpr(type_arr_int, array0);
 
     auto array1 = ColumnHelper::create_column(type_arr_int, false);
-    array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
-    array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
-    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
+    array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+    array1->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+    array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});           // [NULL, 1]
     auto array_expr1 = MockExpr(type_arr_int, array1);
 
     expr->_children.push_back(&array_expr0);
@@ -79,8 +79,8 @@ TEST_F(VectorizedNullIfExprTest, nullIfArray) {
         ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
         ASSERT_TRUE(ptr->is_nullable());
 
-        ASSERT_TRUE(!ptr->is_null(0));
-        ASSERT_TRUE(ptr->is_null(1));
+        ASSERT_TRUE(ptr->is_null(0));
+        ASSERT_TRUE(!ptr->is_null(1));
         ASSERT_TRUE(!ptr->is_null(2));
     }
 }
@@ -90,6 +90,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfEquals) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 10);
@@ -113,6 +114,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -140,6 +142,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -157,11 +160,67 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNull) {
     }
 }
 
+TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNullConstNULL) {
+    for (auto desc : tttype_desc) {
+        expr_node.type = desc;
+        auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+        std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+
+        MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10, true); // only null
+        MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
+
+        col1.all_null = true;
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ASSERT_TRUE(ptr->is_nullable());
+            ASSERT_TRUE(ptr->only_null());
+            ASSERT_FALSE(ptr->is_numeric());
+        }
+    }
+}
+
+TEST_F(VectorizedNullIfExprTest, nullIfLeftConst) {
+    for (auto desc : tttype_desc) {
+        expr_node.type = desc;
+        auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
+        std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+
+        MockConstVectorizedExpr<TYPE_BIGINT> col1(expr_node, 20); // only const
+        MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
+
+        expr->_children.push_back(&col1);
+        expr->_children.push_back(&col2);
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ASSERT_TRUE(ptr->is_nullable());
+            ASSERT_FALSE(ptr->is_numeric());
+
+            auto v = ColumnHelper::cast_to_raw<TYPE_BIGINT>(
+                    ColumnHelper::as_raw_column<NullableColumn>(ptr)->data_column());
+            for (int j = 0; j < ptr->size(); ++j) {
+                if (j % 2 == 1) {
+                    ASSERT_FALSE(ptr->is_null(j));
+                    ASSERT_EQ(20, v->get_data()[j]);
+                } else {
+                    ASSERT_TRUE(ptr->is_null(j));
+                }
+            }
+        }
+    }
+}
+
 TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
     for (auto desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
+        expr->set_type(TypeDescriptor(TYPE_BIGINT));
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);

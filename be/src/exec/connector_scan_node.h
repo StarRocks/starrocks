@@ -37,7 +37,7 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     bool accept_empty_scan_ranges() const override;
 
@@ -48,6 +48,7 @@ public:
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
     bool always_shared_scan() const override;
+    std::atomic<int32_t>* get_lazy_column_coalesce_counter() { return &_lazy_column_coalesce_counter; }
 
 private:
     RuntimeState* _runtime_state = nullptr;
@@ -81,6 +82,7 @@ private:
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
     std::atomic<int32_t> _closed_scanners = 0;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 
 private:
     template <typename T>

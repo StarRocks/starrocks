@@ -61,7 +61,7 @@ public:
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
         // init _open_request
         _open_request.mutable_id()->set_hi(456789);
@@ -200,13 +200,13 @@ protected:
         _tablets_channel.reset();
         _load_channel.reset();
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10087));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10088));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
-        tablet.delete_txn_log(kTxnId);
+        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
@@ -217,7 +217,7 @@ protected:
         auto path = _location_provider->segment_location(tablet_id, filename);
         std::cerr << path << '\n';
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema));
 
         OlapReaderStatistics statistics;
         SegmentReadOptions opts;
@@ -256,6 +256,7 @@ protected:
     std::shared_ptr<Schema> _schema;
     std::shared_ptr<OlapTableSchemaParam> _schema_param;
     PTabletWriterOpenRequest _open_request;
+    PTabletWriterOpenResult _open_response;
 
     std::shared_ptr<LoadChannel> _load_channel;
     std::shared_ptr<TabletsChannel> _tablets_channel;
@@ -265,7 +266,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -366,7 +367,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 2;
@@ -422,7 +423,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
 }
 
 TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
-    ASSERT_OK(_tablets_channel->open(_open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(_open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -489,7 +490,7 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -553,7 +554,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -574,7 +575,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
-    _tablet_manager->delete_tablet(10089);
+    ASSERT_OK(_tablet_manager->delete_tablet(10089));
 
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());
@@ -590,7 +591,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -655,7 +656,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -699,7 +700,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(2);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
     {
         constexpr int kChunkSize = 128;
