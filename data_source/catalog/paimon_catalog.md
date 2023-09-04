@@ -14,8 +14,7 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 ## 使用说明
 
-- StarRocks 查询 Paimon 数据时，不支持 MAP、STRUCT 和 ARRAY 这三种复杂数据类型。
-- Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删操作。
+Paimon Catalog 仅支持查询 Paimon 数据，不支持针对 Paimon 的写/删操作。
 
 ## 准备工作
 
