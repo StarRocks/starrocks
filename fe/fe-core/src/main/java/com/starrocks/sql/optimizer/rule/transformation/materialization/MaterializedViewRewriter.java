@@ -254,13 +254,6 @@ public class MaterializedViewRewriter {
         final ScalarOperator normMVJoinOnPredicate = MvUtils.canonizePredicateForRewrite(mvJoinOnPredicate);
         final Set<ScalarOperator> queryJoinOnPredicates = Sets.newHashSet(Utils.extractConjuncts(normQueryJoinOnPredicate));
         final Set<ScalarOperator> diffPredicates = Sets.newHashSet(Utils.extractConjuncts(normMVJoinOnPredicate));
-        // NOTE: only support use query's range predicates to compensate mv's on predicate for now.
-        if (queryJoinOnPredicates.size() > diffPredicates.size()) {
-            logMVRewrite(mvRewriteContext, "join predicate is different {}(query) != (mv){}, " +
-                    "query's on predicates' size is greater than mv", queryJoinOnPredicate, mvJoinOnPredicate);
-            return false;
-        }
-
 
         // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
         // of a materialized view (MV).
