@@ -108,12 +108,13 @@ public class BackupRestoreAnalyzer {
                     for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                         if (!tableIdToTableRefMap.containsKey(baseTableInfo.getTableId())) {
                             LOG.warn(String.format("Backup/restore materialized view %s's" +
-                                    " base table %s does not in the same db", mv.getName(), baseTableInfo.getTableId()));
+                                    " base table %s is not in the same db with the mv", mv.getName(),
+                                    baseTableInfo.getTableId()));
                         }
                     }
                 }
 
-                // reorder the tableRefs to ensure the ref table/materialized views are before in the materialized view
+                // reorder the tableRefs to ensure ref tables of materialized views are ahead of the materialized view
                 Map<String, TableRef> newTableRefs = reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap,
                         tableIdToTableRefMap);
                 tableRefs.clear();;
@@ -191,7 +192,7 @@ public class BackupRestoreAnalyzer {
                 for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                     if (baseTableInfo.getDb().getId() != database.getId()) {
                         // if the referred base table is not the same with the current database, skip it.
-                        LOG.warn("The referred base table {} is not the same with the materialized view {}, " +
+                        LOG.warn("The referred base table {} 's database is different from the materialized view {}, " +
                                         "skip backup it", baseTableInfo.getTableName(), tableRef.getName());
                         continue;
                     }
