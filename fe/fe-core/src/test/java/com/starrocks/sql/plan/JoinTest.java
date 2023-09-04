@@ -3142,5 +3142,36 @@ public class JoinTest extends PlanTestBase {
                 "  |    \n" +
                 "  9:MERGING-EXCHANGE\n" +
                 "     limit: 20");
+
+        FeConstants.runningUnitTest = true;
+        sql = "SELECT t0.v1 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4 order by t0.v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        sql = "SELECT t0.v1 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4 order by t0.v1 limit 5";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "5:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 5\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE");
+        FeConstants.runningUnitTest = false;
     }
 }
