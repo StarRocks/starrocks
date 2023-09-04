@@ -52,7 +52,6 @@ Status VarBinaryConverter::write_quoted_string(OutputStream* os, const Column& c
     return os->write('"');
 }
 
-
 bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     int max_size = -1;
     if (options.type_desc != nullptr) {
