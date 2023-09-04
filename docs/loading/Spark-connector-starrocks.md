@@ -2,6 +2,10 @@
 
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you load data into a StarRocks table by using Spark. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). The Spark connector is implemented based on Spark DataSource V2. A DataSource can be created by using Spark DataFrames or Spark SQL. And both batch and structured streaming modes are supported.
 
+> **NOTICE**
+> 
+> Only users with the SELECT and INSERT privileges on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privileges.
+
 ## Version requirements
 
 | Spark connector | Spark            | StarRocks     | Java | Scala |
@@ -84,7 +88,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.fe.http.url                          | YES      | None          | The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a comma (,). Format: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`. Since version 1.1.1, you can also add `http://` prefix to the URL, such as `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`.|
 | starrocks.fe.jdbc.url                          | YES      | None          | The address that is used to connect to the MySQL server of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. |
 | starrocks.table.identifier                     | YES      | None          | The name of the StarRocks table. Format: `<database_name>.<table_name>`. |
-| starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account.              |
+| starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account. Only users with the SELECT and INSERT privileges on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privileges.             |
 | starrocks.password                             | YES      | None          | The password of your StarRocks cluster account.              |
 | starrocks.write.label.prefix                   | NO       | spark-        | The label prefix used by Stream Load.                        |
 | starrocks.write.enable.transaction-stream-load | NO | TRUE | Whether to use [Stream Load transaction interface](../loading/Stream_Load_transaction_interface) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry. |
