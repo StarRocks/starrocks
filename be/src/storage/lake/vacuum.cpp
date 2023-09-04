@@ -73,6 +73,7 @@ static Status delete_files(FileSystem* fs, const std::vector<std::string>& paths
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);
+        LOG_IF(INFO, config::lake_print_delete_log) << "Deleted " << paths.size() << " files";
     } else {
         LOG(WARNING) << "Fail to delete: " << st;
     }
