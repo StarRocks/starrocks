@@ -20,7 +20,7 @@ DUPLICATE KEY(`l_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 192
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "group_tpch_100",
 "in_memory" = "false",
 "storage_format" = "V2"
@@ -40,7 +40,7 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "groupxcdffsisdf",
 "in_memory" = "false",
 "storage_format" = "V2"
@@ -61,7 +61,7 @@ DUPLICATE KEY(`o_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 192
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "gsdaf2449s9e",
 "in_memory" = "false",
 "storage_format" = "V2"
@@ -77,7 +77,7 @@ DUPLICATE KEY(`n_nationkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`n_nationkey`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "in_memory" = "false",
 "storage_format" = "V2"
 );
@@ -91,7 +91,7 @@ DUPLICATE KEY(`r_regionkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "in_memory" = "false",
 "storage_format" = "V2"
 );
@@ -109,7 +109,7 @@ DUPLICATE KEY(`s_suppkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "grosdf12sdoq3o",
 "in_memory" = "false",
 "storage_format" = "V2"
@@ -130,7 +130,7 @@ DUPLICATE KEY(`p_partkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "grosdf123p",
 "in_memory" = "false",
 "storage_format" = "V2"
@@ -147,7 +147,7 @@ DUPLICATE KEY(`ps_partkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "3",
+"replication_num" = "1",
 "colocate_with" = "grosdf123o",
 "in_memory" = "false",
 "storage_format" = "V2"
