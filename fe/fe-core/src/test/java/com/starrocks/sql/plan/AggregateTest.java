@@ -820,7 +820,7 @@ public class AggregateTest extends PlanTestBase {
         sql = "select retention([])";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: retention[([]); args: INVALID_TYPE; result: ARRAY<BOOLEAN>; " +
+                "  |  aggregate: retention[([]); args: ARRAY; result: ARRAY<BOOLEAN>; " +
                 "args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
 
