@@ -223,6 +223,9 @@ Status DeltaWriter::_init() {
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
             _partial_schema_with_sort_key = true;
         }
+        if (!_opt.merge_condition.empty()) {
+            writer_context.merge_condition = _opt.merge_condition;
+        }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
