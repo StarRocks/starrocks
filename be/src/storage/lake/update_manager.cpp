@@ -39,6 +39,7 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _update_mem_tracker = mem_tracker;
     _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
+    _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state_cache", mem_tracker);
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
@@ -61,6 +62,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
     Status st = index.lake_load(tablet, metadata, base_version, builder);
+    _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         _index_cache.remove(index_entry);
         std::string msg =
@@ -457,6 +459,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
     Status st = index.lake_load(tablet, metadata, base_version, builder);
+    _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         _index_cache.remove(index_entry);
         LOG(ERROR) << strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
@@ -470,7 +473,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
     RowsetPtr output_rowset =
             std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()));
-    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get());
+    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get(), this);
     size_t total_deletes = 0;
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
@@ -572,11 +575,13 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
 void UpdateManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
-        LOG(INFO) << strings::Substitute("[lake update manager memory]index:$0 update_state:$1 total:$2/$3",
-                                         PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
-                                         PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
-                                         PrettyPrinter::print_bytes(_update_mem_tracker->consumption()),
-                                         PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
+        LOG(INFO) << strings::Substitute(
+                "[lake update manager memory]index:$0 update_state:$1 compact_state:$2 total:$3/$4",
+                PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
+                PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
+                PrettyPrinter::print_bytes(_compaction_state_mem_tracker->consumption()),
+                PrettyPrinter::print_bytes(_update_mem_tracker->consumption()),
+                PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
         last_print_ts.store(time(nullptr));
     }
 }
