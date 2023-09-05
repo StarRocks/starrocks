@@ -18,18 +18,26 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks::lake {
 
-CompactionState::CompactionState(Rowset* rowset) {
+CompactionState::CompactionState(Rowset* rowset, UpdateManager* update_manager) {
     if (rowset->num_segments() > 0) {
         pk_cols.resize(rowset->num_segments());
     }
+    _update_manager = update_manager;
 }
 
+<<<<<<< HEAD
 CompactionState::~CompactionState() {}
+=======
+CompactionState::~CompactionState() {
+    _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
+}
+>>>>>>> bfbc4d536c ([Enhancement] improve cloud native pk table memory use and tracker (#30422))
 
 Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
@@ -74,8 +82,6 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     auto& dest = pk_cols[segment_id];
     auto col = pk_column->clone();
     if (itr != nullptr) {
-        const auto num_rows = rowset->num_rows();
-        col->reserve(num_rows);
         while (true) {
             chunk->reset();
             auto st = itr->get_next(chunk);
@@ -91,6 +97,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     }
     dest = std::move(col);
     dest->raw_data();
+    _memory_usage += dest->memory_usage();
+    _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
 
     return Status::OK();
 }
@@ -99,6 +107,8 @@ void CompactionState::release_segments(uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
+    _memory_usage -= pk_cols[segment_id]->memory_usage();
+    _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
     pk_cols[segment_id]->reset_column();
 }
 
