@@ -26,6 +26,7 @@ import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
@@ -172,16 +173,18 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.resetSessionVariable();
         if (properties != null) {
             for (String key : properties.keySet()) {
+                if (!VariableMgr.containsVariable(key)) {
+                    continue;
+                }
                 try {
                     runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
                 } catch (DdlException e) {
                     // not session variable
                     taskRunContextProperties.put(key, properties.get(key));
-                } finally {
-                    runCtx.getState().reset();
                 }
             }
         }
+        runCtx.getState().reset();
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
