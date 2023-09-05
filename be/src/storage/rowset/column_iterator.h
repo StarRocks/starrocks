@@ -44,6 +44,7 @@ namespace starrocks {
 class CondColumn;
 
 class Column;
+class ColumnAccessPath;
 class ColumnPredicate;
 
 class ColumnReader;
@@ -171,6 +172,15 @@ public:
     }
 
     Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
+
+    // for complex collection type (Array/Struct/Map)
+    virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }
+
+    virtual Status next_batch(const SparseRange<>& range, Column* dst, ColumnAccessPath* path) {
+        return next_batch(range, dst);
+    }
+
+    virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
 protected:
     ColumnIteratorOptions _opts;
