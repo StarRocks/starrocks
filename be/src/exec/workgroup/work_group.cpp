@@ -27,6 +27,26 @@
 
 namespace starrocks::workgroup {
 
+/// WorkGroupMetrics
+struct WorkGroupMetrics {
+    int128_t group_unique_id;
+
+    std::unique_ptr<starrocks::DoubleGauge> cpu_limit = nullptr;
+    std::unique_ptr<starrocks::DoubleGauge> inuse_cpu_ratio = nullptr;
+    std::unique_ptr<starrocks::DoubleGauge> inuse_scan_ratio = nullptr;
+    std::unique_ptr<starrocks::DoubleGauge> inuse_connector_scan_ratio = nullptr;
+    std::unique_ptr<starrocks::IntGauge> mem_limit = nullptr;
+    std::unique_ptr<starrocks::IntGauge> inuse_mem_bytes = nullptr;
+    std::unique_ptr<starrocks::IntGauge> running_queries = nullptr;
+    std::unique_ptr<starrocks::IntGauge> total_queries = nullptr;
+    std::unique_ptr<starrocks::IntGauge> concurrency_overflow_count = nullptr;
+    std::unique_ptr<starrocks::IntGauge> bigquery_count = nullptr;
+
+    std::unique_ptr<starrocks::DoubleGauge> inuse_cpu_cores = nullptr;
+    int64_t timestamp_ns = 0;
+    int64_t cpu_runtime_ns = 0;
+};
+
 /// WorkGroupSchedEntity.
 template <typename Q>
 int64_t WorkGroupSchedEntity<Q>::cpu_limit() const {
@@ -259,6 +279,10 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
                 "resource_group_cpu_limit_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_cpu_limit_ratio.get());
         // cpu use ratio.
+        auto inuse_cpu_cores = std::make_unique<DoubleGauge>(MetricUnit::NOUNIT);
+        bool inuse_cpu_cores_registered = StarRocksMetrics::instance()->metrics()->register_metric(
+                "resource_group_inuse_cpu_cores", MetricLabels().add("name", wg->name()), inuse_cpu_cores.get());
+        // cpu use ratio.
         auto resource_group_cpu_use_ratio = std::make_unique<DoubleGauge>(MetricUnit::PERCENT);
         bool cpu_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_cpu_use_ratio", MetricLabels().add("name", wg->name()),
@@ -308,20 +332,30 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
                 resource_group_bigquery_count.get());
 
         unique_lock.lock();
-        if (cpu_limit_registered) _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
-        if (cpu_ratio_registered) _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
-        if (scan_ratio_registered) _wg_scan_metrics.emplace(wg->name(), std::move(resource_group_scan_use_ratio));
+        auto it = _wg_metrics.find(wg->name());
+        if (it == _wg_metrics.end()) {
+            it = _wg_metrics.emplace(wg->name(), std::make_shared<WorkGroupMetrics>()).first;
+        }
+        auto& wg_metrics = it->second;
+        if (inuse_cpu_cores_registered) {
+            wg_metrics->timestamp_ns = MonotonicNanos();
+            wg_metrics->cpu_runtime_ns = wg->cpu_runtime_ns();
+            wg_metrics->inuse_cpu_cores = std::move(inuse_cpu_cores);
+        }
+        if (cpu_limit_registered) wg_metrics->cpu_limit = std::move(resource_group_cpu_limit_ratio);
+        if (cpu_ratio_registered) wg_metrics->inuse_cpu_ratio = std::move(resource_group_cpu_use_ratio);
+        if (scan_ratio_registered) wg_metrics->inuse_scan_ratio = std::move(resource_group_scan_use_ratio);
         if (connector_scan_ratio_registered)
-            _wg_connector_scan_metrics.emplace(wg->name(), std::move(resource_group_connector_scan_use_ratio));
-        if (mem_limit_registered) _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
-        if (mem_inuse_registered) _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
-        if (running_registered) _wg_running_queries.emplace(wg->name(), std::move(resource_group_running_queries));
-        if (total_registered) _wg_total_queries.emplace(wg->name(), std::move(resource_group_total_queries));
+            wg_metrics->inuse_connector_scan_ratio = std::move(resource_group_connector_scan_use_ratio);
+        if (mem_limit_registered) wg_metrics->mem_limit = std::move(resource_group_mem_limit_bytes);
+        if (mem_inuse_registered) wg_metrics->inuse_mem_bytes = std::move(resource_group_mem_allocated_bytes);
+        if (running_registered) wg_metrics->running_queries = std::move(resource_group_running_queries);
+        if (total_registered) wg_metrics->total_queries = std::move(resource_group_total_queries);
         if (concurrency_registered)
-            _wg_concurrency_overflow_count.emplace(wg->name(), std::move(resource_group_concurrency_overflow));
-        if (bigquery_registered) _wg_bigquery_count.emplace(wg->name(), std::move(resource_group_bigquery_count));
+            wg_metrics->concurrency_overflow_count = std::move(resource_group_concurrency_overflow);
+        if (bigquery_registered) wg_metrics->bigquery_count = std::move(resource_group_bigquery_count);
     }
-    _wg_metrics[wg->name()] = wg->unique_id();
+    _wg_metrics[wg->name()]->group_unique_id = wg->unique_id();
 }
 
 double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
@@ -352,8 +386,8 @@ void WorkGroupManager::update_metrics_unlocked() {
         }
     });
 
-    for (const auto& [name, wg_id] : _wg_metrics) {
-        auto wg_it = _workgroups.find(wg_id);
+    for (auto& [name, wg_metrics] : _wg_metrics) {
+        auto wg_it = _workgroups.find(wg_metrics->group_unique_id);
         if (wg_it != _workgroups.end()) {
             const auto& wg = wg_it->second;
             VLOG(2) << "workgroup update_metrics " << name;
@@ -364,29 +398,39 @@ void WorkGroupManager::update_metrics_unlocked() {
             double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
                                                                sum_connector_scan_runtime_ns);
 
-            _wg_cpu_limit_metrics[name]->set_value(cpu_expected_use_ratio);
-            _wg_cpu_metrics[name]->set_value(cpu_use_ratio);
-            _wg_scan_metrics[name]->set_value(scan_use_ratio);
-            _wg_connector_scan_metrics[name]->set_value(connector_scan_use_ratio);
-            _wg_mem_limit_metrics[name]->set_value(wg->mem_limit_bytes());
-            _wg_mem_metrics[name]->set_value(wg->mem_tracker()->consumption());
-            _wg_running_queries[name]->set_value(wg->num_running_queries());
-            _wg_total_queries[name]->set_value(wg->num_total_queries());
-            _wg_concurrency_overflow_count[name]->set_value(wg->concurrency_overflow_count());
-            _wg_bigquery_count[name]->set_value(wg->bigquery_count());
+            wg_metrics->cpu_limit->set_value(cpu_expected_use_ratio);
+            wg_metrics->inuse_cpu_ratio->set_value(cpu_use_ratio);
+            wg_metrics->inuse_scan_ratio->set_value(scan_use_ratio);
+            wg_metrics->inuse_connector_scan_ratio->set_value(connector_scan_use_ratio);
+            wg_metrics->mem_limit->set_value(wg->mem_limit_bytes());
+            wg_metrics->inuse_mem_bytes->set_value(wg->mem_tracker()->consumption());
+            wg_metrics->running_queries->set_value(wg->num_running_queries());
+            wg_metrics->total_queries->set_value(wg->num_total_queries());
+            wg_metrics->concurrency_overflow_count->set_value(wg->concurrency_overflow_count());
+            wg_metrics->bigquery_count->set_value(wg->bigquery_count());
+
+            int64_t new_timestamp_ns = MonotonicNanos();
+            int64_t new_cpu_runtime_ns = wg->cpu_runtime_ns();
+            int64_t delta_ns = std::max<int64_t>(1, new_timestamp_ns - wg_metrics->timestamp_ns);
+            int64_t delta_runtime_ns = std::max<int64_t>(0, new_cpu_runtime_ns - wg_metrics->cpu_runtime_ns);
+            double inuse_cpu_cores = double(delta_runtime_ns) / delta_ns;
+            wg_metrics->inuse_cpu_cores->set_value(inuse_cpu_cores);
+            wg_metrics->timestamp_ns = new_timestamp_ns;
+            wg_metrics->cpu_runtime_ns = new_cpu_runtime_ns;
         } else {
             VLOG(2) << "workgroup update_metrics " << name << ", workgroup not exists so cleanup metrics";
 
-            _wg_cpu_limit_metrics[name]->set_value(0);
-            _wg_cpu_metrics[name]->set_value(0);
-            _wg_scan_metrics[name]->set_value(0);
-            _wg_connector_scan_metrics[name]->set_value(0);
-            _wg_mem_limit_metrics[name]->set_value(0);
-            _wg_mem_metrics[name]->set_value(0);
-            _wg_running_queries[name]->set_value(0);
-            _wg_total_queries[name]->set_value(0);
-            _wg_concurrency_overflow_count[name]->set_value(0);
-            _wg_bigquery_count[name]->set_value(0);
+            wg_metrics->cpu_limit->set_value(0);
+            wg_metrics->inuse_cpu_ratio->set_value(0);
+            wg_metrics->inuse_scan_ratio->set_value(0);
+            wg_metrics->inuse_connector_scan_ratio->set_value(0);
+            wg_metrics->mem_limit->set_value(0);
+            wg_metrics->inuse_mem_bytes->set_value(0);
+            wg_metrics->running_queries->set_value(0);
+            wg_metrics->total_queries->set_value(0);
+            wg_metrics->concurrency_overflow_count->set_value(0);
+            wg_metrics->bigquery_count->set_value(0);
+            wg_metrics->inuse_cpu_cores->set_value(0);
         }
     }
 }
