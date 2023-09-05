@@ -55,6 +55,7 @@ public class BackendSelectorFactory {
             return new NoopBackendSelector();
         }
 
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
         if (scanNode instanceof SchemaScanNode) {
@@ -62,10 +63,9 @@ public class BackendSelectorFactory {
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
                 scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                 scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
-            SessionVariable sv = connectContext.getSessionVariable();
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
-                    sv.getForceScheduleLocal(),
-                    sv.getHDFSBackendSelectorScanRangeShuffle());
+                    sessionVariable.getForceScheduleLocal(),
+                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
@@ -79,7 +79,8 @@ public class BackendSelectorFactory {
                         execFragment.getOrCreateColocatedAssignment((OlapScanNode) scanNode);
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                 return new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
-                        colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider);
+                        colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,
+                        sessionVariable.getMaxBucketsPerBeToUseBalancerAssignment());
             } else {
                 return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType);
             }
