@@ -92,7 +92,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         return "HDFSCloudConfiguration{" +
                 "configResources=" + configResources +
                 ", runtimeJars=" + runtimeJars +
-                ", credential=" + hdfsCloudCredential.toString() + "}";
+                ", credential=" + hdfsCloudCredential.getCredentialString() + "}";
     }
 
     @Override
