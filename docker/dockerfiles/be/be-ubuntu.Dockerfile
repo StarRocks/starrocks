@@ -21,6 +21,7 @@ COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 
 FROM ubuntu:22.04
