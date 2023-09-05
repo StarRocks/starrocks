@@ -51,7 +51,7 @@ public:
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
         if (chunk && !chunk->is_empty()) {
             if (_aggregator->hash_set_variant().need_expand(chunk->num_rows())) {
-                return chunk->memory_usage() + _aggregator->hash_set_memory_usage();
+                return chunk->memory_usage() + _aggregator->hash_set_memory_usage() * 2;
             }
             return chunk->memory_usage();
         }
