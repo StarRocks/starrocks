@@ -222,10 +222,9 @@ class FurtherPartitionPruneTest extends PlanTestBase {
             String matchedLine = matcher.group();
             System.out.println(matchedLine);
             String[] values = matchedLine.split("=")[1].split("/");
-            Assert.assertTrue(matchedLine,Integer.valueOf(values[0]) == Integer.valueOf(values[1]));
+            Assert.assertTrue(matchedLine, Integer.valueOf(values[0]) == Integer.valueOf(values[1]));
         }
     }
-
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
@@ -437,7 +436,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
-
     private static Stream<Arguments> cannotPrunePredicateSqls() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 200) or s1 = 'a'");
@@ -471,18 +469,19 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
-        sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null or k1 in ('2020-09-01', '2020-09-02', '2020-09-03')");
+        sqlList.add(
+                "select * from less_than_tbl where date_trunc('year', k1) is null or k1 in ('2020-09-01', '2020-09-02', '2020-09-03')");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) > '2050-08-01'");
 
         sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01' " +
                 "or date_trunc('month', date_trunc('day', k1)) > '2020-09-01'");
 
-        sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01 10:00:00'");
+        sqlList.add(
+                "select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01 10:00:00'");
         sqlList.add("select * from maxvalue_range where days_add('2020-01-01' ,v1) > '2050-01-01'");
         sqlList.add("select * from maxvalue_range where hours_add(days_add('2020-01-01' ,v1), 100) > '2050-01-01'");
         sqlList.add("select * from maxvalue_range where hours_add(days_add('2020-01-01' ,v1), 100) > '2050-01-01'");
-
 
         sqlList.add("select * from less_than_tbl where k1 != '2020-09-01' and " +
                 "(date_trunc('year', k1) > '2030-01-01' or (k1 > '2020-09-01' and k1 <= '2020-10-01'))");
