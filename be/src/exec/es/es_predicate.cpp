@@ -425,6 +425,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             BUILD_INPRED_VALUES(TYPE_VARCHAR)
         default:
             // We don't support pushdown json type's in_predicates to ES now.
+            // If failed here, we will fallback in_predicates executed on the BE side.
             return Status::InternalError("unsupported type to push down to ES");
         }
 
