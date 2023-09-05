@@ -212,6 +212,7 @@ public class LoadingTaskPlanner {
             slotDesc.setIsNullable(false);
         }
 
+        Load.checkMergeCondition(mergeConditionStr, table, destColumns, false);
         if (Config.enable_shuffle_load && needShufflePlan()) {
             if (Config.eliminate_shuffle_load_by_replicated_storage) {
                 buildDirectPlan(loadId, fileStatusesList, filesAdded, true);
@@ -250,7 +251,6 @@ public class LoadingTaskPlanner {
                 table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
@@ -332,7 +332,6 @@ public class LoadingTaskPlanner {
                 table.writeQuorum(), table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
