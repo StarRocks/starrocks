@@ -384,7 +384,7 @@ public class MaterializedViewTest {
         mv.addPartition(partition);
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(100L, baseTable.getId());
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseTable.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");

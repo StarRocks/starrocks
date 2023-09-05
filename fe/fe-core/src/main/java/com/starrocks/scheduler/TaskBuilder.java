@@ -24,6 +24,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -176,6 +177,28 @@ public class TaskBuilder {
                 task.setSchedule(taskSchedule);
                 task.setType(Constants.TaskType.PERIODICAL);
             }
+        }
+    }
+
+    public static void rebuildMVTask(String dbName,
+                                     MaterializedView materializedView) throws DdlException {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Task task;
+        if (currentTask == null) {
+            task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
+            taskManager.createTask(task, false);
+        } else {
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+            TaskBuilder.updateTaskInfo(changedTask, materializedView);
+            taskManager.alterTask(currentTask, changedTask, false);
+            task = currentTask;
+        }
+
+        // for event triggered type, run task
+        if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            taskManager.executeTask(task.getName());
         }
     }
 

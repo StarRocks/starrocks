@@ -23,7 +23,7 @@ public class ForeignKeyConstraintTest {
     @Test
     public void testParseInternal() {
         // internal catalog
-        String constraintDescs = "(column1)  REFERENCES  default_catalog.100.1000    (newColumn1)";
+        String constraintDescs = "(column1)  REFERENCES  default_catalog.100.1000(newColumn1)";
         List<ForeignKeyConstraint> foreignKeyConstraints1 = ForeignKeyConstraint.parse(constraintDescs);
         Assert.assertEquals(1, foreignKeyConstraints1.size());
         Assert.assertEquals("default_catalog", foreignKeyConstraints1.get(0).getParentTableInfo().getCatalogName());
