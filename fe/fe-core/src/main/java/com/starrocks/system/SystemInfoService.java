@@ -1179,5 +1179,8 @@ public class SystemInfoService implements GsonPostProcessable {
         throw new DdlException("not implemented");
     }
 
+    public void dropNodes(long warehouseId) throws DdlException {
+        throw new DdlException("not implemented");
+    }
 }
 

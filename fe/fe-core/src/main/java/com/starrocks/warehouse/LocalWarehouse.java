@@ -25,13 +25,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.ComputeNode;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
@@ -134,22 +132,7 @@ public class LocalWarehouse extends Warehouse {
     }
 
     private void dropNodeFromSystem() throws DdlException {
-        List<ComputeNode> nodes = GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream().
-                filter(cn -> cn.getWarehouseId() == this.getId()).collect(Collectors.toList());
-
-        for (ComputeNode node : nodes) {
-            try {
-                GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(node.getHost(), node.getHeartbeatPort());
-                GlobalStateMgr.getCurrentSystemInfo().dropBackend(node.getHost(), node.getHeartbeatPort(), false);
-            } catch (DdlException e) {
-                if (e.getMessage().contains("compute node does not exists")
-                        || e.getMessage().contains("backend does not exists")) {
-                    continue;
-                } else {
-                    throw e;
-                }
-            }
-        }
+        GlobalStateMgr.getCurrentSystemInfo().dropNodes(this.getId());
     }
 
 }
