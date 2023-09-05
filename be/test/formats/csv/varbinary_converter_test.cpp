@@ -32,15 +32,6 @@ public:
         _type.len = 6000;
     }
 
-    std::string hex_binary(const Slice& str) {
-        std::stringstream ss;
-        ss << std::hex << std::uppercase << std::setfill('0');
-        for (int i = 0; i < str.size; ++i) {
-            ss << std::setw(2) << (static_cast<int32_t>(str.data[i]) & 0xFF);
-        }
-        return ss.str();
-    }
-
 protected:
     TypeDescriptor _type;
 };
@@ -50,19 +41,35 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    EXPECT_TRUE(conv->read_string(col.get(), "AB", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), "0101", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), " AB", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), " 0101", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "YWJjZA==", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "YQ== ", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "   ", Converter::Options()));
+
+    EXPECT_EQ(5, col->size());
+    EXPECT_EQ(Slice("abcd"), col->get(0).get_slice());
+    EXPECT_EQ(Slice("a"), col->get(1).get_slice());
+    EXPECT_EQ(Slice("efghij"), col->get(2).get_slice());
+    EXPECT_EQ(Slice("efghij_k"), col->get(3).get_slice());
+    EXPECT_EQ(Slice(), col->get(4).get_slice());
+}
+
+// NOLINTNEXTLINE
+TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    EXPECT_TRUE(conv->read_string(col.get(), "YWJjZA==.", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "YQ== !", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq.", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ?", Converter::Options()));
 
     EXPECT_EQ(4, col->size());
-    ASSERT_EQ(Slice("AB").to_string(), hex_binary(col->get(0).get_slice()));
-    ASSERT_EQ(Slice("0101").to_string(), hex_binary(col->get(1).get_slice()));
-    ASSERT_EQ(Slice("AB").to_string(), hex_binary(col->get(2).get_slice()));
-    ASSERT_EQ(Slice("0101").to_string(), hex_binary(col->get(3).get_slice()));
-
-    EXPECT_FALSE(conv->read_string(col.get(), "xyz", Converter::Options()));
-    EXPECT_FALSE(conv->read_string(col.get(), "1", Converter::Options()));
+    EXPECT_EQ(Slice("YWJjZA==."), col->get(0).get_slice());
+    EXPECT_EQ(Slice("YQ== !"), col->get(1).get_slice());
+    EXPECT_EQ(Slice(" ZWZnaGlq."), col->get(2).get_slice());
+    EXPECT_EQ(Slice(" ZWZnaGlqX2s= ?"), col->get(3).get_slice());
 }
 
 // NOLINTNEXTLINE
@@ -70,7 +77,7 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
-    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH * 2 + 1, 'a');
+    std::string large_string(TypeDescriptor::MAX_VARCHAR_LENGTH * 4, 'a');
     EXPECT_FALSE(conv->read_string(col.get(), large_string, Converter::Options()));
 }
 
@@ -78,12 +85,12 @@ TEST_F(VarBinaryConverterTest, test_read_large_binary01) {
 TEST_F(VarBinaryConverterTest, test_read_large_binary02) {
     TypeDescriptor binary_type;
     binary_type.type = TYPE_VARBINARY;
-    binary_type.len = 10;
+    binary_type.len = 5;
 
     auto conv = csv::get_converter(binary_type, false);
     auto col = ColumnHelper::create_column(binary_type, false);
 
-    std::string large_string("xxxxx");
+    std::string large_string("ZWZnaGlqX2s=");
     Converter::Options options;
     options.type_desc = &binary_type;
     EXPECT_FALSE(conv->read_string(col.get(), large_string, options));
@@ -96,21 +103,21 @@ TEST_F(VarBinaryConverterTest, test_write_string) {
     (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
 
     csv::OutputStreamString buff;
-    ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_string(&buff, *col, 3, Converter::Options()).ok());
-    ASSERT_TRUE(buff.finalize().ok());
-    ASSERT_EQ("61616161616161616161616162626262626262626363636363", buff.as_string());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_string(&buff, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(buff.finalize().ok());
+    EXPECT_EQ("YWFhYWFhYWFhYWFhYmJiYmJiYmI=Y2NjY2M=", buff.as_string());
 
     csv::OutputStreamString buff2;
-    ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());
-    ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 3, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());
+    EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 3, Converter::Options()).ok());
 
-    ASSERT_TRUE(buff2.finalize().ok());
-    ASSERT_EQ("\"616161616161616161616161\"\"6262626262626262\"\"\"\"6363636363\"", buff2.as_string());
+    EXPECT_TRUE(buff2.finalize().ok());
+    EXPECT_EQ("\"YWFhYWFhYWFhYWFh\"\"YmJiYmJiYmI=\"\"\"\"Y2NjY2M=\"", buff2.as_string());
 }
 
 } // namespace starrocks::csv
