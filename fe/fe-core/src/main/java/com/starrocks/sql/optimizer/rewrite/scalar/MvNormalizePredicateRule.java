@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+import autovalue.shaded.com.google.common.common.base.Preconditions;
+>>>>>>> 92220a7892 ([Enhancement] Support convert equal range predicates into equivalence classes (#29988))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -57,6 +61,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         }
     };
 
+<<<<<<< HEAD
     // Normalize Binary Predicate
     // for integer type:
     // a < 3 => a <= 2
@@ -109,6 +114,29 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         }
         return binaryPredicate;
     }
+=======
+    // Comparator to normalize predicates, only use scalar operators' string to compare.
+    private static final Comparator<ScalarOperator> SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID =
+            new Comparator<ScalarOperator>() {
+                @Override
+                public int compare(ScalarOperator o1, ScalarOperator o2) {
+                    if (o1 == null && o2 == null) {
+                        return 0;
+                    } else if (o1 == null) {
+                        return -1;
+                    } else if (o2 == null) {
+                        return 1;
+                    } else {
+                        String s1 = o1.toString();
+                        String s2 = o2.toString();
+                        String n1 = s1.replaceAll("\\d: ", "");
+                        String n2 = s2.replaceAll("\\d: ", "");
+                        int ret = n1.compareTo(n2);
+                        return (ret == 0) ? s1.compareTo(s2) : ret;
+                    }
+                }
+            };
+>>>>>>> 92220a7892 ([Enhancement] Support convert equal range predicates into equivalence classes (#29988))
 
     // should maintain sequence for case:
     // a like "%hello%" and (b * c = 100 or b * c = 200)
@@ -137,6 +165,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         }
     }
 
+<<<<<<< HEAD
     private ConstantOperator createConstantIntegerOne(Type type) {
         if (Type.SMALLINT.equals(type)) {
             return ConstantOperator.createSmallInt((short) 1);
@@ -146,6 +175,32 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             return ConstantOperator.createBigint(1L);
         } else if (Type.LARGEINT.equals(type)) {
             return ConstantOperator.createLargeInt(BigInteger.ONE);
+=======
+    @Override
+    public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
+                                               ScalarOperatorRewriteContext context) {
+        ScalarOperator l = predicate.getChild(0);
+        ScalarOperator r = predicate.getChild(1);
+        if (l.isVariable() && r.isVariable()) {
+            // `a < b` is equal to `b > a`, but here we all normalized it into a < b for better rewrite.
+            if (SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID.compare(l, r) <= 0) {
+                return predicate;
+            }
+            ScalarOperator result = predicate.commutative();
+            Preconditions.checkState(SCALAR_OPERATOR_COMPARATOR_IGNORE_COLUMN_ID
+                    .compare(result.getChild(0), result.getChild(1)) <= 0);
+            return result;
+        } else {
+            return  super.visitBinaryPredicate(predicate, context);
+        }
+    }
+
+    @Override
+    public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        List<ScalarOperator> rhs = predicate.getChildren().subList(1, predicate.getChildren().size());
+        if (predicate.isSubquery()) {
+            return predicate;
+>>>>>>> 92220a7892 ([Enhancement] Support convert equal range predicates into equivalence classes (#29988))
         }
         return null;
     }
