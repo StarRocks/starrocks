@@ -40,12 +40,14 @@ import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
@@ -554,17 +556,16 @@ public class ColumnTypeConverter {
             return new MapType(fromPaimonType(mapType.getKeyType()), fromPaimonType(mapType.getValueType()));
         }
 
-        // TODO: uncomment this and unit test case when this type is supported in paimon connector
-        //public Type visit(RowType rowType) {
-        //    List<DataField> fields = rowType.getFields();
-        //    ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-        //    for (DataField field : fields) {
-        //        String fieldName = field.name();
-        //        Type fieldType = fromPaimonType(field.type());
-        //        structFields.add(new StructField(fieldName, fieldType));
-        //    }
-        //    return new StructType(structFields);
-        //}
+        public Type visit(RowType rowType) {
+            List<DataField> fields = rowType.getFields();
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (DataField field : fields) {
+                String fieldName = field.name();
+                Type fieldType = fromPaimonType(field.type());
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            return new StructType(structFields);
+        }
 
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {

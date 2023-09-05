@@ -19,9 +19,12 @@ import com.starrocks.jni.connector.ColumnValue;
 import org.apache.paimon.data.InternalArray;
 import org.apache.paimon.data.InternalMap;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.data.columnar.ColumnarRow;
 import org.apache.paimon.types.ArrayType;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.MapType;
+import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.time.LocalDate;
@@ -119,7 +122,20 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
-
+        ColumnarRow array = (ColumnarRow) fieldData;
+        List<DataField> fields = ((RowType) dataType).getFields();
+        for (int i = 0; i < structFieldIndex.size(); i++) {
+            Integer idx = structFieldIndex.get(i);
+            PaimonColumnValue cv = null;
+            if (idx != null) {
+                DataField dataField = fields.get(idx);
+                Object o = InternalRowUtils.get(array, i, dataField.type());
+                if (o != null) {
+                    cv = new PaimonColumnValue(0, dataField.type());
+                }
+            }
+            values.add(cv);
+        }
     }
 
     @Override
