@@ -68,7 +68,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
 
     public void dropWarehouse(DropWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
+            throw new DdlException("unsupported statement in shared_nothing mode");
         }
 
         String warehouseName = stmt.getWarehouseName();
@@ -102,7 +102,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
 
     public void suspendWarehouse(SuspendWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
+            throw new DdlException("unsupported statement in shared_nothing mode");
         }
 
         String warehouseName = stmt.getWarehouseName();
@@ -111,6 +111,9 @@ public class WarehouseManagerEpack extends WarehouseManager {
                     "Warehouse '%s' doesn't exist", warehouseName);
 
             Warehouse warehouse = nameToWh.get(warehouseName);
+            if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
+                throw new DdlException("Warehouse " + warehouseName + " has been suspended");
+            }
             warehouse.suspendSelf();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
         }
@@ -125,7 +128,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
 
     public void resumeWarehouse(ResumeWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new RuntimeException(new DdlException("unsupported statement in shared_nothing mode"));
+            throw new DdlException("unsupported statement in shared_nothing mode");
         }
 
         String warehouseName = stmt.getWarehouseName();
@@ -133,6 +136,9 @@ public class WarehouseManagerEpack extends WarehouseManager {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
             Warehouse warehouse = nameToWh.get(warehouseName);
+            if (warehouse.getState() == Warehouse.WarehouseState.AVAILABLE) {
+                throw new DdlException("Can't resume an available warehouse");
+            }
             warehouse.resumeSelf();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
         }
