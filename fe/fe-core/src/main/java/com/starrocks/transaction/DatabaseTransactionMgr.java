@@ -44,8 +44,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -742,7 +742,7 @@ public class DatabaseTransactionMgr {
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
-                    Partition partition = table.getPartition(partitionId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     // partition maybe dropped between commit and publish version, ignore it
                     if (partition == null) {
                         continue;
@@ -857,7 +857,7 @@ public class DatabaseTransactionMgr {
                 PartitionInfo partitionInfo = table.getPartitionInfo();
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
-                    Partition partition = table.getPartition(partitionId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     // partition maybe dropped between commit and publish version, ignore this error
                     if (partition == null) {
                         tableCommitInfo.removePartition(partitionId);
@@ -1075,7 +1075,7 @@ public class DatabaseTransactionMgr {
             while (partitionCommitInfoIterator.hasNext()) {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
                 long partitionId = partitionCommitInfo.getPartitionId();
-                Partition partition = table.getPartition(partitionId);
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
                     partitionCommitInfoIterator.remove();

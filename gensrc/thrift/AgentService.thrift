@@ -342,7 +342,8 @@ enum TTabletMetaType {
     WRITE_QUORUM,
     REPLICATED_STORAGE,
     DISABLE_BINLOG,
-    BINLOG_CONFIG
+    BINLOG_CONFIG,
+    BUCKET_SIZE
 }
 
 struct TTabletMetaInfo {

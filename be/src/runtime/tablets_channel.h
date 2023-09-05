@@ -39,6 +39,7 @@ namespace starrocks {
 class LoadChannel;
 class OlapTableSchemaParam;
 class PTabletWriterOpenRequest;
+class PTabletWriterOpenResult;
 class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
@@ -49,10 +50,10 @@ public:
     TabletsChannel() = default;
     virtual ~TabletsChannel() = default;
 
-    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
+    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                       std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
 
-    virtual Status incremental_open(const PTabletWriterOpenRequest& params,
+    virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,

@@ -80,7 +80,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "state")
     private PartitionState state;
     @SerializedName(value = "idToSubPartition")
-    private Map<Long, PhysicalPartition> idToSubPartition = Maps.newHashMap();
+    private Map<Long, PhysicalPartitionImpl> idToSubPartition = Maps.newHashMap();
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
@@ -89,6 +89,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private long shardGroupId;
 
     /* Physical Partition Member */
+    @SerializedName(value = "isImmutable")
+    private boolean isImmutable = false;
+
     @SerializedName(value = "baseIndex")
     private MaterializedIndex baseIndex;
     /**
@@ -180,8 +183,18 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return this.id;
     }
 
+    public void setImmutable(boolean isImmutable) {
+        this.isImmutable = isImmutable;
+    }
+
+    public boolean isImmutable() {
+        return this.isImmutable;
+    }
+
     public void addSubPartition(PhysicalPartition subPartition) {
-        idToSubPartition.put(subPartition.getId(), subPartition);
+        if (subPartition instanceof PhysicalPartitionImpl) {
+            idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
+        }
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {

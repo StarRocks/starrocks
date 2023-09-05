@@ -1787,6 +1787,18 @@ public class Config extends ConfigBase {
     public static long max_automatic_partition_number = 4096;
 
     /**
+     * enable automatic bucket for random distribution table
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_automatic_bucket = true;
+
+    /**
+     * default bucket size of automatic bucket table
+     */
+    @ConfField(mutable = true)
+    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+
+    /**
      * Used to limit num of agent task for one be. currently only for drop task.
      */
     @ConfField(mutable = true)

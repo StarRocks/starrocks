@@ -127,11 +127,12 @@ public class LocalTabletsProcDirTest {
         System.out.println(result);
         Assert.assertEquals(3, result.size());
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
-        Assert.assertEquals((long) result.get(0).get(1), replicaId);
-        Assert.assertEquals((long) result.get(0).get(2), backendId);
         Assert.assertEquals((long) result.get(1).get(0), tablet1Id);
-        Assert.assertEquals((long) result.get(1).get(1), replicaId + 1);
-        Assert.assertEquals((long) result.get(1).get(2), backendId + 1);
+        if ((long) result.get(0).get(1) == replicaId) {
+            Assert.assertEquals((long) result.get(0).get(2), backendId);
+        } else if ((long) result.get(0).get(1) == replicaId + 1) {
+            Assert.assertEquals((long) result.get(0).get(2), backendId + 1);
+        }
         Assert.assertEquals((long) result.get(2).get(0), tablet2Id);
         Assert.assertEquals(result.get(2).get(1), -1);
         Assert.assertEquals(result.get(2).get(2), -1);

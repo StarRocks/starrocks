@@ -220,4 +220,17 @@ StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
     return false;
 }
 
+int64_t Tablet::data_size() {
+    int64_t size = 0;
+    if (_version_hint > 0) {
+        auto metadata = get_metadata(_version_hint);
+        if (metadata.ok()) {
+            for (const auto& rowset : metadata.value()->rowsets()) {
+                size += rowset.data_size();
+            }
+        }
+    }
+    return size;
+}
+
 } // namespace starrocks::lake

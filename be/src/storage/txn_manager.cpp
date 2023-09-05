@@ -314,6 +314,7 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
         }
     } else {
         auto st = tablet->add_inc_rowset(rowset, version);
+        tablet->remove_in_writing_data_size(transaction_id);
         if (!st.ok() && !st.is_already_exist()) {
             // TODO: rollback saved rowset if error?
             LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()

@@ -34,6 +34,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -384,8 +385,10 @@ public class MvRewritePreprocessor {
             if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
-                MaterializedIndex materializedIndex = p.getIndex(mv.getBaseIndexId());
-                selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
+                for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
+                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexId());
+                    selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
+                }
             }
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);

@@ -297,6 +297,14 @@ public:
 
     void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
 
+    int64_t data_size();
+
+    int64_t in_writing_data_size();
+
+    void add_in_writing_data_size(int64_t txn_id, int64_t delta);
+
+    void remove_in_writing_data_size(int64_t txn_id);
+
     // verify all rowsets of current(max) version in this tablet
     [[nodiscard]] Status verify();
 
@@ -407,6 +415,8 @@ private:
     std::atomic<int64_t> _last_checkpoint_time{0};
 
     std::unique_ptr<BinlogManager> _binlog_manager;
+
+    std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
 };
 
 inline bool Tablet::init_succeeded() {

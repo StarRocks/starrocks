@@ -62,6 +62,7 @@ PARTITION BY date_trunc('day', k)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -101,6 +102,7 @@ PARTITION BY RANGE(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -123,6 +125,7 @@ PARTITION p2 VALUES [("0"), ("20")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -146,6 +149,7 @@ PARTITION p3 VALUES [("20"), ("30")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -170,6 +174,7 @@ PARTITION p4 VALUES [("30"), ("40")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -213,6 +218,7 @@ DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -235,6 +241,7 @@ DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -263,6 +270,7 @@ PARTITION BY RANGE(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
+"bucket_size" = "1073741824",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",

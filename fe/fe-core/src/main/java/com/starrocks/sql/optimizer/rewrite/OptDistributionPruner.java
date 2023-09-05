@@ -22,6 +22,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
@@ -46,9 +47,11 @@ public class OptDistributionPruner {
         List<Long> result = Lists.newArrayList();
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
-            MaterializedIndex table = partition.getIndex(olapScanOperator.getSelectedIndexId());
-            Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
-            result.addAll(tabletIds);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                MaterializedIndex table = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
+                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
+                result.addAll(tabletIds);
+            }
         }
         return result;
     }
