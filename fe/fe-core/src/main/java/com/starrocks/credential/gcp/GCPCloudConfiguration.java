@@ -25,8 +25,6 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CREDENTIAL_KEY;
-
 public class GCPCloudConfiguration implements CloudConfiguration {
 
     private final GCPCloudCredential gcpCloudCredential;
@@ -42,14 +40,12 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
         Map<String, String> properties = new HashMap<>();
         gcpCloudCredential.toThrift(properties);
-        properties.put(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
         gcpCloudCredential.applyToConfiguration(configuration);
-        configuration.set(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
     }
 
     @Override

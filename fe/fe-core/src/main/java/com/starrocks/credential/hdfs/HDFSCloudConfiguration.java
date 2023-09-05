@@ -31,8 +31,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES_LOADED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CREDENTIAL_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 
 public class HDFSCloudConfiguration implements CloudConfiguration {
@@ -80,18 +78,13 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         hdfsCloudCredential.toThrift(properties);
         properties.put(HDFS_CONFIG_RESOURCES, configResources);
         properties.put(HDFS_RUNTIME_JARS, runtimeJars);
-        properties.put(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
         hdfsCloudCredential.applyToConfiguration(configuration);
-        configuration.set(HDFS_CONFIG_RESOURCES, configResources);
-        configuration.set(HDFS_RUNTIME_JARS, runtimeJars);
         addConfigResourcesToConfiguration(configResources, configuration);
-        configuration.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
-        configuration.set(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
     }
 
     @Override

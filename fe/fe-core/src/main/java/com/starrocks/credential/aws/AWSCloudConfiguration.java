@@ -25,8 +25,6 @@ import org.apache.hadoop.conf.Configuration;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_FS_CREDENTIAL_KEY;
-
 public class AWSCloudConfiguration implements CloudConfiguration {
 
     private final AWSCloudCredential awsCloudCredential;
@@ -80,7 +78,6 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
-        configuration.set(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
     }
 
     @Override
@@ -91,7 +88,6 @@ public class AWSCloudConfiguration implements CloudConfiguration {
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(enablePathStyleAccess));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
-        properties.put(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
         awsCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
     }

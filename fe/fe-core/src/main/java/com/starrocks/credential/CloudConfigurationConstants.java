@@ -106,10 +106,7 @@ public class CloudConfigurationConstants {
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
     public static final String HADOOP_KERBEROS_KEYTAB_CONTENT = "hadoop.kerberos.keytab_content";
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
-    // Check if config resources are loaded. If loaded, we don't need to load them again.
-    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
-    public static final String HDFS_FS_CREDENTIAL_KEY = "hadoop.fs.cred.key";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
