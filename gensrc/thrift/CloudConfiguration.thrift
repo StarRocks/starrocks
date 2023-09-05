@@ -20,7 +20,8 @@ enum TCloudType {
     AWS,
     AZURE,
     GCP,
-    ALIYUN
+    ALIYUN,
+    HDFS
 }
 
 // Deprecated

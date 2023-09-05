@@ -14,31 +14,16 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeUpdateTest {
-    // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AnalyzeUpdate/" + UUID.randomUUID().toString() + "/";
-
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
@@ -51,7 +36,7 @@ public class AnalyzeUpdateTest {
 
         analyzeFail("update tprimary set v1 = 'aaa', v2 = 100",
                 "must specify where clause to prevent full table update");
-                
+
         analyzeSuccess("update tprimary set v1 = 'aaa'");
         analyzeSuccess("update tprimary set v1 = 'aaa' where pk = 1");
         analyzeSuccess("update tprimary set v2 = v2 + 1 where pk = 1");
