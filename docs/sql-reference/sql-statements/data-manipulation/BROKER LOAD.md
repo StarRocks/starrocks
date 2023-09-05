@@ -229,9 +229,9 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab = "/keytab/hive.keytab",
-    "kerberos_keytab_content = "YWFhYWFh"
+    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab" = "/keytab/hive.keytab",
+    "kerberos_keytab_content" = "YWFhYWFh"
     ```
 
     The following table describes the parameters in `StorageCredentialParams`.
