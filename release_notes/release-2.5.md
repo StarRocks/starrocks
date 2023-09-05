@@ -1,5 +1,22 @@
 # StarRocks version 2.5
 
+## 2.5.12
+
+发布日期：2023 年 9 月 4 日
+
+### 功能优化
+
+- Audit Log 文件中会保留 SQL 中的 Comment 信息。 [#29747](https://github.com/StarRocks/starrocks/pull/29747)
+- Audit Log 中增加了 INSERT INTO SELECT 的 CPU 和 Memory 统计信息。 [#29901](https://github.com/StarRocks/starrocks/pull/29901)
+
+### 问题修复
+
+修复了如下问题：
+
+- 使用 Broker Load 导入数据时，某些字段的 NOT NULL 约束会导致 BE crash 或者报 "msg:mismatched row count" 错误。 [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- 由于未合入上游 Apache ORC 的 BugFix ORC-1304（[apache/orc#1299](https://github.com/apache/orc/pull/1299)）而导致 ORC 文件查询失败。 [#29804](https://github.com/StarRocks/starrocks/pull/29804)
+- 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。 [#30135](https://github.com/StarRocks/starrocks/pull/30135)
+
 ## 2.5.11
 
 发布日期：2023 年 8 月 28 日
