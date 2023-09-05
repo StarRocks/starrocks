@@ -300,7 +300,7 @@ public class VariableMgr {
     }
 
     public static boolean containsVariable(String name) {
-        return CTX_BY_VAR_NAME.containsKey(name);
+        return CTX_BY_VAR_NAME.containsKey(name) || ALIASES.containsKey(name);
     }
 
     // Entry of handling SetVarStmt
