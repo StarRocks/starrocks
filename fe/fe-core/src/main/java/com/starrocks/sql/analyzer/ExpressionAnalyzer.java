@@ -142,6 +142,8 @@ public class ExpressionAnalyzer {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ANY_MATCH) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ALL_MATCH) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
@@ -166,33 +168,49 @@ public class ExpressionAnalyzer {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
-    private Expr rewriteHighOrderFunction(Expr expr) {
+    private void rewriteHighOrderFunction(Expr expr, Visitor visitor, Scope scope) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
-                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
-            // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
-            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
-                    Lists.newArrayList(functionCallExpr.getChildren()));
-            arrayMap.setType(Type.BOOLEAN);
-            Expr arr1 = functionCallExpr.getChild(1);
-            functionCallExpr.clearChildren();
-            functionCallExpr.addChild(arr1);
-            functionCallExpr.addChild(arrayMap);
-            return arrayMap;
-        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
-                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
-            // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
-            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
-                    Lists.newArrayList(functionCallExpr.getChildren()));
-            Expr arr1 = functionCallExpr.getChild(1);
-            functionCallExpr.clearChildren();
-            functionCallExpr.addChild(arr1);
-            functionCallExpr.addChild(arrayMap);
-            functionCallExpr.setType(arr1.getType());
-            return arrayMap;
+        if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
+            return;
         }
-        return null;
+        switch (functionCallExpr.getFnName().getFunction()) {
+            case FunctionSet.ARRAY_FILTER: {
+                // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ALL_MATCH:
+            case FunctionSet.ANY_MATCH: {
+                // func(lambda_func_expr, arr1...) -> func(array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ARRAY_SORTBY: {
+                // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                functionCallExpr.setType(arr1.getType());
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+        }
     }
 
     // only high-order functions can use lambda functions.
@@ -260,10 +278,7 @@ public class ExpressionAnalyzer {
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
-        Expr res = rewriteHighOrderFunction(expression);
-        if (res != null) {
-            visitor.visit(res, scope);
-        }
+        rewriteHighOrderFunction(expression, visitor, scope);
         scope.clearLambdaInputs();
     }
 
@@ -1039,6 +1054,19 @@ public class ExpressionAnalyzer {
                 if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                     throw new SemanticException("The second input of " + fnName +
                             " should be an array or a lambda function.");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ALL_MATCH) || fnName.equals(FunctionSet.ANY_MATCH)) {
+                if (node.getChildren().size() != 1) {
+                    throw new SemanticException(fnName + " should have a input array");
+                }
+                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                    throw new SemanticException("The first input of " + fnName + " should be an array");
+                }
+                // force the second array be of Type.ARRAY_BOOLEAN
+                if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
+                    throw new SemanticException("The second input of " + fnName +
+                            node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
