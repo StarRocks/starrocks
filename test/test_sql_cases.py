@@ -253,7 +253,7 @@ Start to run: %s
             self.drop_resource(each_resource)
 
     def _create_and_use_db(self):
-        db_name = "test_db_%s" % uuid.uuid1().hex
+        db_name = "test_db_%s" % uuid.uuid4().hex
         self.db.append(db_name)
         self.execute_sql("CREATE DATABASE %s;" % db_name)
         self.execute_sql("USE %s;" % db_name)
