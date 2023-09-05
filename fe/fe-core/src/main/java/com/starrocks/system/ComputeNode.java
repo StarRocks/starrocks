@@ -23,6 +23,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
