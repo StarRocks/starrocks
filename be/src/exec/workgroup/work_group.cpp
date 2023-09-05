@@ -332,7 +332,11 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
                 resource_group_bigquery_count.get());
 
         unique_lock.lock();
-        auto& wg_metrics = _wg_metrics[wg->name()];
+        auto it = _wg_metrics.find(wg->name());
+        if (it == _wg_metrics.end()) {
+            it = _wg_metrics.emplace(wg->name(), std::make_shared<WorkGroupMetrics>()).first;
+        }
+        auto& wg_metrics = it->second;
         if (inuse_cpu_cores_registered) {
             wg_metrics->timestamp_ns = MonotonicNanos();
             wg_metrics->cpu_runtime_ns = wg->cpu_runtime_ns();
