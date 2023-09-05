@@ -52,7 +52,7 @@ jobs:
       - name: Ori PR Info
         id: ori_pr_info
         run: |
-          cd /var/lib/elastic-service
+          cd /var/lib/elastic-service && git pull
           ./lib/get_pr_info.sh 
 
   repo-sync:
@@ -141,7 +141,7 @@ jobs:
           BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B ${{ inputs.BRANCH }} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -F ${BODY_FILE} -r ${REVIEWER}
+          gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"
 
       # previous pr files' check pending
       - name: Create pending pull request
@@ -155,7 +155,7 @@ jobs:
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B ${{ inputs.BRANCH }} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -b ${BODY} -r ${REVIEWER}
+          gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"
 
       # Unexpected failure
       - name: Create Error pull request
@@ -175,7 +175,7 @@ jobs:
           BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          gh pr create -B ${BASE} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -F ${BODY_FILE} -r ${REVIEWER}
+          gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"
 
       - name: notify
         if: always()
