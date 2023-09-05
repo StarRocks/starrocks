@@ -42,6 +42,8 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
     private String configResources;
     private String runtimeJars;
 
+    private static final String CONFIG_RESOURCES_SEPERATOR = ",";
+
     public HDFSCloudConfiguration(HDFSCloudCredential hdfsCloudCredential) {
         Preconditions.checkNotNull(hdfsCloudCredential);
         this.hdfsCloudCredential = hdfsCloudCredential;
@@ -63,7 +65,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         if (Strings.isNullOrEmpty(configResources)) {
             return;
         }
-        String[] parts = configResources.split(",");
+        String[] parts = configResources.split(CONFIG_RESOURCES_SEPERATOR);
         for (String p : parts) {
             Path path = new Path(StarRocksFE.STARROCKS_HOME_DIR + "/conf/", p);
             LOG.debug(String.format("Add path '%s' to configuration", path.toString()));
@@ -79,9 +81,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         properties.put(HDFS_CONFIG_RESOURCES, configResources);
         properties.put(HDFS_RUNTIME_JARS, runtimeJars);
         properties.put(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
-        if (!properties.isEmpty()) {
-            tCloudConfiguration.setCloud_properties_v2(properties);
-        }
+        tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
@@ -94,15 +94,12 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
         configuration.set(HDFS_FS_CREDENTIAL_KEY, getCredentialString());
     }
 
-    // NOTE(yanz): hdfs credential is quite special. In most cases, people write auth/username/password etc.
-    // in XML file instead of in string literals. So here we use `configResources` and `runtimeJars` as cred string.
-    // And `hdfsCloudCredential` this field is only for broker load, has nothing to do with catalog connector.
     @Override
     public String getCredentialString() {
         return "HDFSCloudConfiguration{" +
                 "configResources=" + configResources +
                 ", runtimeJars=" + runtimeJars +
-                '}';
+                ", credential=" + hdfsCloudCredential.toString() + "}";
     }
 
     @Override

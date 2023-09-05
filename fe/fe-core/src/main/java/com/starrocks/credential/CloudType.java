@@ -15,6 +15,7 @@
 package com.starrocks.credential;
 
 public enum CloudType {
+    // Means nothing, don't do anything
     DEFAULT,
     AWS,
     AZURE,
