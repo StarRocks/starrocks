@@ -111,11 +111,6 @@ Status BufferControlBlock::init() {
 }
 
 Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
-    DeferOp op([&result, &need_free] {
-        if (need_free) {
-            delete result;
-        }
-    });
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
@@ -133,6 +128,10 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     }
 
     _process_batch_without_lock(ser_res);
+    // should delete it outside in abnormal cases
+    if (need_free) {
+        delete result;
+    }
     return Status::OK();
 }
 
@@ -198,10 +197,11 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         RETURN_IF_ERROR(status_or_value.status());
         auto ser_res = std::move(status_or_value.value());
         _batch_queue.enqueue(std::move(ser_res));
-        {
+        /*{
             std::unique_lock<std::mutex> l(_lock);
             _data_arriaval.notify_one();
         }
+         */
     }
 
     std::unique_lock<std::mutex> l(_lock);
@@ -279,7 +279,7 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     std::unique_ptr<SerializeRes> ser = nullptr;
     if (_batch_queue.try_dequeue(ser)) {
         std::unique_lock data_lock(_lock);
-        _data_removal.notify_one();
+        // _data_removal.notify_one();
         auto packet_num = _packet_num.load();
         ++_packet_num;
         data_lock.unlock();

@@ -154,7 +154,7 @@ public class ResultReceiver {
                         }
                     }
                 }
-                if (variable != null && variable.getSpillEncodeLevel() > 0) {
+                if (variable != null && variable.getSpillEncodeLevel() > 0 && variable.getSpillEncodeLevel() != 7) {
                     int threadCount = variable.getSpillEncodeLevel();
                     MyThread[] threads = new MyThread[threadCount];
                     for (int i = 0; i < threadCount; ++i) {
