@@ -506,6 +506,10 @@ public:
     }
 
     Status delete_files(const std::vector<std::string>& paths) override {
+        if (paths.empty()) {
+            return Status::OK();
+        }
+
         std::vector<std::string> parsed_paths;
         parsed_paths.reserve(paths.size());
         std::shared_ptr<staros::starlet::fslib::FileSystem> fs = nullptr;
