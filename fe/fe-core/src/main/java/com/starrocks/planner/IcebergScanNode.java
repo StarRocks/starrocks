@@ -33,11 +33,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
-import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -114,10 +114,19 @@ public class IcebergScanNode extends ScanNode {
         if (catalogName == null) {
             return;
         }
-        IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalogName);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
+
+        // Hard coding here
+        // Try to get tabular signed temporary credential
+        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
+        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
+            cloudConfiguration = tabularTempCloudConfiguration;
+        } else {
+            Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            if (connector != null) {
+                cloudConfiguration = connector.getCloudConfiguration();
+            }
         }
     }
 
@@ -397,15 +406,7 @@ public class IcebergScanNode extends ScanNode {
 
         msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
-        // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(srIcebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
-            // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            tabularTempCloudConfiguration.toThrift(tCloudConfiguration);
-            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
-        } else if (cloudConfiguration != null) {
+       if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
