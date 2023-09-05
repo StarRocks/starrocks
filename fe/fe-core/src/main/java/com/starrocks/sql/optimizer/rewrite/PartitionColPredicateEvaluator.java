@@ -294,7 +294,7 @@ public class PartitionColPredicateEvaluator {
             for (int i = 0; i < candidateNum; i++) {
                 Range<PartitionKey> range = ranges.get(i);
                 if (range.isConnected(predicateRange) && !range.intersection(predicateRange).isEmpty()) {
-                    if (isCanonicalType(partitionColumn.getType())) {
+                    if (isCanonicalType(scalarOperator.getType())) {
                         // try to canonical predicate
                         Range intersectedRange = range.intersection(predicateRange);
                         Range canonicalRange = intersectedRange.canonical(new PartitionKeyDiscreteDomain());
