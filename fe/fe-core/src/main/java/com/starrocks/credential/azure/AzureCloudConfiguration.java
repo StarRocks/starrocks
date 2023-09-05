@@ -35,7 +35,6 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
         Map<String, String> properties = new HashMap<>();
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);

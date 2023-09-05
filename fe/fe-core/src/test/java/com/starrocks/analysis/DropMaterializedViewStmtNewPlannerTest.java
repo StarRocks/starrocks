@@ -39,18 +39,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.File;
-import java.util.UUID;
-
 public class DropMaterializedViewStmtNewPlannerTest {
-
-    private static String runningDir = "fe/mocked/DropMaterializedViewStmtNewPlannerTest/" + UUID.randomUUID() + "/";
-
     private static ConnectContext connectContext;
 
     @BeforeClass
@@ -64,12 +57,6 @@ public class DropMaterializedViewStmtNewPlannerTest {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase("test");
-    }
-
-    @AfterClass
-    public static void tearDown() {
-        File file = new File(runningDir);
-        file.delete();
     }
 
     @Test
