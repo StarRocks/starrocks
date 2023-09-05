@@ -1,3 +1,4 @@
+-- name: testArrayFunc
 select array_contains( cast ('[40360,40361]' as array<int>), 40360);
 select array_contains_all( cast ('[40360,40361]' as array<int>), 40360);
 select array_append( cast ('[40360,40361]' as array<int>), 40360);
@@ -25,7 +26,6 @@ select array_to_bitmap( cast ('[40360,40361]' as array<int>));
 select bitmap_to_array(array_to_bitmap(cast ('[40360,40361]' as array<int>)));
 select REVERSE( cast ('[40360,40361]' as array<int>));
 
-
 select array_contains( cast ('null' as array<int>), 40360);
 select array_contains_all( cast ('null' as array<int>), 40360);
 select array_append( cast ('null' as array<int>), 40360);
@@ -52,3 +52,39 @@ select array_sum( cast ('null' as array<int>));
 select array_to_bitmap( cast ('null' as array<int>));
 select bitmap_to_array(array_to_bitmap(cast ('null' as array<int>)));
 select REVERSE( cast ('null' as array<int>));
+
+select all_match((x,y) -> x < y, null, [4,5,6]);
+select all_match((x,y) -> x < y, [], []);
+select all_match((x,y) -> x < y, null, []);
+select all_match((x,y) -> x < y, null, null);
+select any_match((x,y) -> x < y, null, [4,5,6]);
+select any_match((x,y) -> x < y, [], []);
+select any_match((x,y) -> x < y, null, []);
+select any_match((x,y) -> x < y, null, null);
+select all_match([0],x->1);
+select any_match([0],x->1);
+select any_match([],x->1);
+select any_match(null);
+select any_match([]);
+select all_match([]);
+select any_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+select any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+select any_match((x,y) -> x < y, [11,12,null], [4,5,6]);
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]);
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]), any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+
+select all_match((x,y) -> x < y, []);
+select all_match((x,y) -> x < y, [],{});
+select all_match([],null);
+select all_match({});
+select all_match();
+select all_match(null,[]);
+select all_match(null,null);
+select any_match((x,y) -> x < y, []);
+select any_match((x,y) -> x < y, [],{});
+select any_match([],null);
+select any_match({});
+select any_match();
+select any_match(null,[]);
+select any_match(null,null);
+select all_match([[]]);

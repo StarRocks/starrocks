@@ -1,10 +1,11 @@
+-- name: testArrayFunc
 select array_contains( cast ('[40360,40361]' as array<int>), 40360);
 -- result:
 1
 -- !result
 select array_contains_all( cast ('[40360,40361]' as array<int>), 40360);
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 70. Detail message: No matching function with signature: array_contains_all(array<int(11)>, int(11)).')
+E: (1064, 'No matching function with signature: array_contains_all(ARRAY<int(11)>, int(11)).')
 -- !result
 select array_append( cast ('[40360,40361]' as array<int>), 40360);
 -- result:
@@ -12,7 +13,7 @@ select array_append( cast ('[40360,40361]' as array<int>), 40360);
 -- !result
 select array_avg( cast ('[40360,40361]' as array<int>), 40360);
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 61. Detail message: No matching function with signature: array_avg(array<int(11)>, int(11)).')
+E: (1064, 'No matching function with signature: array_avg(ARRAY<int(11)>, int(11)).')
 -- !result
 select array_concat( cast ('[40360,40361]' as array<int>), [40360]);
 -- result:
@@ -108,7 +109,7 @@ None
 -- !result
 select array_contains_all( cast ('null' as array<int>), 40360);
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 61. Detail message: No matching function with signature: array_contains_all(array<int(11)>, int(11)).')
+E: (1064, 'No matching function with signature: array_contains_all(ARRAY<int(11)>, int(11)).')
 -- !result
 select array_append( cast ('null' as array<int>), 40360);
 -- result:
@@ -116,7 +117,7 @@ None
 -- !result
 select array_avg( cast ('null' as array<int>), 40360);
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 52. Detail message: No matching function with signature: array_avg(array<int(11)>, int(11)).')
+E: (1064, 'No matching function with signature: array_avg(ARRAY<int(11)>, int(11)).')
 -- !result
 select array_concat( cast ('null' as array<int>), [40360]);
 -- result:
@@ -205,4 +206,140 @@ None
 select REVERSE( cast ('null' as array<int>));
 -- result:
 None
+-- !result
+select all_match((x,y) -> x < y, null, [4,5,6]);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, [], []);
+-- result:
+1
+-- !result
+select all_match((x,y) -> x < y, null, []);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, null, null);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, null, [4,5,6]);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, [], []);
+-- result:
+0
+-- !result
+select any_match((x,y) -> x < y, null, []);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, null, null);
+-- result:
+None
+-- !result
+select all_match([0],x->1);
+-- result:
+1
+-- !result
+select any_match([0],x->1);
+-- result:
+1
+-- !result
+select any_match([],x->1);
+-- result:
+0
+-- !result
+select any_match(null);
+-- result:
+None
+-- !result
+select any_match([]);
+-- result:
+0
+-- !result
+select all_match([]);
+-- result:
+1
+-- !result
+select any_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+-- result:
+1
+-- !result
+select any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+-- result:
+0
+-- !result
+select any_match((x,y) -> x < y, [11,12,null], [4,5,6]);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]), any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+-- result:
+None	0
+-- !result
+select all_match((x,y) -> x < y, []);
+-- result:
+E: (1064, 'Lambda arguments should equal to lambda input arrays.')
+-- !result
+select all_match((x,y) -> x < y, [],{});
+-- result:
+E: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '}' at line 1")
+-- !result
+select all_match([],null);
+-- result:
+E: (1064, 'all_match should have a input array')
+-- !result
+select all_match({});
+-- result:
+E: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '}' at line 1")
+-- !result
+select all_match();
+-- result:
+E: (1064, 'all_match should have a input array')
+-- !result
+select all_match(null,[]);
+-- result:
+E: (1064, 'all_match should have a input array')
+-- !result
+select all_match(null,null);
+-- result:
+E: (1064, 'all_match should have a input array')
+-- !result
+select any_match((x,y) -> x < y, []);
+-- result:
+E: (1064, 'Lambda arguments should equal to lambda input arrays.')
+-- !result
+select any_match((x,y) -> x < y, [],{});
+-- result:
+E: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '}' at line 1")
+-- !result
+select any_match([],null);
+-- result:
+E: (1064, 'any_match should have a input array')
+-- !result
+select any_match({});
+-- result:
+E: (1064, "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '}' at line 1")
+-- !result
+select any_match();
+-- result:
+E: (1064, 'any_match should have a input array')
+-- !result
+select any_match(null,[]);
+-- result:
+E: (1064, 'any_match should have a input array')
+-- !result
+select any_match(null,null);
+-- result:
+E: (1064, 'any_match should have a input array')
+-- !result
+select all_match([[]]);
+-- result:
+E: (1064, "The second input of all_matchARRAY<ARRAY<NULL_TYPE>>  can't cast to ARRAY<BOOL>")
 -- !result
