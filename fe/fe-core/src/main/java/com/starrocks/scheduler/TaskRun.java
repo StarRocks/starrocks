@@ -177,6 +177,8 @@ public class TaskRun implements Comparable<TaskRun> {
                 } catch (DdlException e) {
                     // not session variable
                     taskRunContextProperties.put(key, properties.get(key));
+                } finally {
+                    runCtx.getState().reset();
                 }
             }
         }
