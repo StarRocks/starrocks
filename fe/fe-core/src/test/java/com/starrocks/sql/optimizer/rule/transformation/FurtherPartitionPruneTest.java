@@ -470,7 +470,8 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
         sqlList.add(
-                "select * from less_than_tbl where date_trunc('year', k1) is null or k1 in ('2020-09-01', '2020-09-02', '2020-09-03')");
+                "select * from less_than_tbl where date_trunc('year', k1) is null or k1 in " +
+                        "('2020-09-01', '2020-09-02', '2020-09-03')");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) > '2050-08-01'");
 
         sqlList.add("select * from less_than_tbl where date_trunc('month', date_trunc('day', k1)) < '2020-08-01'");
