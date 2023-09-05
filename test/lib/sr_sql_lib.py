@@ -34,6 +34,7 @@ import subprocess
 import ast
 import time
 import unittest
+import uuid
 
 import pymysql as _mysql
 from nose import tools
@@ -49,6 +50,7 @@ root_path = os.path.abspath(os.path.join(lib_path, "../"))
 common_sql_path = os.path.join(root_path, "common/sql")
 common_data_path = os.path.join(root_path, "common/data")
 common_result_path = os.path.join(root_path, "common/result")
+
 
 LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
@@ -91,7 +93,11 @@ class StarrocksSQLApiLib(object):
         self.log = []
         self.res_log = []
 
-        self.read_conf()
+        config_path = os.environ.get("config_path")
+        if config_path is None or config_path == "":
+            self.read_conf("conf/sr.conf")
+        else:
+            self.read_conf(config_path)
 
     def __del__(self):
         pass
@@ -108,21 +114,22 @@ class StarrocksSQLApiLib(object):
     def setUpClass(cls) -> None:
         pass
 
-    def read_conf(self):
+    def read_conf(self, path):
         """read conf"""
         config_parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        config_parser.read("%s/conf/sr.conf" % root_path)
+        config_parser.read("%s/%s" % (root_path, path))
         self.mysql_host = config_parser.get("mysql-client", "host")
         self.mysql_port = config_parser.get("mysql-client", "port")
         self.mysql_user = config_parser.get("mysql-client", "user")
         self.mysql_password = config_parser.get("mysql-client", "password")
+        self.http_port = config_parser.get("mysql-client", "http_port")
 
         # read replace info
-        for (rep_key, rep_value) in config_parser.items("replace"):
+        for rep_key, rep_value in config_parser.items("replace"):
             self.__setattr__(rep_key, rep_value)
 
         # read env info
-        for (env_key, env_value) in config_parser.items("env"):
+        for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
             self.__setattr__(env_key, env_value)
@@ -220,6 +227,18 @@ class StarrocksSQLApiLib(object):
                     sql = sql + " " + line.strip()
         return sql
 
+    @staticmethod
+    def get_common_data_files(path_name, dir_path=common_data_path):
+        """
+        get files path
+        """
+        data_path = os.path.join(dir_path, path_name)
+        file_list = os.listdir(data_path)
+        file_path_list = []
+        for file_name in file_list:
+            file_path_list.append(os.path.join(data_path, file_name))
+        return file_path_list
+
     def execute_sql(self, sql, ori=False):
         """execute query"""
         try:
@@ -304,7 +323,6 @@ class StarrocksSQLApiLib(object):
         return self.delete_from(args)
 
     def treatment_record_res(self, sql, sql_res):
-
         if any(re.match(condition, sql) is not None for condition in skip.skip_res_cmd):
             return
 
@@ -380,8 +398,11 @@ class StarrocksSQLApiLib(object):
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
         return [
             cmd_res.returncode,
-            cmd_res.stdout.rstrip("\n") if cmd_res.returncode == 0 else cmd_res.stderr.rstrip("\n")
+            cmd_res.stdout.rstrip("\n") if cmd_res.returncode == 0 else cmd_res.stderr.rstrip("\n"),
         ]
+
+    def meta_sync(self):
+        return self.execute_sql("sync", True)
 
     def replace(self, cmd):
         """replace ${**} with self attrs"""
@@ -463,7 +484,7 @@ class StarrocksSQLApiLib(object):
             log.info("[%s.check] skip check" % sql_id)
             return
 
-        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG):] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
+        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG) :] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
         if tmp_ori_sql.startswith(SHELL_FLAG):
             tools.assert_equal(int(exp.split("\n")[0]), act[0], "shell %s error: %s" % (sql, act))
 
@@ -474,18 +495,35 @@ class StarrocksSQLApiLib(object):
             act_code = act[0]
             act_std = act[1]
             act_std_is_json = act_std.startswith("{")
-
             # check json/str match
             tools.assert_equal(exp_std_is_json, act_std_is_json)
 
             if exp_std_is_json:
-                exp_std = json.loads(exp_std)
-                act_std = json.loads(act_std)
-                # check all key,values in exp_std
-                tools.assert_true(
-                    all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
-                    "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
-                )
+                try:
+                    exp_std = json.loads(exp_std)
+                    act_std = json.loads(act_std)
+                    # check all key,values in exp_std
+                    tools.assert_true(
+                        all(k in act_std and exp_std[k] == act_std[k] for k in exp_std),
+                        "shell result json not match, \n[exp]: %s,\n[act]: %s" % (exp_std, act_std),
+                    )
+                    return
+
+                except Exception as e:
+                    log.debug("Try to treat res as json failed!\n:%s" % e)
+
+                # If result can't be treated as json, cmp as str
+                if exp_std == act_std:
+                    return
+
+                try:
+                    tools.assert_true(re.match(exp_std, act_std, flags=re.S),
+                                      "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+                except Exception as e:
+                    log.warn("Try to treat res as regex, failed!\n:%s" % e)
+
+                tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
+
             else:
                 # str
                 if exp_std != act_std and not re.match(exp_std, act_std, flags=re.S):
@@ -526,13 +564,15 @@ class StarrocksSQLApiLib(object):
                         tools.assert_list_equal(
                             expect_res,
                             act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                            % (sql, expect_res, act),
                         )
                     else:
                         tools.assert_count_equal(
                             expect_res,
                             act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                            % (sql, expect_res, act),
                         )
                     return
                 elif exp.startswith("{") and exp.endswith("}"):
@@ -624,8 +664,8 @@ class StarrocksSQLApiLib(object):
 
         insert_round = 1
         while len(new_log) > 0:
-            current_log = new_log[:min(len(new_log), 65533)]
-            new_log = new_log[len(current_log):]
+            current_log = new_log[: min(len(new_log), 65533)]
+            new_log = new_log[len(current_log) :]
 
             arg_dict = {
                 "database_name": T_R_DB,
@@ -687,16 +727,25 @@ class StarrocksSQLApiLib(object):
             file_dict[file] = self.merge_case_info(part, file, logs)
 
         for file, logs in file_dict.items():
-
+            t_file = file.replace("/R/", "/T/")
+            case_names = self._get_case_names(t_file)
             # write into file
             file_path = os.path.join(self.root_path, file)
 
             if not os.path.exists(os.path.dirname(file_path)):
                 os.makedirs(os.path.dirname(file_path))
 
+            lines = list()
+            for case_name in case_names:
+                lines.append(logs.get(case_name, ""))
+                if case_name in logs.keys():
+                    logs.pop(case_name)
+
+            if len(logs) > 0:
+                log.info("% has case logs not write to R files: %s" % (file, logs))
+
             with open(file_path, "w") as f:
-                lines = "\n".join(logs.values())
-                f.write(lines)
+                f.write("\n".join(lines))
 
         # drop db
         self.connect_starrocks()
@@ -751,6 +800,22 @@ class StarrocksSQLApiLib(object):
             info_dict[case_name] = "".join(case_log)
 
         return info_dict
+
+    def _get_case_names(self, t_file):
+        file_path = os.path.join(self.root_path, t_file)
+
+        case_names = list()
+        if not os.path.exists(file_path):
+            return case_names
+
+        with open(file_path, "r") as f:
+            contents = f.readlines()
+
+        for line in contents:
+            if not line.startswith(NAME_FLAG):
+                continue
+            case_names.append(re.compile("name: ([a-zA-Z0-9_-]+)").findall(line)[0])
+        return case_names
 
     def show_schema_change_task(self):
         show_sql = "show alter table column"
@@ -850,6 +915,29 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_for_pipe_finish(self, db_name, pipe_name, check_count=60):
+        """
+        wait pipe load finish
+        """
+        status = ""
+        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        count = 0
+        print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            print(res)
+            status = res["result"][0][0]
+            if status != "FINISHED":
+                print("pipe status is " + status)
+                time.sleep(1)
+            else:
+                # sleep another 5s to avoid FE's async action.
+                time.sleep(1)
+                break
+            count += 1
+        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
@@ -886,9 +974,7 @@ class StarrocksSQLApiLib(object):
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
-        time.sleep(10)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
-
 
     def wait_global_dict_ready(self, column_name, table_name):
         """
@@ -915,7 +1001,7 @@ class StarrocksSQLApiLib(object):
         sql = "explain costs select distinct %s from %s" % (column_name, table_name)
         res = self.execute_sql(sql, True)
         tools.assert_true(str(res["result"]).find("Decode") > 0, "assert dictionary error")
-    
+
     def assert_no_global_dict(self, column_name, table_name):
         """
         assert table_name:column_name has global dict
@@ -960,3 +1046,153 @@ class StarrocksSQLApiLib(object):
                     time.sleep(10)
             count += 1
         tools.assert_true(False, "check es table metadata 600s timeout")
+
+    def _stream_load(self, label, database_name, table_name, filepath, headers=None, meta_sync=True):
+        """ """
+        url = (
+            "http://"
+            + self.mysql_host
+            + ":"
+            + self.http_port
+            + "/api/"
+            + database_name
+            + "/"
+            + table_name
+            + "/_stream_load"
+        )
+        params = [
+            "curl",
+            "--location-trusted",
+            "-u",
+            "%s:%s" % (self.mysql_user, self.mysql_password),
+            "-T",
+            filepath,
+            "-XPUT",
+            "-H",
+            "label:%s" % label,
+        ]
+
+        if headers:
+            for k, v in headers.items():
+                params.append("-H")
+                params.append("%s:%s" % (k, v))
+
+        params.append(url)
+        stream_load_sql = " ".join(param for param in params)
+        log.info(stream_load_sql)
+
+        cmd_res = subprocess.run(
+            params,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            timeout=1800,
+        )
+
+        log.info(cmd_res)
+        if cmd_res.returncode != 0:
+            return {"Status": "CommandFail", "Message": cmd_res.stderr}
+
+        res = json.loads(cmd_res.stdout)
+
+        if meta_sync:
+            self.meta_sync()
+
+        if res["Status"] == "Publish Timeout":
+            cmd = "curl -s --location-trusted -u %s:%s http://%s:%s/api/%s/get_load_state?label=%s" % (
+                self.mysql_user,
+                self.mysql_password,
+                self.mysql_host,
+                self.http_port,
+                database_name,
+                label,
+            )
+            print(cmd)
+            cmd = cmd.split(" ")
+            for i in range(60):
+                time.sleep(3)
+                res = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    encoding="utf-8",
+                    timeout=60,
+                )
+
+                if res.returncode != 0:
+                    return {"Status": "CommandFail", "Message": res.stderr}
+
+                res = json.loads(res.stdout)
+                if res["state"] == "VISIBLE":
+                    break
+                else:
+                    log.error(res)
+                    res["Status"] = "Failed"
+        return res
+
+    def prepare_data(self, data_name, db):
+        """ load data """
+        tools.assert_in(data_name, ["ssb", "tpch", "tpcds"], "Unsupported data!")
+
+        # create tables
+        create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, data_name))
+        res = self.execute_sql(create_table_sqls, True)
+        tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
+
+        # load data
+        data_files = self.get_common_data_files(data_name)
+        for data in data_files:
+            if ".gitkeep" in data:
+                continue
+            label = "%s_load_label_%s" % (data_name, uuid.uuid1().hex)
+            file_name = data.split("/")[-1]
+            table_name = file_name.split(".")[0]
+            log.info("Load %s..." % table_name)
+            headers = {"column_separator": "|"}
+
+            # tpcds prepare
+            if data_name == "tpcds":
+                switch = {
+                    "web_returns": "wr_returned_date_sk,wr_returned_time_sk,wr_item_sk,\
+                                               wr_refunded_customer_sk,wr_refunded_cdemo_sk,wr_refunded_hdemo_sk,\
+                                               wr_refunded_addr_sk,wr_returning_customer_sk,wr_returning_cdemo_sk,\
+                                               wr_returning_hdemo_sk,wr_returning_addr_sk,wr_web_page_sk,wr_reason_sk,\
+                                               wr_order_number,wr_return_quantity,wr_return_amt,wr_return_tax,\
+                                               wr_return_amt_inc_tax,wr_fee,wr_return_ship_cost,wr_refunded_cash,\
+                                               wr_reversed_charge,wr_account_credit,wr_net_loss",
+                    "web_sales": "ws_sold_date_sk,ws_sold_time_sk,ws_ship_date_sk,ws_item_sk,\
+                                             ws_bill_customer_sk,ws_bill_cdemo_sk,ws_bill_hdemo_sk,ws_bill_addr_sk,\
+                                             ws_ship_customer_sk,ws_ship_cdemo_sk,ws_ship_hdemo_sk,ws_ship_addr_sk,\
+                                             ws_web_page_sk,ws_web_site_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_promo_sk,\
+                                             ws_order_number,ws_quantity,ws_wholesale_cost,ws_list_price,ws_sales_price,\
+                                             ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,\
+                                             ws_ext_tax,ws_coupon_amt,ws_ext_ship_cost,ws_net_paid,ws_net_paid_inc_tax,\
+                                             ws_net_paid_inc_ship,ws_net_paid_inc_ship_tax,ws_net_profit",
+                    "catalog_returns": "cr_returned_date_sk,cr_returned_time_sk,cr_item_sk,cr_refunded_customer_sk,\
+                                                   cr_refunded_cdemo_sk,cr_refunded_hdemo_sk,cr_refunded_addr_sk,\
+                                                   cr_returning_customer_sk,cr_returning_cdemo_sk,cr_returning_hdemo_sk,\
+                                                   cr_returning_addr_sk,cr_call_center_sk,cr_catalog_page_sk,cr_ship_mode_sk,\
+                                                   cr_warehouse_sk,cr_reason_sk,cr_order_number,cr_return_quantity,cr_return_amount,\
+                                                   cr_return_tax,cr_return_amt_inc_tax,cr_fee,cr_return_ship_cost,cr_refunded_cash,\
+                                                   cr_reversed_charge,cr_store_credit,cr_net_loss",
+                    "catalog_sales": "cs_sold_date_sk,cs_sold_time_sk,cs_ship_date_sk,cs_bill_customer_sk,cs_bill_cdemo_sk,\
+                                                 cs_bill_hdemo_sk,cs_bill_addr_sk,cs_ship_customer_sk,cs_ship_cdemo_sk,cs_ship_hdemo_sk,\
+                                                 cs_ship_addr_sk,cs_call_center_sk,cs_catalog_page_sk,cs_ship_mode_sk,cs_warehouse_sk,\
+                                                 cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_wholesale_cost,cs_list_price,\
+                                                 cs_sales_price,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,\
+                                                 cs_ext_list_price,cs_ext_tax,cs_coupon_amt,cs_ext_ship_cost,cs_net_paid,\
+                                                 cs_net_paid_inc_tax,cs_net_paid_inc_ship,cs_net_paid_inc_ship_tax,cs_net_profit",
+                    "store_returns": "sr_returned_date_sk,sr_return_time_sk,sr_item_sk,sr_customer_sk,sr_cdemo_sk,\
+                                                 sr_hdemo_sk,sr_addr_sk,sr_store_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,\
+                                                 sr_return_amt,sr_return_tax,sr_return_amt_inc_tax,sr_fee,sr_return_ship_cost,\
+                                                 sr_refunded_cash,sr_reversed_charge,sr_store_credit,sr_net_loss",
+                    "store_sales": "ss_sold_date_sk,ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,\
+                                               ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_quantity,ss_wholesale_cost,\
+                                               ss_list_price,ss_sales_price,ss_ext_discount_amt,ss_ext_sales_price,ss_ext_wholesale_cost,\
+                                               ss_ext_list_price,ss_ext_tax,ss_coupon_amt,ss_net_paid,ss_net_paid_inc_tax,ss_net_profit",
+                }
+                if table_name in switch.keys():
+                    headers["columns"] = switch[table_name]
+
+            res = self._stream_load(label, db, table_name, data, headers)
+            tools.assert_equal(res["Status"], "Success", "Prepare %s data error: %s" % (data_name, res["Message"]))
