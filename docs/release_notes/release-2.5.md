@@ -1,5 +1,24 @@
 # StarRocks version 2.5
 
+## 2.5.12
+
+Release date: September 4, 2023
+
+### Improvements
+
+- Comments in an SQL are retained in the Audit Log. [#29747](https://github.com/StarRocks/starrocks/pull/29747)
+- Added CPU and memory statistics of INSERT INTO SELECT to the Audit Log. [#29901](https://github.com/StarRocks/starrocks/pull/29901)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When Broker Load is used to load data, the NOT NULL attribute of some fields may cause BEs to crash or cause the "msg:mismatched row count" error. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+
+- Queries against ORC-formatted files fail because the bugfix ORC-1304 ([apache/orc#1299](https://github.com/apache/orc/pull/1299)) from Apache ORC is not merged. [#29804](https://github.com/StarRocks/starrocks/pull/29804)
+
+- Restoring Primary Key tables causes metadata inconsistency after BEs are restarted. [#30135](https://github.com/StarRocks/starrocks/pull/30135)
+
 ## 2.5.11
 
 Release date: August 28, 2023
