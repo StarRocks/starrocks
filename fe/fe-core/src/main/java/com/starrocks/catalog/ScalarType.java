@@ -77,7 +77,7 @@ public class ScalarType extends Type implements Cloneable {
     // Only used for type CHAR.
     @SerializedName(value = "len")
     private int len = -1;
-    private boolean isAssignedStrLenInColDefinition = false;
+    private boolean isAssignedStrLenInColDefinition = true;
 
     // Only used if type is DECIMAL. -1 (for both) is used to represent a
     // decimal with any precision and scale.
