@@ -66,8 +66,8 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     } else {
                         String s1 = o1.toString();
                         String s2 = o2.toString();
-                        String n1 = s1.replaceAll("[0-9]", "");
-                        String n2 = s2.replaceAll("[0-9]", "");
+                        String n1 = s1.replaceAll("\\d: ", "");
+                        String n2 = s2.replaceAll("\\d: ", "");
                         int ret = n1.compareTo(n2);
                         return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
