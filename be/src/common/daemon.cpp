@@ -276,7 +276,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
 
-    UserFunctionCache::instance()->init(config::user_function_dir);
+    CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
 

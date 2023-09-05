@@ -110,7 +110,7 @@ Status ScalarColumnIterator::seek_to_first() {
     RETURN_IF_ERROR(_reader->seek_to_first(&_page_iter));
     RETURN_IF_ERROR(_read_data_page(_page_iter));
 
-    _seek_to_pos_in_page(_page.get(), 0);
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
     _current_ordinal = 0;
     return Status::OK();
 }
@@ -121,7 +121,7 @@ Status ScalarColumnIterator::seek_to_ordinal(ordinal_t ord) {
         RETURN_IF_ERROR(_reader->seek_at_or_before(ord, &_page_iter));
         RETURN_IF_ERROR(_read_data_page(_page_iter));
     }
-    _seek_to_pos_in_page(_page.get(), ord - _page->first_ordinal());
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), ord - _page->first_ordinal()));
     _current_ordinal = ord;
     return Status::OK();
 }
@@ -135,7 +135,7 @@ Status ScalarColumnIterator::seek_to_ordinal_and_calc_element_ordinal(ordinal_t 
     _array_size.resize(0);
     _element_ordinal = static_cast<int64_t>(_page->corresponding_element_ordinal());
     _current_ordinal = _page->first_ordinal();
-    _seek_to_pos_in_page(_page.get(), 0);
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
     size_t size_to_read = ord - _current_ordinal;
     RETURN_IF_ERROR(_page->read(&_array_size, &size_to_read));
     _current_ordinal += size_to_read;
@@ -146,12 +146,12 @@ Status ScalarColumnIterator::seek_to_ordinal_and_calc_element_ordinal(ordinal_t 
     return Status::OK();
 }
 
-void ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page) {
+Status ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page) {
     if (page->offset() == offset_in_page) {
         // fast path, do nothing
-        return;
+        return Status::OK();
     }
-    page->seek(offset_in_page);
+    return page->seek(offset_in_page);
 }
 
 Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
@@ -250,7 +250,7 @@ Status ScalarColumnIterator::_load_next_page(bool* eos) {
     }
 
     RETURN_IF_ERROR(_read_data_page(_page_iter));
-    _seek_to_pos_in_page(_page.get(), 0);
+    RETURN_IF_ERROR(_seek_to_pos_in_page(_page.get(), 0));
     *eos = false;
     return Status::OK();
 }
@@ -506,7 +506,7 @@ Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size,
             DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
             rowid_t curr = *rowids;
             _current_ordinal = implicit_cast<ordinal_t>(curr);
-            _page->seek(curr - _page->first_ordinal());
+            RETURN_IF_ERROR(_page->seek(curr - _page->first_ordinal()));
             const rowid_t* p = rowids + 1;
             while ((next_page_rowid != p) && (*p == curr + 1)) {
                 curr = *p++;

@@ -85,7 +85,8 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        query_trace->dump();
+        auto st = query_trace->dump();
+        st.permit_unchecked_error();
     }
 }
 

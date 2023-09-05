@@ -64,9 +64,11 @@ void HorizontalGeneralTabletWriter::close() {
         auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
         if (maybe_fs.ok()) {
             auto fs = std::move(maybe_fs).value();
+            // TODO: batch delete
             for (const auto& name : _files) {
                 auto path = _tablet.segment_location(name);
-                (void)fs->delete_file(path);
+                auto st = fs->delete_file(path);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path;
             }
         }
     }

@@ -179,7 +179,8 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                      .ok());
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];

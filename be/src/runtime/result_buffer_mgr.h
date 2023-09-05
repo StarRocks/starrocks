@@ -57,21 +57,22 @@ public:
     ResultBufferMgr();
     ~ResultBufferMgr();
     // init Result Buffer Mgr, start cancel thread
-    Status init();
+    [[nodiscard]] Status init();
     // create one result sender for this query_id
     // the returned sender do not need release
     // sender is not used when call cancel or unregister
-    Status create_sender(const TUniqueId& query_id, int buffer_size, std::shared_ptr<BufferControlBlock>* sender);
+    [[nodiscard]] Status create_sender(const TUniqueId& query_id, int buffer_size,
+                                       std::shared_ptr<BufferControlBlock>* sender);
     // fetch data, used by RPC
-    Status fetch_data(const TUniqueId& fragment_id, TFetchDataResult* result);
+    [[nodiscard]] Status fetch_data(const TUniqueId& fragment_id, TFetchDataResult* result);
 
     void fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* ctx);
 
     // cancel
-    Status cancel(const TUniqueId& fragment_id);
+    [[nodiscard]] Status cancel(const TUniqueId& fragment_id);
 
     // cancel one query at a future time.
-    Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
+    [[nodiscard]] Status cancel_at_time(time_t cancel_time, const TUniqueId& query_id);
 
 private:
     typedef std::unordered_map<TUniqueId, std::shared_ptr<BufferControlBlock>> BufferMap;

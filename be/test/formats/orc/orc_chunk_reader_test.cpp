@@ -75,8 +75,8 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
+    auto st = DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(st.ok()) << st;
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     *tuple_desc = row_desc->tuple_descriptors()[0];
     return;

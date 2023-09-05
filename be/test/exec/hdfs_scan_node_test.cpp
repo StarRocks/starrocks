@@ -235,7 +235,9 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     THdfsPartition partition;
     std::map<int64_t, THdfsPartition> p_map;
@@ -267,7 +269,9 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl,
+                                config::vector_chunk_size)
+                  .ok());
 
     // hdfs table
     THdfsTable t_hdfs_table;

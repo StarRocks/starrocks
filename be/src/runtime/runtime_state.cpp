@@ -128,6 +128,7 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
+    _process_status.permit_unchecked_error();
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
