@@ -98,7 +98,10 @@ class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
 
-    ~SegmentIterator() override = default;
+    ~SegmentIterator() override {
+        _get_del_vec_st.permit_unchecked_error();
+        _get_dcg_st.permit_unchecked_error();
+    }
 
     void close() override;
 
@@ -220,7 +223,7 @@ private:
 
     Status _finish_late_materialization(ScanContext* ctx);
 
-    Status _build_final_chunk(ScanContext* ctx);
+    void _build_final_chunk(ScanContext* ctx);
 
     Status _encode_to_global_id(ScanContext* ctx);
 
@@ -1534,7 +1537,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     return Status::OK();
 }
 
-Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
+void SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     // trim all use less columns
     Columns& input_columns = ctx->_dict_chunk->columns();
     for (size_t i = 0; i < ctx->_read_index_map.size(); i++) {
@@ -1542,7 +1545,6 @@ Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     }
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-    return Status::OK();
 }
 
 Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {

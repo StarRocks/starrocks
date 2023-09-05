@@ -241,14 +241,10 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-Status GlobalEnv::_init_storage_page_cache() {
+void GlobalEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
-
-    // TODO(zc): The current memory usage configuration is a bit confusing,
-    // we need to sort out the use of memory
-    return Status::OK();
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
