@@ -1135,7 +1135,13 @@ void SegmentIterator::_switch_context(ScanContext* to) {
     DCHECK_GT(this->output_schema().num_fields(), 0);
 
     if (to->_has_force_dict_encode) {
+        // This branch may be caused by dictionary inconsistency (there is no local dictionary, but the
+        // global dictionary exists), so our processing method is read->decode->materialize->encode.
+        // the column after materialize is binary_column
+
         // rebuild encoded schema
+        // If a column global dictionary cannot be applied to a local dictionary.
+        // We need to disable the global dictionary for these columns first
         _encoded_schema.clear();
         for (const auto& field : schema().fields()) {
             if (_can_using_global_dict(field)) {
@@ -1144,6 +1150,8 @@ void SegmentIterator::_switch_context(ScanContext* to) {
                 _encoded_schema.append(field);
             }
         }
+
+        // Rebuilding final_chunk schema. filter_unused_columns will prune out useless columns in encode_schema
         Schema final_chunk_schema;
         DCHECK_GE(_encoded_schema.num_fields(), output_schema().num_fields());
         size_t output_schema_idx = 0;
