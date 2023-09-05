@@ -73,7 +73,8 @@ private:
 
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
-    void _report_error(const std::string& line, const std::string& err_msg);
+    void _report_error(const CSVReader::Record& record, const std::string& err_msg);
+    void _report_rejected_record(const CSVReader::Record& record, const std::string& err_msg);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     using CSVReaderPtr = std::unique_ptr<ScannerCSVReader>;
