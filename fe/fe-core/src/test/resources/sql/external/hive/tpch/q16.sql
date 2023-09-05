@@ -199,7 +199,7 @@ OutPut Exchange Id: 03
 2:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO BURNISHED%'), 11: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)
-MIN/MAX PREDICATES: 24: p_size >= 1, 25: p_size <= 43
+MIN/MAX PREDICATES: 11: p_size >= 1, 11: p_size <= 43
 partitions=1/1
 avgRowSize=47.0
 cardinality: 2304000

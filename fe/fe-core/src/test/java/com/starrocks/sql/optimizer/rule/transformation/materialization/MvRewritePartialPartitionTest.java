@@ -401,9 +401,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 ImmutableList.of("l_shipdate=1998-01-02"));
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "lineitem_par",
-                "PARTITION PREDICATES: (((23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06'))" +
-                        " AND (23: l_shipdate >= '1998-01-02')) OR (23: l_shipdate IS NULL)",
-                "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
+                "PARTITION PREDICATES: (((22: l_shipdate < '1998-01-03') OR (22: l_shipdate >= '1998-01-06'))" +
+                        " AND (22: l_shipdate >= '1998-01-02')) OR (22: l_shipdate IS NULL)",
+                "NON-PARTITION PREDICATES: 20: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
 

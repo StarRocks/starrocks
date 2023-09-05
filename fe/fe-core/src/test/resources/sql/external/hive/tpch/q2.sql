@@ -296,7 +296,7 @@ OutPut Exchange Id: 14
 12:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
-MIN/MAX PREDICATES: 53: p_size <= 12, 54: p_size >= 12
+MIN/MAX PREDICATES: 6: p_size <= 12, 6: p_size >= 12
 partitions=1/1
 avgRowSize=62.0
 cardinality: 100000
@@ -431,7 +431,7 @@ OutPut Exchange Id: 04
 2:HdfsScanNode
 TABLE: region
 NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
-MIN/MAX PREDICATES: 51: r_name <= 'AMERICA', 52: r_name >= 'AMERICA'
+MIN/MAX PREDICATES: 27: r_name <= 'AMERICA', 27: r_name >= 'AMERICA'
 partitions=1/1
 avgRowSize=10.8
 cardinality: 1
