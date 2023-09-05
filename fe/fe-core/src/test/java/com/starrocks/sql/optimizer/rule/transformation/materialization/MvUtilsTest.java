@@ -108,7 +108,7 @@ public class MvUtilsTest {
         OptExpression scanExpr2 = OptExpression.create(scanOperator2);
         LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, binaryPredicate);
         OptExpression joinExpr = OptExpression.create(joinOperator, scanExpr, scanExpr2);
-        List<ScalarOperator> predicates = MvUtils.getAllPredicates(joinExpr);
+        List<ScalarOperator> predicates = MvUtils.getAllValidPredicates(joinExpr);
         Assert.assertEquals(3, predicates.size());
         Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr));
         LogicalJoinOperator joinOperator2 = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, binaryPredicate);
