@@ -1683,7 +1683,6 @@ public class OlapTable extends Table {
             tableProperty.write(out);
         }
         tempPartitions.write(out);
-        out.writeInt(maxColUniqueId);
     }
 
     @Override
@@ -1784,7 +1783,6 @@ public class OlapTable extends Table {
         }
         tempPartitions.unsetPartitionInfo();
 
-        maxColUniqueId = in.readInt();
         // In the present, the fullSchema could be rebuilt by schema change while the
         // properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as
