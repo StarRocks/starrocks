@@ -35,8 +35,12 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
+<<<<<<< HEAD
 
         List<TCloudProperty> properties = new LinkedList<>();
+=======
+        Map<String, String> properties = new HashMap<>();
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
     }

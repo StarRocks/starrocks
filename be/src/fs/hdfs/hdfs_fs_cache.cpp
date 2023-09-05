@@ -55,10 +55,19 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
 
     // Insert cloud properties(key-value paired) into Hadoop configuration
     // TODO(SmithCruise): Should remove when using cpp sdk
+<<<<<<< HEAD
     const std::vector<TCloudProperty>* cloud_properties = get_cloud_properties(options);
     if (cloud_properties != nullptr) {
         for (const auto& cloud_property : *cloud_properties) {
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
+=======
+    const std::map<std::string, std::string> cloud_properties = get_cloud_properties(options);
+    if (!cloud_properties.empty()) {
+        for (const auto& cloud_property : cloud_properties) {
+            VLOG_FILE << "[xxx] cloud property: key = " << cloud_property.first.data()
+                      << ", value = " << cloud_property.second.data();
+            hdfsBuilderConfSetStr(hdfs_builder, cloud_property.first.data(), cloud_property.second.data());
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
         }
     }
 

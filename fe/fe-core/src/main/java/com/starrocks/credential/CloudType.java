@@ -19,5 +19,11 @@ public enum CloudType {
     DEFAULT,
     AWS,
     AZURE,
+<<<<<<< HEAD
     GCP
+=======
+    GCP,
+    ALIYUN,
+    HDFS
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }

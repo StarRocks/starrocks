@@ -18,7 +18,6 @@ package com.starrocks.credential;
  * Mapping used config key in StarRocks
  */
 public class CloudConfigurationConstants {
-
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
     public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
@@ -45,7 +44,6 @@ public class CloudConfigurationConstants {
      */
     public static final String AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
-
     public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
     public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
     public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
@@ -54,7 +52,6 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
-
 
     // Credential for Azure storage
     // For Azure Blob Storage
@@ -78,10 +75,39 @@ public class CloudConfigurationConstants {
 
     // Credential for Google Cloud Platform (GCP)
     // For Google Cloud Storage (GCS)
-    public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT = "gcp.gcs.use_compute_engine_service_account";
+    public static final String GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT =
+            "gcp.gcs.use_compute_engine_service_account";
     public static final String GCP_GCS_SERVICE_ACCOUNT_EMAIL = "gcp.gcs.service_account_email";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY = "gcp.gcs.service_account_private_key";
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
     public static final String GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT =
             "gcp.gcs.impersonation_service_account";
+<<<<<<< HEAD
+=======
+
+    // Credential for HDFS
+    public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
+    @Deprecated
+    public static final String HDFS_USERNAME_DEPRECATED = "username";
+    public static final String HDFS_USERNAME = "hadoop.username";
+    @Deprecated
+    public static final String HDFS_PASSWORD_DEPRECATED = "password";
+    public static final String HDFS_PASSWORD = "hadoop.password";
+    public static final String HDFS_KERBEROS_PRINCIPAL_DEPRECATED = "kerberos_principal";
+    public static final String HDFS_KERBEROS_PRINCIPAL = "hadoop.kerberos.principal";
+    @Deprecated
+    public static final String HDFS_KERBEROS_KEYTAB_DEPRECATED = "kerberos_keytab";
+    public static final String HADOOP_KERBEROS_KEYTAB = "hadoop.kerberos.keytab";
+
+    @Deprecated
+    public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
+    public static final String HADOOP_KERBEROS_KEYTAB_CONTENT = "hadoop.kerberos.keytab_content";
+    public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
+    public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
+
+    // Credential for Aliyun OSS
+    public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
+    public static final String ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
+    public static final String ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }

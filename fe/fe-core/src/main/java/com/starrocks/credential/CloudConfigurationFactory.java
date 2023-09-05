@@ -24,7 +24,19 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
+<<<<<<< HEAD
 public abstract class CloudConfigurationFactory {
+=======
+public class CloudConfigurationFactory {
+
+    static ImmutableList<CloudConfigurationProvider> cloudConfigurationFactoryChain = ImmutableList.of(
+            new AWSCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider());
+
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
         CloudConfiguration cloudConfiguration = factory.buildForStorage();

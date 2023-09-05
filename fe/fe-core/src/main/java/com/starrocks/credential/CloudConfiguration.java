@@ -30,4 +30,11 @@ public interface CloudConfiguration {
     String getCredentialString();
 
     CloudType getCloudType();
+<<<<<<< HEAD
+=======
+
+    // Convert to the protobuf used by staros.
+    FileStoreInfo toFileStoreInfo();
+
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }

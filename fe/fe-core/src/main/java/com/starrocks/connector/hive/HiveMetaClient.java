@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.connector.ClassUtils;
+=======
+import com.starrocks.connector.HdfsEnvironment;
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
@@ -68,8 +71,9 @@ public class HiveMetaClient {
         this.conf = conf;
     }
 
-    public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
+    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
         HiveConf conf = new HiveConf();
+        conf.addResource(env.getConfiguration());
         properties.forEach(conf::set);
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
@@ -284,14 +288,18 @@ public class HiveMetaClient {
      * hive metastore is false. The hive metastore will throw StackOverFlow exception.
      * We solve this problem by get partitions information multiple times.
      * Each retry reduces the number of partitions fetched by half until only one partition is fetched at a time.
+     *
      * @return Hive table partitions
      * @throws StarRocksConnectorException If there is an exception with only one partition at a time when get partition,
-     * then we determine that there is a bug with the user's hive metastore.
+     *                                     then we determine that there is a bug with the user's hive metastore.
      */
     private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
                                                    List<String> partNames, int retryNum) throws StarRocksConnectorException {
         int subListSize = (int) Math.pow(2, retryNum);
         int subListNum = partNames.size() / subListSize;
+        if (subListNum == 0) {
+            subListNum = 1;
+        }
         List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
         List<Partition> partitions = Lists.newArrayList();
 
@@ -345,4 +353,49 @@ public class HiveMetaClient {
             throw new MetastoreNotificationFetchException(e.getMessage());
         }
     }
+<<<<<<< HEAD
 }
+=======
+
+    static class ClassUtils {
+        private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();
+
+        static {
+            WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Byte.class, Byte.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Short.class, Short.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Integer.class, Integer.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Float.class, Float.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Long.class, Long.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Double.class, Double.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(String.class, String.class);
+        }
+
+        public static Class<?>[] getCompatibleParamClasses(Object[] args) {
+            Class<?>[] argTypes = new Class[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argTypes[i] = toPrimitiveClass(args[i].getClass());
+            }
+            return argTypes;
+        }
+
+        public static Class<?> toPrimitiveClass(Class<?> parameterType) {
+            if (List.class.isAssignableFrom(parameterType)) {
+                return List.class;
+            } else if (!parameterType.isPrimitive()) {
+                Class<?> wrapperType = getWrapperType(parameterType);
+
+                assert wrapperType != null;
+                return wrapperType;
+            } else {
+                return parameterType;
+            }
+        }
+
+        public static Class<?> getWrapperType(Class<?> primitiveType) {
+            return (Class) WRAPPER_TO_PRIMITIVE.get(primitiveType);
+        }
+    }
+}
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
