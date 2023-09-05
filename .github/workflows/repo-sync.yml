@@ -47,7 +47,6 @@ jobs:
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
     outputs:
       assignees: ${{ steps.ori_pr_info.outputs.assignees }}
-      body: ${{ steps.ori_pr_info.outputs.body }}
       title: ${{ steps.ori_pr_info.outputs.title }}
     steps:
       - name: Ori PR Info
@@ -73,15 +72,6 @@ jobs:
         run: |
           curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
-
-      - name: Prepare PR Info
-        id: prepare_pr_info
-        run: |
-          set -x
-          echo ${{ needs.pr-info.outputs.body }} > tmp_info.txt
-          sed -i 's#\\r\\n#\r\n#g' tmp_info.txt
-          echo PR_BODY=`cat tmp_info.txt` >> $GITHUB_ENV
-          rm -rf ${{ github.workspace }}/*
 
       - uses: actions/checkout@v3
         with:
@@ -138,38 +128,34 @@ jobs:
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
-          rm -rf elastic-service
           git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
-      - uses: repo-sync/pull-request@v2.12.1
+      - name: Create pull request
         id: create_pr
-        name: Create pull request
         if: steps.previous-check.outputs.RES == 'True'
-        with:
-          source_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
-          destination_branch: ${{ inputs.BRANCH }}
-          pr_label: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}"
-          pr_title: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          pr_body: ${{ steps.cherry-pick.outputs.CONFLICT_INFO }}${{ env.PR_BODY }}
-          github_token: ${{ secrets.SYNC_PAT }}
-          pr_reviewer: ${{ needs.pr-info.outputs.assignees }}
-          pr_allow_empty: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          gh pr create -B ${{ inputs.BRANCH }} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -F ${BODY_FILE} -r ${REVIEWER}
 
-      # previous pr files' check conflict
+      # previous pr files' check pending
       - name: Create pending pull request
         id: create_pending_pr
         if: steps.previous-check.outputs.RES != 'True'
-        uses: repo-sync/pull-request@v2.12.1
-        with:
-          source_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
-          destination_branch: ${{ inputs.BRANCH }}
-          pr_label: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},pending"
-          pr_title: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          pr_body: |
-            Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}
-          github_token: ${{ secrets.SYNC_PAT }}
-          pr_reviewer: ${{ needs.pr-info.outputs.assignees }}
-          pr_allow_empty: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},pending"
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          gh pr create -B ${{ inputs.BRANCH }} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -b ${BODY} -r ${REVIEWER}
 
       # Unexpected failure
       - name: Create Error pull request
@@ -180,22 +166,16 @@ jobs:
             steps.cherry-pick.outcome == 'failure' ||
             steps.create_pr.outcome == 'failure' ||
             steps.create_pending_pr.outcome == 'failure')
-        uses: repo-sync/pull-request@v2.12.1
         env:
-          source_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
-          destination_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
-        with:
-          source_branch: ${{ env.source_branch }}
-          destination_branch: ${{ env.destination_branch }}
-          pr_label: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,error"
-          pr_title: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          pr_body: |
-            # ERROR, please contact us.<br />
-            ## cherry-pick #${{ inputs.PR_ID }}(${{ inputs.COMMIT_ID }}) from ${{ env.source_branch }} to ${{ env.destination_branch }} error<br />
-            please fix this and then create pr to ${{ inputs.BRANCH }}!<br />
-            ${{ env.PR_BODY }}
-          github_token: ${{ secrets.SYNC_PAT }}
-          pr_reviewer: ${{ needs.pr-info.outputs.assignees }}
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,error"
+          HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          gh pr create -B ${BASE} -H ${HEAD} -l ${PR_LABEL} -t ${TITLE} -F ${BODY_FILE} -r ${REVIEWER}
 
       - name: notify
         if: always()
@@ -207,7 +187,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
           cd ${{ github.workspace }}
-          git clone https://${{ secrets.SYNC_PAT }}@github.com/StarRocks/elastic-service.git
+          if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
+            git clone https://${{ secrets.SYNC_PAT }}@github.com/StarRocks/elastic-service.git
+          fi
           cd elastic-service
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
@@ -222,3 +204,11 @@ jobs:
             this_pr_url=${{ steps.create_error_pr.outputs.pr_url }}
           fi
           python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
+
+      - name: clean
+        if: always()
+        env:
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+        run: |
+          rm -f ${BODY_FILE}
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
