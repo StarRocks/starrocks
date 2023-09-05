@@ -94,7 +94,7 @@ public:
     Status init();
     // In order not to affect the current implementation of the non-pipeline engine,
     // this method is reserved and is only used in the non-pipeline engine
-    Status add_batch(TFetchDataResult* result);
+    Status add_batch(TFetchDataResult* result, bool need_free = true);
     Status add_batch(std::unique_ptr<TFetchDataResult>& result);
 
     // non-blocking version of add_batch

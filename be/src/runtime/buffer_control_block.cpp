@@ -39,6 +39,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
+#include "util/defer_op.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -65,7 +66,6 @@ void GetResultBatchCtx::on_close(int64_t packet_seq, QueryStatistics* statistics
 void GetResultBatchCtx::on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos) {
     uint8_t* buf = nullptr;
     uint32_t len = 0;
-
     ThriftSerializer ser(false, 4096);
     auto st = ser.serialize(&t_result->result_batch, &len, &buf);
     if (st.ok()) {
@@ -76,7 +76,6 @@ void GetResultBatchCtx::on_data(TFetchDataResult* t_result, int64_t packet_seq, 
         LOG(WARNING) << "TFetchDataResult serialize failed, errmsg=" << st.get_error_msg();
     }
     st.to_protobuf(result->mutable_status());
-
     done->Run();
     delete this;
 }
@@ -87,7 +86,6 @@ void GetResultBatchCtx::on_data(SerializeRes* res, int64_t packet_seq, bool eos)
     result->set_packet_seq(packet_seq);
     result->set_eos(eos);
     st.to_protobuf(result->mutable_status());
-
     done->Run();
     delete this;
 }
@@ -102,13 +100,22 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
+    std::unique_ptr<SerializeRes> ser = nullptr;
+    while (_batch_queue.try_dequeue(ser)) {
+        ser.reset();
+    }
 }
 
 Status BufferControlBlock::init() {
     return Status::OK();
 }
 
-Status BufferControlBlock::add_batch(TFetchDataResult* result) {
+Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
+    DeferOp op([&result, &need_free] {
+        if (need_free) {
+            delete result;
+        }
+    });
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
@@ -144,22 +151,7 @@ StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TF
 }
 
 Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) {
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    auto status_or_value = _serialize_result(result.get());
-    RETURN_IF_ERROR(status_or_value.status());
-    auto ser_res = std::move(status_or_value.value());
-
-    std::unique_lock<std::mutex> l(_lock);
-    while ((_batch_queue.size_approx() > _buffer_limit) && !_is_cancelled) {
-        _data_removal.wait(l);
-    }
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
-    }
-    _process_batch_without_lock(ser_res);
-    return Status::OK();
+    return add_batch(result.get(), false);
 }
 
 void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRes>& ser_res) {
@@ -200,18 +192,11 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         return false;
     }
 
-    uint8_t* buf = nullptr;
-    uint32_t len = 0;
     // serialize first
     for (auto& result : results) {
-        auto ser_res = std::make_unique<SerializeRes>();
-        ser_res->row_size = result->result_batch.rows.size();
-        {
-            SCOPED_TIMER(_rpc_serialize_timer);
-            ThriftSerializer ser(false, 4096);
-            RETURN_IF_ERROR(ser.serialize(&result->result_batch, &len, &buf));
-            ser_res->attachment.append(buf, len);
-        }
+        auto status_or_value = _serialize_result(result.get());
+        RETURN_IF_ERROR(status_or_value.status());
+        auto ser_res = std::move(status_or_value.value());
         _batch_queue.enqueue(std::move(ser_res));
         {
             std::unique_lock<std::mutex> l(_lock);
@@ -234,8 +219,50 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
     return true;
 }
 
+// seems no use?
 Status BufferControlBlock::get_batch(TFetchDataResult* result) {
-    return Status::NotSupported("outdated rpc interface");
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        while ((_batch_queue.size_approx() == 0) && !_is_close && !_is_cancelled) {
+            _data_arriaval.wait(l);
+        }
+        // if Status has been set, return fail;
+        RETURN_IF_ERROR(_status);
+        // cancelled
+        if (_is_cancelled) {
+            return Status::Cancelled("Cancelled BufferControlBlock::get_batch");
+        }
+
+        if (_batch_queue.size_approx() == 0) {
+            if (_is_close) {
+                // no result, normal end
+                result->eos = true;
+                result->__set_packet_num(_packet_num);
+                _packet_num++;
+                return Status::OK();
+            } else {
+                // can not get here
+                return Status::InternalError("Internal error, can not Get here!");
+            }
+        }
+        _data_removal.notify_one();
+    }
+    std::unique_ptr<SerializeRes> ser = nullptr;
+    if (_batch_queue.try_dequeue(ser)) {
+        std::vector<uint8_t> continuous_mem(ser->attachment.size());
+        // IOBuf is not continuous
+        auto copied_size = ser->attachment.copy_to(continuous_mem.data(), ser->attachment.size(), 0);
+        DCHECK(copied_size == ser->attachment.size());
+        uint32_t len = continuous_mem.size();
+        auto st = (deserialize_thrift_msg(continuous_mem.data(), &len, TProtocolType::BINARY, &result->result_batch));
+        if (!st.ok()) {
+            return st;
+        }
+        result->__set_packet_num(_packet_num);
+        _packet_num++;
+    }
+
+    return Status::OK();
 }
 
 void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
