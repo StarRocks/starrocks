@@ -136,6 +136,7 @@ public class LoadStmt extends DdlStmt {
             .add(PARTIAL_UPDATE)
             .add(PRIORITY)
             .add(SPARK_LOAD_SUBMIT_TIMEOUT)
+            .add(MERGE_CONDITION)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
