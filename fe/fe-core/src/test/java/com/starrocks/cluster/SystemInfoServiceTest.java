@@ -243,6 +243,24 @@ public class SystemInfoServiceTest {
     }
 
     @Test
+    public void addComputeNodeTest() throws AnalysisException {
+        clearAllBackend();
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(stmt.getHostPortPairs());
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("already exists"));
+        }
+    }
+
+    @Test
     public void removeBackendTest() throws AnalysisException {
         clearAllBackend();
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
