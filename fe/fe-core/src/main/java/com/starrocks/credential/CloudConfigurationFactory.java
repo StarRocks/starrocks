@@ -34,6 +34,7 @@ public class CloudConfigurationFactory {
             new AzureCloudConfigurationProvider(),
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
+<<<<<<< HEAD
             new HDFSCloudConfigurationProvider(),
             new CloudConfigurationProvider() {
                 @Override
@@ -41,6 +42,9 @@ public class CloudConfigurationFactory {
                     return new CloudConfiguration();
                 }
             });
+=======
+            new HDFSCloudConfigurationProvider());
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {

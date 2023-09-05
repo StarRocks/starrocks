@@ -16,8 +16,11 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+=======
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;

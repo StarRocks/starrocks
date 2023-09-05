@@ -90,7 +90,11 @@ public class HDFSCloudCredential implements CloudCredential {
     @Override
     public String toCredString() {
         return "HDFSCloudCredential{" +
+<<<<<<< HEAD
                 "authentication='" + authentication + '\'' +
+=======
+                "authentication=" + authentication +
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
                 ", username='" + userName + '\'' +
                 ", password='" + password + '\'' +
                 ", krbPrincipal='" + krbPrincipal + '\'' +

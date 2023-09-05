@@ -73,6 +73,7 @@ public class CloudConfiguration {
     }
 
     // Convert to the protobuf used by staros.
+<<<<<<< HEAD
     public FileStoreInfo toFileStoreInfo() {
         return null;
     }
@@ -85,4 +86,8 @@ public class CloudConfiguration {
     public String getCommonFieldsString() {
         return String.format("resources='%s', jars='%s'", configResources, runtimeJars);
     }
+=======
+    FileStoreInfo toFileStoreInfo();
+
+>>>>>>> e4479f8adf ([Refactor] refactor cloud cred and support cred-isolated cache key (#30023))
 }
