@@ -228,7 +228,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 List<Long> nodeIds = new ArrayList<>();
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
                     if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                        for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
                             ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
                             if (node != null && node.isAvailable()) {
                                 nodeIds.add(nodeId);

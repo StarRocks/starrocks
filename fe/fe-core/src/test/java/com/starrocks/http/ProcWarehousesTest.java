@@ -66,19 +66,19 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"1\"," +
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"3\"," +
                         "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\"," +
-                        "\"StartedClusters\":\"1\",\"RunningSql\":\"-1\",\"QueuedSql\":\"-1\""
+                        "\"StartedClusters\":\"1\",\"RunningSql\":\"0\",\"QueuedSql\":\"0\""
         );
         // list cluster in warehouse:0
         sendHttpAndValidateResponse("/warehouses/0",
                 "[{\"ClusterId\":\"0\",\"WorkerGroupId\":\"0\"," +
-                        "\"ComputeNodeIds\":\"[]\",\"Pending\":\"-1\",\"Running\":\"-1\"}]"
+                        "\"ComputeNodeIds\":\"[1000, 1001, 1002]\",\"Pending\":\"0\",\"Running\":\"0\"}]"
         );
         // list clusters in warehouse("default_warehouse")
         sendHttpAndValidateResponse("/warehouses/default_warehouse",
                 "[{\"ClusterId\":\"0\",\"WorkerGroupId\":\"0\"," +
-                        "\"ComputeNodeIds\":\"[]\",\"Pending\":\"-1\",\"Running\":\"-1\"}]"
+                        "\"ComputeNodeIds\":\"[1000, 1001, 1002]\",\"Pending\":\"0\",\"Running\":\"0\"}]"
         );
         sendHttpAndValidateResponse("/warehouses/11111", "[]");
         sendHttpAndValidateResponse("/warehouses/notexistwarehouse", "[]");
@@ -105,19 +105,19 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
         // list all warehouses
         sendHttpAndValidateResponse("/warehouses",
-                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"1\"," +
+                "\"Id\":\"0\",\"Name\":\"default_warehouse\",\"State\":\"AVAILABLE\",\"Size\":\"3\"," +
                         "\"CurrentClusterCount\":\"1\",\"MaxClusterCount\":\"1\",\"StartedClusters\":\"1\"," +
-                        "\"RunningSql\":\"-1\",\"QueuedSql\":\"-1\""
+                        "\"RunningSql\":\"0\",\"QueuedSql\":\"0\""
         );
         // list cluster in warehouse:0
         sendHttpAndValidateResponse("/warehouses/0",
                 "[{\"ClusterId\":\"0\",\"WorkerGroupId\":\"0\"," +
-                        "\"ComputeNodeIds\":\"[1, 2, 3]\",\"Pending\":\"-1\",\"Running\":\"-1\"}]"
+                        "\"ComputeNodeIds\":\"[1, 2, 3]\",\"Pending\":\"0\",\"Running\":\"0\"}]"
         );
         // list clusters in warehouse("default_warehouse")
         sendHttpAndValidateResponse("/warehouses/default_warehouse",
                 "[{\"ClusterId\":\"0\",\"WorkerGroupId\":\"0\"," +
-                        "\"ComputeNodeIds\":\"[1, 2, 3]\",\"Pending\":\"-1\",\"Running\":\"-1\"}]"
+                        "\"ComputeNodeIds\":\"[1, 2, 3]\",\"Pending\":\"0\",\"Running\":\"0\"}]"
         );
         sendHttpAndValidateResponse("/warehouses/11111", "[]");
         sendHttpAndValidateResponse("/warehouses/notexistwarehouse", "[]");

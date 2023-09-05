@@ -78,10 +78,10 @@ public class Cluster implements Writable {
     }
 
     public int getRunningSqls() {
-        return -1;
+        return 0;
     }
     public int getPendingSqls() {
-        return -1;
+        return 0;
     }
 
     public AtomicInteger getNextComputeNodeHostId() {
@@ -91,15 +91,15 @@ public class Cluster implements Writable {
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
                 String.valueOf(this.getWorkerGroupId()),
-                String.valueOf(this.getComputeNodeIds()),
+                String.valueOf(this.getAvailableComputeNodeIds()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
     }
 
     public void getProcNodesDataV2(BaseProcResult result) {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream().
-                filter(cn -> cn.getWorkerGroupId() == this.getWorkerGroupId()).collect(Collectors.toList());
+
+        List<ComputeNode> nodes = getAllComputeNodes();
+
         for (ComputeNode node : nodes) {
             List<String> computeNodeInfo = Lists.newArrayList();
 
@@ -139,11 +139,20 @@ public class Cluster implements Writable {
         }
     }
 
-    public List<Long> getComputeNodeIds() {
+    public List<ComputeNode> getAllComputeNodes() {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream().
+                filter(cn -> cn.getWorkerGroupId() == this.getWorkerGroupId()).collect(Collectors.toList());
+        return nodes;
+    }
+
+    public List<Long> getAvailableComputeNodeIds() {
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            return nodeIds;
+            final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            return clusterInfoService.backendAndComputeNodeStream().map(ComputeNode::getId).collect(Collectors.toList());
         }
+        
         try {
             // ask starMgr for node lists
             StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();

@@ -62,12 +62,12 @@ public class LocalWarehouse extends Warehouse {
                 String.valueOf(this.getId()),
                 this.getName(),
                 this.getState().toString(),
+                String.valueOf(cluster.getAvailableComputeNodeIds().size()),
                 String.valueOf(1L),
                 String.valueOf(1L),
                 String.valueOf(1L),
-                String.valueOf(1L),
-                String.valueOf(-1L),   //TODO: need to be filled after
-                String.valueOf(-1L),   //TODO: need to be filled after
+                String.valueOf(0L),   //TODO: need to be filled after
+                String.valueOf(0L),   //TODO: need to be filled after
                 TimeUtils.longToTimeString(this.getCreatedTime()),
                 TimeUtils.longToTimeString(this.getResumedTime()),
                 TimeUtils.longToTimeString(this.getUpdatedTime()),

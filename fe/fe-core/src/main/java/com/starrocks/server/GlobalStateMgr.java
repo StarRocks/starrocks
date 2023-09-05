@@ -590,7 +590,7 @@ public class GlobalStateMgr {
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
-            for (Long cnId : cluster.getComputeNodeIds()) {
+            for (Long cnId : cluster.getAvailableComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
             }
