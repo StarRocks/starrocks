@@ -124,7 +124,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            checkSomeNodeExist(pair.first, pair.second);
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -180,7 +180,7 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
-            checkSomeNodeExist(pair.first, pair.second);
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -188,7 +188,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    private void checkSomeNodeExist(String host, int heartPort) throws DdlException {
+    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
         // check is already exist
         if (getBackendWithHeartbeatPort(host, heartPort) != null) {
             throw new DdlException("Same backend already exists[" + host + ":" + heartPort + "]");
