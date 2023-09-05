@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -93,7 +94,8 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     @Override
     public ScalarOperator visitCall(CallOperator call, Void context) {
-        if (call.getColumnRefs().size() == 1 && partitionColumnSet.containsAll(call.getUsedColumns())) {
+        if (ConnectContext.get().getSessionVariable().isEnableExprPrunePartition()
+                && call.getColumnRefs().size() == 1 && partitionColumnSet.containsAll(call.getUsedColumns())) {
             BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
                 @Override
                 public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
