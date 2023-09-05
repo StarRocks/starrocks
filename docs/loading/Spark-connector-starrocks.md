@@ -186,23 +186,23 @@ Construct data in memory and load data into the StarRocks table.
 1. You can write the spark application using Scala or Python.
 
   For Scala, run the following code snippet in `spark-shell`:
-   
-    ```Scala
-    // 1. Create a DataFrame from a sequence.
-    val data = Seq((1, "starrocks", 100), (2, "spark", 100))
-    val df = data.toDF("id", "name", "score")
-   
-    // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
-    // You need to modify the options according your own environment.
-    df.write.format("starrocks")
-        .option("starrocks.fe.http.url", "127.0.0.1:8030")
-        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
-        .option("starrocks.table.identifier", "test.score_board")
-        .option("starrocks.user", "root")
-        .option("starrocks.password", "")
-        .mode("append")
-        .save()
-    ```
+
+  ```Scala
+  // 1. Create a DataFrame from a sequence.
+  val data = Seq((1, "starrocks", 100), (2, "spark", 100))
+  val df = data.toDF("id", "name", "score")
+
+  // 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
+  // You need to modify the options according your own environment.
+  df.write.format("starrocks")
+      .option("starrocks.fe.http.url", "127.0.0.1:8030")
+      .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
+      .option("starrocks.table.identifier", "test.score_board")
+      .option("starrocks.user", "root")
+      .option("starrocks.password", "")
+      .mode("append")
+      .save()
+  ```
 
   For Python, run the following code snippet in `pyspark`:
    
@@ -412,23 +412,23 @@ This example will show how to only update data in the column `name` through load
 
 1. Insert initial data to StarRocks table in MySQL client.
 
-```SQL
-mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
+  ``sql
+  mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
 
-mysql> select * from score_board;
-+------+-----------+-------+
-| id   | name      | score |
-+------+-----------+-------+
-|    1 | starrocks |   100 |
-|    2 | spark     |   100 |
-+------+-----------+-------+
-2 rows in set (0.02 sec)
-```
+  mysql> select * from score_board;
+  +------+-----------+-------+
+  | id   | name      | score |
+  +------+-----------+-------+
+  |    1 | starrocks |   100 |
+  |    2 | spark     |   100 |
+  +------+-----------+-------+
+  2 rows in set (0.02 sec)
+  ```
 
 2. Create a Spark table `score_board` in Spark SQL client.
 
-* Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update.
-* Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write.
+  - Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update.
+  - Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write.
 
   ```SQL
   CREATE TABLE `score_board`
@@ -448,6 +448,7 @@ mysql> select * from score_board;
   ```SQL
   INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'spark-update');
   ```
+
 4. Query the StarRocks table in MySQL client.
    
    You can see that only values for `name` change, and the values for `score` does not change.
@@ -485,8 +486,8 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 2. Create a Spark table `score_board` in the following ways.
 
-* Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score` as the condition.
-* Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
+  - Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score` as the condition.
+  - Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
 
   ```SQL
   CREATE TABLE `score_board`
