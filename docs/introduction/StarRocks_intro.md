@@ -12,7 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks)
 - [Architecture](../introduction/Architecture)
-- [Shared-data StarRocks cluster](../deployment/deploy_shared_data)
+- [Shared-data cluster](../deployment/deploy_shared_data)
 - [Features](../introduction/Features)
 
 </NavBoxPartItem>
@@ -64,7 +64,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Cost-based optimizer](../using_starrocks/Cost_based_optimizer)
 - [Synchronous materialized view](../using_starrocks/Materialized_view-single_table)
-- [Asynchronous materialized views](../using_starrocks/Materialized_view)
+- [Asynchronous materialized view](../using_starrocks/Materialized_view)
 - [Colocate Join](../using_starrocks/Colocate_join)
 - [Query cache](../using_starrocks/query_cache)
 
