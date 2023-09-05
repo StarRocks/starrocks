@@ -279,7 +279,7 @@ MySQL > show profilelist limit 1;
 Time: 0.005s
 ```
 
-This SQL statement allow you to easily obtain the `QueryId` associated with each query. The `QueryId` serves as a crucial identifier for further profile analysis and investigations.
+This SQL statement allows you to easily obtain the `QueryId` associated with each query. The `QueryId` serves as a crucial identifier for further profile analysis and investigations.
 
 #### Analyze profile
 
