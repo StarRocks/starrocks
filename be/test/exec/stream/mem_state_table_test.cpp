@@ -135,7 +135,7 @@ TEST_F(MemStateTableTest, TestSeekKey) {
 
     auto chunk_ptr = MakeStreamChunk<int32_t>({{1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {11, 12, 13}}, {0, 0, 0});
     // write table
-    state_table->write(_runtime_state, chunk_ptr);
+    ASSERT_TRUE(state_table->write(_runtime_state, chunk_ptr).ok());
     // read table
     check_seek(state_table.get(), {1}, {1, 1, 11});
     check_seek(state_table.get(), {2}, {2, 2, 12});
@@ -144,7 +144,7 @@ TEST_F(MemStateTableTest, TestSeekKey) {
     // UPDATE keys
     auto chunk_ptr2 = MakeStreamChunk<int32_t>({{1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {21, 22, 23}}, {0, 0, 0});
     // write table
-    state_table->write(_runtime_state, chunk_ptr2);
+    ASSERT_TRUE(state_table->write(_runtime_state, chunk_ptr2).ok());
     // read table
     check_seek(state_table.get(), {1}, {1, 1, 21});
     check_seek(state_table.get(), {2}, {2, 2, 22});
@@ -159,7 +159,7 @@ TEST_F(MemStateTableTest, TestPrefixSeek) {
     check_prefix_scan_not_found(state_table.get(), {1, 1}, Status::EndOfFile(""));
 
     // write table
-    state_table->write(_runtime_state, chunk_ptr);
+    ASSERT_TRUE(state_table->write(_runtime_state, chunk_ptr).ok());
     // read table
     check_prefix_scan(state_table.get(), {1, 1},
                       {
@@ -171,7 +171,7 @@ TEST_F(MemStateTableTest, TestPrefixSeek) {
     // UPDATE keys
     auto chunk_ptr2 = MakeStreamChunk<int32_t>({{1, 1, 1}, {1, 1, 1}, {1, 2, 3}, {21, 22, 23}}, {0, 0, 0});
     // write table
-    state_table->write(_runtime_state, chunk_ptr2);
+    ASSERT_TRUE(state_table->write(_runtime_state, chunk_ptr2).ok());
     // read table
     check_prefix_scan(state_table.get(), {1, 1},
                       {

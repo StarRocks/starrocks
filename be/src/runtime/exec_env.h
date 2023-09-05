@@ -154,7 +154,7 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    Status _init_storage_page_cache();
+    void _init_storage_page_cache();
 
     template <class... Args>
     std::shared_ptr<MemTracker> regist_tracker(Args&&... args);

@@ -111,10 +111,12 @@ Status StreamPipelineTest::execute() {
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     DCHECK(prepare_status.ok());
     bool enable_resource_group = _fragment_ctx->enable_resource_group();
-    _fragment_ctx->iterate_drivers([exec_env = _exec_env, enable_resource_group](const DriverPtr& driver) {
-        exec_env->wg_driver_executor()->submit(driver.get());
-        return Status::OK();
-    });
+    CHECK(_fragment_ctx
+                  ->iterate_drivers([exec_env = _exec_env, enable_resource_group](const DriverPtr& driver) {
+                      exec_env->wg_driver_executor()->submit(driver.get());
+                      return Status::OK();
+                  })
+                  .ok());
     return Status::OK();
 }
 
@@ -160,7 +162,7 @@ Status StreamPipelineTest::start_mv(InitiliazeFunc&& init_func) {
 void StreamPipelineTest::stop_mv() {
     VLOG_ROW << "StopMV";
     auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
-    stream_epoch_manager->set_finished(_exec_env, _query_ctx);
+    ASSERT_TRUE(stream_epoch_manager->set_finished(_exec_env, _query_ctx).ok());
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
 }
 

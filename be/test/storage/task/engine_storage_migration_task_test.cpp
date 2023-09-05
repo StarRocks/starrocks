@@ -586,9 +586,11 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    global_env->init();
+    auto st = global_env->init();
+    st.permit_unchecked_error();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    exec_env->init(paths);
+    st = exec_env->init(paths);
+    st.permit_unchecked_error();
     int r = RUN_ALL_TESTS();
 
     sleep(10);

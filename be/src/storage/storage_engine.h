@@ -146,7 +146,7 @@ public:
 
     size_t get_store_num() { return _store_map.size(); }
 
-    Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
+    void get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     std::vector<string> get_store_paths();
     // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,

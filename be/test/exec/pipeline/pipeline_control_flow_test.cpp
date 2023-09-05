@@ -277,7 +277,7 @@ public:
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished && !has_output(); }
     Status set_finishing(RuntimeState* state) override {
-        TestOperator::set_finishing(state);
+        CHECK(TestOperator::set_finishing(state).ok());
         _is_finished = true;
         return Status::OK();
     }
@@ -329,7 +329,7 @@ public:
     bool has_output() const override { return false; }
     bool is_finished() const override { return _is_finished; }
     Status set_finishing(RuntimeState* state) override {
-        TestOperator::set_finishing(state);
+        CHECK(TestOperator::set_finishing(state).ok());
         _is_finished = true;
         return Status::OK();
     }

@@ -126,7 +126,9 @@ void TableFunctionOperatorTest::SetUp() {
         t_desc_table.slotDescriptors.push_back(slot_desc);
     }
 
-    DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    ASSERT_TRUE(
+            DescriptorTbl::create(&_runtime_state, &_object_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size)
+                    .ok());
     _runtime_state.set_desc_tbl(_desc_tbl);
 
     _tnode.node_id = 1;
