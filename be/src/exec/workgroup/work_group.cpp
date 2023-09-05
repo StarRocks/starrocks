@@ -412,7 +412,8 @@ void WorkGroupManager::update_metrics_unlocked() {
             int64_t new_timestamp_ns = MonotonicNanos();
             int64_t new_cpu_runtime_ns = wg->cpu_runtime_ns();
             int64_t delta_ns = std::max<int64_t>(1, new_timestamp_ns - wg_metrics->timestamp_ns);
-            double inuse_cpu_cores = double(new_cpu_runtime_ns - wg_metrics->cpu_runtime_ns) / delta_ns;
+            int64_t delta_runtime_ns = std::max<int64_t>(0, new_cpu_runtime_ns - wg_metrics->cpu_runtime_ns);
+            double inuse_cpu_cores = double(delta_runtime_ns) / delta_ns;
             wg_metrics->inuse_cpu_cores->set_value(inuse_cpu_cores);
             wg_metrics->timestamp_ns = new_timestamp_ns;
             wg_metrics->cpu_runtime_ns = new_cpu_runtime_ns;
