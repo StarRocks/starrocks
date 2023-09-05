@@ -81,6 +81,10 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean forCTAS = false;
 
+    // tableFunctionAsTargetTable is true if insert statement is parsed from INSERT INTO FILES(..)
+    private final boolean tableFunctionAsTargetTable;
+    private final Map<String, String> tableFunctionProperties;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -95,6 +99,8 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -106,6 +112,19 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
         this.forCTAS = true;
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+    }
+
+    // Ctor for INSERT INTO FILES(...)
+    public InsertStmt(Map<String, String> tableFunctionProperties, QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tblName = new TableName("table_function_catalog", "table_function_db", "table_function_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
+        this.tableFunctionAsTargetTable = true;
+        this.tableFunctionProperties = tableFunctionProperties;
     }
 
     public Table getTargetTable() {
@@ -231,5 +250,13 @@ public class InsertStmt extends DmlStmt {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitInsertStatement(this, context);
+    }
+
+    public boolean useTableFunctionAsTargetTable() {
+        return tableFunctionAsTargetTable;
+    }
+
+    public Map<String, String> getTableFunctionProperties() {
+        return tableFunctionProperties;
     }
 }

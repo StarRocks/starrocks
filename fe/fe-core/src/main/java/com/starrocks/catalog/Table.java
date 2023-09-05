@@ -338,6 +338,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.JDBC;
     }
 
+    public boolean isTableFunctionTable() {
+        return type == TableType.TABLE_FUNCTION;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();

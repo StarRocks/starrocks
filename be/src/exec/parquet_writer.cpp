@@ -29,6 +29,7 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
         std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
         int32_t driver_id)
         : _table_info(std::move(tableInfo)),
+          _max_file_size(_table_info.max_file_size),
           _output_expr_ctxs(output_expr_ctxs),
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
@@ -84,7 +85,7 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
         }
     }
     // exceed file size
-    if (_writer->file_size() > _max_file_size) {
+    if (_max_file_size != -1 && _writer->file_size() > _max_file_size) {
         auto st = close_current_writer(state);
         if (st.ok()) {
             _new_file_writer();

@@ -23,10 +23,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DataSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -232,8 +234,16 @@ public class CoordinatorPreprocessor {
 
     private void validateExecutionDAG() throws StarRocksPlannerException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
-            if (execFragment.getPlanFragment().getSink() instanceof ResultSink && execFragment.getInstances().size() > 1) {
+            DataSink sink = execFragment.getPlanFragment().getSink();
+            if (sink instanceof ResultSink && execFragment.getInstances().size() > 1) {
                 throw new StarRocksPlannerException("This sql plan has multi result sinks", ErrorType.INTERNAL_ERROR);
+            }
+
+            if (sink instanceof TableFunctionTableSink && (((TableFunctionTableSink) sink).isWriteSingleFile())
+                    && execFragment.getInstances().size() > 1) {
+                throw new StarRocksPlannerException(
+                        "This sql plan has multi table function table sinks, but set to write single file",
+                        ErrorType.INTERNAL_ERROR);
             }
         }
     }
