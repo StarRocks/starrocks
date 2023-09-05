@@ -140,6 +140,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
 
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -769,6 +771,26 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
             }
             properties.remove(propKey);
+        }
+        return val;
+    }
+
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
         }
         return val;
     }

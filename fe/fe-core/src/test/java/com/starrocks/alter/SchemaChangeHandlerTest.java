@@ -96,6 +96,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         createTable(createDupTbl2StmtStr);
 
+        String createPKTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_pk (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "PRIMARY  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+
+        createTable(createPKTblStmtStr);
+
     }
 
     private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
@@ -411,5 +418,46 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
                         .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 105, false));
 
+    }
+
+    @Test
+    public void testSetPrimaryIndexCacheExpireSec() throws Exception {
+
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("sc_pk");
+        db.readLock();
+        try {
+            Assertions.assertNotNull(tbl);
+            System.out.println(tbl.getName());
+            Assertions.assertEquals("StarRocks", tbl.getEngine());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+        } finally {
+            db.readUnlock();
+        }
+
+        //process set properties
+        String addValColStmtStr = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '3600');";
+        AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+
+        try {
+            String addValColStmtStr2 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = '-12');";
+            AlterTableStmt addValColStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr2);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt2);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must not be less than 0"));
+        }
+
+        try {
+            String addValColStmtStr3 = "alter table test.sc_pk set ('primary_index_cache_expire_sec' = 'asd');";
+            AlterTableStmt addValColStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr3);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt3);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
+        }
     }
 }

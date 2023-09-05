@@ -496,6 +496,9 @@ public class OperationType {
     // Pipe operations log
     public static final short OP_PIPE = 12200;
 
+    // Primary key
+    public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
      */
