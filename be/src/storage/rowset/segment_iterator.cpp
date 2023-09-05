@@ -38,6 +38,7 @@
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/delta_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
@@ -1143,7 +1144,17 @@ void SegmentIterator::_switch_context(ScanContext* to) {
                 _encoded_schema.append(field);
             }
         }
-        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _reserve_chunk_size);
+        Schema final_chunk_schema;
+        DCHECK_GE(_encoded_schema.num_fields(), output_schema().num_fields());
+        size_t output_schema_idx = 0;
+        for (size_t i = 0; i < _encoded_schema.num_fields(); ++i) {
+            if (_encoded_schema.field(i)->id() == output_schema().field(output_schema_idx)->id()) {
+                final_chunk_schema.append(_encoded_schema.field(i));
+                output_schema_idx++;
+            }
+        }
+
+        to->_final_chunk = ChunkHelper::new_chunk(final_chunk_schema, _reserve_chunk_size);
     } else {
         to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
     }
@@ -1386,6 +1397,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
+    DCHECK(!(output_schema().num_fields() < _schema.num_fields()) || _opts.delete_predicates.empty())
+            << "delete condition couldn't work with filter_unused_columns";
 
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
@@ -1607,7 +1620,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
     auto final_chunk = ctx->_final_chunk;
 
     for (size_t i = 0; i < num_columns; i++) {
-        const FieldPtr& f = _schema.field(i);
+        const FieldPtr& f = output_schema().field(i);
         const ColumnId cid = f->id();
         ColumnPtr& col = ctx->_final_chunk->get_column_by_index(i);
         ColumnPtr& dst = ctx->_adapt_global_dict_chunk->get_column_by_index(i);
