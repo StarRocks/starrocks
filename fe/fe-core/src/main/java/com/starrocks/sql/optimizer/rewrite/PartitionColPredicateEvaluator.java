@@ -148,8 +148,16 @@ public class PartitionColPredicateEvaluator {
                         Optional<LiteralExpr> mappingLowerBound = mapRangeBoundValue(call, lowerBound);
                         Optional<LiteralExpr> mappingUpperBound = mapRangeBoundValue(call, upperBound);
                         if (mappingLowerBound.isPresent() && mappingUpperBound.isPresent()) {
-                            lowerKey.pushColumn(mappingLowerBound.get(), returnType);
-                            upperKey.pushColumn(mappingUpperBound.get(), returnType);
+                            LiteralExpr newLowerBound = mappingLowerBound.get();
+                            LiteralExpr newUpperBound = mappingUpperBound.get();
+                            // switch bound value
+                            if (newLowerBound.compareTo(newUpperBound) > 0) {
+                                LiteralExpr tmp = newLowerBound;
+                                newLowerBound = newUpperBound;
+                                newUpperBound = tmp;
+                            }
+                            lowerKey.pushColumn(newLowerBound, returnType);
+                            upperKey.pushColumn(newUpperBound, returnType);
                             newRange = Range.range(lowerKey, BoundType.CLOSED, upperKey, BoundType.OPEN);
                         } else {
                             newRange = createFullScopeRange(call.getType().getPrimitiveType());

@@ -489,6 +489,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from less_than_tbl where previous_day(k1, 'Monday') in ('2020-07-01', '2020-08-01', " +
                 "'2020-08-06') and k3 = 'a'");
+        sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) < 0");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }
