@@ -191,11 +191,11 @@ public class SystemInfoService implements GsonPostProcessable {
     private void checkSameNodeExist(String host, int heartPort) throws DdlException {
         // check is already exist
         if (getBackendWithHeartbeatPort(host, heartPort) != null) {
-            throw new DdlException("Same backend already exists[" + host + ":" + heartPort + "]");
+            throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
         }
 
         if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
-            throw new DdlException("Same compute node already exists[" + host + ":" + heartPort + "]");
+            throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
         }
     }
 
