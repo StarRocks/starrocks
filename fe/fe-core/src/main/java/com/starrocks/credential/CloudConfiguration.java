@@ -34,4 +34,5 @@ public interface CloudConfiguration {
 
     // Convert to the protobuf used by staros.
     FileStoreInfo toFileStoreInfo();
+
 }

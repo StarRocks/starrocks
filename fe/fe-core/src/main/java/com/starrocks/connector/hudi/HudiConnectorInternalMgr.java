@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -83,7 +82,7 @@ public class HudiConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(hdfsEnvironment, properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {

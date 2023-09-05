@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
@@ -69,8 +69,9 @@ public class HiveMetaClient {
         this.conf = conf;
     }
 
-    public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
+    public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
         HiveConf conf = new HiveConf();
+        conf.addResource(env.getConfiguration());
         properties.forEach(conf::set);
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
@@ -292,14 +293,18 @@ public class HiveMetaClient {
      * hive metastore is false. The hive metastore will throw StackOverFlow exception.
      * We solve this problem by get partitions information multiple times.
      * Each retry reduces the number of partitions fetched by half until only one partition is fetched at a time.
+     *
      * @return Hive table partitions
      * @throws StarRocksConnectorException If there is an exception with only one partition at a time when get partition,
-     * then we determine that there is a bug with the user's hive metastore.
+     *                                     then we determine that there is a bug with the user's hive metastore.
      */
     private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
                                                    List<String> partNames, int retryNum) throws StarRocksConnectorException {
         int subListSize = (int) Math.pow(2, retryNum);
         int subListNum = partNames.size() / subListSize;
+        if (subListNum == 0) {
+            subListNum = 1;
+        }
         List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
         List<Partition> partitions = Lists.newArrayList();
 
@@ -356,6 +361,7 @@ public class HiveMetaClient {
 
     static class ClassUtils {
         private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();
+
         static {
             WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
             WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
