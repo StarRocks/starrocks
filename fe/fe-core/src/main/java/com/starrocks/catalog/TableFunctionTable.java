@@ -99,7 +99,7 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, List<Column> columns,
-                              List<Integer> partitionColumnIDs, boolean writeSingleFile,
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
                               Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");

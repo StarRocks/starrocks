@@ -163,7 +163,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
         const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
         bool write_single_file, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink",
-                          Operator::s_pseudo_plan_node_id_for_table_function_table_sink),
+                          Operator::s_pseudo_plan_node_id_for_final_sink),
           _path(path),
           _file_format(file_format),
           _compression_type(compression_type),

@@ -275,7 +275,7 @@ public class InsertPlanner {
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
-                    targetTable.isHiveTable())) {
+                    targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
@@ -298,7 +298,7 @@ public class InsertPlanner {
                     sinkFragment.setHasHiveTableSink();
                 } else if (targetTable.isIcebergTable()) {
                     sinkFragment.setHasIcebergTableSink();
-                } else if (targetTable instanceof TableFunctionTable) {
+                } else if (targetTable.isTableFunctionTable()) {
                     sinkFragment.setHasTableFunctionTableSink();
                 }
 
