@@ -47,6 +47,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -199,7 +200,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService) {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -263,9 +264,9 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), false, 
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         System.out.println(param);
 
         // Check
@@ -280,7 +281,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) {
+            @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -347,9 +348,9 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId),
-                TWriteQuorumType.MAJORITY, true, false, false);
-        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(
+                table, table.getClusterId(), Lists.newArrayList(partitionId), true,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         System.out.println(param);
 
         // Check

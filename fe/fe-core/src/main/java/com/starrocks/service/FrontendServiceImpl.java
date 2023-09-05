@@ -43,7 +43,11 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -72,6 +76,7 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -118,6 +123,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.mysql.privilege.TablePrivEntry;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -179,6 +185,8 @@ import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
 import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
+import com.starrocks.thrift.TGetDictQueryParamRequest;
+import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
@@ -2501,4 +2509,47 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return res;
     }
 
+
+    @Override
+    public TGetDictQueryParamResponse getDictQueryParam(TGetDictQueryParamRequest request) throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(request.getDb_name());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", request.getDb_name());
+        }
+        Table table = db.getTable(request.getTable_name());
+        if (table == null) {
+            throw new SemanticException("dict table %s is not found", request.getTable_name());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("dict table type is not OlapTable, type=" + table.getClass());
+        }
+        OlapTable dictTable = (OlapTable) table;
+        TupleDescriptor tupleDescriptor = new TupleDescriptor(TupleId.createGenerator().getNextId());
+        IdGenerator<SlotId> slotIdIdGenerator = SlotId.createGenerator();
+
+        for (Column column : dictTable.getBaseSchema()) {
+            SlotDescriptor slotDescriptor = new SlotDescriptor(slotIdIdGenerator.getNextId(), tupleDescriptor);
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsMaterialized(true);
+            tupleDescriptor.addSlot(slotDescriptor);
+        }
+
+        TGetDictQueryParamResponse response = new TGetDictQueryParamResponse();
+        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
+        try {
+            List<Long> allPartitions = dictTable.getAllPartitionIds();
+            response.setPartition(
+                    OlapTableSink.createPartition(
+                        db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
+            response.setLocation(OlapTableSink.createLocation(
+                    dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage(), 
+                    WarehouseManager.DEFAULT_WAREHOUSE_ID));
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
+        } catch (UserException e) {
+            SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
+            semanticException.initCause(e);
+            throw semanticException;
+        }
+        return response;
+    }
 }
