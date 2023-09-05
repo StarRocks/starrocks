@@ -26,10 +26,11 @@ namespace starrocks {
 
 namespace lake {
 class Rowset;
+class UpdateManager;
 
 class CompactionState {
 public:
-    CompactionState(Rowset* rowset);
+    CompactionState(Rowset* rowset, UpdateManager* update_manager);
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;
@@ -42,6 +43,9 @@ public:
 
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
+
+    UpdateManager* _update_manager;
+    size_t _memory_usage = 0;
 };
 
 } // namespace lake

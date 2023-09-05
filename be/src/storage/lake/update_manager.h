@@ -118,6 +118,8 @@ public:
         return Status::OK();
     }
 
+    MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
+
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -150,6 +152,7 @@ private:
     MemTracker* _update_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
+    std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 };
 
 } // namespace lake
