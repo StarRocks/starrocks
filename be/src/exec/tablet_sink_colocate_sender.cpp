@@ -103,7 +103,7 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
                 auto choose_tablet_id = tablet_id_selections[selection];
                 DCHECK(tablet_to_bes.find(choose_tablet_id) != tablet_to_bes.end());
                 auto& be_ids = tablet_to_bes.find(choose_tablet_id)->second;
-                DCHECK_LT(be_ids.size(), 0);
+                DCHECK_LT(0, be_ids.size());
                 // TODO(meegoo): add backlist policy
                 // first replica is primary replica, which determined by FE now
                 // only send to primary replica when enable replicated storage engine

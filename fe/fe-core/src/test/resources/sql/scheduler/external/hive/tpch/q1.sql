@@ -87,19 +87,19 @@ PLAN FRAGMENT 2
   |  <slot 7> : 7: l_discount
   |  <slot 9> : 9: l_returnflag
   |  <slot 10> : 10: l_linestatus
-  |  <slot 17> : 32: multiply
-  |  <slot 18> : 32: multiply * CAST(1 + CAST(8: l_tax AS DECIMAL64(16,2)) AS DECIMAL128(16,2))
+  |  <slot 17> : 31: multiply
+  |  <slot 18> : 31: multiply * CAST(1 + CAST(8: l_tax AS DECIMAL64(16,2)) AS DECIMAL128(16,2))
   |  common expressions:
-  |  <slot 32> : 28: cast * 31: cast
-  |  <slot 28> : CAST(6: l_extendedprice AS DECIMAL128(15,2))
-  |  <slot 29> : CAST(7: l_discount AS DECIMAL64(18,2))
-  |  <slot 30> : 1 - 29: cast
-  |  <slot 31> : CAST(30: subtract AS DECIMAL128(18,2))
+  |  <slot 27> : CAST(6: l_extendedprice AS DECIMAL128(15,2))
+  |  <slot 28> : CAST(7: l_discount AS DECIMAL64(18,2))
+  |  <slot 29> : 1 - 28: cast
+  |  <slot 30> : CAST(29: subtract AS DECIMAL128(18,2))
+  |  <slot 31> : 27: cast * 30: cast
   |  
   0:HdfsScanNode
      TABLE: lineitem
      NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
-     MIN/MAX PREDICATES: 27: l_shipdate <= '1998-12-01'
+     MIN/MAX PREDICATES: 11: l_shipdate <= '1998-12-01'
      partitions=1/1
      cardinality=600037902
      avgRowSize=70.0

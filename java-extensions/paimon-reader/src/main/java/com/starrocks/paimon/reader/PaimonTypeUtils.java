@@ -110,9 +110,9 @@ public class PaimonTypeUtils {
         }
 
         public String visit(RowType rowType) {
-            String type = rowType.getFields().stream().map(f -> f.type().accept(this) + ",")
+            String type = rowType.getFields().stream().map(f -> f.name() + ":" + f.type().accept(this))
                     .collect(Collectors.joining(","));
-            return String.format("struct<%s>", type.substring(0, type.length() - 1));
+            return String.format("struct<%s>", type);
         }
 
         @Override

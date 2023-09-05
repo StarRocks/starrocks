@@ -199,6 +199,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    public static final String MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT = "max_buckets_per_be_to_use_balancer_assignment";
+
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
 
@@ -288,6 +290,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_rewrite_groupingsets_to_union_all";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+    public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
 
     // --------  New planner session variables end --------
 
@@ -361,7 +364,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
-
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -397,6 +399,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return EnumUtils.getEnumIgnoreCase(MaterializedViewRewriteMode.class, str);
         }
     }
+
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
@@ -495,6 +498,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // binary, json, compact
     public static final String THRIFT_PLAN_PROTOCOL = "thrift_plan_protocol";
 
+    public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -520,6 +525,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    /**
+     * The threshold for determining whether to use a more evenly assignment bucket sequences to backend algorithm for query
+     * execution.
+     *
+     * <p> This algorithm is only used when {@code numBucketsPerBe} is smaller than this threshold, because the time complexity
+     * of it is {@code numBucketsPerBe} times than the previous algorithm.
+     *
+     * @see ColocatedBackendSelector
+     */
+    @VariableMgr.VarAttr(name = MAX_BUCKETS_PER_BE_TO_USE_BALANCER_ASSIGNMENT, flag = VariableMgr.INVISIBLE)
+    private int maxBucketsPerBeToUseBalancerAssignment = 6;
 
     @VariableMgr.VarAttr(name = ENABLE_RUNTIME_ADAPTIVE_DOP)
     private boolean enableRuntimeAdaptiveDop = false;
@@ -1045,6 +1062,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
     private String thriftPlanProtocol = "binary";
 
+    @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
+    private long cboPushDownTopNLimit = 1000;
+
+    public long getCboPushDownTopNLimit() {
+        return cboPushDownTopNLimit;
+    }
+
+    public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
+        this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
     public String getThriftPlanProtocol() {
         return thriftPlanProtocol;
     }
@@ -1266,6 +1294,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
     }
@@ -1273,6 +1304,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
         this.hiveTempStagingDir = hiveTempStagingDir;
         return this;
+    }
+
+    public boolean isCboPredicateSubfieldPath() {
+        return cboPredicateSubfieldPath;
     }
 
     public int getExprChildrenLimit() {
@@ -1882,6 +1917,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return true;
     }
 
+    public int getMaxBucketsPerBeToUseBalancerAssignment() {
+        return maxBucketsPerBeToUseBalancerAssignment;
+    }
+
+    public void setMaxBucketsPerBeToUseBalancerAssignment(int maxBucketsPerBeToUseBalancerAssignment) {
+        this.maxBucketsPerBeToUseBalancerAssignment = maxBucketsPerBeToUseBalancerAssignment;
+    }
+
     public void setPipelineDop(int pipelineDop) {
         this.pipelineDop = pipelineDop;
     }
@@ -1955,8 +1998,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableMaterializedViewForceRewrite() {
-        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE)  ||
-                        materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+        return materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE) ||
+                materializedViewRewriteMode.equalsIgnoreCase(MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
     }
 
     public boolean isEnableMaterializedViewRewriteOrError() {
