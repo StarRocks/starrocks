@@ -898,7 +898,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
                     context.getColRefToExpr()
-                            .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                            .putIfAbsent(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
             }
             minMaxTuple.computeMemLayout();

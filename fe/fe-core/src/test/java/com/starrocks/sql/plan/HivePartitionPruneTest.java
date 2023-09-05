@@ -45,7 +45,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     TABLE: t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 1\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
-                "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
                 "     partitions=1/3");
 
         sql = "select * from t1 where par_col = abs(-1) and c1 = 2";
@@ -55,7 +55,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     NO EVAL-PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
-                "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
                 "     partitions=3/3");
 
         sql = "select * from t1 where par_col = 1+1 and c1 = 2";
@@ -64,7 +64,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "     TABLE: t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 2\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
-                "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
+                "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
                 "     partitions=1/3");
     }
 

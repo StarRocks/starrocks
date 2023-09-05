@@ -184,7 +184,7 @@ OutPut Exchange Id: 13
 6:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 26: l_returnflag = 'R'
-MIN/MAX PREDICATES: 40: l_returnflag <= 'R', 41: l_returnflag >= 'R'
+MIN/MAX PREDICATES: 26: l_returnflag <= 'R', 26: l_returnflag >= 'R'
 partitions=1/1
 avgRowSize=25.0
 cardinality: 200012634
@@ -214,7 +214,7 @@ OutPut Exchange Id: 10
 8:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
-MIN/MAX PREDICATES: 42: o_orderdate >= '1994-05-01', 43: o_orderdate < '1994-08-01'
+MIN/MAX PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
 partitions=1/1
 avgRowSize=20.0
 cardinality: 5738046
