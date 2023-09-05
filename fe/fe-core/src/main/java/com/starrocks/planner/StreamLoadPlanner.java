@@ -203,7 +203,7 @@ public class StreamLoadPlanner {
             olapTableSink.setAutomaticBucketSize(destTable.getAutomaticBucketSize());
         }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, olapTableSink.missAutoIncrementColumn());
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns, olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
