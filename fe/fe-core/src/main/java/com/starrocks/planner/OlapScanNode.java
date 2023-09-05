@@ -838,8 +838,8 @@ public class OlapScanNode extends ScanNode {
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
-                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames,
-                        keyColumnTypes, isPreAggregation, columnsDesc);
+                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setColumns_desc(columnsDesc);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
