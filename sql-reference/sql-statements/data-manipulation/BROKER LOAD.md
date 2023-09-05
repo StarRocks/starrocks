@@ -228,9 +228,9 @@ StarRocks 访问存储系统的认证配置。
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab = "/keytab/hive.keytab",
-    "kerberos_keytab_content = "YWFhYWFh"
+    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab" = "/keytab/hive.keytab",
+    "kerberos_keytab_content" = "YWFhYWFh"
     ```
 
     `StorageCredentialParams` 包含如下参数。
