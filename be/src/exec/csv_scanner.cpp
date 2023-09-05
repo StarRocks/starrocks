@@ -26,17 +26,21 @@
 namespace starrocks {
 
 static std::string string_2_asc(const std::string& input) {
-    if (input.size() == 0) {
-        return "";
-    }
-    std::string output;
-    for (int i = 0; i < input.size(); i++) {
-        output += std::to_string(int(input[i]));
-        if (i != input.size() - 1) {
-            output += " ";
+    std::stringstream oss;
+    oss << "'";
+    for (char c : input) {
+        if (c == '\n') {
+            oss << "\\n";
+        } else if (c == '\t') {
+            oss << "\\t";
+        } else if (std::isprint(static_cast<unsigned char>(c))) {
+            oss << c;
+        } else {
+            oss << "0x" << std::hex << (static_cast<unsigned int>(c) & 0xFF);
         }
     }
-    return output;
+    oss << "'";
+    return oss.str();
 }
 
 static std::string make_column_count_not_matched_error_message(int expected_count, int actual_count,
@@ -44,7 +48,7 @@ static std::string make_column_count_not_matched_error_message(int expected_coun
     std::stringstream error_msg;
     error_msg << "Value count does not match column count: "
               << "expected = " << expected_count << ", actual = " << actual_count << ". "
-              << "Column delimiter: " << string_2_asc(parse_options.column_delimiter) << ", "
+              << "Column separator: " << string_2_asc(parse_options.column_delimiter) << ", "
               << "Row delimiter: " << string_2_asc(parse_options.row_delimiter);
     return error_msg.str();
 }
