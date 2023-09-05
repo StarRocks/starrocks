@@ -165,6 +165,10 @@ private:
     RuntimeProfile::Counter* _io_ns_local_disk_timer = nullptr;
     RuntimeProfile::Counter* _io_ns_remote_timer = nullptr;
     RuntimeProfile::Counter* _io_ns_total_timer = nullptr;
+    // Prefetch
+    RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
+    RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
+    RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 };
 
 // ================================
@@ -586,6 +590,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _io_ns_local_disk_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeLocalDisk", "IOStatistics");
     _io_ns_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeRemote", "IOStatistics");
     _io_ns_total_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTimeTotal", "IOStatistics");
+    // Prefetch
+    _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, "IOStatistics");
+    _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", "IOStatistics");
+    _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", "IOStatistics");
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -690,6 +698,10 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
     COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
     COUNTER_UPDATE(_io_statistics_timer, _reader->stats().io_ns);
+
+    COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
+    COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
+    COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
 }
 
 // ================================
