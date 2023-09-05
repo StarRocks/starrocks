@@ -394,11 +394,7 @@ Status SyncFileWriter::_flush_row_group() {
             _chunk_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
             _chunk_writer.reset();
-
-            // this is to avoid calling ParquetFileWriter.Close which incurs segfault
             _closed = true;
-            _writer.release();
-
             auto st = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << st;
             return st;
