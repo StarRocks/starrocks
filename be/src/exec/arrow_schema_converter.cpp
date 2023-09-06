@@ -155,7 +155,7 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
     // <list-repetition> group <name> (LIST) 
     const auto& child_node = list_group_node->field(0);
     TypeDescriptor child_type_desc;
-    RETURN_IF_ERROR(get_parquet_type_from_primitive(child_node, &child_type_desc));
+    RETURN_IF_ERROR(get_parquet_type(child_node, &child_type_desc));
     type_desc->children.emplace_back(std::move(child_type_desc));
 
     return Status::OK();
