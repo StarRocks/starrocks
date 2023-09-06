@@ -19,6 +19,8 @@
 
 #include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
+#include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "util/thread.h"
 
 using namespace std::chrono_literals;
@@ -540,7 +542,7 @@ Status CompactionManager::get_running_task_status(std::vector<RunningCompactionM
             metric.type = to_string(type);
             metric.partition_id = task->tablet()->partition_id();
             metric.tablet_id = task->tablet()->tablet_id();
-            metric.start_time = ToStringFromUnixMillis(task->start_time());
+            metric.start_time = ToStringFromUnixMillis(task->get_start_time());
             metric.algorithm = task->get_compaction_algorithm() == HORIZONTAL_COMPACTION ? "horizontal" : "vertical";
             metric.input_rowset_num = task->input_rowsets().size();
             metric.input_segment_num = task->input_segments_num();
@@ -591,7 +593,7 @@ Status CompactionManager::get_waiting_tasks_status(std::vector<WaitingCompaction
                                                    std::vector<WaitingCompactionMetric>& cumu_metric) {
     std::lock_guard lg(_candidates_mutex);
 
-    for (const auto task : _compaction_candidates) {
+    for (const auto& task : _compaction_candidates) {
         WaitingCompactionMetric metric;
         CompactionType type = task.type;
         metric.type = to_string(type);
