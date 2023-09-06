@@ -21,7 +21,6 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -79,8 +78,7 @@ public class RewriteTreeTask extends OptimizerTask {
             }
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
 
-            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(traceInfo, rule, root, result);
+            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, root, result);
 
             if (result.isEmpty()) {
                 continue;

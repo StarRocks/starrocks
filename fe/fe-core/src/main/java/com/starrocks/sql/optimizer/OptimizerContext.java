@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -29,8 +29,11 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class OptimizerContext {
+    private final UUID queryId;
     private final Memo memo;
     private final RuleSet ruleSet;
     private final GlobalStateMgr globalStateMgr;
@@ -40,12 +43,12 @@ public class OptimizerContext {
     private DumpInfo dumpInfo;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
-    private OptimizerTraceInfo traceInfo;
-    private OptimizerConfig optimizerConfig;
-    private List<MaterializationContext> candidateMvs;
+    private final OptimizerConfig optimizerConfig;
+    private final List<MaterializationContext> candidateMvs;
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+    private final Stopwatch optimizerTimer = Stopwatch.createStarted();
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -57,6 +60,7 @@ public class OptimizerContext {
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
         this.candidateMvs = Lists.newArrayList();
+        this.queryId = UUID.randomUUID();
     }
 
     @VisibleForTesting
@@ -71,6 +75,7 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
+        this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
         this.cteContext = new CTEContext();
@@ -126,12 +131,8 @@ public class OptimizerContext {
         return currentTaskContext;
     }
 
-    public void setTraceInfo(OptimizerTraceInfo traceInfo) {
-        this.traceInfo = traceInfo;
-    }
-
-    public OptimizerTraceInfo getTraceInfo() {
-        return traceInfo;
+    public UUID getQueryId() {
+        return queryId;
     }
 
     public OptimizerConfig getOptimizerConfig() {
@@ -157,7 +158,12 @@ public class OptimizerContext {
     public void setUpdateTableId(long updateTableId) {
         this.updateTableId = updateTableId;
     }
+
     public long getUpdateTableId() {
         return updateTableId;
+    }
+
+    public long getCostTimeMs() {
+        return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
     }
 }

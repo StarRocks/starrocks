@@ -58,7 +58,7 @@ public class OptimizerTraceUtil {
     public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
         Tracers.log(Tracers.Module.MV, "[MV TRACE] [REWRITE {} {} {}] {}",
-                mvContext.getOptimizerContext().getTraceInfo().getQueryId(),
+                mvContext.getOptimizerContext().getQueryId(),
                 mvRewriteContext.getRule().type().name(),
                 mvContext.getMv().getName(),
                 MessageFormatter.arrayFormat(format, object).getMessage());
@@ -67,16 +67,16 @@ public class OptimizerTraceUtil {
     public static void logMVRewrite(OptimizerContext optimizerContext, Rule rule,
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, "[MV TRACE] [REWRITE {} {}] {}",
-                optimizerContext.getTraceInfo().getQueryId(),
+                optimizerContext.getQueryId(),
                 rule.type().name(),
                 String.format(format, object));
     }
 
-    public static void logApplyRule(OptimizerTraceInfo traceInfo, Rule rule,
+    public static void logApplyRule(OptimizerContext ctx, Rule rule,
                                     OptExpression oldExpression, List<OptExpression> newExpressions) {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", traceInfo.getQueryId(), rule));
+            sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
             sb.append("Original Expression:\n").append(oldExpression.debugString(3));
             sb.append("\nNew Expression:");
             if (newExpressions.isEmpty()) {

@@ -229,9 +229,6 @@ public class Optimizer {
         }
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
-        OptimizerTraceInfo traceInfo = new OptimizerTraceInfo(connectContext.getQueryId());
-        context.setTraceInfo(traceInfo);
-
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {

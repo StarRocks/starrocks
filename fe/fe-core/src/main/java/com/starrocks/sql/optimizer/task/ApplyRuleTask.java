@@ -22,7 +22,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
@@ -89,8 +88,7 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             newExpressions.addAll(targetExpressions);
-            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(traceInfo, rule, extractExpr, targetExpressions);
+            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, extractExpr, targetExpressions);
 
             extractExpr = binder.next();
         }
