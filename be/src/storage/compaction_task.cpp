@@ -157,15 +157,15 @@ void CompactionTask::_success_callback() {
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
         StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_task_info.input_rowsets_size);
-        StarRocksMetrics::instance()->cumulative_compaction_task_cost_time.set_value(cost_time / 1000.0);
-        StarRocksMetrics::instance()->cumulative_compaction_task_rate.set_value(_task_info.input_rowsets_size /
-                                                                                (cost_time / 1000.0));
+        StarRocksMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
+        StarRocksMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(
+                _task_info.input_rowsets_size / (cost_time / 1000.0 + 1));
     } else {
         StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
         StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_task_info.input_rowsets_size);
-        StarRocksMetrics::instance()->base_compaction_task_cost_time.set_value(cost_time / 1000.0);
-        StarRocksMetrics::instance()->base_compaction_task_rate.set_value(_task_info.input_rowsets_size /
-                                                                          (cost_time / 1000.0));
+        StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+        StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_task_info.input_rowsets_size /
+                                                                                     (cost_time / 1000.0 + 1));
     }
 
     // preload the rowset

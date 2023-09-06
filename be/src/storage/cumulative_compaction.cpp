@@ -70,8 +70,9 @@ Status CumulativeCompaction::compact() {
     int64_t cost_time = end_time - start_time;
     StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
     StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_input_rowsets_size);
-    StarRocksMetrics::instance()->cumulative_compaction_task_cost_time.set_value(cost_time / 1000.0);
-    StarRocksMetrics::instance()->cumulative_compaction_task_rate.set_value(_input_rowsets_size / (cost_time / 1000.0));
+    StarRocksMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
+    StarRocksMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(_input_rowsets_size /
+                                                                                       (cost_time / 1000.0 + 1));
     TRACE("save cumulative compaction metrics");
 
     return Status::OK();

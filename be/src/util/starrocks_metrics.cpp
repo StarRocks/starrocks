@@ -181,12 +181,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(running_cumulative_compaction_task_num);
     REGISTER_STARROCKS_METRIC(running_base_compaction_task_num);
     REGISTER_STARROCKS_METRIC(running_update_compaction_task_num);
-    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_cost_time);
-    REGISTER_STARROCKS_METRIC(base_compaction_task_cost_time);
-    REGISTER_STARROCKS_METRIC(update_compaction_task_cost_time);
-    REGISTER_STARROCKS_METRIC(base_compaction_task_rate);
-    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_rate);
-    REGISTER_STARROCKS_METRIC(update_compaction_task_rate);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_cost_time_ms);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_cost_time_ns);
+    REGISTER_STARROCKS_METRIC(base_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(cumulative_compaction_task_byte_per_second);
+    REGISTER_STARROCKS_METRIC(update_compaction_task_byte_per_second);
 
     REGISTER_STARROCKS_METRIC(push_request_write_bytes_per_second);
     REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);

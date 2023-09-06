@@ -223,14 +223,14 @@ public:
     METRIC_DEFINE_INT_GAUGE(running_update_compaction_task_num, MetricUnit::NOUNIT);
 
     // compaction task cost time
-    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_cost_time, MetricUnit::SECONDS);
-    METRIC_DEFINE_INT_GAUGE(base_compaction_task_cost_time, MetricUnit::SECONDS);
-    METRIC_DEFINE_INT_GAUGE(update_compaction_task_cost_time, MetricUnit::SECONDS);
+    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_cost_time_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_GAUGE(base_compaction_task_cost_time_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_GAUGE(update_compaction_task_cost_time_ns, MetricUnit::NANOSECONDS);
 
     // compaction task rate
-    METRIC_DEFINE_INT_GAUGE(base_compaction_task_rate, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_rate, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(update_compaction_task_rate, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(base_compaction_task_byte_per_second, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(cumulative_compaction_task_byte_per_second, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(update_compaction_task_byte_per_second, MetricUnit::BYTES);
 
     // The following metrics will be calculated
     // by metric calculator

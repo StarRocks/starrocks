@@ -64,8 +64,9 @@ Status BaseCompaction::compact() {
     int64_t cost_time = end_time - start_time;
     StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
     StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_input_rowsets_size);
-    StarRocksMetrics::instance()->base_compaction_task_cost_time.set_value(cost_time / 1000.0);
-    StarRocksMetrics::instance()->base_compaction_task_rate.set_value(_input_rowsets_size / (cost_time / 1000.0));
+    StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+    StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_input_rowsets_size /
+                                                                                 (cost_time / 1000.0 + 1));
     TRACE("save base compaction metrics");
 
     return Status::OK();
