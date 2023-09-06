@@ -40,13 +40,18 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+=======
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
+import static io.airlift.concurrent.MoreFutures.getFutureValue;
+>>>>>>> 2f6306c7cf ([Enhancement] Support ignoring invalid directories when list hive directory recursively. (#30363))
 
 public class RemoteFileOperationsTest {
     @Test
     public void testGetHiveRemoteFiles() {
         HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
@@ -97,5 +102,177 @@ public class RemoteFileOperationsTest {
         Assert.assertEquals(1, presentRemoteFileInfos.size());
 
         Assert.assertEquals(2, ops.getPresentFilesInCache(partitions.values()).size());
+<<<<<<< HEAD
+=======
+
+        ops.refreshPartitionFilesCache(new Path(tableLocation));
+    }
+
+    @Test
+    public void asyncRenameFilesTest() {
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newFixedThreadPool(5);
+        ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
+
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+        Path writePath = new Path("hdfs://hadoop01:9000/tmp/starrocks/queryid");
+        Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
+        List<String> fileNames = Lists.newArrayList("file1");
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Failed to move data files to target location." +
+                        " Failed to get file system on path hdfs://hadoop01:9000/tmp/starrocks/queryid",
+                () -> ops.asyncRenameFiles(futures, new AtomicBoolean(true), writePath, targetPath, fileNames));
+
+
+        RemoteFileOperations ops1 = new RemoteFileOperations(cachingFileIO, executorToLoad, Executors.newSingleThreadExecutor(),
+                false, true, new Configuration());
+
+        FileSystem mockedFs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE) {
+            @Override
+            public boolean exists(Path path) {
+                return true;
+            }
+        };
+
+        new MockUp<FileSystem>() {
+            @Mock
+            public FileSystem get(URI uri, Configuration conf) throws IOException {
+                return mockedFs;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Failed to move data files from hdfs://hadoop01:9000/tmp/starrocks/queryid/file1 to" +
+                        " target location hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1/file1." +
+                        " msg: target location already exists",
+                () -> {
+                    ops1.asyncRenameFiles(futures, new AtomicBoolean(false), writePath, targetPath, fileNames);
+                    getFutureValue(futures.get(0), StarRocksConnectorException.class);
+                });
+
+        new MockUp<FileSystem>() {
+            @Mock
+            public FileSystem get(URI uri, Configuration conf) throws IOException {
+                return fs;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Failed to move data files from hdfs://hadoop01:9000/tmp/starrocks/queryid/file1 to" +
+                        " target location hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1/file1." +
+                        " msg: rename operation failed",
+                () -> {
+                    futures.clear();
+                    ops.asyncRenameFiles(futures, new AtomicBoolean(false), writePath, targetPath, fileNames);
+                    getFutureValue(futures.get(0), StarRocksConnectorException.class);
+                });
+    }
+
+    @Test
+    public void testRenameDir() {
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
+        ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public boolean pathExists(Path path, Configuration conf) {
+                return true;
+            }
+        };
+
+        Path writePath = new Path("hdfs://hadoop01:9000/tmp/starrocks/queryid");
+        Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
+
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Unable to rename from hdfs://hadoop01:9000/tmp/starrocks/queryid to " +
+                        "hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1. msg: target directory already exists",
+                () -> ops.renameDirectory(writePath, targetPath, () -> {}));
+    }
+
+    @Test
+    public void testRenameDirFailed() {
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
+        ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+
+
+        Path writePath = new Path("hdfs://hadoop01:9000/tmp/starrocks/queryid");
+        Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
+        FileSystem mockedFs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE) {
+            @Override
+            public boolean exists(Path path) {
+                if (path.equals(targetPath.getParent())) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        };
+
+        new MockUp<FileSystem>() {
+            @Mock
+            public FileSystem get(URI uri, Configuration conf) throws IOException {
+                return mockedFs;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Failed to rename",
+                () -> ops.renameDirectory(writePath, targetPath, () -> {}));
+    }
+
+    @Test
+    public void testRemoveNotCurrentQueryFiles() {
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
+        ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+        Path targetPath = new Path("hdfs://hadoop01:9000/user/hive/warehouse/test.db/t1");
+
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "Failed to delete partition",
+                () -> ops.removeNotCurrentQueryFiles(targetPath, "aaa"));
+
+        new MockUp<FileSystem>() {
+            @Mock
+            public FileSystem get(URI uri, Configuration conf) throws IOException {
+                return fs;
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(
+                StarRocksConnectorException.class,
+                "file name or query id is invalid",
+                () -> ops.removeNotCurrentQueryFiles(targetPath, "aaa"));
+>>>>>>> 2f6306c7cf ([Enhancement] Support ignoring invalid directories when list hive directory recursively. (#30363))
     }
 }
