@@ -1585,4 +1585,18 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "1.100000000");
     }
+
+    @Test
+    public void testDecimalV2Cast1() throws Exception {
+        String sql = "select length(cast('12.3567' as decimalV2(9,1)) * 200)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "2 <-> length[('2471.34'); args: VARCHAR; result: INT;");
+        sql = "select length(col) from (select cast('12.3567' as decimalV2(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[('2471.34'); args: VARCHAR; result: INT;");
+
+        sql = "select length(col) from (select cast('12.3567' as decimal(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[('2480.0'); args: VARCHAR; result: INT;");
+    }
 }
