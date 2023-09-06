@@ -1587,4 +1587,11 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "1.100000000");
     }
+
+    @Test
+    public void testDecimalV2Cast() throws Exception {
+        String sql = "select length(cast('12.13' as decimalV2(9,1)) * 200)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 2> : length('2426')");
+    }
 }
