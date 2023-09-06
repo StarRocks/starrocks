@@ -232,14 +232,17 @@ public class MaterializedViewRewriter {
      * Checks whether the join-on predicate of a query is equivalent to the join-on predicate
      * of a materialized view (MV).
      */
-    boolean checkJoinOnPredicateFromOnPredicates(Set<ScalarOperator> queryJoinOnPredicates, Set<ScalarOperator> diff) {
-        for (ScalarOperator queryPredicate : queryJoinOnPredicates) {
-            diff.removeIf(p -> ScalarOperator.isEquivalent(queryPredicate, p));
+    boolean checkJoinOnPredicateFromOnPredicates(Set<ScalarOperator> queryPredicates, Set<ScalarOperator> diff) {
+        for (ScalarOperator queryPredicate : queryPredicates) {
+            if (!diff.removeIf(p -> ScalarOperator.isEquivalent(queryPredicate, p))) {
+                return false;
+            }
         }
-        return diff.isEmpty();
+        return true;
     }
 
-    boolean checkJoinOnPredicate(LogicalJoinOperator mvJoinOp, LogicalJoinOperator queryJoinOp) {
+    boolean checkJoinOnPredicate(LogicalJoinOperator mvJoinOp,
+                                 LogicalJoinOperator queryJoinOp) {
         final JoinOperator mvJoinType = mvJoinOp.getJoinType();
         final JoinOperator queryJoinType = queryJoinOp.getJoinType();
         // ignore if join's type both are inner join or cross join
@@ -248,16 +251,19 @@ public class MaterializedViewRewriter {
             return true;
         }
 
+        // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
+        // of a materialized view (MV).
         final ScalarOperator mvJoinOnPredicate = mvJoinOp.getOriginalOnPredicate();
         final ScalarOperator queryJoinOnPredicate = queryJoinOp.getOriginalOnPredicate();
         final ScalarOperator normQueryJoinOnPredicate = MvUtils.canonizePredicateForRewrite(queryJoinOnPredicate);
         final ScalarOperator normMVJoinOnPredicate = MvUtils.canonizePredicateForRewrite(mvJoinOnPredicate);
         final Set<ScalarOperator> queryJoinOnPredicates = Sets.newHashSet(Utils.extractConjuncts(normQueryJoinOnPredicate));
         final Set<ScalarOperator> diffPredicates = Sets.newHashSet(Utils.extractConjuncts(normMVJoinOnPredicate));
+        if (!checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
+            return false;
+        }
 
-        // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
-        // of a materialized view (MV).
-        if (checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
+        if (diffPredicates.isEmpty()) {
             return true;
         }
 
@@ -422,32 +428,26 @@ public class MaterializedViewRewriter {
     }
 
     private boolean checkJoinChildPredicate(OptExpression queryExpr, OptExpression mvExpr, int index) {
-        Set<ScalarOperator> queryPredicates = Sets.newHashSet();
-        // extract all conjuncts
+        // extract the ith child's all conjuncts in query
         ScalarOperator normalizedQueryPredicate =
                 MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllValidPredicates(queryExpr.inputAt(index))));
-        queryPredicates.addAll(Utils.extractConjuncts(normalizedQueryPredicate));
-        queryPredicates =
-                queryPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
-        Set<ScalarOperator> mvPredicates = Sets.newHashSet();
-        // extract all conjuncts
+        Set<ScalarOperator> queryPredicates = Sets.newHashSet(Utils.extractConjuncts(normalizedQueryPredicate));
+
+        // extract the ith child's all conjuncts in mv
         ScalarOperator normalizedMvPredicate =
                 MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(MvUtils.getAllValidPredicates(mvExpr.inputAt(index))));
-        mvPredicates.addAll(Utils.extractConjuncts(normalizedMvPredicate));
-        mvPredicates = mvPredicates.stream().filter(scalarOperator -> !scalarOperator.isPushdown()).collect(Collectors.toSet());
-        if (queryPredicates.isEmpty() && mvPredicates.isEmpty()) {
-            return true;
+        Set<ScalarOperator> mvPredicates = Sets.newHashSet(Utils.extractConjuncts(normalizedMvPredicate));
+
+        if (!isAllPredicateEquivalent(mvPredicates, queryPredicates)) {
+            logMVRewrite(mvRewriteContext, "join child predicate not matched, queryPredicates: {}, " +
+                            "mvPredicates: {}, index: {}", queryPredicates, mvPredicates, index);
+            return false;
         }
-        boolean isEqual = isAllPredicateEquivalent(queryPredicates, mvPredicates);
-        if (!isEqual) {
-            logMVRewrite(mvRewriteContext, "join child predicate not matched, queryPredicates: {}, mvPredicates: {}, index: {}",
-                    queryPredicates, mvPredicates, index);
-        }
-        return isEqual;
+        return true;
     }
 
-    private boolean isAllPredicateEquivalent(
-            Collection<ScalarOperator> queryPredicates, final Collection<ScalarOperator> mvPredicates) {
+    private boolean isAllPredicateEquivalent(Collection<ScalarOperator> queryPredicates,
+                                             final Collection<ScalarOperator> mvPredicates) {
         return queryPredicates.size() == mvPredicates.size()
                 && queryPredicates.stream().allMatch(queryPredicate ->
                 mvPredicates.stream().anyMatch(mvPredicate -> mvPredicate.equivalent(queryPredicate)));
