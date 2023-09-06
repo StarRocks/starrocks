@@ -855,7 +855,7 @@ DUPLICATE KEY(`l_shipdate`, `l_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 96
 PROPERTIES (
-    "replication_num" = "1";
+    "replication_num" = "1",
     "colocate_with" = "tpch2"
 );
 

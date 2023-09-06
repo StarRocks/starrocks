@@ -105,7 +105,7 @@ DISTRIBUTED BY HASH(id);
 
 ### 导入数据至生成列
 
-导入数据时 StarRocks 通过计算表达式自动得出生成列的值，**您无法指定生成列的值**。本文以使用 [INSERT INTO](../loading/InsertInto.md) 导入数据为例进行说明。
+导入数据时 StarRocks 通过计算表达式自动得出生成列的值，**您无法指定生成列的值**。本文以使用 [INSERT INTO](../../loading/InsertInto.md) 导入数据为例进行说明。
 
 1. 使用 INSERT INTO 插入一行数据至表 `test_tbl1`，注意不能在 `VALUES ()` 中指定生成列的值 。
 
