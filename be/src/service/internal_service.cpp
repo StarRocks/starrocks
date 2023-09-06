@@ -299,8 +299,10 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
+    LOG(INFO) << "got exec plan fragment request, controller=" << cntl_base << ", done=" << done;
     auto task = [=]() { this->_exec_plan_fragment(cntl_base, request, response, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+        LOG(WARNING) << "fail exec plan fragment request, controller: " << cntl_base;
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_plan_fragment task failed").to_protobuf(response->mutable_status());
     }
@@ -311,6 +313,7 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       const PExecPlanFragmentRequest* request,
                                                       PExecPlanFragmentResult* response,
                                                       google::protobuf::Closure* done) {
+    LOG(INFO) << " enter _exec_plan_fragment, controller: " << cntl_base;
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
@@ -320,10 +323,12 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
     }
 
     auto st = _exec_plan_fragment(cntl);
+    LOG(INFO) << " done exec plan fragment request, controller: " << cntl;
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
     }
     st.to_protobuf(response->mutable_status());
+    LOG(INFO) << " done exec plan fragment status, controller: " << cntl;
 }
 
 template <typename T>
@@ -331,10 +336,12 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
+    LOG(INFO) << " exec batch plan fragment request, controller=" << cntl_base << ", done=" << done;
     auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
     if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
+        LOG(INFO) << " exec batch plan fragment request FAIL, controller: " << cntl_base;
     }
 }
 
@@ -343,6 +350,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              const PExecBatchPlanFragmentsRequest* request,
                                                              PExecBatchPlanFragmentsResult* response,
                                                              google::protobuf::Closure* done) {
+    LOG(INFO) << " enter exec batch plan fragment request, controller: " << cntl_base;
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto ser_request = cntl->request_attachment().to_string();
@@ -353,8 +361,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
             !status.ok()) {
             status.to_protobuf(response->mutable_status());
+            LOG(INFO) << " exec batch plan fragment deserialize FAIL, controller: " << cntl << ", status: " << status;
             return;
         }
+        LOG(INFO) << " exec batch plan fragment request, controller: " << cntl;
     }
 
     auto& common_request = t_batch_requests->common_param;
@@ -362,11 +372,17 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     if (unique_requests.empty()) {
         Status::OK().to_protobuf(response->mutable_status());
+        LOG(INFO) << "done exec batch plan fragment request, controller: " << cntl;
         return;
     }
 
+    LOG(INFO) << "exec batch plan fragment, controller: " << cntl
+              << ", fragment_instance_id=" << print_id(unique_requests[0].params.fragment_instance_id)
+              << ", coord=" << common_request.coord << ", backend=" << common_request.backend_num
+              << ", is_pipeline=true, chunk_size=" << common_request.query_options.batch_size;
     Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0]);
     status.to_protobuf(response->mutable_status());
+    LOG(INFO) << "done exec batch plan fragment request, controller: " << cntl << ", status: " << status;
 }
 
 template <typename T>
@@ -416,12 +432,14 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
+        LOG(INFO) << " exec plan fragment request, controller: " << cntl;
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
-    LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+    LOG(INFO) << "exec plan fragment, controller: " << cntl
+              << ", fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
               << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
@@ -437,7 +455,16 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
-        return fragment_executor.execute(_exec_env);
+        LOG(INFO) << "exec plan fragment by pipeline, fragment_instance_id="
+                  << print_id(t_unique_request.params.fragment_instance_id) << ", coord=" << t_common_param.coord
+                  << ", backend=" << t_common_param.backend_num
+                  << ", is_pipeline=true, chunk_size=" << t_common_param.query_options.batch_size;
+        auto st = fragment_executor.execute(_exec_env);
+        LOG(INFO) << "DONE exec plan fragment by pipeline, fragment_instance_id="
+                  << print_id(t_unique_request.params.fragment_instance_id) << ", coord=" << t_common_param.coord
+                  << ", backend=" << t_common_param.backend_num
+                  << ", is_pipeline=true, chunk_size=" << t_common_param.query_options.batch_size << ", status=" << st;
+        return st;
     } else {
         return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
     }
