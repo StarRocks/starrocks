@@ -1491,7 +1491,7 @@ public class StmtExecutor {
         DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
         String stmtName = deallocateStmt.getStmtName();
         if (context.getPreparedStmt(stmtName) == null) {
-            throw new Exception("PrepareStatement `" + stmtName + "` not exist");
+            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
         }
         context.removePreparedStmt(stmtName);
         context.getState().setOk();
@@ -1501,7 +1501,7 @@ public class StmtExecutor {
         PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
         boolean isBinaryRowFormat = context.getCommand() == MysqlCommand.COM_STMT_PREPARE;
         // register prepareStmt
-        LOG.info("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
+        LOG.debug("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
         context.putPreparedStmt(prepareStmt.getName(), new PrepareStmtContext(prepareStmt, context, execPlan));
         if (isBinaryRowFormat) {
             sendStmtPrepareOK(prepareStmt);
@@ -1526,7 +1526,7 @@ public class StmtExecutor {
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         if (numParams > 0) {
             List<String> colNames = prepareStmt.getParameterLabels();
-            List<Parameter> parameters = parsedStmt.getParameters();
+            List<Parameter> parameters = prepareStmt.getParameters();
             for (int i = 0; i < colNames.size(); ++i) {
                 serializer.reset();
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());

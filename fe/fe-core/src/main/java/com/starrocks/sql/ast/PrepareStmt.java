@@ -25,9 +25,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PrepareStmt extends StatementBase {
-    private final String name;
+    private String name;
 
     private final StatementBase innerStmt;
+
+    protected List<Parameter> parameters;
 
     public PrepareStmt(String name, StatementBase stmt, List<Parameter> parameters) {
         super(NodePosition.ZERO);
@@ -44,10 +46,16 @@ public class PrepareStmt extends StatementBase {
         return name;
     }
 
-    @Override
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public List<Parameter> getParameters() {
+        return parameters;
+    }
+
     public void setParameters(List<Parameter> parameters) {
-        Preconditions.checkArgument(parameters == null || parameters == this.parameters,
-                "The placeHolders of PrepareStmt is already set.");
+        this.parameters = parameters;
     }
 
     public StatementBase assignValues(List<Expr> values) {

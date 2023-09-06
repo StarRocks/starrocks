@@ -267,20 +267,19 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
-    private static LiteralExpr tinyIntExpr;
-    private static LiteralExpr smallIntExpr;
-    private static LiteralExpr intExpr;
-    private static LiteralExpr bigIntExpr;
-    private static LiteralExpr floatExpr;
-    private static LiteralExpr doubleExpr;
-    private static LiteralExpr decimal32Expr;
-    private static LiteralExpr timeExpr;
-    private static LiteralExpr dateExpr;
-    private static LiteralExpr dateTimeExpr;
-    private static LiteralExpr stringExpr;
-    private static LiteralExpr varcharExpr;
+    private static final LiteralExpr tinyIntExpr;
+    private static final LiteralExpr smallIntExpr;
+    private static final LiteralExpr intExpr;
+    private static final LiteralExpr bigIntExpr;
+    private static final LiteralExpr floatExpr;
+    private static final LiteralExpr doubleExpr;
+    private static final LiteralExpr decimal32Expr;
+    private static final LiteralExpr dateExpr;
+    private static final LiteralExpr dateTimeExpr;
+    private static final LiteralExpr stringExpr;
+    private static final LiteralExpr varcharExpr;
 
-    {
+    static {
         try {
             tinyIntExpr = LiteralExpr.create("0", Type.TINYINT);
             smallIntExpr = LiteralExpr.create("0", Type.SMALLINT);
@@ -289,7 +288,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             floatExpr = LiteralExpr.create("0", Type.FLOAT);
             doubleExpr = LiteralExpr.create("0", Type.DOUBLE);
             decimal32Expr = LiteralExpr.create("0", Type.DECIMAL32);
-            timeExpr = LiteralExpr.create("", Type.TIME);
             dateExpr = LiteralExpr.create("1970-01-01", Type.DATE);
             dateTimeExpr = LiteralExpr.create("1970-01-01 00:00:00", Type.DATETIME);
             stringExpr = LiteralExpr.create("", Type.STRING);
@@ -299,7 +297,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
-    private static Map<Integer, LiteralExpr> MYSQL_LITERAL_TYPE_ENCODE_MAP = Maps.of(
+    private static final Map<Integer, LiteralExpr> MYSQL_LITERAL_TYPE_ENCODE_MAP = Maps.of(
             0, decimal32Expr,       // MYSQL_TYPE_DECIMAL
             1, tinyIntExpr,             // MYSQL_TYPE_TINY
             2, smallIntExpr,            // MYSQL_TYPE_SHORT
@@ -309,7 +307,6 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             7, dateTimeExpr,            // MYSQL_TYPE_TIMESTAMP2
             8, bigIntExpr,              // MYSQL_TYPE_LONGLONG
             10, dateExpr,               // MYSQL_TYPE_DATE
-            11, timeExpr,               // MYSQL_TYPE_TIME
             12, dateTimeExpr,           // MYSQL_TYPE_DATETIME
             15, varcharExpr,            // MYSQL_TYPE_VARCHAR
             17, dateTimeExpr,           // MYSQL_TYPE_TIMESTAMP2

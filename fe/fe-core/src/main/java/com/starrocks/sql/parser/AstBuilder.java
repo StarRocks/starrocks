@@ -6527,16 +6527,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitPrepareStatement(StarRocksParser.PrepareStatementContext context) {
         String stmtName = context.identifier().getText();
+        StatementBase statement = null;
         if (context.prepareSql().statement() != null) {
-            StatementBase statement = (StatementBase) visitStatement(context.prepareSql().statement());
+            statement = (StatementBase) visitStatement(context.prepareSql().statement());
             return new PrepareStmt(stmtName, statement, parameters);
         } else if (context.prepareSql().SINGLE_QUOTED_TEXT() != null) {
             String sql = context.prepareSql().SINGLE_QUOTED_TEXT().getText();
-            StatementBase statement = SqlParser.parseSingleStatement(sql.substring(1, sql.length() - 1), sqlMode);
-            return new PrepareStmt(stmtName, statement, statement.getParameters());
-        } else {
-            throw new ParsingException("error prepare sql");
+            statement = SqlParser.parseSingleStatement(sql.substring(1, sql.length() - 1), sqlMode);
+            if (null != statement && statement instanceof PrepareStmt) {
+                PrepareStmt prepareStmt = (PrepareStmt) statement;
+                return new PrepareStmt(stmtName, prepareStmt.getInnerStmt(), prepareStmt.getParameters());
+            } else {
+                // prepare stm1 from select * from t1, no parameters
+                return new PrepareStmt(stmtName, statement, ImmutableList.of());
+            }
         }
+
+        throw new ParsingException("error prepare sql");
     }
 
     @Override

@@ -68,6 +68,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -354,6 +355,10 @@ public class ConnectProcessor {
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);
+                //JDBC has no prepared prefix, only
+                if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
+                    ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
+                }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
                 // Only add the last running stmt for multi statement,
