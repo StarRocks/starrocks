@@ -28,7 +28,7 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
-public class AnalyzeCreateAnalyzeJobTest {
+public class AnalyzeCreateNativeAnalyzeJobTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass

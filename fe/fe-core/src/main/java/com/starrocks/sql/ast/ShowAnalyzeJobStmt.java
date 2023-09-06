@@ -21,6 +21,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
@@ -31,7 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.StatsConstants;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -64,26 +64,28 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
     public static List<String> showAnalyzeJobs(ConnectContext context,
                                                AnalyzeJob analyzeJob) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "ALL", "ALL", "ALL", "", "", "", "", "", "");
-        long dbId = analyzeJob.getDbId();
-        long tableId = analyzeJob.getTableId();
+        List<String> row = Lists.newArrayList("", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "ALL", "ALL",
+                "ALL", "", "", "", "", "", "");
+
+        String dbName = analyzeJob.getDbName();
+        String tableName = analyzeJob.getTableName();
         List<String> columns = analyzeJob.getColumns();
 
         row.set(0, String.valueOf(analyzeJob.getId()));
-        if (StatsConstants.DEFAULT_ALL_ID != dbId) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (!analyzeJob.isAnalyzeAllDb()) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
 
             if (db == null) {
-                throw new MetaNotFoundException("No found database: " + dbId);
+                throw new MetaNotFoundException("No found database: " + dbName);
             }
 
             row.set(1, db.getOriginName());
 
-            if (StatsConstants.DEFAULT_ALL_ID != tableId) {
-                Table table = db.getTable(tableId);
+            if (!analyzeJob.isAnalyzeAllTable()) {
+                Table table = db.getTable(tableName);
 
                 if (table == null) {
-                    throw new MetaNotFoundException("No found table: " + tableId);
+                    throw new MetaNotFoundException("No found table: " + tableName);
                 }
 
                 row.set(2, table.getName());

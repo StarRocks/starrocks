@@ -182,7 +182,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testAnalyzeALLDB() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+                new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -203,7 +203,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testAnalyzeDB() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+                new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -222,7 +222,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testAnalyzeTable() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(testDb.getId(), t0StatsTableId, null,
+                new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -236,7 +236,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
         Table table = db.getTable("tprimary_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), table.getId(), null,
+                new NativeAnalyzeJob(db.getId(), table.getId(), null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -249,7 +249,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         table = db.getTable("tunique_stats");
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), table.getId(), null,
+                new NativeAnalyzeJob(db.getId(), table.getId(), null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -265,7 +265,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testAnalyzeColumn() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -280,7 +280,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testAnalyzeColumnSample() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -303,7 +303,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -311,7 +311,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, jobs.size());
 
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -324,7 +324,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -402,7 +402,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public void testSplitColumns() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(db.getId(), t0StatsTableId, null,
+                new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -523,7 +523,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         Database database = connectContext.getGlobalStateMgr().getDb("test");
 
-        AnalyzeJob job = new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+        NativeAnalyzeJob job = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(),
@@ -533,7 +533,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(6, allJobs.size());
         Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
 
-        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, ".*"),
@@ -541,7 +541,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(0, allJobs.size());
 
-        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test/."),
@@ -549,7 +549,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(3, allJobs.size());
 
-        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test.t0_stats_partition"),
@@ -558,7 +558,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(2, allJobs.size());
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
 
-        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+        job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "(test.t0_stats_partition)|(test.t1_stats)"),
@@ -601,7 +601,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Test
     public void testAnalyzeBeforeUpdate() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -665,7 +665,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -729,7 +729,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             }
         };
 
-        AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,
@@ -782,7 +782,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
 
-        AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+        NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.PENDING,

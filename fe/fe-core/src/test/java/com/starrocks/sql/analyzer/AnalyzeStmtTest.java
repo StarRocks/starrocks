@@ -39,11 +39,11 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
@@ -143,12 +143,12 @@ public class AnalyzeStmtTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("t0");
 
-        AnalyzeJob analyzeJob = new AnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
-                ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), analyzeJob).toString());
+                ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), nativeAnalyzeJob).toString());
 
         sql = "show analyze job";
         showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
