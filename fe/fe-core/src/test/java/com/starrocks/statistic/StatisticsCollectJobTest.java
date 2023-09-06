@@ -514,6 +514,25 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals(1, collectSqlList.size());
         assertContains(collectSqlList.get(0).toString(), "r_regionkey", "r_name", "r_comment");
         assertContains(collectSqlList.get(0).toString(), "1=1");
+
+        database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1_par_null");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table,
+                        Lists.newArrayList("c1", "c2", "c3", "par_col", "par_date"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(30, collectSqlList.size());
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "par_col=1/par_date=NULL");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` = '1' AND `par_date` IS NULL");
+        assertContains(collectSqlList.get(0).toString(), "par_col=NULL/par_date=2020-01-03");
+        assertContains(collectSqlList.get(0).toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
     }
 
     @Test

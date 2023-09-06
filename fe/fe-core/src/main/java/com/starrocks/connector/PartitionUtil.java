@@ -303,6 +303,18 @@ public class PartitionUtil {
         return partitionColumns;
     }
 
+    // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
+    // p1=1/p2=NULL
+    public static String normalizePartitionName(String partitionName, List<String> partitionColumnNames, String nullValue) {
+        List<String> partitionValues = Lists.newArrayList(toPartitionValues(partitionName));
+        for (int i = 0; i < partitionValues.size(); ++i) {
+            if (partitionValues.get(i).equals(nullValue)) {
+                partitionValues.set(i, "NULL");
+            }
+        }
+        return toHivePartitionName(partitionColumnNames, partitionValues);
+    }
+
     /**
      * Return table's partition name to partition key range's mapping:
      * - for native base table, just return its range partition map;
