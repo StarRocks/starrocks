@@ -23,10 +23,6 @@ import java.util.function.Function;
 public abstract class Tracer {
     private static final Timer EMPTY_TIMER = new Timer();
 
-    private long timePoint() {
-        return 0;
-    }
-
     public Timer watchScope(String name) {
         return EMPTY_TIMER;
     }
