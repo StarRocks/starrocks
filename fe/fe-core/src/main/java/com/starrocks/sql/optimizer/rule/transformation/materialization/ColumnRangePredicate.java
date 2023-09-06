@@ -43,11 +43,15 @@ public class ColumnRangePredicate extends RangePredicate {
         this.columnRef = columnRef;
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
-        for (Range range : this.columnRanges.asRanges()) {
-            Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
-            canonicalRanges.add(canonicalRange);
+        if (ConstantOperatorDiscreteDomain.isSupportedType(columnRef.getType())) {
+            for (Range range : this.columnRanges.asRanges()) {
+                Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
+                canonicalRanges.add(canonicalRange);
+            }
+            this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
+        } else {
+            this.canonicalColumnRanges = columnRanges;
         }
-        this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
     }
 
     public ColumnRefOperator getColumnRef() {

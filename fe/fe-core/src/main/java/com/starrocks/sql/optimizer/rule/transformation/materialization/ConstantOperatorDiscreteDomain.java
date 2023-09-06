@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.DiscreteDomain;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,17 +23,21 @@ public class ConstantOperatorDiscreteDomain extends DiscreteDomain<ConstantOpera
     @Nullable
     @Override
     public ConstantOperator next(ConstantOperator value) {
-        return value.successor().get();
+        return value.successor().orElse(null);
     }
 
     @Nullable
     @Override
     public ConstantOperator previous(ConstantOperator value) {
-        return value.predecessor().get();
+        return value.predecessor().orElse(null);
     }
 
     @Override
     public long distance(ConstantOperator start, ConstantOperator end) {
         return start.distance(end);
+    }
+
+    public static boolean isSupportedType(Type type) {
+        return type.isIntegerType() || type.isLargeint() || type.isDateType();
     }
 }
