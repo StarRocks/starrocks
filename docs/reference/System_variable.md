@@ -498,6 +498,12 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   The value is an integer. Default value: 1024000.
 
+* runtime_profile_report_interval
+
+  The time interval at which runtime profiles are reported. This variable is supported from v3.1.0 onwards.
+
+  Unit: second, Default: `10`.
+
 * spill_mode (3.0 and later)
 
   The execution mode of intermediate result spilling. Valid values:
