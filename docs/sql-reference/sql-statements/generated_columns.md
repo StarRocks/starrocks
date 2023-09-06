@@ -105,7 +105,7 @@ DISTRIBUTED BY HASH(id);
 
 ### Load data into generated columns
 
-During data loading, StarRocks automatically calculates the values for generated columns based on the expressions. You cannot specify the values of generated columns. The following example uses the [INSERT INTO](../loading/InsertInto.md) statement to load data:
+During data loading, StarRocks automatically calculates the values for generated columns based on the expressions. You cannot specify the values of generated columns. The following example uses the [INSERT INTO](../../loading/InsertInto.md) statement to load data:
 
 1. Use INSERT INTO to insert a record into the `test_tbl1` table. Note that you cannot specify the values for the generated columns within the `VALUES ()` clause.
 
