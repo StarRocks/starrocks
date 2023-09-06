@@ -4,7 +4,7 @@
 
 暂停 Routine Load 导入作业，导入作业会进入 PAUSED 状态，但是未结束，您可以执行 [RESUME ROUTINE LOAD](./RESUME%20ROUTINE%20LOAD.md) 语句重启导入作业。
 
-Routine Load 导入作业暂停后，您可以执行 [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md) 、[ALTER ROUTINE LOAD](./ALTER%20ROUTINE%20LOAD.md) 语句查看和修改已暂停的导入作业的信息。
+Routine Load 导入作业暂停后，您可以执行 [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md) 、[ALTER ROUTINE LOAD](./alter-routine-load.md) 语句查看和修改已暂停的导入作业的信息。
 
 ## 语法
 
