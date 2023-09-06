@@ -7,14 +7,28 @@
 针对 StarRocks v2.5 之前的版本，您可以通过将变量 `is_report_success` 设置为 `true` 以启用 Query Profile：
 
 ```SQL
-set is_report_success = true;
+SET is_report_success = true;
 ```
 
 针对 StarRocks v2.5 或更高版本，您可以通过将变量 `enable_profile` 设置为 `true` 以启用 Query Profile：
 
 ```SQL
-set enable_profile = true;
+SET enable_profile = true;
 ```
+
+### Runtime Profile
+
+从 v3.1 开始，StarRocks 支持 Runtime Profile 功能。您可以在查询完成之前查看其 Query Profile。
+
+如需使用此功能，您需要在将 `enable_profile` 设置为 `true` 之后，设置变量 `runtime_profile_report_interval`。`runtime_profile_report_interval` 控制 Query Profile 的报告间隔，单位为秒，默认值为 `10`。默认设置表示每当查询时间超过 10 秒时，系统将自动启用 Runtime Profile 功能。
+
+```SQL
+SET runtime_profile_report_interval = 10;
+```
+
+Runtime Profile 与普通 Query Profile 显示的信息相同。您可以像分析常规 Query Profile 一样分析 Runtime Profile，以此了解集群内正在运行的查询的性能指标。
+
+但是需要注意的是，由于执行计划中的某些 Operator 可能依赖于其他 Operator，Runtime Profile 可能并不完整。为了区分正在运行的 Operator 和已完成的 Operator，正在运行的算子会标记为 `Status: Running`。
 
 ## 获取 Query Profile
 
@@ -22,7 +36,7 @@ set enable_profile = true;
 >
 > 如果您使用 StarRocks 企业版，则可以使用 StarRocks Manager 获取并可视化 Query Profile。
 
-如果您不是 StarRocks 企业版用户，请按照以下步骤获取 Query Profile：
+如果您是 StarRocks 社区版用户，请按照以下步骤获取 Query Profile：
 
 1. 在浏览器中访问 `http://<fe_ip>:<fe_http_port>`。
 2. 在显示的页面上，单击顶部导航中的 **queries**。
@@ -219,6 +233,89 @@ Pipeline Engine 是并行计算引擎。每个 Fragment 被分发到多台机器
                - __MAX_OF_OperatorTotalTime: 10m30s
                - __MIN_OF_OperatorTotalTime: 279.170us
 ```
+
+## 基于文本的 Query Profile 分析
+
+从 v3.1 开始，StarRocks 支持基于文本的 Query Profile 分析功能。此功能帮助您有效识别查询瓶颈和优化机会。
+
+### 分析已有查询
+
+您可以通过现有查询的 `QueryID` 分析其 Query Profile。查询可以是正在进行的查询或已完成的查询。
+
+```sql
+SHOW PROFILELIST;
+```
+
+示例：
+
+```sql
+MySQL > show profilelist;
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time  | State    | Statement                                                                                                                            |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms  | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ...  |
+| b5be2fa8-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:23 | 67ms  | Finished | SELECT COUNT(*)\nFROM (\n    SELECT l_orderkey, SUM(l_extendedprice * (1 - l_discount)) AS revenue\n        , o_orderdate, o_sh ...  |
+| b36ac9c6-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:19 | 320ms | Finished | SELECT COUNT(*)\nFROM (\n    SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr\n        , s_address, s_phone, s_comment\n    F ... |
+| b037b245-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:14 | 175ms | Finished | SELECT l_returnflag, l_linestatus, SUM(l_quantity) AS sum_qty\n    , SUM(l_extendedprice) AS sum_base_price\n    , SUM(l_exten ...   |
+| a9543cf4-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:02 | 40ms  | Finished | select count(*) from lineitem                                                                                                        |
++--------------------------------------+---------------------+-------+----------+--------------------------------------------------------------------------------------------------------------------------------------+
+5 rows in set
+Time: 0.006s
+
+
+MySQL > show profilelist limit 1;
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| QueryId                              | StartTime           | Time | State    | Statement                                                                                                                           |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+| b8289ffc-3049-11ee-838f-00163e0a894b | 2023-08-01 16:59:27 | 86ms | Finished | SELECT o_orderpriority, COUNT(*) AS order_count\nFROM orders\nWHERE o_orderdate >= DATE '1993-07-01'\n    AND o_orderdate < DAT ... |
++--------------------------------------+---------------------+------+----------+-------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set
+Time: 0.005s
+```
+
+您可以通过此 SQL 语句获取与每个查询关联的 `QueryId`。`QueryId` 是每个查询的关键标识符。
+
+#### 分析 Profile
+
+获得 `QueryId` 后，您可以使用 ANALYZE PROFILE 语句对特定查询执行更详细的分析。此 SQL 语句提供了更多详细信息，有助于全面分析优化查询的性能。
+
+```sql
+ANALYZE PROFILE FROM '<QueryId>' [, <plan_node_id>, ...]
+```
+
+默认情况下，分析结果仅显示每个 Operator 最关键的指标。您可以指定一个或多个计划节点的 ID 来查看其相应的指标。此功能有助于更全面地检查查询的性能并实施针对性优化。
+
+示例一：分析 Profile 时不指定计划节点 ID：
+
+![img](../assets/profile-21.png)
+
+示例二：分析 Profile 时指定计划节点 ID：
+
+![img](../assets/profile-17.png)
+
+ANALYZE PROFILE 可用于分析正在进行的查询的 Profile。其返回值会显示 Operator 的不同状态，例如阻塞（Blocked）、正在运行（Running）和已完成（Finished）。此外，该语句还可以根据处理的数据行数全面分析整个进度以及各个 Operator 的进度。您可以根据该语句的返回结果更深入地了解查询执行和性能，并进一步分析和优化查询。
+
+示例三：分析正在进行的查询的 Runtime Profile：
+
+![img](../assets/profile-20.png)
+
+### 分析模拟查询
+
+您还可以使用 EXPLAIN ANALYZE 语句模拟给定查询语句并分析其 Query Profile。
+
+```sql
+EXPLAIN ANALYZE <sql>
+```
+
+目前，EXPLAIN ANALYZE 支持两种类型的 SQL 语句：查询（SELECT）语句和 INSERT INTO 语句。您只能在 StarRocks 内表上模拟 INSERT INTO 语句并分析其 Query Profile。请注意，当您模拟并分析 INSERT INTO 语句的 Query Profile 时，实际上不会导入任何数据。默认情况下，导入事务会被中止，以确保在分析过程中不会对数据进行意外更改。
+
+示例一：模拟给定查询语句并分析其 Query Profile：
+
+![img](../assets/profile-18.png)
+
+示例二：模拟给定 INSERT INTO 语句并分析其 Query Profile：
+
+![img](../assets/profile-19.png)
 
 ## 可视化 Query Profile
 
