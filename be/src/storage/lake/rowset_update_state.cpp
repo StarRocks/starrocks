@@ -209,8 +209,6 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
         auto col = pk_column->clone();
         auto itr = itrs[i].get();
         if (itr != nullptr) {
-            auto num_rows = rowset_ptr->num_rows();
-            col->reserve(num_rows);
             while (true) {
                 chunk->reset();
                 auto st = itr->get_next(chunk);
