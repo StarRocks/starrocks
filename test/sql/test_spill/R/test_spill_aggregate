@@ -1,4 +1,4 @@
--- name: test_spill_agg_with_empty_agg_operator
+-- name: test_spill_agg
 set enable_spill=true;
 -- result:
 -- !result
@@ -28,4 +28,38 @@ insert into t2 select sum(k1),k2 from t1 group by k2;
 select * from t2;
 -- result:
 1	1
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+select max(sl) from (select sum(c1) sl from t0 group by c0) tb;
+-- result:
+16380
+-- !result
+select avg(sl) from (select sum(c1) sl from t0 group by c0) tb;
+-- result:
+8190.0
+-- !result
+select count(sl) from (select sum(c1) sl from t0 group by c0) tb;
+-- result:
+4096
+-- !result
+select count(sl) from (select count(c1) sl from t0 group by c0) tb;
+-- result:
+4096
 -- !result
