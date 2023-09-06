@@ -159,19 +159,15 @@ public:
         auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
-            if (nullable_column->has_null()) {
-                if constexpr (!IsNeverNullFunctionState<State>) {
-                    dst_nullable_column->set_has_null(true);
-                }
+            if constexpr (IsNeverNullFunctionState<State>) {
+                dst_nullable_column->null_column_data().resize(chunk_size);
+                nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
+            } else if (nullable_column->has_null()) {
+                dst_nullable_column->set_has_null(true);
                 const NullData& src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
-                    if constexpr (IsNeverNullFunctionState<NestedState>) {
-                        nested_function->convert_to_serialize_format(ctx, src, chunk_size,
-                                                                     &dst_nullable_column->data_column());
-                    } else {
-                        dst_nullable_column->append_nulls(chunk_size);
-                    }
+                    dst_nullable_column->append_nulls(chunk_size);
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
                     dst_null_data = src_null_data;
