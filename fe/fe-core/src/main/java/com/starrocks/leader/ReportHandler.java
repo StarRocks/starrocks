@@ -437,6 +437,9 @@ public class ReportHandler extends Daemon {
         // 12. send set table binlog config to be
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
+        // 13. send primary index cache expire sec to be
+        handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
+
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
@@ -799,6 +802,7 @@ public class ReportHandler extends Daemon {
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),
                                             olapTable.enablePersistentIndex(),
+                                            olapTable.primaryIndexCacheExpireSec(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
                                             olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
                                     createReplicaTask.setIsRecoverTask(true);
@@ -1287,6 +1291,60 @@ public class ReportHandler extends Daemon {
         }
     }
 
+
+    public static void testHandleSetPrimaryIndexCacheExpireSec(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
+    }
+
+    private static void handleSetPrimaryIndexCacheExpireSec(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Triple<Long, Integer, Integer>> tabletToPrimaryCacheExpireSec = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetPrimary_index_cache_expire_sec()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                int bePrimaryIndexCacheExpireSec = tabletInfo.primary_index_cache_expire_sec;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    int fePrimaryIndexCacheExpireSec = olapTable.primaryIndexCacheExpireSec();
+                    if (bePrimaryIndexCacheExpireSec != fePrimaryIndexCacheExpireSec) {
+                        tabletToPrimaryCacheExpireSec.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
+                                fePrimaryIndexCacheExpireSec));
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        }
+
+        if (!tabletToPrimaryCacheExpireSec.isEmpty()) {
+            LOG.info("find [{}] tablet(s) which need to be set primary index cache expire sec",
+                    tabletToPrimaryCacheExpireSec.size());
+            AgentBatchTask batchTask = new AgentBatchTask();
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToPrimaryCacheExpireSec,
+                    TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            batchTask.addTask(task);
+            if (!FeConstants.runningUnitTest) {
+                AgentTaskExecutor.submit(batchTask);
+            }
+        }
+    }
+
     private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
 
@@ -1348,7 +1406,8 @@ public class ReportHandler extends Daemon {
         LOG.debug("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
         if (!tabletToBinlogConfig.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig);
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig,
+                    TTabletMetaType.BINLOG_CONFIG);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }

@@ -63,6 +63,7 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     private Set<Pair<Long, Integer>> tableIdWithSchemaHash;
     private boolean isInMemory;
     private boolean enablePersistentIndex;
+    private int primaryIndexCacheExpireSec;
 
     private BinlogConfig binlogConfig;
 
@@ -74,6 +75,9 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
 
     // <tablet id, tablet schema hash, BinlogConfig>
     private List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogCofig;
+
+    // <tablet id, tablet schema hash, primary index cache expire sec>
+    private List<Triple<Long, Integer, Integer>> tabletToPrimaryCacheExpireSec;
 
     public UpdateTabletMetaInfoTask(long backendId, Set<Pair<Long, Integer>> tableIdWithSchemaHash,
                                     TTabletMetaType metaType) {
@@ -108,20 +112,26 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     }
 
     public UpdateTabletMetaInfoTask(long backendId,
-                                    List<Triple<Long, Integer, Boolean>> tabletToMeta,
+                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
+                                    int primaryIndexCacheExpireSec,
+                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
                                     TTabletMetaType metaType) {
+        this(backendId, tableIdWithSchemaHash, metaType);
+        this.primaryIndexCacheExpireSec = primaryIndexCacheExpireSec;
+        this.latch = latch;
+    }
+
+    public UpdateTabletMetaInfoTask(long backendId, Object tabletToMeta, TTabletMetaType metaType) {
         super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
                 -1L, -1L, -1L, -1L, -1L, tabletToMeta.hashCode());
         this.metaType = metaType;
-        this.tabletToMeta = tabletToMeta;
-    }
-
-    public UpdateTabletMetaInfoTask(long backendId,
-                                    List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogCofig) {
-        super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
-                -1L, -1L, -1L, -1L, -1L, tabletToBinlogCofig.hashCode());
-        this.metaType = TTabletMetaType.BINLOG_CONFIG;
-        this.tabletToBinlogCofig = tabletToBinlogCofig;
+        if (metaType == TTabletMetaType.BINLOG_CONFIG) {
+            this.tabletToBinlogCofig = (List<Triple<Long, Integer, BinlogConfig>>) tabletToMeta;
+        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
+            this.tabletToPrimaryCacheExpireSec = (List<Triple<Long, Integer, Integer>>) tabletToMeta;
+        } else {
+            this.tabletToMeta = (List<Triple<Long, Integer, Boolean>>) tabletToMeta;
+        }
     }
 
     public void countDownLatch(long backendId, Set<Pair<Long, Integer>> tablets) {
@@ -242,6 +252,31 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
                         metaInfos.add(metaInfo);
                     }
                 }
+                break;
+            }
+            case PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
+                if (latch != null) {
+                    // for schema change
+                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(pair.first);
+                        metaInfo.setSchema_hash(pair.second);
+                        metaInfo.setPrimary_index_cache_expire_sec(primaryIndexCacheExpireSec);
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                } else {
+                    // for ReportHandler
+                    for (Triple<Long, Integer, Integer> triple : tabletToPrimaryCacheExpireSec) {
+                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                        metaInfo.setTablet_id(triple.getLeft());
+                        metaInfo.setSchema_hash(triple.getMiddle());
+                        metaInfo.setPrimary_index_cache_expire_sec(triple.getRight());
+                        metaInfo.setMeta_type(metaType);
+                        metaInfos.add(metaInfo);
+                    }
+                }
+                break;
             }
 
         }

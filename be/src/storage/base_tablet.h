@@ -82,6 +82,7 @@ public:
 
     // Property encapsulated in TabletMeta
     const TabletMetaSharedPtr tablet_meta();
+    const TabletMetaSharedPtr tablet_meta() const;
 
     void set_tablet_meta(const TabletMetaSharedPtr& tablet_meta) { _tablet_meta = tablet_meta; }
 
@@ -139,6 +140,10 @@ inline const std::string& BaseTablet::schema_hash_path() const {
 }
 
 inline const TabletMetaSharedPtr BaseTablet::tablet_meta() {
+    return _tablet_meta;
+}
+
+inline const TabletMetaSharedPtr BaseTablet::tablet_meta() const {
     return _tablet_meta;
 }
 

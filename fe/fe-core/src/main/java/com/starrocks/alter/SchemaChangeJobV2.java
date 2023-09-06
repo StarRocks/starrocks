@@ -363,6 +363,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
+                                    tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
                                     tbl.getCompressionType(), copiedSortKeyIdxes);
                             createReplicaTask.setBaseTablet(

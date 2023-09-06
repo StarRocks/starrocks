@@ -59,7 +59,8 @@ Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tabl
             request.tablet_schema, next_unique_id,
             request.__isset.enable_persistent_index && request.enable_persistent_index, col_ordinal_to_unique_id,
             tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
-            request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
+            request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME,
+            request.__isset.primary_index_cache_expire_sec ? request.primary_index_cache_expire_sec : 0);
 
     if (request.__isset.binlog_config) {
         BinlogConfig binlog_config;
@@ -87,7 +88,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                        bool enable_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType,
-                       TCompressionType::type compression_type)
+                       TCompressionType::type compression_type, int32_t primary_index_cache_expire_sec)
         : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
@@ -103,6 +104,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_tablet_type(tabletType == TTabletType::TABLET_TYPE_MEMORY ? TabletTypePB::TABLET_TYPE_MEMORY
                                                                                  : TabletTypePB::TABLET_TYPE_DISK);
     tablet_meta_pb.set_in_restore_mode(false);
+    tablet_meta_pb.set_primary_index_cache_expire_sec(primary_index_cache_expire_sec);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
     auto st = convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema,
@@ -292,6 +294,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
+    _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -350,6 +353,7 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
+    tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
