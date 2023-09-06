@@ -105,8 +105,9 @@ select k1, d2 from ptest where date_trunc('day', d2) > days_sub(d2, 4) order by 
 14	2020-07-01
 14	2050-01-05
 -- !result
-select * from ptest where datediff('2020-08-01', k1) < 0 order by k1;
+select k1, d2 from ptest where datediff('2020-08-01', d2) < 0 order by k1;
 -- result:
+14	2050-01-05
 -- !result
 select k1, d2 from ptest_expr where date_trunc('day', d2) is null order by k1;
 -- result:
@@ -166,6 +167,7 @@ select k1, d2 from ptest_expr where date_trunc('day', d2) > days_sub(d2, 4) orde
 14	2050-01-05
 14	2020-07-01
 -- !result
-select * from ptest_expr where datediff('2020-08-01', k1) < 0 order by k1;
+select k1, d2 from ptest_expr where datediff('2020-08-01', d2) < 0 order by k1;
 -- result:
+14	2050-01-05
 -- !result
