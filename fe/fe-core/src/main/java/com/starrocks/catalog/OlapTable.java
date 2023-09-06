@@ -2126,6 +2126,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        if (tableProperty != null) {
+            return tableProperty.primaryIndexCacheExpireSec();
+        }
+        return 0;
+    }
+
     public String getPersistentIndexTypeString() {
         if (tableProperty != null) {
             return tableProperty.getPersistentIndexTypeString();
@@ -2168,6 +2175,16 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+                        Integer.valueOf(primaryIndexCacheExpireSec).toString());
+        tableProperty.buildPrimaryIndexCacheExpireSec();
     }
 
     public void setPersistentIndexType(TPersistentIndexType persistentIndexType) {
