@@ -14,6 +14,7 @@
 
 #include "storage/tablet_reader.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -300,6 +301,10 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     const auto skip_aggr = params.skip_aggregation;
     const auto select_all_keys = _schema.num_key_fields() == _tablet->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet->num_key_columns());
+
+    if (!_is_asc) {
+        std::reverse(seg_iters.begin(), seg_iters.end());
+    }
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);

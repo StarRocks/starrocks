@@ -383,6 +383,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
+    if (!output_asc()) {
+        std::sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->partition_id() >
+                   down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+        });
+    }
+
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));

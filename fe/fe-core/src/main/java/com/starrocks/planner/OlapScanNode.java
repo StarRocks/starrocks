@@ -144,6 +144,7 @@ public class OlapScanNode extends ScanNode {
     private boolean isSortedByKeyPerTablet = false;
 
     private final HashSet<Long> scanBackendIds = new HashSet<>();
+    private boolean isOutputAsc = false;
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -182,6 +183,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
         this.isSortedByKeyPerTablet = isSortedByKeyPerTablet;
+    }
+
+    public void setIsAsc(boolean isAsc) {
+        this.isOutputAsc = isAsc;
     }
 
     public List<Long> getSelectedPartitionIds() {
@@ -814,6 +819,8 @@ public class OlapScanNode extends ScanNode {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+
+            msg.olap_scan_node.setOutput_asc(isOutputAsc);
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));

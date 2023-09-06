@@ -94,6 +94,8 @@ public:
         return starrocks::ScanNode::io_tasks_per_scan_operator();
     }
 
+    bool output_asc() const { return _output_asc; }
+
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
 private:
@@ -197,6 +199,7 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _sorted_by_keys_per_tablet = false;
+    bool _output_asc = true;
 
     std::vector<ExprContext*> _bucket_exprs;
 

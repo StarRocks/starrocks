@@ -118,6 +118,7 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
     virtual bool always_shared_scan() const { return false; }
+    virtual bool is_asc() const { return false; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);

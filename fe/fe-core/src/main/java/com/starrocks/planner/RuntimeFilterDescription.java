@@ -65,6 +65,7 @@ public class RuntimeFilterDescription {
     private SessionVariable sessionVariable;
 
     private boolean onlyLocal;
+    private boolean isAsc;
 
     private RuntimeFilterType type;
 
@@ -88,6 +89,7 @@ public class RuntimeFilterDescription {
         sessionVariable = sv;
         onlyLocal = false;
         type = RuntimeFilterType.JOIN_FILTER;
+        isAsc = true;
     }
 
     public boolean getEqualForNull() {
@@ -122,9 +124,16 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
+    public void setIsAsc(boolean isAsc) {
+        this.isAsc = isAsc;
+    }
+
     public boolean canProbeUse(PlanNode node) {
         if (!canAcceptFilter(node)) {
             return false;
+        }
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+            ((OlapScanNode)node).setIsAsc(isAsc);
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
