@@ -38,6 +38,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -153,4 +154,66 @@ public class LocalMetaStoreTest {
         Assert.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
         Assert.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testReplayAddSubPartition() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+        Partition p = table.getPartitions().stream().findFirst().get();
+        int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
+        MaterializedIndex index = new MaterializedIndex();
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
+                index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getId()).getStorageMedium());
+        index.addTablet(new LocalTablet(0), tabletMeta);
+        PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
+                db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, p.getId(), 0, index));
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.replayAddSubPartition(info);
+    }
+
+    @Test
+    public void testModifyAutomaticBucketSize() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+
+        try {
+            db.writeLock();
+            Map<String, String> properties = Maps.newHashMap();
+            LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+            table.setTableProperty(null);
+            localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
+            localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    @Test
+    public void testCreateTableIfNotExists() throws Exception {
+        // create table if not exists, if the table already exists, do nothing
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
+                // don't expect any invoke to this method
+                minTimes = 0;
+                maxTimes = 0;
+                result = null;
+            }
+        };
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        // with IF NOT EXIST
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
+                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+    }
+>>>>>>> 6294333429 ([BugFix] check table existence before heavy creating operation (#30404))
 }
