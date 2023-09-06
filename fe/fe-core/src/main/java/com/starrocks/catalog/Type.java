@@ -1309,23 +1309,23 @@ public abstract class Type implements Cloneable {
         return new Pair<Type, Integer>(type, tmpNodeIdx);
     }
 
-    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
-        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(0).type);
+    public static Type fromProtobuf(PTypeDesc pTypeDesc, int nodeIndex) {
+        Preconditions.checkState(pTypeDesc.types.size() > nodeIndex);
+        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(nodeIndex).type);
         switch (tTypeNodeType) {
             case SCALAR: {
-                Preconditions.checkState(pTypeDesc.types.size() == 1);
-                PScalarType scalarType = pTypeDesc.types.get(0).scalarType;
+                PScalarType scalarType = pTypeDesc.types.get(nodeIndex).scalarType;
                 return ScalarType.createType(scalarType);
             }
             case ARRAY: {
-                Preconditions.checkState(pTypeDesc.types.size() == 2);
-                ScalarType childType = ScalarType.createType(pTypeDesc.types.get(1).scalarType);
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 1);
+                Type childType = fromProtobuf(pTypeDesc, nodeIndex + 1);
                 return new ArrayType(childType);
             }
             case MAP: {
-                Preconditions.checkState(pTypeDesc.types.size() == 3);
-                ScalarType keyType = ScalarType.createType(pTypeDesc.types.get(1).scalarType);
-                ScalarType valueType = ScalarType.createType(pTypeDesc.types.get(2).scalarType);
+                Preconditions.checkState(pTypeDesc.types.size() > nodeIndex + 2);
+                Type keyType = fromProtobuf(pTypeDesc, nodeIndex + 1);
+                Type valueType = fromProtobuf(pTypeDesc, nodeIndex + 2);
                 return new MapType(keyType, valueType);
             }
             default: {
