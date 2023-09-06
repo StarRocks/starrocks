@@ -1589,9 +1589,12 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testDecimalV2Cast() throws Exception {
-        String sql = "select length(cast('12.13' as decimalV2(9,1)) * 200)";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 2> : length('2426')");
+    public void testDecimalV2Cast1() throws Exception {
+        String sql = "select length(cast('12.3567' as decimalV2(9,1)) * 200)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "2 <-> length[('2471.34'); args: VARCHAR; result: INT;");
+        sql = "select length(col) from (select cast('12.3567' as decimalV2(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[(cast(2471.34000 as VARCHAR)); args: VARCHAR; result: INT;");
     }
 }
