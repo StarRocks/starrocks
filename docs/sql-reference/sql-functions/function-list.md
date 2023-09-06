@@ -31,7 +31,7 @@ You can find a function based on the following categories:
 
 - [any_value](../sql-functions/aggregate-functions/any_value.md)
 - [approx_count_distinct](../sql-functions/aggregate-functions/approx_count_distinct.md)
-- [array_agg](../sql-functions/array-functions)
+- [array_agg](../sql-functions/array-functions/array_agg.md)
 - [avg](../sql-functions/aggregate-functions/avg.md)
 - [bitmap](../sql-functions/aggregate-functions/bitmap.md)
 - [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
