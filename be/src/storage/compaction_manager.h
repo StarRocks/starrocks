@@ -67,7 +67,11 @@ public:
 
     uint16_t running_tasks_num() {
         std::lock_guard lg(_tasks_mutex);
-        return _running_tasks.size();
+        size_t res = 0;
+        for (const auto& it : _running_tasks) {
+            res += it.second.size();
+        }
+        return res;
     }
 
     bool check_if_exceed_max_task_num() {
@@ -77,7 +81,11 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        if (_running_tasks.size() >= _max_task_num) {
+        size_t running_tasks_num = 0;
+        for (const auto& it : _running_tasks) {
+            running_tasks_num += it.second.size();
+        }
+        if (running_tasks_num >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
@@ -110,6 +118,14 @@ public:
 
     int64_t cumulative_compaction_concurrency();
 
+    bool has_running_task(const TabletSharedPtr& tablet);
+
+    void stop_compaction(const TabletSharedPtr& tablet);
+
+    std::unordered_set<CompactionTask*> get_running_task(const TabletSharedPtr& tablet);
+
+    int get_waiting_task_num();
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
@@ -131,7 +147,7 @@ private:
 
     std::mutex _tasks_mutex;
     std::atomic<uint64_t> _next_task_id;
-    std::unordered_set<CompactionTask*> _running_tasks;
+    std::map<int64_t, std::unordered_set<CompactionTask*>> _running_tasks;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_cumulative_task_num_map;
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
