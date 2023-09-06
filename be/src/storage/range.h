@@ -193,6 +193,15 @@ public:
 
     std::string to_string() const;
 
+    void split(size_t expected_range_cnt, size_t chunk_size);
+
+    // reverse inner-range
+    // if a SparseRange call this function. then the range won't be a normalized range.
+    void reverse();
+
+    bool is_normalized() const { return _is_normalized; }
+    void set_normalized(bool normalized) { _is_normalized = normalized; }
+
     bool operator==(const SparseRange<T>& rhs) const;
     bool operator!=(const SparseRange<T>& rhs) const;
 
@@ -212,6 +221,7 @@ private:
     void _add_uncheck(const Range<T>& r);
 
     std::vector<Range<T>> _ranges;
+    bool _is_normalized = true;
 };
 using SparseRangePtr = std::shared_ptr<SparseRange<>>;
 
@@ -316,6 +326,36 @@ inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) co
 }
 
 template <typename T>
+inline void SparseRange<T>::split(size_t expected_range_cnt, size_t chunk_size) {
+    if (size() < expected_range_cnt && span_size() > std::max(expected_range_cnt, chunk_size)) {
+        size_t expected_size_each_range = 0;
+        for (size_t i = 0; i < size(); ++i) {
+            expected_size_each_range += _ranges[i].span_size();
+        }
+
+        expected_size_each_range /= expected_range_cnt;
+        expected_size_each_range = std::max<size_t>(expected_size_each_range, 1);
+
+        std::vector<Range<T>> new_ranges;
+        for (auto range : _ranges) {
+            while (range.span_size() > expected_size_each_range) {
+                new_ranges.emplace_back(range.begin(), range.begin() + expected_size_each_range);
+                range = Range<T>(range.begin() + expected_size_each_range, range.end());
+            }
+            new_ranges.emplace_back(range);
+        }
+        std::swap(_ranges, new_ranges);
+        _is_normalized = false;
+    }
+}
+
+template <typename T>
+inline void SparseRange<T>::reverse() {
+    std::reverse(_ranges.begin(), _ranges.end());
+    _is_normalized = false;
+}
+
+template <typename T>
 inline SparseRange<T> SparseRange<T>::operator|(const SparseRange<T>& rhs) const {
     SparseRange res = *this;
     res |= rhs;
@@ -371,6 +411,9 @@ inline void SparseRangeIterator<T>::next_range(SparseRangeIterator<T>::rowid_t s
         Range r = next(size);
         range->add(r);
         size -= r.span_size();
+        if (!_range->is_normalized()) {
+            break;
+        }
     }
 }
 
@@ -379,8 +422,21 @@ inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseR
                                                                    SparseRange<T>* result) const {
     DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
                           [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
-    for (size_t i = _index; i < _range->_ranges.size(); ++i) {
-        const auto& r1 = _range->_ranges[i];
+    if (!has_more()) {
+        return SparseRangeIterator<T>(result);
+    }
+
+    bool normalized = _range->is_normalized();
+    auto ranges = std::vector<Range<T>>(_range->_ranges.begin() + _index, _range->_ranges.end());
+    ranges[0] = Range<T>(_next_rowid, ranges[0].end());
+    if (!normalized) {
+        std::reverse(ranges.begin(), ranges.end());
+    }
+    DCHECK(std::is_sorted(ranges.begin(), ranges.end(),
+                          [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
+
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        const auto& r1 = ranges[i];
         for (const auto& r2 : rhs._ranges) {
             if (r1.end() < r2.begin()) {
                 break;
@@ -390,21 +446,13 @@ inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseR
             }
         }
     }
-    SparseRangeIterator<T> res(result);
-    if (res.has_more()) {
-        for (size_t i = 0; i < res._range->size(); ++i) {
-            // set idx and next rowid
-            if (_next_rowid < res._range->_ranges[i].end()) {
-                res._next_rowid = std::max(res._range->_ranges[i].begin(), _next_rowid);
-                res._index = i;
-                break;
-            }
-            // filter all range
-            if (i == res._range->size() - 1) {
-                res._index = res._range->size();
-            }
-        }
+    DCHECK(std::is_sorted(result->_ranges.begin(), result->_ranges.end(),
+                          [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
+    if (!normalized) {
+        std::reverse(result->_ranges.begin(), result->_ranges.end());
     }
+
+    SparseRangeIterator<T> res(result);
     return res;
 }
 

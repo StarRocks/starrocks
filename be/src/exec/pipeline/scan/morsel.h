@@ -112,6 +112,7 @@ public:
             _owner_id = _scan_range->internal_scan_range.__isset.bucket_sequence
                                 ? _scan_range->internal_scan_range.bucket_sequence
                                 : _owner_id;
+            _partition_id = _scan_range->internal_scan_range.partition_id;
         }
         if (_scan_range->__isset.binlog_scan_range) {
             _owner_id = _scan_range->binlog_scan_range.tablet_id;
@@ -132,11 +133,13 @@ public:
     }
 
     int32_t owner_id() const { return _owner_id; }
+    int32_t partition_id() const { return _partition_id; }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
     int64_t _owner_id = 0;
     int64_t _version = 0;
+    int64_t _partition_id = 0;
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
