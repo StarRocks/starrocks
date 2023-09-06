@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
@@ -80,6 +79,7 @@ public interface ConnectorMetadata {
 
     /**
      * Return all partition names of the table.
+     *
      * @param databaseName the name of the database
      * @param tableName the name of the table
      * @return a list of partition names
@@ -90,6 +90,7 @@ public interface ConnectorMetadata {
 
     /**
      * Return partial partition names of the table using partitionValues to filter.
+     *
      * @param databaseName the name of the database
      * @param tableName the name of the table
      * @param partitionValues the partition value to filter
@@ -103,7 +104,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
-     * @param dbName  - the string represents the database name
+     * @param dbName - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -114,7 +115,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
-     * @param dbName  - the string represents the database name
+     * @param dbName - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -127,12 +128,12 @@ public interface ConnectorMetadata {
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
      * 2. Get file scan tasks for iceberg metadata by query predicate.
+     *
      * @param table
      * @param partitionKeys selected partition columns
      * @param snapshotId selected snapshot id
      * @param predicate used to filter metadata for iceberg, etc
      * @param fieldNames all selected columns (including partition columns)
-     *
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
@@ -146,12 +147,12 @@ public interface ConnectorMetadata {
 
     /**
      * Get statistics for the table.
+     *
      * @param session optimizer context
      * @param table
      * @param columns selected columns
      * @param partitionKeys selected partition keys
      * @param predicate used to filter metadata for iceberg, etc
-     *
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
@@ -266,7 +267,7 @@ public interface ConnectorMetadata {
     }
 
     default CloudConfiguration getCloudConfiguration() {
-        return null;
+        throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
 }
 

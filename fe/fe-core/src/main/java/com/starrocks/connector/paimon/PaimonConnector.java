@@ -75,7 +75,7 @@ public class PaimonConnector implements Connector {
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
 
-        if (cloudConfiguration.getCloudType() == CloudType.AWS && cloudConfiguration instanceof AWSCloudConfiguration) {
+        if (cloudConfiguration.getCloudType() == CloudType.AWS) {
             AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
             paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
