@@ -34,7 +34,7 @@ Returns a BOOLEAN value.
 
 ## Usage notes
 
-- The lambda function follows the usage notes in [array_map()](array_map.md). It returns array<bool\>.
+- The lambda function follows the usage notes in [array_map()](array_map.md). It returns array\<bool\>.
 - If the input array is null or the lambda function results in null, null is returned.
 - If `arr1` is empty, `false` is returned.
 - To apply this function to MAP, rewrite `any_match((k,v)->k>v,map)` to `any_match(map_values(transform_values((k,v)->k>v, map)))`. For example, `select any_match(map_values(transform_values((k,v)->k>v, map{2:1})));` returns 1.
