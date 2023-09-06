@@ -495,7 +495,7 @@ struct TOlapScanNode {
   29: optional list<TColumnAccessPath> column_access_paths
 
   30: optional bool use_pk_index
-  31: required list<Descriptors.TColumn> columns_desc
+  31: optional list<Descriptors.TColumn> columns_desc
   32: optional bool output_chunk_by_bucket
 }
 
