@@ -255,7 +255,7 @@
       + [USE](/sql-reference/sql-statements/data-definition/USE.md)
     + DML
       + [ALTER LOAD](/sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md)
-      + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ALTER%20ROUTINE%20LOAD.md)
+      + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
       + [CANCEL REFRESH MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
