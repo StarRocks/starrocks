@@ -74,16 +74,15 @@ public class EquationRewriter {
             }
 
             @Override
-            public ScalarOperator preprocess(ScalarOperator scalarOperator) {
-                ScalarOperator tmp = replace(scalarOperator);
-                return tmp != null ? tmp : null;
+            public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
+                return replace(scalarOperator);
             }
 
             @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                ScalarOperator tmp = replace(predicate);
-                if (tmp != null) {
-                    return tmp;
+                Optional<ScalarOperator> tmp = replace(predicate);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 ScalarOperator left = predicate.getChild(0);
@@ -107,17 +106,17 @@ public class EquationRewriter {
             @Override
             public ScalarOperator visitCall(CallOperator call, Void context) {
                 // 1. rewrite query's predicate
-                ScalarOperator tmp = replace(call);
-                if (tmp != null) {
-                    return tmp;
+                Optional<ScalarOperator> tmp = replace(call);
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 2. normalize predicate to better match mv
                 // TODO: merge into aggregateFunctionRewriter later.
                 CallOperator normalizedCall = normalizeCallOperator(call);
                 tmp = replace(normalizedCall);
-                if (tmp != null) {
-                    return tmp;
+                if (tmp.isPresent()) {
+                    return tmp.get();
                 }
 
                 // 3. retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
@@ -137,7 +136,7 @@ public class EquationRewriter {
                 return super.visitCall(call, context);
             }
 
-            ScalarOperator replace(ScalarOperator scalarOperator) {
+            Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
                 if (equationMap.containsKey(scalarOperator)) {
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
@@ -146,23 +145,23 @@ public class EquationRewriter {
                     ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
 
                     if (columnMapping == null) {
-                        return extendedExpr == null ? basedColumn.clone() : extendedExpr.clone();
+                        return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
                     }
 
                     ColumnRefOperator replaced = columnMapping.get(basedColumn);
                     if (replaced == null) {
-                        return null;
+                        return Optional.empty();
                     }
 
                     if (extendedExpr == null) {
-                        return replaced.clone();
+                        return Optional.of(replaced.clone());
                     }
                     ScalarOperator newExpr = extendedExpr.clone();
                     return replaceColInExpr(newExpr, basedColumn,
-                            replaced.clone()) ? newExpr : null;
+                            replaced.clone()) ? Optional.of(newExpr) : Optional.empty();
                 }
 
-                return null;
+                return Optional.empty();
             }
 
             private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {
