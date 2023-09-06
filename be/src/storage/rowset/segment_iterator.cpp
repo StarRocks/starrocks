@@ -1760,6 +1760,12 @@ void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
             _opts.stats->io_ns_local_disk += value;
         } else if (name == kIONsRemote) {
             _opts.stats->io_ns_remote += value;
+        } else if (name == kPrefetchHitCount) {
+            _opts.stats->prefetch_hit_count += value;
+        } else if (name == kPrefetchWaitFinishNs) {
+            _opts.stats->prefetch_wait_finish_ns += value;
+        } else if (name == kPrefetchPendingNs) {
+            _opts.stats->prefetch_pending_ns += value;
         }
     }
 }
