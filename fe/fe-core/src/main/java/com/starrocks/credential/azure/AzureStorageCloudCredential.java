@@ -105,7 +105,7 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AzureBlobCloudCredential{" +
                 "endpoint='" + endpoint + '\'' +
                 ", storageAccount='" + storageAccount + '\'' +
@@ -163,7 +163,7 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AzureADLS1CloudCredential{" +
                 "useManagedServiceIdentity=" + useManagedServiceIdentity +
                 ", oauth2ClientId='" + oauth2ClientId + '\'' +
@@ -236,7 +236,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AzureADLS2CloudCredential{" +
                 "oauth2ManagedIdentity=" + oauth2ManagedIdentity +
                 ", oauth2TenantId='" + oauth2TenantId + '\'' +

@@ -59,7 +59,7 @@ public class AliyunCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AliyunCloudCredential{" +
                 "accessKey=" + accessKey +
                 ", secretKey='" + secretKey + '\'' +

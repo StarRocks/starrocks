@@ -88,7 +88,7 @@ public class HDFSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "HDFSCloudCredential{" +
                 "authentication=" + authentication +
                 ", username='" + userName + '\'' +

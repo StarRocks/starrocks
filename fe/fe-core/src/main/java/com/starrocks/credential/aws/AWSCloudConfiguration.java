@@ -102,9 +102,9 @@ public class AWSCloudConfiguration extends CloudConfiguration {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toConfString() {
         return "AWSCloudConfiguration{" + getCommonFieldsString() +
-                ", cred=" + awsCloudCredential.getCredentialString() +
+                ", cred=" + awsCloudCredential.toCredString() +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +
                 ", enableSSL=" + enableSSL +
                 '}';

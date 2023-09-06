@@ -42,7 +42,7 @@ public class CloudConfigurationFactoryTest {
                         "useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                         "accessKey='ak', secretKey='sk', sessionToken='token', iamRoleArn='', " +
                         "externalId='', region='region', endpoint=''}, enablePathStyleAccess=false, " +
-                        "enableSSL=true}", cloudConfiguration.getCredentialString());
+                        "enableSSL=true}", cloudConfiguration.toConfString());
     }
 
     @Test
@@ -61,7 +61,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -80,7 +80,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -101,7 +101,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -121,7 +121,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -144,7 +144,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -165,7 +165,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -184,7 +184,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -197,7 +197,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.getCredentialString());
+        System.out.println(cc.toConfString());
     }
 
     @Test
@@ -205,6 +205,6 @@ public class CloudConfigurationFactoryTest {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
-        System.out.println(cred.getCredentialString());
+        System.out.println(cred.toCredString());
     }
 }

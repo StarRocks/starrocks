@@ -57,8 +57,8 @@ public class AzureCloudConfiguration extends CloudConfiguration {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toConfString() {
         return String.format("AzureCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
-                azureStorageCloudCredential.getCredentialString());
+                azureStorageCloudCredential.toCredString());
     }
 }
