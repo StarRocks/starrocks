@@ -60,6 +60,7 @@ public class GCPCloudConfiguration extends CloudConfiguration {
 
     @Override
     public String getCredentialString() {
-        return super.getCredentialString() + gcpCloudCredential.getCredentialString();
+        return String.format("GCPCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                gcpCloudCredential.getCredentialString());
     }
 }

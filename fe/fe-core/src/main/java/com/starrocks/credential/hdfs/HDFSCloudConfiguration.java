@@ -53,7 +53,8 @@ public class HDFSCloudConfiguration extends CloudConfiguration {
 
     @Override
     public String getCredentialString() {
-        return super.getCredentialString() + hdfsCloudCredential.getCredentialString();
+        return String.format("HDFSCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                hdfsCloudCredential.getCredentialString());
     }
 
     @Override

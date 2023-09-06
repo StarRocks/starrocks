@@ -46,7 +46,7 @@ public class CloudConfigurationFactory {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
             CloudConfiguration cloudConfiguration = factory.build(properties);
             if (cloudConfiguration != null) {
-                cloudConfiguration.loadCommonProperties(properties);
+                cloudConfiguration.loadCommonFields(properties);
                 return cloudConfiguration;
             }
         }
