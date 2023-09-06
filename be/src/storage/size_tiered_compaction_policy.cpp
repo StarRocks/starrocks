@@ -71,6 +71,11 @@ std::shared_ptr<CompactionTask> SizeTieredCompactionPolicy::create_compaction(Ta
         output_version.first = (*_rowsets.begin())->start_version();
         output_version.second = (*_rowsets.rbegin())->end_version();
 
+        // set rowset status to compacting
+        for (const auto& rowset : _rowsets) {
+            rowset->set_is_compacting(true);
+        }
+
         CompactionTaskFactory factory(output_version, tablet, std::move(_rowsets), _score, _compaction_type);
         std::shared_ptr<CompactionTask> compaction_task = factory.create_compaction_task();
         _compaction_type = INVALID_COMPACTION;
@@ -200,6 +205,23 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         if (level_size == -1) {
             level_size = rowset_size < _max_level_size ? rowset_size : _max_level_size;
             total_size = 0;
+        }
+
+        // meet version being compacted
+        if (rowset->get_is_compacting()) {
+            if (!transient_rowsets.empty()) {
+                auto level = std::make_unique<SizeTieredLevel>(
+                        transient_rowsets, segment_num, level_size, total_size,
+                        _cal_compaction_score(segment_num, level_size, total_size, keys_type, reached_max_version));
+                priority_levels.emplace(level.get());
+                order_levels.emplace_back(std::move(level));
+            }
+            segment_num = 0;
+            total_size = 0;
+            level_size = -1;
+            prev_end_version = rowset->end_version();
+            transient_rowsets.clear();
+            continue;
         }
 
         // meet missed version

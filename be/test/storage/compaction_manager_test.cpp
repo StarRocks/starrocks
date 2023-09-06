@@ -155,4 +155,59 @@ TEST(CompactionManagerTest, test_next_compaction_task_id) {
     ASSERT_LT(0, start_task_id);
 }
 
+TEST(CompactionManagerTest, test_compaction_parallel) {
+    std::vector<TabletSharedPtr> tablets;
+    std::vector<std::shared_ptr<MockCompactionTask>> tasks;
+    DataDir data_dir("./data_dir");
+    // generate compaction task
+    config::max_compaction_concurrency = 10;
+    int tablet_num = 3;
+    int task_id = 0;
+    // each tablet has 3 compaction tasks
+    for (int i = 0; i < tablet_num; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
+        compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+        tablet->set_compaction_context(compaction_context);
+        tablets.push_back(tablet);
+
+        // create base compaction
+        std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(BASE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction1
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+
+        // create cumulative compaction2
+        task = std::make_shared<MockCompactionTask>();
+        task->set_tablet(tablet);
+        task->set_task_id(task_id++);
+        task->set_compaction_type(CUMULATIVE_COMPACTION);
+        tasks.emplace_back(std::move(task));
+    }
+
+    StorageEngine::instance()->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
+
+    for (int i = 0; i < 9; i++) {
+        bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
+        ASSERT_TRUE(ret);
+    }
+
+    ASSERT_EQ(9, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+
+    StorageEngine::instance()->compaction_manager()->clear_tasks();
+    ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+}
+
 } // namespace starrocks
