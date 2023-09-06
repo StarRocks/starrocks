@@ -140,13 +140,11 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
         rowset_queue.emplace(std::make_shared<const RowsetMetadata>(rowset_pb), stat);
     }
     size_t cur_compaction_result_bytes = 0;
-    size_t cur_compaction_result_rows = 0;
 
     std::stringstream input_infos;
     while (!rowset_queue.empty()) {
         const auto& rowset_candidate = rowset_queue.top();
         cur_compaction_result_bytes += rowset_candidate.stat.bytes;
-        cur_compaction_result_rows += rowset_candidate.stat.num_rows;
         if (input_rowsets.size() > 0 && cur_compaction_result_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
