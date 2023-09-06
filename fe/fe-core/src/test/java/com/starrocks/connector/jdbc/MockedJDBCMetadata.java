@@ -24,6 +24,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -37,6 +38,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
     private Map<String, String> properties;
+    private Map<String, JDBCTable> tables = new HashMap<>();
 
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
     private List<PartitionInfo> partitions = Arrays.asList(new Partition("d", 1690819200L),
@@ -57,16 +59,20 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     private Table getJDBCTable(String tblName) {
         readLock();
         try {
-            if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-                return new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
-                        getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
-            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-                return new JDBCTable(100001, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
-                        getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
-            } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
-                return new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
-                        getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties);
+            if (tables.get(tblName) == null) {
+                if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
+
+                    tables.put(tblName, new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
+                    tables.put(tblName, new JDBCTable(100001, MOCKED_PARTITIONED_TABLE_NAME1, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
+                    tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                }
             }
+            return tables.get(tblName);
         } catch (DdlException e) {
             e.printStackTrace();
         } finally {
@@ -80,10 +86,10 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
                 return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.VARCHAR), new Column("d", Type.INT));
+                        new Column("c", Type.INT), new Column("d", Type.INT));
             } else {
                 return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.VARCHAR), new Column("d", Type.CHAR));
+                        new Column("c", Type.INT), new Column("d", Type.CHAR));
             }
 
         } finally {
@@ -194,6 +200,17 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public void refreshPartitions() {
+        readLock();
+        try {
+            partitions = Arrays.asList(new Partition("d", 1690819300L),
+                    new Partition("d", 1690819300L),
+                    new Partition("d", 1690819300L));
         } finally {
             readUnlock();
         }

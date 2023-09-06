@@ -3250,6 +3250,16 @@ public class LocalMetastore implements ConnectorMetadata {
                             Collections.singletonList(stmt.getPartitionColumn()));
                 }
             }
+            if ((expr instanceof FunctionCallExpr)) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                    Column partitionColumn = stmt.getPartitionColumn();
+                    partitionColumn.setType(com.starrocks.catalog.Type.DATE);
+                    return expressionPartitionDesc.toPartitionInfo(
+                            Collections.singletonList(partitionColumn),
+                            Maps.newHashMap(), false);
+                }
+            }
             return expressionPartitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);

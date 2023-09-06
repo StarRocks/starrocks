@@ -105,6 +105,36 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJDBCSingleTableEqualPredicateRewrite() throws Exception {
+        createAndRefreshMv("test", "jdbc_mv_1",
+                "create materialized view jdbc_mv_1 distributed by hash(a) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"LOOSE\"\n" +
+                        ") " +
+                        " as select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d = 20230803");
+        String query = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d = 20230803";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "jdbc_mv_1");
+
+        String query2 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d = 20230804";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertNotContains(plan2, "jdbc_mv_1");
+        String query3 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d > 20230803";
+        String plan3 = getFragmentPlan(query3);
+        PlanTestBase.assertNotContains(plan3, "jdbc_mv_1");
+
+        String query4 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d < 20230803";
+        String plan4 = getFragmentPlan(query4);
+        PlanTestBase.assertNotContains(plan4, "jdbc_mv_1");
+
+        String query5 = "select a, b, c, d + 1 from jdbc0.partitioned_db0.tbl0 where d = 20230803";
+        String plan5 = getFragmentPlan(query5);
+        PlanTestBase.assertContains(plan5, "jdbc_mv_1");
+
+        dropMv("test", "jdbc_mv_1");
+    }
+
+    @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "mv_1",
@@ -210,6 +240,49 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJDBCSingleTableRangePredicateRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+        createAndRefreshMv("test", "jdbc_mv_2",
+                "create materialized view jdbc_mv_2 distributed by hash(a) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"LOOSE\"\n" +
+                        ") " +
+                        " as select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d < 20230804");
+        String query = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d < 20230803";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "jdbc_mv_2");
+
+        String query2 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d < 20230802";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "jdbc_mv_2");
+
+        String query3 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d <= 20230804";
+        String plan3 = getFragmentPlan(query3);
+        PlanTestBase.assertNotContains(plan3, "jdbc_mv_2");
+
+        String query4 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d > 20230804";
+        String plan4 = getFragmentPlan(query4);
+        PlanTestBase.assertNotContains(plan4, "jdbc_mv_2");
+
+        String query5 = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d = 20230803";
+        String plan5 = getFragmentPlan(query5);
+        PlanTestBase.assertContains(plan5, "jdbc_mv_2");
+
+        String query6 =
+                "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d between 20230802 and 20230803";
+        String plan6 = getFragmentPlan(query6);
+        PlanTestBase.assertContains(plan6, "jdbc_mv_2");
+
+        String query7 =
+                "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d < 20230803 and " +
+                        "a is not null";
+        String plan7 = getFragmentPlan(query7);
+        PlanTestBase.assertContains(plan7, "jdbc_mv_2");
+
+        dropMv("test", "jdbc_mv_2");
+    }
+
+    @Test
     public void testSingleTableResidualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -232,6 +305,20 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_mv_1");
         dropMv("test", "hive_mv_1");
+    }
+
+    @Test
+    public void testJDBCSingleTableResidualPredicateRewrite() throws Exception {
+        createAndRefreshMv("test", "jdbc_mv_3",
+                "create materialized view jdbc_mv_3 distributed by hash(a) " +
+                        "PROPERTIES (\n" +
+                        "\"force_external_table_query_rewrite\" = \"LOOSE\"\n" +
+                        ") " +
+                        " as select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d * d > 100 and a like \"%abc%\"");
+        String query = "select a, b, c, d from jdbc0.partitioned_db0.tbl0 where d * d > 100 and a like \"%abc%\"";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "jdbc_mv_3");
+        dropMv("test", "jdbc_mv_3");
     }
 
     @Test

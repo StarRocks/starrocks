@@ -130,6 +130,9 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             case DATE:
             case DATETIME:
                 return DateLiteral.createMinValue(type);
+            case CHAR:
+            case VARCHAR:
+                return StringLiteral.create("1970-01-01", type);
             default:
                 throw new AnalysisException("Invalid data type for creating infinity: " + type);
         }
