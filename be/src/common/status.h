@@ -23,8 +23,13 @@ class TStatus;
 
 template <typename T>
 class StatusOr;
+#ifdef STARROCKS_STATUS_NODISCARD
+#define STATUS_ATTRIBUTE [[nodiscard]]
+#else
+#define STATUS_ATTRIBUTE
+#endif
 
-class Status {
+class STATUS_ATTRIBUTE Status {
 public:
     Status() = default;
 
