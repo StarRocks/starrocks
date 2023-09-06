@@ -33,7 +33,7 @@ public class CloudConfigurationFactoryTest {
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        Assert.assertEquals("AWSCloudConfiguration{awsCloudCredential=AWSCloudCredential" +
+        Assert.assertEquals("CloudConfiguration{configResources=, runtimeJars=}AWSCloudConfiguration{awsCloudCredential=AWSCloudCredential" +
                 "{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
                 "accessKey='ak', secretKey='sk', sessionToken='token', iamRoleArn='', " +
                 "externalId='', region='region', endpoint=''}, enablePathStyleAccess=false, " +

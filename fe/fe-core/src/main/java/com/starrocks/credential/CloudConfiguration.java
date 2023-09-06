@@ -65,7 +65,7 @@ public class CloudConfiguration {
     // So we need to generate an identifier for different CloudCredential, and used it as cache key.
     // getCredentialString() Method just like toString()
     public String getCredentialString() {
-        return String.format("CloudConfiguration(configResources=%s, runtimeJars=%s)",
+        return String.format("CloudConfiguration{configResources=%s, runtimeJars=%s}",
                 configResources == null ? "null" : configResources, runtimeJars == null ? "null" : runtimeJars);
     }
 
