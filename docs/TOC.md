@@ -667,8 +667,14 @@
     + Pattern Matching Functions
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
+<<<<<<< HEAD
       + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
+=======
+      + [regexp_extract](./sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
+      + [regexp_extract_all](./sql-reference/sql-functions/like_predicate-functions/regexp_extract_all.md)
+      + [regexp_replace](./sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
+>>>>>>> c5720342d7 ([Doc] fix links (#30461))
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)

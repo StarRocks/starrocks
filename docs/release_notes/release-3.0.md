@@ -1,5 +1,113 @@
 # StarRocks version 3.0
 
+<<<<<<< HEAD
+=======
+## 3.0.5
+
+Release date: August 16, 2023
+
+### New Features
+
+- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
+- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+
+## Improvements
+
+- Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
+- Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
+- The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](../table_design/expression_partitioning.md#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
+
+## Bug Fixes
+
+Fixed the following issues:
+
+- Incorrect table-level scan statistics in FE cause inaccurate metrics for table queries and loading. [#27779](https://github.com/StarRocks/starrocks/pull/27779)
+- The query result is not stable if the sort key is modified for a partitioned table. [#27850](https://github.com/StarRocks/starrocks/pull/27850)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored. [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- If the bucket number is not specified when users create a Colocation table, the number will be inferred as 0, which causes failures in adding new partitions. [#27086](https://github.com/StarRocks/starrocks/pull/27086)
+- When the SELECT result set of INSERT INTO SELECT is empty, the load job status returned by SHOW LOAD is `CANCELED`. [#26913](https://github.com/StarRocks/starrocks/pull/26913)
+- BEs may crash when the input values of the sub_bitmap function are not of the BITMAP type. [#27982](https://github.com/StarRocks/starrocks/pull/27982)
+- BEs may crash when the AUTO_INCREMENT column is being updated. [#27199](https://github.com/StarRocks/starrocks/pull/27199)
+- Outer join and Anti join rewrite errors for materialized views. [#28028](https://github.com/StarRocks/starrocks/pull/28028)
+- Inaccurate estimation of average row size causes Primary Key partial updates to occupy excessively large memory. [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- Activating an inactive materialized view may cause a FE to crash. [#27959](https://github.com/StarRocks/starrocks/pull/27959)
+- Queries can not be rewritten to materialized views created based on external tables in a Hudi catalog. [#28023](https://github.com/StarRocks/starrocks/pull/28023)
+- The data of a Hive table can still be queried even after the table is dropped and the metadata cache is manually updated. [#28223](https://github.com/StarRocks/starrocks/pull/28223)
+- Manually refreshing an asynchronous materialized view via a synchronous call results in multiple INSERT OVERWRITE records in the `information_schema.task_runs` table. [#28060](https://github.com/StarRocks/starrocks/pull/28060)
+- FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.com/StarRocks/starrocks/pull/28311)
+
+## 3.0.4
+
+Release date: July 18, 2023
+
+### New Feature
+
+Queries can be rewritten even when the queries contain a different type of join than the materialized view. [#25099](https://github.com/StarRocks/starrocks/pull/25099)
+
+### Improvements
+
+- Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
+- If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten to benefit from the materialized view. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
+- [When the SQL dialect (`sql_dialect`) is set to `trino`](../reference/System_variable.md), table aliases are not case-sensitive. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- Added a new field `table_id` to the table `Information_schema.tables_config`. You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- If a query that contains the sum aggregate function is rewritten to directly obtain query results from a single-table materialized view, the values in sum() field may be incorrect due to type inference issues. [#25512](https://github.com/StarRocks/starrocks/pull/25512)
+- An error occurs when SHOW PROC is used to view information about tablets in a StarRocks shared-data cluster.
+- The INSERT operation hangs when the length of CHAR data in a STRUCT to be inserted exceeds the maximum length. [#25942](https://github.com/StarRocks/starrocks/pull/25942)
+- Some data rows queried fail to be returned for INSERT INTO SELECT with FULL JOIN. [#26603](https://github.com/StarRocks/starrocks/pull/26603)
+- An error `ERROR xxx: Unknown table property xxx` occurs when the ALTER TABLE statement is used to modify the table's property `default.storage_medium`. [#25870](https://github.com/StarRocks/starrocks/issues/25870)
+- An error occurs when Broker Load is used to load empty files. [#26212](https://github.com/StarRocks/starrocks/pull/26212)
+- Decommissioning a BE sometimes hangs. [#26509](https://github.com/StarRocks/starrocks/pull/26509)
+
+## 3.0.3
+
+Release date: June 28, 2023
+
+### Improvements
+
+- Metadata synchronization of StarRocks external tables has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/en-us/3.0/table_design/automatic_partitioning). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The min/max filter gets the wrong Parquet field when the Parquet file contains complex data types. [#23976](https://github.com/StarRocks/starrocks/pull/23976)
+- Load tasks are still queuing even when the related database or table has been dropped. [#24801](https://github.com/StarRocks/starrocks/pull/24801)
+- There is a low probability that an FE restart may cause BEs to crash. [#25037](https://github.com/StarRocks/starrocks/pull/25037)
+- Load and query jobs occasionally freeze when the variable `enable_profile` is set to `true`. [#25060](https://github.com/StarRocks/starrocks/pull/25060)
+- Inaccurate error message is displayed when INSERT OVERWRITE is executed on a cluster with less than three alive BEs. [#25314](https://github.com/StarRocks/starrocks/pull/25314)
+
+## 3.0.2
+
+Release date: June 13, 2023
+
+### Improvements
+
+- Predicates in a UNION query can be pushed down after the query is rewritten by an asynchronous materialized view. [#23312](https://github.com/StarRocks/starrocks/pull/23312)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Removed the dependency of NetworkTime on system clocks, which fixes incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- A schema change sometimes may be hung if data loading occurs simultaneously with the schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- Queries encounter an error when the session variable `pipeline_profile_level` is set to `0`. [#23873](https://github.com/StarRocks/starrocks/pull/23873)
+- CREATE TABLE encounters an error when `cloud_native_storage_type` is set to `S3`.
+- LDAP authentication succeeds even when no password is used. [#24862](https://github.com/StarRocks/starrocks/pull/24862)
+- CANCEL LOAD fails if the table involved in the load job does not exist. [#24922](https://github.com/StarRocks/starrocks/pull/24922)
+
+### Upgrade Notes
+
+If your system has a database named `starrocks`, change it to another name using ALTER DATABASE RENAME before the upgrade. This is because `starrocks` is the name of a default system database that stores privilege information.
+
+>>>>>>> c5720342d7 ([Doc] fix links (#30461))
 ## 3.0.1
 
 Release date: June 1, 2023
