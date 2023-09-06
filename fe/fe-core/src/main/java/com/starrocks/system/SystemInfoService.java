@@ -308,6 +308,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
+
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -419,6 +422,9 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // remove from BackendCoreStat
+        BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1009,6 +1015,12 @@ public class SystemInfoService implements GsonPostProcessable {
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
 
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
+        }
+
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -1036,6 +1048,12 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // remove from BackendCoreStat
+            BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
+        }
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1179,6 +1197,17 @@ public class SystemInfoService implements GsonPostProcessable {
             idToReportVersion.put(beId, new AtomicLong(0));
         }
         idToReportVersionRef = ImmutableMap.copyOf(idToReportVersion);
+
+        // BackendCoreStat is a global state, checkpoint should not modify it.
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            // update BackendCoreStat
+            for (ComputeNode node : idToBackendRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+            }
+        }
     }
 }
 

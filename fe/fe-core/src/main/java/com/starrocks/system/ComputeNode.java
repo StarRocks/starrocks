@@ -23,6 +23,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -428,10 +429,6 @@ public class ComputeNode implements IComputable, Writable {
         return cpuCores;
     }
 
-    public void setCpuCores(int cpuCores) {
-        this.cpuCores = cpuCores;
-    }
-
     /**
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
@@ -497,7 +494,11 @@ public class ComputeNode implements IComputable, Writable {
             if (this.cpuCores != hbResponse.getCpuCores()) {
                 isChanged = true;
                 this.cpuCores = hbResponse.getCpuCores();
-                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+
+                // BackendCoreStat is a global state, checkpoint should not modify it.
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                }
             }
 
             heartbeatErrMsg = "";
