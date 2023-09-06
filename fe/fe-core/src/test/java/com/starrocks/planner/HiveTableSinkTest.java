@@ -77,7 +77,7 @@ public class HiveTableSinkTest {
         new Expectations() {
             {
                 hiveConnector.getMetadata().getCloudConfiguration();
-                result = CloudConfigurationFactory.buildDefaultCloudConfiguration();
+                result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
                 minTimes = 1;
             }
         };
