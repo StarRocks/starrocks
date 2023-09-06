@@ -73,7 +73,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveMetadataTest {
     private HiveMetaClient client;
@@ -107,7 +107,7 @@ public class HiveMetadataTest {
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
