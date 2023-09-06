@@ -4,7 +4,6 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 You can find a function based on the following categories:
 
-<<<<<<< HEAD
 - [Aggregate functions](#aggregate-functions)
 - [Array functions](#array-functions)
 - [Binary functions](#binary-functions)
@@ -27,29 +26,6 @@ You can find a function based on the following categories:
 - [String functions](#string-functions)
 - [Utility functions](#utility-functions)
 - [Window functions](Window_function.md)
-=======
-- [Function list](#function-list)
-  - [Aggregate functions](#aggregate-functions)
-  - [Array functions](#array-functions)
-  - [Binary functions](#binary-functions)
-  - [Bit functions](#bit-functions)
-  - [Bitmap functions](#bitmap-functions)
-  - [Conditional functions](#conditional-functions)
-  - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
-  - [Geographic functions](#geographic-functions)
-  - [Hash functions](#hash-functions)
-  - [JSON functions](#json-functions)
-  - [String functions](#string-functions)
-  - [Map functions](#map-functions)
-  - [Math functions](#math-functions)
-  - [Pattern matching functions](#pattern-matching-functions)
-  - [Percentile functions](#percentile-functions)
-  - [Scalar functions](#scalar-functions)
-  - [Struct functions](#struct-functions)
-  - [Table functions](#table-functions)
-  - [Utility functions](#utility-functions)
->>>>>>> fb1b19e963 ([Doc] fix links (backport #30461) (#30467))
 
 ## Aggregate functions
 
