@@ -35,7 +35,7 @@ public:
                                    const std::vector<ExprContext*>& output_exprs,
                                    const std::vector<ExprContext*>& partition_exprs,
                                    const std::vector<std::string>& partition_column_names, bool write_single_file,
-                                   const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx,
+                                   const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
                                    std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, false, driver_sequence),
               _path(path),
@@ -74,6 +74,12 @@ public:
 private:
     TableInfo _make_table_info(const string& partition_location) const;
 
+    static void add_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+        if (writer->metadata()) {
+            state->update_num_rows_load_sink(writer->metadata()->num_rows());
+        }
+    }
+
 private:
     const std::string _path;
     const std::string _file_format;
@@ -83,7 +89,7 @@ private:
     const std::vector<std::string> _partition_column_names;
     const bool _write_single_file;
     const TCloudConfiguration _cloud_conf;
-    const FragmentContext* _fragment_ctx;
+    mutable FragmentContext* _fragment_ctx;
 
     const std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
@@ -99,7 +105,7 @@ public:
                                           const std::vector<std::string>& column_names,
                                           const std::vector<std::string>& partition_column_names,
                                           bool write_single_file, const TCloudConfiguration& cloud_conf,
-                                          const FragmentContext* fragment_ctx);
+                                          FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 
@@ -119,7 +125,7 @@ private:
     const std::vector<std::string> _partition_column_names;
     const bool _write_single_file;
     const TCloudConfiguration _cloud_conf;
-    const FragmentContext* _fragment_ctx;
+    FragmentContext* _fragment_ctx;
 
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
 };

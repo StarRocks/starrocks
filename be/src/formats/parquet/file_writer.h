@@ -199,12 +199,27 @@ public:
 
     std::string partition_location() const { return _partition_location; }
 
+    void set_io_status(const Status& status) {
+        std::unique_lock l(_io_status_mutex);
+        if (_io_status.ok()) {
+            _io_status = status;
+        }
+    }
+
+    Status get_io_status() const {
+        std::shared_lock l(_io_status_mutex);
+        return _io_status;
+    }
+
 private:
     Status _flush_row_group() override;
 
     std::string _file_location;
     std::string _partition_location;
     std::atomic<bool> _closed = false;
+
+    mutable std::shared_mutex _io_status_mutex;
+    Status _io_status;
 
     PriorityThreadPool* _executor_pool;
 

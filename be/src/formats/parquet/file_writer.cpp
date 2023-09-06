@@ -432,7 +432,12 @@ Status AsyncFileWriter::_flush_row_group() {
     bool ok = _executor_pool->try_offer([&]() {
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
-            _chunk_writer->close();
+            try {
+                _chunk_writer->close();
+            } catch (const ::parquet::ParquetStatusException& e) {
+                LOG(WARNING) << "flush row group error: " << e.what();
+                set_io_status(Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what())));
+            }
             _chunk_writer = nullptr;
         }
         {
@@ -464,25 +469,37 @@ Status AsyncFileWriter::close(RuntimeState* state,
             auto lock = std::unique_lock(_m);
             _cv.wait(lock, [&] { return !_rg_writer_closing; });
         }
-        _writer->Close();
+
+        DeferOp defer([&]() {
+            // set closed to true anyway
+            _closed.store(true);
+        });
+
+        try {
+            _writer->Close();
+        } catch (const ::parquet::ParquetStatusException& e) {
+            LOG(WARNING) << "close writer error: " << e.what();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
+        }
         _chunk_writer = nullptr;
+
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {
-            return Status::InternalError("Close outstream failed");
+            LOG(WARNING) << "close output stream error: " << st.message();
+            set_io_status(Status::IOError(fmt::format("{}: {}", "close output stream error", st.message())));
         }
 
         if (cb != nullptr) {
             cb(this, state);
         }
-        _closed.store(true);
-        return Status::OK();
     });
 
-    if (ret) {
-        return Status::OK();
+    if (!ret) {
+        return Status::InternalError("Submit close file task error");
     }
-    return Status::InternalError("Submit close file error");
+
+    return Status::OK();
 }
 
 } // namespace starrocks::parquet

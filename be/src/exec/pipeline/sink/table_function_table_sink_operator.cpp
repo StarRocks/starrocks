@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "exec/parquet_builder.h"
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
 
@@ -85,6 +84,12 @@ bool TableFunctionTableSinkOperator::is_finished() const {
         if (!writer.second->closed()) {
             return false;
         }
+
+        auto st = writer.second->get_io_status();
+        if (!st.ok()) {
+            LOG(WARNING) << "cancel fragment: " << st.message();
+            _fragment_ctx->cancel(st);
+        }
     }
 
     return true;
@@ -119,7 +124,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
             auto writer = std::make_unique<RollingAsyncParquetWriter>(
-                    _make_table_info(_path), _output_exprs, _common_metrics.get(), nullptr, state, _driver_sequence);
+                    _make_table_info(_path), _output_exprs, _common_metrics.get(), add_commit_info, state, _driver_sequence);
             _partition_writers.insert({"default writer", std::move(writer)});
         }
         return _partition_writers["default writer"]->append_chunk(chunk.get(), state);
@@ -138,7 +143,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     if (partition_writer == _partition_writers.end()) {
         auto writer =
                 std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
-                                                            _common_metrics.get(), nullptr, state, _driver_sequence);
+                                                            _common_metrics.get(), add_commit_info, state, _driver_sequence);
         _partition_writers.insert({partition_location, std::move(writer)});
     }
 
@@ -161,7 +166,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
         const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
         const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
         const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
-        bool write_single_file, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
+        bool write_single_file, const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink",
                           Operator::s_pseudo_plan_node_id_for_final_sink),
           _path(path),

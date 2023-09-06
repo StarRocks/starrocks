@@ -61,6 +61,16 @@ public:
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
+    void set_io_status(const Status& status) {
+        if (_io_status.ok()) {
+            _io_status = status;
+        }
+    }
+
+    Status get_io_status() const {
+        return _io_status;
+    }
+
 private:
     std::string _new_file_location();
 
@@ -76,6 +86,7 @@ private:
     TableInfo _table_info;
     int32_t _file_cnt = 0;
     std::string _outfile_location;
+    Status _io_status;
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
     int64_t _max_file_size;
     std::vector<ExprContext*> _output_expr_ctxs;

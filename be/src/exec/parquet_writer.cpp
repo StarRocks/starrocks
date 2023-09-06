@@ -78,6 +78,8 @@ Status RollingAsyncParquetWriter::_new_file_writer() {
 }
 
 Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
+    RETURN_IF_ERROR(get_io_status());
+
     if (_writer == nullptr) {
         auto status = _new_file_writer();
         if (!status.ok()) {
@@ -118,16 +120,23 @@ Status RollingAsyncParquetWriter::close(RuntimeState* state) {
 
 bool RollingAsyncParquetWriter::closed() {
     for (auto& writer : _pending_commits) {
-        if (writer != nullptr && writer->closed()) {
-            writer = nullptr;
-        }
-        if (writer != nullptr && (!writer->closed())) {
+        if (!writer->closed()) {
             return false;
+        }
+
+        auto st = writer->get_io_status();
+        if (!st.ok()) {
+            set_io_status(st);
         }
     }
 
     if (_writer != nullptr) {
         return _writer->closed();
+    }
+
+    auto st = _writer->get_io_status();
+    if (!st.ok()) {
+        set_io_status(st);
     }
 
     return true;
