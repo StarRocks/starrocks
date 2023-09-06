@@ -1595,6 +1595,10 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "2 <-> length[('2471.34'); args: VARCHAR; result: INT;");
         sql = "select length(col) from (select cast('12.3567' as decimalV2(9,1)) * 200 as col) t";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "3 <-> length[(cast(2471.34000 as VARCHAR)); args: VARCHAR; result: INT;");
+        assertContains(plan, "3 <-> length[(cast(2471.34 as VARCHAR)); args: VARCHAR; result: INT;");
+
+        sql = "select length(col) from (select cast('12.3567' as decimal(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[(cast(2480.0 as VARCHAR)); args: VARCHAR; result: INT;");
     }
 }
