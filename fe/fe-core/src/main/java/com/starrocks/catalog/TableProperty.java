@@ -273,6 +273,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
+        buildConstraint();
         return this;
     }
 
@@ -486,15 +487,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
 
     public TableProperty buildConstraint() {
-        try {
-            uniqueConstraints = UniqueConstraint.parse(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (AnalysisException e) {
-            LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                uniqueConstraints = UniqueConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
+            }
         }
 
-        foreignKeyConstraints = ForeignKeyConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                foreignKeyConstraints = ForeignKeyConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse foreign key constraints, ignore this foreign key constraints", e);
+            }
+        }
         return this;
     }
 
