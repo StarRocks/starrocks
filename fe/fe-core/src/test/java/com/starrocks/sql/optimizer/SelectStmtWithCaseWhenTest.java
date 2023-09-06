@@ -712,7 +712,6 @@ class SelectStmtWithCaseWhenTest {
                         "0:OlapScanNode\n" +
                         "     table: t0, rollup: t0\n" +
                         "     preAggregation: on"},
-
                 {"select * from test.t0 where nullif(1, ship_code) is NOT NULL", "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
                 {"select * from test.t0 where (nullif(1, ship_code) is NOT NULL) is NULL",
                         "(5: ship_code != 1) OR (5: ship_code IS NULL)"},
