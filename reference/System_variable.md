@@ -492,6 +492,12 @@ SELECT /*+ SET_VAR
 
   生成 Bloomfilter 类型的 Local RF 的 Hash Table 的行数阈值。超过该阈值, 则不产生 Local RF。该变量避免产生过大 Local RF。取值为整数，表示行数。默认值：1024000。
 
+* runtime_profile_report_interval
+
+  报告 Runtime Profile 的时间间隔。此变量从 v3.1.0 开始支持。
+
+  单位：秒，默认值：`10`。
+
 * spill_mode (3.0 及以后)
 
   中间结果落盘的执行方式。默认值：`auto`。有效值包括：
