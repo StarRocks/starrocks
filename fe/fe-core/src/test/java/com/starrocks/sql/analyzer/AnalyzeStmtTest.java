@@ -147,7 +147,7 @@ public class AnalyzeStmtTest {
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
+        Assert.assertEquals("[-1, default_catalog, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
                 ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), nativeAnalyzeJob).toString());
 
         sql = "show analyze job";

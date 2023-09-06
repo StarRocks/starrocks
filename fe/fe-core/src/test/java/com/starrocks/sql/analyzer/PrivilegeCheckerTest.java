@@ -678,7 +678,7 @@ public class PrivilegeCheckerTest {
         System.out.println(showResult);
         // can show result for analyze job on table that user has any privilege on
         Assert.assertNotNull(showResult);
-        Assert.assertEquals("tbl1", showResult.get(2));
+        Assert.assertEquals("tbl1", showResult.get(3));
 
         nativeAnalyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
