@@ -636,6 +636,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 100" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(false);
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
@@ -652,6 +653,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 99" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(true);
         String plan3 = getFragmentPlan(query3);
         PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +

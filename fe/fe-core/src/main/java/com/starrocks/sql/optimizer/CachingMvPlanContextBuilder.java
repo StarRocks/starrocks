@@ -17,26 +17,19 @@ package com.starrocks.sql.optimizer;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class CachingMvPlanContextBuilder {
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private final Executor mvPlanCacheExecutor = Executors.newFixedThreadPool(10,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-refresher-%d").build());
-
     private Cache<MvId, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
-            .expireAfterWrite(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(1000)
-            .executor(mvPlanCacheExecutor)
+            .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.mv_plan_cache_max_size)
             .build();
 
     private CachingMvPlanContextBuilder() {
