@@ -34,6 +34,8 @@
 
 package com.starrocks.plugin;
 
+import com.starrocks.server.WarehouseManager;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -125,6 +127,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "Warehouse")
+    public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     public static class AuditEventBuilder {
 
@@ -222,6 +226,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setSpilledBytes(long spilledBytes) {
             auditEvent.spilledBytes = spilledBytes;
+            return this;
+        }
+
+        public AuditEventBuilder setWarehouse(String warehouse) {
+            auditEvent.warehouse = warehouse;
             return this;
         }
 

@@ -34,6 +34,8 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.server.WarehouseManager;
+
 import java.io.Serializable;
 
 public class QueryDetail implements Serializable {
@@ -77,6 +79,7 @@ public class QueryDetail implements Serializable {
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
     private long spillBytes = -1;
+    private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
     public QueryDetail() {
     }
@@ -106,6 +109,15 @@ public class QueryDetail implements Serializable {
         this.user = user;
     }
 
+    public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
+                        long startTime, long endTime, long latency, QueryMemState state,
+                        String database, String sql, String user, String resourceGroupName,
+                        String warehouse) {
+        this(queryId, isQuery, connId, remoteIP, startTime, endTime, latency,
+                state, database, sql, user, resourceGroupName);
+        this.warehouse = warehouse;
+    }
+
     public QueryDetail copy() {
         QueryDetail queryDetail = new QueryDetail();
         queryDetail.eventTime = this.eventTime;
@@ -129,6 +141,7 @@ public class QueryDetail implements Serializable {
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
+        queryDetail.warehouse = this.warehouse;
         return queryDetail;
     }
 
@@ -294,5 +307,9 @@ public class QueryDetail implements Serializable {
 
     public void setSpillBytes(long spillBytes) {
         this.spillBytes = spillBytes;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
     }
 }
