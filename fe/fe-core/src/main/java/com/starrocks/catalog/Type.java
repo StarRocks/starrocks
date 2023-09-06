@@ -42,6 +42,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -1305,6 +1307,31 @@ public abstract class Type implements Cloneable {
             }
         }
         return new Pair<Type, Integer>(type, tmpNodeIdx);
+    }
+
+    public static Type fromProtobuf(PTypeDesc pTypeDesc) {
+        TTypeNodeType tTypeNodeType = TTypeNodeType.findByValue(pTypeDesc.types.get(0).type);
+        switch (tTypeNodeType) {
+            case SCALAR: {
+                Preconditions.checkState(pTypeDesc.types.size() == 1);
+                PScalarType scalarType = pTypeDesc.types.get(0).scalarType;
+                return ScalarType.createType(scalarType);
+            }
+            case ARRAY: {
+                Preconditions.checkState(pTypeDesc.types.size() == 2);
+                ScalarType childType = ScalarType.createType(pTypeDesc.types.get(1).scalarType);
+                return new ArrayType(childType);
+            }
+            case MAP: {
+                Preconditions.checkState(pTypeDesc.types.size() == 3);
+                ScalarType keyType = ScalarType.createType(pTypeDesc.types.get(1).scalarType);
+                ScalarType valueType = ScalarType.createType(pTypeDesc.types.get(2).scalarType);
+                return new MapType(keyType, valueType);
+            }
+            default: {
+                return null;
+            }
+        }
     }
 
     /**
