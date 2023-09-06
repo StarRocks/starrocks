@@ -370,6 +370,7 @@ public:
         size_t origin_next_row = _opts.context->next_row;
         size_t origin_rows_to_skip = _opts.context->rows_to_skip;
 
+<<<<<<< HEAD
         // Fill data for non-nullptr subfield column reader
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
@@ -385,12 +386,114 @@ public:
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
                 child_column->append_default(*num_records);
+=======
+        // Fill data for subfield column reader
+        bool first_read = true;
+        size_t real_read = 0;
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
+                if (_child_readers[field_name] != nullptr) {
+                    Column* child_column = struct_column->field_column(field_name).get();
+                    _opts.context->next_row = origin_next_row;
+                    _opts.context->rows_to_skip = origin_rows_to_skip;
+                    RETURN_IF_ERROR(_child_readers[field_name]->prepare_batch(num_records, child_column));
+                    size_t current_real_read = child_column->size();
+                    real_read = first_read ? current_real_read : real_read;
+                    first_read = false;
+                    if (UNLIKELY(real_read != current_real_read)) {
+                        return Status::InternalError(strings::Substitute("Unmatched row count, $0", field_name));
+                    }
+                }
+            } else {
+                return Status::InternalError(
+                        strings::Substitute("there is no match subfield reader for $1", field_name));
+>>>>>>> 72092c75b0 ([BugFix] when struct in array append_default real struct row for noexist subfield (#30263))
+            }
+        }
+
+        if (UNLIKELY(first_read)) {
+            return Status::InternalError(
+                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
+        }
+
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (_child_readers[field_name] == nullptr) {
+                Column* child_column = struct_column->field_column(field_name).get();
+                child_column->append_default(real_read);
             }
         }
 
         if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
+<<<<<<< HEAD
             size_t row_nums = fields_column[0]->size();
+=======
+            size_t row_nums = struct_column->fields_column()[0]->size();
+            NullColumn null_column(row_nums, 0);
+            auto& is_nulls = null_column.get_data();
+            bool has_null = false;
+            _handle_null_rows(is_nulls.data(), &has_null, row_nums);
+
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        }
+        return Status::OK();
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        StructColumn* struct_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_struct());
+            DCHECK(!_field->is_nullable);
+            struct_column = down_cast<StructColumn*>(dst);
+        }
+
+        const auto& field_names = struct_column->field_names();
+
+        DCHECK_EQ(field_names.size(), _child_readers.size());
+
+        // Fill data for subfield column reader
+        size_t real_read = 0;
+        bool first_read = true;
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
+                if (_child_readers[field_name] != nullptr) {
+                    Column* child_column = struct_column->field_column(field_name).get();
+                    RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
+                    real_read = child_column->size();
+                    first_read = false;
+                }
+            } else {
+                return Status::InternalError(
+                        strings::Substitute("there is no match subfield reader for $1", field_name));
+            }
+        }
+
+        if (UNLIKELY(first_read)) {
+            return Status::InternalError(
+                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
+        }
+
+        for (size_t i = 0; i < field_names.size(); i++) {
+            const auto& field_name = field_names[i];
+            if (_child_readers[field_name] == nullptr) {
+                Column* child_column = struct_column->field_column(field_name).get();
+                child_column->append_default(real_read);
+            }
+        }
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            size_t row_nums = struct_column->fields_column()[0]->size();
+>>>>>>> 72092c75b0 ([BugFix] when struct in array append_default real struct row for noexist subfield (#30263))
             NullColumn null_column(row_nums, 0);
             auto& is_nulls = null_column.get_data();
             bool has_null = false;
