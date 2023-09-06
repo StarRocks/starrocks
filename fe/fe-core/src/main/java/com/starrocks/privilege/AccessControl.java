@@ -22,116 +22,146 @@ import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 
+import java.util.List;
 import java.util.Set;
 
 public interface AccessControl {
-    default void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.SYSTEM, null);
+    default void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                 PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
-                                    PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.CATALOG, catalogName);
+                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.CATALOG, catalogName);
+    default void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
-                               PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.DATABASE, catalogName);
+                               PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.DATABASE, catalogName);
+    default void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.TABLE, tableName.getTbl());
+    default void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.TABLE, tableName.getTbl());
+    default void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.TABLE, "ANY");
+    default void checkAnyActionOnAnyTable(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.VIEW, tableName.getTbl());
+    default void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.VIEW, tableName.getTbl());
+    default void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.VIEW, "ANY");
+    default void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                             PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.MATERIALIZED_VIEW, tableName.getTbl());
+                                             PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.MATERIALIZED_VIEW, tableName.getTbl());
+    default void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.MATERIALIZED_VIEW, "ANY");
+    default void checkAnyActionOnAnyMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database, Function function,
-                                     PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.FUNCTION, function.getSignature());
+                                     PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.FUNCTION, function.getSignature());
+    default void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String database) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.FUNCTION, "ANY");
+    default void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String database)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkGlobalFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Function function,
-                                           PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.GLOBAL_FUNCTION, function.getSignature());
+                                           PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.GLOBAL_FUNCTION, function.getSignature());
+    default void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     /**
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
-    default void checkActionInDb(UserIdentity userIdentity, Set<Long> roleIds, String db, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.DATABASE, db);
+    default void checkActionInDb(UserIdentity currentUser, Set<Long> roleIds, String db, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.RESOURCE, name);
+    default void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.RESOURCE, name);
+    default void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.RESOURCE_GROUP, name);
+    default void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
-                                          PrivilegeType privilegeType) {
-        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.STORAGE_VOLUME, storageVolume);
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume) {
-        AccessDeniedException.reportAccessDenied("ANY", ObjectType.STORAGE_VOLUME, storageVolume);
+    default void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void withGrantOption(UserIdentity currentUser, Set<Long> roleIds,
+                                 ObjectType type, List<PrivilegeType> wants, List<PEntryObject> objects)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
     }
 
     default Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {

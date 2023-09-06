@@ -48,6 +48,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
@@ -75,7 +76,7 @@ public class ShowProcAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);

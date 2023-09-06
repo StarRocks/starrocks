@@ -112,7 +112,11 @@ public enum ErrorCode {
             "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
 
     ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation"),
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
+                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
+                    "Current role(s): %s. Inactivated role(s): %s."),
+    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(1253, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),

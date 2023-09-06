@@ -3575,7 +3575,7 @@ public class GlobalStateMgr {
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
@@ -3606,7 +3606,7 @@ public class GlobalStateMgr {
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    Authorizer.checkAnyActionOnOrInCatalog(ctx.getCurrentUserIdentity(),
+                    Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");

@@ -41,6 +41,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.load.Load;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -60,7 +61,7 @@ public class GetLoadInfoAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
         Load.JobInfo info = new Load.JobInfo(request.getSingleParameter(DB_KEY),
                 request.getSingleParameter(LABEL_KEY));
         if (Strings.isNullOrEmpty(info.dbName)) {
@@ -79,7 +80,9 @@ public class GetLoadInfoAction extends RestBaseAction {
                     ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
-                checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(
+                        ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                        info.dbName, tblName, PrivilegeType.INSERT);
             }
         }
         globalStateMgr.getLoadMgr().getLoadJobInfo(info);

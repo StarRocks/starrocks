@@ -45,9 +45,11 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -75,7 +77,7 @@ public class TableRowCountAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response)
-            throws DdlException {
+            throws DdlException, AccessDeniedException {
         // just allocate 2 slot for top holder map
         Map<String, Object> resultMap = new HashMap<>(4);
         String dbName = request.getSingleParameter(DB_KEY);
@@ -86,7 +88,8 @@ public class TableRowCountAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
             }
             // check privilege for select, otherwise return HTTP 401
-            checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
+            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                    dbName, tableName, PrivilegeType.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,

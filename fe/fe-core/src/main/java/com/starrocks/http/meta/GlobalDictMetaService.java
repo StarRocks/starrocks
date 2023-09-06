@@ -23,6 +23,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.RestBaseResult;
+import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -52,7 +53,7 @@ public class GlobalDictMetaService {
 
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
-                throws DdlException {
+                throws DdlException, AccessDeniedException {
             if (redirectToLeader(request, response)) {
                 return;
             }

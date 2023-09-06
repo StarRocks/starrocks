@@ -22,6 +22,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -38,7 +39,7 @@ public class StopFeAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
 
         response.setContentType("application/json");
         RestResult result = new RestResult();

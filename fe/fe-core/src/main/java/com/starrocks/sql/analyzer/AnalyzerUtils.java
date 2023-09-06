@@ -66,6 +66,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -190,8 +192,15 @@ public class AnalyzerUtils {
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn != null) {
-                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        db, fn, PrivilegeType.USAGE);
+                try {
+                    Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, fn,
+                            PrivilegeType.USAGE);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                }
             }
 
             return fn;
@@ -205,8 +214,15 @@ public class AnalyzerUtils {
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
-            Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    fn, PrivilegeType.USAGE);
+            try {
+                Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        fn, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectType.GLOBAL_FUNCTION.name(), fn.getSignature());
+            }
         }
 
         return fn;
@@ -1216,7 +1232,7 @@ public class AnalyzerUtils {
     }
 
     private static void checkPartitionColumnTypeValid(FunctionCallExpr expr, List<ColumnDef> columnDefs,
-                                               NodePosition pos, String partitionColumnName, String fmt) {
+                                                      NodePosition pos, String partitionColumnName, String fmt) {
         // For materialized views currently columnDefs == null
         if (columnDefs != null && "hour".equalsIgnoreCase(fmt)) {
             ColumnDef partitionDef = findPartitionDefByName(columnDefs, partitionColumnName);

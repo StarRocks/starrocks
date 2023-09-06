@@ -158,6 +158,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -3275,8 +3277,16 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
+            try {
+                Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        stmt.getDbMvName().getCatalog(),
+                        ConnectContext.get().getCurrentUserIdentity(),
+                        ConnectContext.get().getCurrentRoleIds(), PrivilegeType.DROP.name(), ObjectType.MATERIALIZED_VIEW.name(),
+                        stmt.getDbMvName().getTbl());
+            }
 
             MaterializedView view = (MaterializedView) table;
             MaterializedViewMgr.getInstance().stopMaintainMV(view);
