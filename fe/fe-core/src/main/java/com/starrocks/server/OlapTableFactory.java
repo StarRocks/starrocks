@@ -318,6 +318,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             table.setEnablePersistentIndex(enablePersistentIndex);
 
+            try {
+                table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties, 
+                        PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, 0));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+
             if (properties != null && (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL))) {

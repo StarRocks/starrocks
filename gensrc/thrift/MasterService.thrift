@@ -63,6 +63,7 @@ struct TTabletInfo {
     18: optional bool is_error_state
     19: optional Types.TVersion max_readable_version
     20: optional i64 max_rowset_creation_time
+    21: optional i32 primary_index_cache_expire_sec
 }
 
 struct TTabletVersionPair {

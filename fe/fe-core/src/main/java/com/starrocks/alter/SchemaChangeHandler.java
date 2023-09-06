@@ -1591,6 +1591,12 @@ public class SchemaChangeHandler extends AlterHandler {
             if (bucketSize == olapTable.getAutomaticBucketSize()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
+            int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
+                    PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
+            if (primaryIndexCacheExpireSec == olapTable.primaryIndexCacheExpireSec()) {
+                return;
+            }
         } else {
             LOG.warn("meta type: {} does not support", metaType);
             return;

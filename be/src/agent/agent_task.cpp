@@ -692,6 +692,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
 
     LOG(INFO) << "get update tablet meta task, signature:" << agent_task_req->signature;
 
+    auto update_manager = StorageEngine::instance()->update_manager();
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
 
@@ -743,8 +744,20 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                 // because the primary index is available in cache
                 // But it will be remove from index cache after apply is finished
-                auto manager = StorageEngine::instance()->update_manager();
-                manager->index_cache().try_remove_by_key(tablet->tablet_id());
+                update_manager->index_cache().try_remove_by_key(tablet->tablet_id());
+                break;
+            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " primary_index_cache_expire_sec:" << tablet_meta_info.primary_index_cache_expire_sec;
+                tablet->tablet_meta()->set_primary_index_cache_expire_sec(
+                        tablet_meta_info.primary_index_cache_expire_sec);
+                // update index's expire right now, if pk index is alive
+                auto index_entry = update_manager->index_cache().get(tablet->tablet_id());
+                if (index_entry != nullptr) {
+                    index_entry->update_expire_time(MonotonicMillis() +
+                                                    update_manager->get_index_cache_expire_ms(*tablet));
+                    update_manager->index_cache().release(index_entry);
+                }
                 break;
             }
         }

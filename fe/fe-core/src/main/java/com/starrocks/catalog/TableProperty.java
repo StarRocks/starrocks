@@ -151,6 +151,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // and it's null in SHARED NOTHGING
     TPersistentIndexType persistendIndexType;
 
+    private int primaryIndexCacheExpireSec = 0;
+
     /*
      * the default storage volume of this table.
      * DEFAULT: depends on FE's config 'run_mode'
@@ -244,6 +246,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
+                break;
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                buildPrimaryIndexCacheExpireSec();
                 break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
@@ -479,6 +484,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildPrimaryIndexCacheExpireSec() {
+        primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
+        return this;
+    }
+
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
@@ -617,6 +628,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        return primaryIndexCacheExpireSec;
+    }
+
     public String getPersistentIndexTypeString() {
         return persistentIndexTypeToString(persistendIndexType);
     }
@@ -739,6 +754,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+        buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();

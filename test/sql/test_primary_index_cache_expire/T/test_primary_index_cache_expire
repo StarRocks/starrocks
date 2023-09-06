@@ -1,0 +1,60 @@
+-- name: test_primary_index_cache_expire
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1",
+    "primary_index_cache_expire_sec" = "3600"
+);
+
+show create table tab1;
+insert into tab1 values(100, "100", 100, 100, 100), (200, "200", 200, 200, 200), (300, "300", 300, 300, 300);
+select * from tab1 where v2 = 200;
+
+alter table tab1 set ("primary_index_cache_expire_sec" = "0");
+show create table tab1;
+alter table tab1 set ("primary_index_cache_expire_sec" = "7200");
+show create table tab1;
+
+select * from tab1 where v2 = 200;
+
+alter table tab1 set ("primary_index_cache_expire_sec" = "add");
+alter table tab1 set ("primary_index_cache_expire_sec" = "-1");
+alter table tab1 set ("primary_index_cache_expire_sec" = "-3600");
+CREATE table tab2 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1",
+    "primary_index_cache_expire_sec" = "-100"
+);
+
+CREATE table tab3 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1",
+    "primary_index_cache_expire_sec" = "asd"
+);

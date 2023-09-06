@@ -78,7 +78,10 @@ public class ReportHandlerTest {
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
                         "duplicate key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');");
+                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
+                .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                        "'primary_index_cache_expire_sec' = '3600');");
     }
 
     @Test
@@ -103,6 +106,31 @@ public class ReportHandlerTest {
 
         ReportHandler handler = new ReportHandler();
         handler.testHandleSetTabletEnablePersistentIndex(backendId, backendTablets);
+    }
+
+    @Test
+    public void testHandleSetPrimaryIndexCacheExpireSec() {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
+        long backendId = 10001L;
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        Assert.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
+        List<TTabletInfo> tabletInfos = Lists.newArrayList();
+        TTablet tablet = new TTablet(tabletInfos);
+        for (Long tabletId : tabletIds) {
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setTablet_id(tabletId);
+            tabletInfo.setSchema_hash(60000);
+            tabletInfo.setPrimary_index_cache_expire_sec(7200);
+            tablet.tablet_infos.add(tabletInfo);
+        }
+        backendTablets.put(backendId, tablet);
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
     }
 
     @Test

@@ -1354,7 +1354,7 @@ void build_persistent_index_from_tablet(size_t N) {
 
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(*tablet));
     auto& primary_index = index_entry->value();
     st = primary_index.load(tablet.get());
     if (!st.ok()) {
