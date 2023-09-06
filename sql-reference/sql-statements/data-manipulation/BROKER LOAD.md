@@ -169,9 +169,9 @@ INTO TABLE <table_name>
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab = "/keytab/hive.keytab",
-    "kerberos_keytab_content = "YWFhYWFh"
+    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab" = "/keytab/hive.keytab",
+    "kerberos_keytab_content" = "YWFhYWFh"
     ```
 
     上述配置中的参数说明如下表所述。
