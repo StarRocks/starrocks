@@ -1,0 +1,19 @@
+-- name: testParquetStructInArray
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_struct_in_array/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/formats/parquet/test_data/array_struct.parquet oss://${oss_bucket}/test_parquet_struct_in_array/${uuid0}/test_parquet_struct_in_array.parquet | grep -Pv "(average|elapsed)"
+
+CREATE EXTERNAL TABLE struct_in_array (
+c0 int,
+c_array array<struct<c1 string, c2 string>>
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_parquet_struct_in_array/${uuid0}/test_parquet_struct_in_array.parquet",
+    "format" = "parquet"
+);
+
+select * from struct_in_array where c0 > 4094 and c0 < 4098;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_struct_in_array/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
