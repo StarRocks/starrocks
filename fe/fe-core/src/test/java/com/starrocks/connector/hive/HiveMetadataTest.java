@@ -54,7 +54,12 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+=======
+import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
+>>>>>>> 2f6306c7cf ([Enhancement] Support ignoring invalid directories when list hive directory recursively. (#30363))
 
 public class HiveMetadataTest {
     private HiveMetaClient client;
@@ -88,7 +93,7 @@ public class HiveMetadataTest {
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
