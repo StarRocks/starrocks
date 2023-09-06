@@ -15,7 +15,6 @@
 package com.starrocks.credential.hdfs;
 
 import autovalue.shaded.com.google.common.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
 
@@ -25,14 +24,12 @@ import java.util.Map;
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_RUNTIME_JARS;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
@@ -72,18 +69,10 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
                 getOrDefault(properties, HADOOP_KERBEROS_KEYTAB_CONTENT, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
                 prop
         );
-        String configResources = getOrDefault(properties, HDFS_CONFIG_RESOURCES);
-        String runtimeJars = getOrDefault(prop, HDFS_RUNTIME_JARS);
-        boolean useHDFS = false;
-        if (!Strings.isNullOrEmpty(configResources) || !Strings.isNullOrEmpty(runtimeJars)) {
-            useHDFS = true;
-        }
-        if (!useHDFS && !hdfsCloudCredential.validate()) {
+        if (!hdfsCloudCredential.validate()) {
             return null;
         }
         HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
-        conf.setConfigResources(configResources);
-        conf.setRuntimeJars(runtimeJars);
         return conf;
     }
 }
