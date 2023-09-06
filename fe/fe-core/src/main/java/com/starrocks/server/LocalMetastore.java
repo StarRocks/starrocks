@@ -788,6 +788,22 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
         }
 
+        // perform the existence check which is cheap before any further heavy operations.
+        // NOTE: don't even check the quota if already exists.
+        db.readLock();
+        try {
+            String tableName = stmt.getTableName();
+            if (db.getTable(tableName) != null) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+                LOG.info("create table[{}] which already exists", tableName);
+                return false;
+            }
+        } finally {
+            db.readUnlock();
+        }
+
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity

@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -191,5 +192,30 @@ public class LocalMetaStoreTest {
         } finally {
             db.writeUnlock();
         }
+    }
+
+    @Test
+    public void testCreateTableIfNotExists() throws Exception {
+        // create table if not exists, if the table already exists, do nothing
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("t1");
+        Assert.assertTrue(table instanceof OlapTable);
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
+                // don't expect any invoke to this method
+                minTimes = 0;
+                maxTimes = 0;
+                result = null;
+            }
+        };
+
+        starRocksAssert = new StarRocksAssert(connectContext);
+        // with IF NOT EXIST
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
+                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 }
