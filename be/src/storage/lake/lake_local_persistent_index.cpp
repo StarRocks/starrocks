@@ -207,14 +207,12 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
 
     size_t total_data_size = 0;
     size_t total_segments = 0;
-    size_t total_rows = 0;
 
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
     for (auto& rowset : *rowsets) {
         total_data_size += rowset->data_size();
         total_segments += rowset->num_segments();
-        total_rows += rowset->num_rows();
 
         auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
         if (!res.ok()) {
