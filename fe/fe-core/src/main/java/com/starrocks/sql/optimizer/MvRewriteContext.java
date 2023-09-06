@@ -36,6 +36,7 @@ public class MvRewriteContext {
     private final OptExpression queryExpression;
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
     private final PredicateSplit queryPredicateSplit;
+    private final PredicateSplit queryRedundantPredicateSplit;
 
     // mv's partition and distribution related conjunct predicate,
     // used to prune partitions and buckets of scan mv operator after rewrite
@@ -53,12 +54,14 @@ public class MvRewriteContext {
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
+            PredicateSplit queryRedundantPredicateSplit,
             List<ScalarOperator> onPredicates, Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.queryPredicateSplit = queryPredicateSplit;
+        this.queryRedundantPredicateSplit = queryRedundantPredicateSplit;
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
@@ -82,6 +85,10 @@ public class MvRewriteContext {
 
     public PredicateSplit getQueryPredicateSplit() {
         return queryPredicateSplit;
+    }
+
+    public ScalarOperator getAllRangePredicate() {
+        return Utils.compoundAnd(queryRedundantPredicateSplit.getRangePredicates(), queryPredicateSplit.getRangePredicates());
     }
 
     public ScalarOperator getMvPruneConjunct() {
@@ -114,5 +121,9 @@ public class MvRewriteContext {
 
     public void setEnforcedColumns(List<ColumnRefOperator> enforcedColumns) {
         this.enforcedColumns = enforcedColumns;
+    }
+
+    public PredicateSplit getQueryRedundantPredicateSplit() {
+        return this.queryRedundantPredicateSplit;
     }
 }

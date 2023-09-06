@@ -125,7 +125,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 rewriteGroupByKeys(rewriteContext, columnRewriter, mvAggOp.getGroupingKeys(), true);
         List<ScalarOperator> queryGroupingKeys =
                 rewriteGroupByKeys(rewriteContext, columnRewriter, queryAggOp.getGroupingKeys(), false);
-        ScalarOperator queryRangePredicate = rewriteContext.getQueryPredicateSplit().getRangePredicates();
+        ScalarOperator queryRangePredicate = rewriteContext.getAllRangePredicate();
         boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
 
         // Cannot ROLLUP distinct

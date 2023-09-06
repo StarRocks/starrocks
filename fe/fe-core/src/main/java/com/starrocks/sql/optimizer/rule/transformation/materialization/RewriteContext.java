@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,6 +30,7 @@ import java.util.Set;
 public class RewriteContext {
     private final OptExpression queryExpression;
     private final PredicateSplit queryPredicateSplit;
+    private final PredicateSplit queryRedundantPredicateSplit;
     private EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns;
@@ -48,6 +50,7 @@ public class RewriteContext {
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
+                          PredicateSplit queryRedundantPredicateSplit,
                           EquivalenceClasses queryEquivalenceClasses,
                           Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns,
                           ColumnRefFactory queryRefFactory,
@@ -61,6 +64,7 @@ public class RewriteContext {
                           Set<ColumnRefOperator> queryColumnSet) {
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
+        this.queryRedundantPredicateSplit = queryRedundantPredicateSplit;
         this.queryEquivalenceClasses = queryEquivalenceClasses;
         this.queryRelationIdToColumns = queryRelationIdToColumns;
         this.queryRefFactory = queryRefFactory;
@@ -88,6 +92,15 @@ public class RewriteContext {
 
     public PredicateSplit getQueryPredicateSplit() {
         return queryPredicateSplit;
+    }
+
+    public PredicateSplit getQueryRedundantPredicateSplit() {
+        return queryRedundantPredicateSplit;
+    }
+
+    public ScalarOperator getAllRangePredicate() {
+        return Utils.compoundAnd(queryPredicateSplit.getRangePredicates(),
+                queryRedundantPredicateSplit.getRangePredicates());
     }
 
     public EquivalenceClasses getQueryEquivalenceClasses() {

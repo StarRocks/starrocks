@@ -382,13 +382,6 @@ public class MvUtils {
         return predicates;
     }
 
-    // get all predicates within and below root
-    public static List<ScalarOperator> getAllPredicates(OptExpression root) {
-        List<ScalarOperator> predicates = Lists.newArrayList();
-        getAllPredicates(root, x -> true, predicates);
-        return predicates;
-    }
-
     // If join is not cross/inner join, MV Rewrite must rewrite, otherwise may cause bad results.
     // eg.
     // mv: select * from customer left outer join orders on c_custkey = o_custkey;
@@ -498,6 +491,12 @@ public class MvUtils {
      */
     private static void getAllValidPredicates(OptExpression root, List<ScalarOperator> predicates) {
         getAllPredicates(root, MvUtils::isValidPredicate, predicates);
+    }
+
+    public static List<ScalarOperator> getAllRedundantPredicates(OptExpression root) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        getAllPredicates(root, MvUtils::isRedundantPredicate, predicates);
+        return predicates;
     }
 
     /**
@@ -822,55 +821,86 @@ public class MvUtils {
         return partitionPredicates;
     }
 
-    public static ScalarOperator compensatePartitionPredicate(OptExpression plan,
-                                                              ColumnRefFactory columnRefFactory,
-                                                              boolean isCompensate) {
+    public static List<ScalarOperator> compensatePartitionPredicate(OptExpression plan,
+                                                                    ColumnRefFactory columnRefFactory) {
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        List<ScalarOperator> prunedPartitionPredicates = compensatePrunedPartitionPredicate(plan);
+        partitionPredicates.addAll(prunedPartitionPredicates);
+
+        List<ScalarOperator> redundantPartitionPredicate =
+                compensateRedundantPartitionPredicate(plan, columnRefFactory);
+        if (redundantPartitionPredicate == null) {
+            return null;
+        }
+        partitionPredicates.addAll(redundantPartitionPredicate);
+        return partitionPredicates;
+    }
+
+    public static List<ScalarOperator> compensatePrunedPartitionPredicate(OptExpression plan) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
         if (scanOperators.isEmpty()) {
-            return ConstantOperator.createBoolean(true);
+            return Lists.newArrayList();
+        }
+
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        for (LogicalScanOperator scanOperator : scanOperators) {
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                // compensated predicates should also take care whether it's a redundant/push down predicate.
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                // it can be null
+                List<ScalarOperator> partitionPredicate = olapScanOperator.getPrunedPartitionPredicates();
+                if (partitionPredicate != null && !partitionPredicate.isEmpty()) {
+                    partitionPredicates.addAll(partitionPredicate);
+                }
+            } else if (scanOperator instanceof LogicalHiveScanOperator) {
+                LogicalHiveScanOperator hiveScanOperator = (LogicalHiveScanOperator) scanOperator;
+                ScanOperatorPredicates scanOperatorPredicates = hiveScanOperator.getScanOperatorPredicates();
+                // keep extra already pruned partition predicates
+                List<ScalarOperator> partitionConjuncts = scanOperatorPredicates.getPartitionConjuncts();
+                List<ScalarOperator> nonPartitionConjuncts = scanOperatorPredicates.getNonPartitionConjuncts();
+                if (partitionConjuncts != null && nonPartitionConjuncts != null) {
+                    List<ScalarOperator> copiedPartitionConjuncts = Lists.newArrayList(partitionConjuncts);
+                    if (copiedPartitionConjuncts.removeAll(nonPartitionConjuncts)) {
+                        partitionPredicates.addAll(copiedPartitionConjuncts);
+                    }
+                }
+            }
+        }
+        return partitionPredicates;
+    }
+
+    // NOTE: all those these predicates are also added because we can use it for non-rewrite purpose:
+    // - use this predicate to check whether it's a rollup or not.
+    // NOTE: all those predicates are redundant because its real predicate can be represented
+    // by other predicates
+    public static List<ScalarOperator> compensateRedundantPartitionPredicate(OptExpression plan,
+                                                                             ColumnRefFactory columnRefFactory) {
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(plan);
+        if (scanOperators.isEmpty()) {
+            return Lists.newArrayList();
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         for (LogicalScanOperator scanOperator : scanOperators) {
             List<ScalarOperator> partitionPredicate = null;
             if (scanOperator instanceof LogicalOlapScanOperator) {
-                if (!isCompensate) {
-                    partitionPredicate = ((LogicalOlapScanOperator) scanOperator).getPrunedPartitionPredicates();
-                } else {
-                    // NOTE: It's not safe to get table's pruned partition predicates by
-                    // `LogicalOlapScanOperator#getPrunedPartitionPredicates` :
-                    //  - partitionPredicate is null if olap scan operator cannot prune partitions.
-                    //  - partitionPredicate is not exact even if olap scan operator has pruned partitions.
-                    // eg:
-                    // t1:
-                    //  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")), has data
-                    //  PARTITION p2 VALUES [("2020-01-01"), ("2020-02-01")), has data
-                    //  PARTITION p3 VALUES [("2020-02-01"), ("2020-03-01")), has data
-                    //  PARTITION p4 VALUES [("2020-03-01"), ("2020-04-01")), no data
-                    //  PARTITION p5 VALUES [("2020-04-01"), ("2020-05-01")), no data
-                    //
-                    // TODO: support partition prune for this later.
-                    // query1 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-11' group by k1;
-                    // `partitionPredicate` : null
-                    //
-                    // query2 : SELECT k1, sum(v1) as sum_v1 FROM t1 where k1>='2020-02-01' group by k1;
-                    // `partitionPredicate` : k1>='2020-02-11'
-                    // however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
-                    partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
-                            columnRefFactory);
-                }
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                partitionPredicate  = compensatePartitionPredicateForOlapScan(olapScanOperator, columnRefFactory);
             } else if (scanOperator instanceof LogicalHiveScanOperator) {
                 partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator);
             } else {
                 continue;
             }
+
             if (partitionPredicate == null) {
                 return null;
             }
             partitionPredicates.addAll(partitionPredicate);
         }
-        return partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) :
-                Utils.compoundAnd(partitionPredicates);
+        if (!partitionPredicates.isEmpty()) {
+            partitionPredicates.stream().forEach(x -> x.setRedundant(true));
+        }
+        return partitionPredicates;
     }
 
     /**

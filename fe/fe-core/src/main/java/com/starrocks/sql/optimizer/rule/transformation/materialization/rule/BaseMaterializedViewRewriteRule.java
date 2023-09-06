@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -38,6 +37,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
@@ -94,38 +94,46 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
 
         // Compensate partition predicates and add them into query predicate.
-        PredicateSplit queryPredicateSplit = null;
-        if (mvCandidateContexts.stream().anyMatch(mvContext -> !mvContext.getMv().getRefreshScheme().isSync())) {
-            queryPredicateSplit = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, true);
+        final List<ScalarOperator> queryPartitionPredicates =
+                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
+        if (queryPartitionPredicates == null) {
+            logMVRewrite(context, this, "Compensate query expression's partition predicates " +
+                    "from pruned partitions failed.");
+            return null;
         }
 
-        // sync mv always has the same partition with
-        PredicateSplit queryPredicateWithoutCompensate = null;
-        if (mvCandidateContexts.stream().anyMatch(mvContext -> mvContext.getMv().getRefreshScheme().isSync())) {
-            queryPredicateWithoutCompensate = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, false);
+        Map<Boolean, List<ScalarOperator>> queryPartitionPredicatesByValid = queryPartitionPredicates.stream()
+                .collect(Collectors.partitioningBy(MvUtils::isValidPredicate));
+
+        // Collect all valid(no push-down or redundant) predicates into query split.
+        ScalarOperator queryPredicate =
+                MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+        if (!queryPartitionPredicates.isEmpty()) {
+            queryPredicate = Utils.compoundAnd(
+                    Utils.compoundAnd(queryPartitionPredicatesByValid.get(true)), queryPredicate);
         }
-        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
-        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+
+        PredicateSplit queryPredicateSplit =  PredicateSplit.splitPredicate(queryPredicate);
+        if (queryPredicateSplit == null) {
+            logMVRewrite(context, this, "Query expression's partition compensate failed");
+            return results;
+        }
+
+        // Collect all redundant predicates into redundant query split to be used later.
+        List<ScalarOperator> redundantPredicates = MvUtils.getAllRedundantPredicates(queryExpression);
+        queryPartitionPredicatesByValid.get(false).stream()
+                .filter(MvUtils::isRedundantPredicate)
+                .forEach(redundantPredicates::add);
+        PredicateSplit queryRedundantPredicateSplit =
+                PredicateSplit.splitPredicate(Utils.compoundAnd(redundantPredicates));
+
+        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression)
+                        .stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            MvRewriteContext mvRewriteContext;
-            if (mvContext.getMv().getRefreshScheme().isSync()) {
-                if (queryPredicateWithoutCompensate == null) {
-                    logMVRewrite(context, this, "Query expression's partition compensate failed from sync mv.");
-                    return results;
-                }
-                mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateWithoutCompensate, onPredicates, this);
-            } else {
-                if (queryPredicateSplit == null) {
-                    logMVRewrite(context, this, "Query expression's partition compensate failed");
-                    return results;
-                }
-                mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
-            }
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, queryRedundantPredicateSplit, onPredicates, this);
+
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
@@ -144,34 +152,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
 
         return results;
-    }
-
-    /**
-     * Return the query predicate split with/without compensate :
-     * - with compensate    : deducing from the selected partition ids.
-     * - without compensate : only get the partition predicate from pruned partitions of scan operator
-     * eg: for sync mv without partition columns, we always no need compensate partition predicates because
-     * mv and the base table are always synced.
-     */
-    private PredicateSplit getQuerySplitPredicate(OptimizerContext context,
-                                                  OptExpression queryExpression,
-                                                  ColumnRefFactory queryColumnRefFactory,
-                                                  ReplaceColumnRefRewriter queryColumnRefRewriter,
-                                                  boolean isCompensate) {
-        // sync mv always has the same partition with
-        // Compensate partition predicates and add them into query predicate.
-        final ScalarOperator queryPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory, isCompensate);
-        if (queryPartitionPredicate == null) {
-            logMVRewrite(context, this, "Compensate query expression's partition predicates " +
-                    "from pruned partitions failed.");
-            return null;
-        }
-        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
-        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
-        }
-        return PredicateSplit.splitPredicate(queryPredicate);
     }
 
     /**

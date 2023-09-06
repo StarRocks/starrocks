@@ -262,8 +262,7 @@ public class MaterializedViewRewriter {
         }
 
         // try to deduce from join's on predicates or other predicates.
-        List<ScalarOperator> queryPredicates =
-                Utils.extractConjuncts(mvRewriteContext.getQueryPredicateSplit().getRangePredicates());
+        List<ScalarOperator> queryPredicates = Utils.extractConjuncts(mvRewriteContext.getAllRangePredicate());
         if (!checkJoinOnPredicateFromPredicates(queryPredicates, diffPredicates)) {
             logMVRewrite(mvRewriteContext, "join predicate is different after compensate {}(query) != (mv){}, " +
                             "diff: {}", queryJoinOnPredicate, mvJoinOnPredicate,
@@ -645,18 +644,6 @@ public class MaterializedViewRewriter {
 
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
-        if (materializationContext.getMvPartialPartitionPredicate() != null) {
-            List<ScalarOperator> partitionPredicates =
-                    getPartitionRelatedPredicates(mvPredicate, mvRewriteContext.getMaterializationContext().getMv());
-            if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
-                    && !((IsNullPredicateOperator) p).isNotNull())) {
-                // there is no partition column is null predicate
-                // add latest partition predicate to mv predicate
-                ScalarOperator rewritten =
-                        mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
-                mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, rewritten));
-            }
-        }
         final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
         if (matchMode == MatchMode.VIEW_DELTA) {
@@ -784,7 +771,7 @@ public class MaterializedViewRewriter {
         deduceEquivalenceClassesFromRangePredicates(rangePredicates, queryEc, true);
 
         final RewriteContext rewriteContext = new RewriteContext(
-                queryExpression, queryPredicateSplit, queryEc,
+                queryExpression, queryPredicateSplit, mvRewriteContext.getQueryRedundantPredicateSplit(), queryEc,
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,

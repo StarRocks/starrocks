@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -26,12 +28,21 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Set;
+
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
+                return Sets.newHashSet();
+            }
+        };
 
         new MockUp<UtFrameUtils>() {
             @Mock
@@ -113,6 +124,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                         null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testMVOnMV2() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("test_mv2"));
     }
 
     @Test
