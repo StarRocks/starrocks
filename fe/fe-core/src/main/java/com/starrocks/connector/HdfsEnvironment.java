@@ -29,6 +29,7 @@ public class HdfsEnvironment {
      */
     public HdfsEnvironment() {
         hdfsConfiguration = new Configuration();
+        cloudConfiguration = CloudConfigurationFactory.buildDefaultCloudConfiguration();
     }
 
     public HdfsEnvironment(Map<String, String> properties) {
