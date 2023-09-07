@@ -266,7 +266,7 @@ public class ResourceGroupClassifier implements Writable {
      * than max.
      */
     public static class CostRange {
-        private static final String STR_RANGE_REGEX = "\\s*\\[\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*";
+        private static final String STR_RANGE_REGEX = "^\\s*\\[\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*$";
         private static final Pattern STR_RANGE_PATTERN = Pattern.compile(STR_RANGE_REGEX, Pattern.CASE_INSENSITIVE);
 
         public static final String FORMAT_STR_RANGE_MESSAGE = "the format must be '[min, max)' " +

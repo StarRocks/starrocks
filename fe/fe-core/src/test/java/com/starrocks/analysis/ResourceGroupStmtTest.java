@@ -1142,6 +1142,9 @@ public class ResourceGroupStmtTest {
         }
 
         List<TestCase> testCases = ImmutableList.of(
+                new TestCase("a [1, 10)", "[2, 100)"),
+                new TestCase("[1, 10)", "[2, 100) b"),
+
                 new TestCase("[1, 10]", "[2, 100)"),
 
                 new TestCase("[1,1 0)", "[2, 100)"),
