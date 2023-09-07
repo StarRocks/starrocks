@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -118,9 +119,11 @@ public class IcebergScanNode extends ScanNode {
             cloudConfiguration = tabularTempCloudConfiguration;
         } else {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-            if (connector != null) {
-                cloudConfiguration = connector.getCloudConfiguration();
-            }
+            Preconditions.checkState(connector != null,
+                    String.format("connector of catalog %s should not be null", catalogName));
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+            Preconditions.checkState(cloudConfiguration != null,
+                    String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         }
     }
 
@@ -378,7 +381,7 @@ public class IcebergScanNode extends ScanNode {
 
         msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
-       if (cloudConfiguration != null) {
+        if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
