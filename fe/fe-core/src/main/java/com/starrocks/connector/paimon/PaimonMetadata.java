@@ -46,6 +46,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -153,8 +154,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
         for (DataField field : fields) {
             String fieldName = field.name();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(field.type());
-            Column column = new Column(fieldName, fieldType, true);
+            DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, type.isNullable());
             fullSchema.add(column);
         }
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
