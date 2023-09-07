@@ -170,7 +170,8 @@ void GlobalDriverExecutor::_worker_thread() {
             if (!status.ok()) {
                 LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", status=" << status;
+                             << ", status=" << status
+                             << ", pipeline=" << driver->to_readable_string();
                 driver->runtime_profile()->add_info_string("ErrorMsg", status.get_error_msg());
                 query_ctx->cancel(status);
                 driver->cancel_operators(runtime_state);

@@ -44,8 +44,7 @@ public:
     bool spillable() const override { return true; }
     void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
-        LOG(INFO) << "AggregateBlockingSink, mark spill " << (void*)this << ", " << _aggregator->spiller().get()
-            << ", hash map bytes: " << _aggregator->hash_map_memory_usage();
+        TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
     }
 
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override {

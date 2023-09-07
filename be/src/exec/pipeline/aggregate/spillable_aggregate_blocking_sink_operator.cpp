@@ -44,26 +44,20 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         _is_finished = true;
     });
 
-    // LOG(INFO) << "agg block sink set_finishing, " << _aggregator->spiller().get() << ", spill rows: " << _aggregator->spiller()->spilled_append_rows()
-    //     << ", plan_node_id:" << _plan_node_id;
-
     // cancel spill task
     if (state->is_cancelled()) {
-        // LOG(INFO) << "cancel spiller, "<< _aggregator->spiller().get() << ", plan_node_id:" << _plan_node_id;
         _aggregator->spiller()->cancel();
     }
 
 
     if (!_aggregator->spiller()->spilled()) {
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-        // LOG(INFO) << "no spill, " << _aggregator->spiller().get();
         return Status::OK();
     }
     if (!_aggregator->spill_channel()->has_task()) {
         if (_aggregator->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
             _aggregator->hash_map_variant().visit(
                     [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
-            // LOG(INFO) << "spill res data, " << _aggregator->spiller().get();
             _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
         }
     }
@@ -72,7 +66,6 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         auto& spiller = _aggregator->spiller();
-        // LOG(INFO) << "agg block sink flush, " << _aggregator->spiller().get() << ", plan_node_id:" << _plan_node_id;
         return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
@@ -82,7 +75,6 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-                    // LOG(INFO) << "agg block sink set_finishing done, " << _aggregator->spiller().get() << ", plan_node_id:" << _plan_node_id;
                     return Status::OK();
                 },
                 state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _aggregator->spiller()));

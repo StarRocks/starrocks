@@ -122,10 +122,7 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
 }
 
 void PassThroughContext::init() {
-    // @TODO pass metrics
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
-    // @TODO add a interface to channel, update channel?
-
 }
 
 void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
