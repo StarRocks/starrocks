@@ -18,7 +18,7 @@ This section describes privileges that are available on different objects.
 | GRANT                   | Creates a user or role, alters a user or role, or grants privileges to a user or role. This privilege cannot be directly granted to users or roles. The `user_admin` role has this privilege. |
 | CREATE RESOURCE GROUP   | Creates a resource group.                                    |
 | CREATE RESOURCE         | Creates resources for Spark Load jobs or external tables.    |
-| CREATE EXTERNAL CATALOG | Creates an External Catalog.                                 |
+| CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
 | PLUGIN                  | Installs or uninstalls a plugin.                             |
 | REPOSITORY              | Creates, deletes, or views repositories.                     |
 | BLACKLIST               | Creates, deletes, or displays SQL blacklists.                |

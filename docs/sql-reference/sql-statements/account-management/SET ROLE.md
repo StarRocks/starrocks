@@ -2,14 +2,14 @@
 
 ## Description
 
-Activates a role, along with all of its associated privileges, for the current session.
+Activates roles, along with all of its associated privileges, for the current session. After the role is activated, users can use this role to perform operations.
 
 This command is supported from v3.0.
 
 ## Syntax
 
 ```SQL
--- Active specific roles.
+-- Active specific roles and perform operations as this role.
 SET ROLE <role_name>[,<role_name>,..];
 -- Activate all roles of a user, except for specific roles.
 SET ROLE ALL EXCEPT <role_name>[,<role_name>,..]; 
