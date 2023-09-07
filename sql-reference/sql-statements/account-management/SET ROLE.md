@@ -2,22 +2,24 @@
 
 ## 功能
 
-在当前会话下，激活当前用户拥有权限的角色。该命令从 3.0 版本开始支持。
+在当前会话下，激活当前用户拥有权限的角色。激活后，用户可以使用该角色进行相关操作。
+
+该命令从 3.0 版本开始支持。
 
 ## 注意事项
 
-用户只能激活自己已有权限的角色。
+- 用户只能激活自己已有权限的角色。
 
-用户可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色，可以通过[SELECT CURRENT_ROLE](../../sql-functions/utility-functions/current_role.md) 查看当前激活的角色。
+- 用户可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色，可以通过[SELECT CURRENT_ROLE](../../sql-functions/utility-functions/current_role.md) 查看当前激活的角色。
 
 ## 语法
 
 ```SQL
--- 激活特定角色
+-- 激活特定角色，使用这个角色进行操作。
 SET ROLE <role_name>[,<role_name>,..];
--- 激活除指定角色之外，用户拥有的所有角色
+-- 激活除指定角色之外，用户拥有的所有角色。
 SET ROLE ALL EXCEPT <role_name>[,<role_name>,..]; 
--- 激活用户拥有的所有角色
+-- 激活用户拥有的所有角色。
 SET ROLE ALL;
 ```
 

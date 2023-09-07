@@ -2,7 +2,11 @@
 
 ## 功能
 
-查看当前集群中的所有 catalog，包括 internal catalog 和 external catalog。
+查看当前集群中的所有 Catalog，包括 Internal Catalog 和 External Catalog。
+
+> **注意**
+>
+> 只有拥有 External Catalog USAGE 权限的用户才能查看到该 Catalog。如果没有该权限，仅返回 default_catalog。您可以使用 [GRANT](../account-management/GRANT.md) 命令进行授权操作。
 
 ## 语法
 

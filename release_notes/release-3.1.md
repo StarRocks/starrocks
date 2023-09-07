@@ -15,6 +15,12 @@
 - [array_map()](../sql-reference/sql-functions/array-functions/array_map.md) 同时涉及多个表时，下推策略问题导致查询失败。[#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - 由于未合入上游 Apache ORC 的 BugFix ORC-1304（[apache/orc#1299](https://github.com/apache/orc/pull/1299)）而导致 ORC 文件查询失败。[#29804](https://github.com/StarRocks/starrocks/pull/29804)
 
+### 行为变更
+
+如果是新部署的 3.1 版本集群，执行 SET CATALOG 操作必须要有目标 Catalog 的 USAGE 权限。您可以使用 [GRANT](../account-management/GRANT.md) 命令进行授权操作。
+
+如果是从低版本升级上来的集群，已经做好了升级逻辑，不需要重新赋权。[#29389](https://github.com/StarRocks/starrocks/pull/29389)
+
 ## 3.1.1
 
 发布日期：2023 年 8 月 18 日

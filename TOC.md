@@ -104,9 +104,10 @@
   + [配置 Microsoft Azure Storage 认证信息](/integrations/authenticate_to_azure_storage.md)
   + [配置 GCS 认证信息](/integrations/authenticate_to_gcs.md)
   + BI 集成
+    + [Apache Superset](/integrations/BI_integrations/Superset.md)
+    + [FineBI](/integrations/BI_integrations/FineBI.md)
     + [Hex](/integrations/BI_integrations/Hex.md)
     + [Querybook](/integrations/BI_integrations/Querybook.md)
-    + [Apache Superset](/integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](/integrations/BI_integrations/Tableau_Desktop.md)
   + IDE 集成
     + [DataGrip](/integrations/IDE_integrations/DataGrip.md)
@@ -139,6 +140,7 @@
     + [权限系统总览](/administration/privilege_overview.md)
     + [权限项](/administration/privilege_item.md)
     + [管理用户权限](/administration/User_privilege.md)
+    + [权限系统 FAQ](/administration/privilege_faq.md)
     + [认证方式](/administration/Authentication.md)
   + 性能调优
     + [查询分析](/administration/Query_planning.md)
@@ -717,6 +719,8 @@
       + [DataX](/faq/loading/DataX_faq.md)
       + [CloudCanal 数据导入](/faq/loading/CloudCanal_load_faq.md)
     + [导出](/faq/Exporting_faq.md)
+  + [权限相关 FAQ](/administration/privilege_faq.md)
+  + [数据湖 FAQ](/data_source/datalake_faq.md)
   + [SQL FAQ](/faq/Sql_faq.md)
   + [query_dump 接口](/faq/Dump_query.md)
   + [视频资源](/faq/Video.md)

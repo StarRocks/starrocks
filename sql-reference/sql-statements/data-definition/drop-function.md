@@ -9,14 +9,14 @@
 ## 语法
 
 ```sql
-DROP FUNCTION <function_name>(arg_type [, ...])
+DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...])
 ```
 
-参数说明：
+## 参数说明
 
-`function_name`: 待删除函数的名字，必填。
-
-`arg_type`: 待删除函数的参数类型，必填。
+- `GLOBAL`：表示删除全局函数。StarRocks 从 3.0 版本开始支持创建 [Global UDF](../../sql-functions/JAVA_UDF.md)。
+- `function_name`: 待删除函数的名字，必填。
+- `arg_type`: 待删除函数的参数类型，必填。
 
 ## 示例
 
@@ -25,3 +25,8 @@ DROP FUNCTION <function_name>(arg_type [, ...])
 ```sql
 DROP FUNCTION my_add(INT, INT)
 ```
+
+## 相关 SQL
+
+- [SHOW FUNCTIONS](./show-functions.md)
+- [Java UDF](../../sql-functions/JAVA_UDF.md)
