@@ -19,6 +19,8 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
@@ -172,5 +174,11 @@ public class PaimonMetadataTest {
                          @Mocked ReadBuilder readBuilder) {
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
+    }
+
+    @Test
+    public void testGetCloudConfiguration() {
+        CloudConfiguration cc = metadata.getCloudConfiguration();
+        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
     }
 }

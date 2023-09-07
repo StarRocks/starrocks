@@ -27,6 +27,8 @@ import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -117,5 +119,11 @@ public class HudiMetadataTest {
         Database database = hudiMetadata.getDb("db1");
         Assert.assertEquals("db1", database.getFullName());
 
+    }
+
+    @Test
+    public void testGetCloudConfiguration() {
+        CloudConfiguration cc = hudiMetadata.getCloudConfiguration();
+        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
     }
 }
