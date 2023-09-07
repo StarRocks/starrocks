@@ -95,9 +95,8 @@ struct TLoadErrorHubInfo {
 }
 
 enum TPipelineProfileLevel {
-  CORE_METRICS,
-  ALL_METRICS,
-  DETAIL
+  MERGE = 1;
+  DETAIL = 2;
 }
 
 enum TSpillMode {
