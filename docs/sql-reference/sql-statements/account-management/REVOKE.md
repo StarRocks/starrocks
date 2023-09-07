@@ -98,9 +98,9 @@ REVOKE
 * You must first run SET CATALOG before you run this command.
 * You can also use db.tbl to represent a table.
 
-```SQL
-REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
-```
+  ```SQL
+  REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
+  ```
 
 #### View
 
@@ -116,9 +116,9 @@ REVOKE
 * You must first run SET CATALOG before you run this command.
 * You can also use db.view to represent a view.
 
-```SQL
-REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
-```
+  ```SQL
+  REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
+  ```
 
 #### Materialized view
 
@@ -134,9 +134,9 @@ REVOKE
 * You must first run SET CATALOG before you run this command.
 * You can also use db.mv to represent an mv.
 
-```SQL
-REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
-```
+  ```SQL
+  REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
+  ```
 
 #### Function
 
@@ -152,9 +152,9 @@ REVOKE
 * You must first run SET CATALOG before you run this command.
 * You can also use db.function to represent a function.
 
-```SQL
-REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
-```
+  ```SQL
+  REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+  ```
 
 #### Storage volume
 
