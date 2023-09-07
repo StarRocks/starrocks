@@ -417,6 +417,7 @@ public class MvUtils {
             compoundPredicate = Utils.compoundAnd(conjuncts);
             compoundPredicate = columnRefRewriter.rewrite(compoundPredicate.clone());
         }
+        compoundPredicate = MvUtils.canonizePredicateForRewrite(compoundPredicate);
         return compoundPredicate;
     }
 
