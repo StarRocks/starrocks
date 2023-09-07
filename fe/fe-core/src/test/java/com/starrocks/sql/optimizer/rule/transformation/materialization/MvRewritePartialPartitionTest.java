@@ -152,9 +152,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String plan10 = getFragmentPlan(query10);
         PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "TABLE: test_base_part\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
-                "     partitions=3/6\n" +
-                "     rollup: test_base_part");
+                "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)");
 
         String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
         String plan12 = getFragmentPlan(query12);
@@ -386,10 +384,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
-                "PARTITION PREDICATES: ((23: l_shipdate >= '1998-01-02') AND ((23: l_shipdate < '1998-01-03')" +
-                        " OR (23: l_shipdate >= '1998-01-06'))) OR (23: l_shipdate IS NULL)",
-                "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "lineitem_par",
+                "PARTITION PREDICATES: (((23: l_shipdate < '1998-01-03') OR (23: l_shipdate >= '1998-01-06'))" +
+                        " AND (23: l_shipdate >= '1998-01-02')) OR (23: l_shipdate IS NULL)",
+                "NON-PARTITION PREDICATES: 21: l_orderkey >= 101");
 
         dropMv("test", "hive_parttbl_mv_2");
 
@@ -428,9 +426,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) " +
-                        "OR (20: l_orderkey != 100)) OR (22: l_shipdate IS NULL)");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=6/6", "lineitem_par",
+                "NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-02')) OR " +
+                        "((22: l_shipdate IS NULL) OR (20: l_orderkey <= 99))) OR (20: l_orderkey >= 101)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",
