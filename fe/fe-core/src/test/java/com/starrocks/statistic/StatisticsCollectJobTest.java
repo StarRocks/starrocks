@@ -18,11 +18,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
@@ -396,6 +398,58 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as db_id, " + t0StatsTableId +
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
+    }
+
+    @Test
+    public void testNativeAnalyzeJob() {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        Assert.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, nativeAnalyzeJob.getCatalogName());
+
+        nativeAnalyzeJob.setWorkTime(LocalDateTime.of(2023, 1, 1, 12, 0, 0));
+        Assert.assertEquals("2023-01-01T12:00", nativeAnalyzeJob.getWorkTime().toString());
+
+        nativeAnalyzeJob.setReason("test");
+        Assert.assertEquals("test", nativeAnalyzeJob.getReason());
+
+        nativeAnalyzeJob.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        new MockUp<FullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {}
+        };
+
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.PENDING, nativeAnalyzeJob.getStatus());
+
+        new MockUp<FullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                throw new RuntimeException("mock exception");
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
+        Table table = db.getTable("tprimary_stats");
+        nativeAnalyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
+        Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
     }
 
     @Test

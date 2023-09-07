@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -28,7 +29,7 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
-public class AnalyzeCreateNativeAnalyzeJobTest {
+public class AnalyzeCreateAnalyzeJobTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
@@ -76,5 +77,15 @@ public class AnalyzeCreateNativeAnalyzeJobTest {
         Table table = db.getTable("tbl");
         Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
+    }
+
+    @Test
+    public void testCreateAnalyzeJob() throws Exception {
+        String sql = "create analyze table db.tbl";
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+
+        DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
+        Assert.assertEquals(1,
+                starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
     }
 }
