@@ -771,9 +771,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
         }
 
-        bool is_sc_sorting = false;
         if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
-            is_sc_sorting = true;
+            // new sort keys' size is greater than base sort keys, must be sc_sorting
+            sc_params.sc_sorting = true;
+            sc_params.sc_directly = false;
         } else {
             auto base_iter = base_sort_key_unique_ids.cbegin();
             auto new_iter = new_sort_key_unique_ids.cbegin();
@@ -782,9 +783,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                 ++base_iter;
                 ++new_iter;
             }
-            is_sc_sorting = (new_iter != new_sort_key_unique_ids.cend());
+            if (new_iter != new_sort_key_unique_ids.cend()) {
+                sc_params.sc_sorting = true;
+                sc_params.sc_directly = false;
+            }
         }
-        sc_params.sc_directly = is_sc_sorting && !sc_params.sc_sorting;
+
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get(), _alter_msg_header);
