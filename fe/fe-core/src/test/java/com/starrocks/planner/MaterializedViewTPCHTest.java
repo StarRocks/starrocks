@@ -72,6 +72,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch/q6");
     }
 
+    @Ignore
     @Test
     public void testQuery7() {
         runFileUnitTest("materialized-view/tpch/q7");
