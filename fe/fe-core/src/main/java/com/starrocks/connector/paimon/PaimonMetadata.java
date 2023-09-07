@@ -41,12 +41,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.reader.RecordReader;
+import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 
@@ -164,8 +169,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             Column column = new Column(fieldName, fieldType, type.isNullable());
             fullSchema.add(column);
         }
+        long createTime = getTableCreateTime(dbName, tblName);
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
-                catalogType, metastoreUris, warehousePath, paimonNativeTable);
+                catalogType, metastoreUris, warehousePath, paimonNativeTable, createTime);
         tables.put(identifier, table);
         return table;
     }
@@ -247,5 +253,30 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return hdfsEnvironment.getCloudConfiguration();
+    }
+
+    public long getTableCreateTime(String dbName, String tblName) {
+        Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
+        try {
+            SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
+            PredicateBuilder predicateBuilder = new PredicateBuilder(table.rowType());
+            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+            RecordReader<InternalRow> recordReader =
+                    table.newReadBuilder().withFilter(equal)
+                            .newRead().createReader(table.newScan().plan());
+            RecordReaderIterator<InternalRow> iterator = new RecordReaderIterator<>(recordReader);
+            while (iterator.hasNext()) {
+                InternalRow rowData = iterator.next();
+                Long schemaId = rowData.getLong(0);
+                org.apache.paimon.data.Timestamp updateTime = rowData.getTimestamp(6, 3);
+                if (schemaId == 0) {
+                    return updateTime.getMillisecond();
+                }
+            }
+            iterator.close();
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        }
+        return 0;
     }
 }
