@@ -97,14 +97,15 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
-+ Integration
++ Integrations
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
   + [Authenticate to Microsoft Azure Storage](./integrations/authenticate_to_azure_storage.md)
   + [Authenticate to Google Cloud Storage](./integrations/authenticate_to_gcs.md)
   + BI tools
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [FineBI](./integrations/BI_integrations/FineBI.md)
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
-    + [Apache Superset](./integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
@@ -136,6 +137,7 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
+    + [Privilege FAQ](./administration/privilege_faq.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
@@ -718,6 +720,8 @@
       + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
+  + [Privilege](./administration/privilege_faq.md)
+  + [Data lake](./data_source/datalake_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
