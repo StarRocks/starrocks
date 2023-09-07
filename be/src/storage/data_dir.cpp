@@ -258,7 +258,7 @@ Status DataDir::load() {
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;
     } else {
-        LOG(INFO) << "load rowset from meta finished, data dir: " << _path;
+        LOG(INFO) << "load rowset from meta finished, data dir: " << _path << ", size=" << dir_rowset_metas.size();
     }
 
     // load tablet
@@ -323,6 +323,7 @@ Status DataDir::load() {
     // 1. add committed rowset to txn map
     // 2. add visible rowset to tablet
     // ignore any errors when load tablet or rowset, because fe will repair them after report
+    size_t invalid_rowset_count = 0;
     for (const auto& rowset_meta : dir_rowset_metas) {
         TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
@@ -330,6 +331,7 @@ Status DataDir::load() {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
             //              << ", schema hash: " << rowset_meta->tablet_schema_hash()
             //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
+            invalid_rowset_count++;
             continue;
         }
         RowsetSharedPtr rowset;
@@ -370,6 +372,7 @@ Status DataDir::load() {
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
+    LOG(INFO) << "load invalid rowset count: " << invalid_rowset_count;
     return Status::OK();
 }
 

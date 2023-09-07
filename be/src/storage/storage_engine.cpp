@@ -1026,6 +1026,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
 
         TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
         if (tablet == nullptr) {
+            invalid_rowset_metas.push_back(rowset_meta);
             return true;
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE && (!tablet->rowset_meta_is_useful(rowset_meta))) {
@@ -1037,6 +1038,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
         (void)RowsetMetaManager::traverse_rowset_metas(data_dir->get_meta(), clean_rowset_func);
+        LOG(INFO) << "Traverse invalid rowset count: " << invalid_rowset_metas.size();
         for (auto& rowset_meta : invalid_rowset_metas) {
             (void)RowsetMetaManager::remove(data_dir->get_meta(), rowset_meta->tablet_uid(), rowset_meta->rowset_id());
         }
