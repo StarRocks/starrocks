@@ -330,7 +330,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
         } else if (type.isDecimalV2()) {
-            return String.valueOf(value);
+            // remove trailing zero and use plain string, keep same with BE
+            return ((BigDecimal) value).stripTrailingZeros().toPlainString();
         } else if (type.isDecimalOfAnyVersion()) {
             // align zero, keep same with BE
             int scale = ((ScalarType) type).getScalarScale();
@@ -562,6 +563,26 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Optional.empty();
         } else {
             return Optional.of(creator.apply(func.apply(value)));
+        }
+    }
+
+    public long distance(ConstantOperator other) {
+        if (type.isTinyint()) {
+            return other.getTinyInt() - getTinyInt();
+        } else if (type.isSmallint()) {
+            return other.getSmallint() - getSmallint();
+        } else if (type.isInt()) {
+            return other.getInt() - getInt();
+        } else if (type.isBigint()) {
+            return other.getBigint() - getBigint();
+        } else if (type.isLargeint()) {
+            return other.getLargeInt().subtract(getLargeInt()).longValue();
+        } else if (type.isDatetime()) {
+            return ChronoUnit.SECONDS.between(getDatetime(), other.getDatetime());
+        } else if (type.isDateType()) {
+            return ChronoUnit.DAYS.between(getDatetime(), other.getDatetime());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported distince for type:" + type);
         }
     }
 }
