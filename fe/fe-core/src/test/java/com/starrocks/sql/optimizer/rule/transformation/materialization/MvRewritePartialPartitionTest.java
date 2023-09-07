@@ -654,7 +654,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
             String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "where l_shipdate >= '1998-01-04'";
-            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
             dropMv("test", mvName);
         }
 
@@ -703,7 +703,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             refreshMaterializedView("test", mvName);
             query =
                     "SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate";
-            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
             dropMv("test", mvName);
 
         }
