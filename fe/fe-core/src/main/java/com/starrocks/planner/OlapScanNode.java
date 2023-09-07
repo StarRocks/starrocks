@@ -144,7 +144,7 @@ public class OlapScanNode extends ScanNode {
     private boolean isSortedByKeyPerTablet = false;
 
     private final HashSet<Long> scanBackendIds = new HashSet<>();
-    private boolean isOutputAsc = false;
+    private boolean isOutputAsc = true;
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.

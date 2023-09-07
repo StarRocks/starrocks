@@ -94,7 +94,7 @@ public:
         return starrocks::ScanNode::io_tasks_per_scan_operator();
     }
 
-    bool output_asc() const { return _output_asc; }
+    bool is_asc() const override { return _output_asc; }
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 

@@ -268,6 +268,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges = params.short_key_ranges;
+    rs_opts.asc_hint = _is_asc;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
@@ -301,10 +302,6 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     const auto skip_aggr = params.skip_aggregation;
     const auto select_all_keys = _schema.num_key_fields() == _tablet->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet->num_key_columns());
-
-    if (!_is_asc) {
-        std::reverse(seg_iters.begin(), seg_iters.end());
-    }
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
@@ -341,6 +338,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+

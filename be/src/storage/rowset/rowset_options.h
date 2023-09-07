@@ -74,6 +74,8 @@ public:
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
+
+    bool asc_hint = true;
 };
 
 } // namespace starrocks

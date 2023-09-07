@@ -132,7 +132,7 @@ public class RuntimeFilterDescription {
         if (!canAcceptFilter(node)) {
             return false;
         }
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
             ((OlapScanNode)node).setIsAsc(isAsc);
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.

@@ -186,6 +186,15 @@ public:
     bool operator==(const SparseRange& rhs) const;
     bool operator!=(const SparseRange& rhs) const;
 
+    void split(size_t expected_range_cnt);
+
+    // reverse inner-range
+    // if a SparseRange call this function. then the range won't be a normalized range.
+    void reverse();
+
+    bool is_normalized() const { return _is_normalized; }
+    void set_normalized(bool normalized) { _is_normalized = normalized; }
+
     const Range& operator[](size_t idx) const { return _ranges[idx]; }
 
     SparseRange operator&(const SparseRange& rhs) const { return intersection(rhs); }
@@ -201,6 +210,7 @@ private:
 
     void _add_uncheck(const Range& r);
 
+    bool _is_normalized = true;
     std::vector<Range> _ranges;
 };
 
@@ -283,6 +293,32 @@ inline std::string SparseRange::to_string() const {
     return ss.str();
 }
 
+inline void SparseRange::split(size_t expected_range_cnt) {
+    if (size() < expected_range_cnt) {
+        size_t expected_size_each_range = 0;
+        // 4096 + 65535 / 10 = expected_size;
+        for (size_t i = 0; i < size(); ++i) {
+            expected_size_each_range += _ranges[i].span_size();
+        }
+        expected_size_each_range /= expected_range_cnt;
+        std::vector<Range> new_ranges;
+        for (auto range : _ranges) {
+            while (range.span_size() > expected_size_each_range) {
+                new_ranges.emplace_back(range.begin(), range.begin() + expected_size_each_range);
+                range = Range(range.begin() + expected_size_each_range, range.end());
+            }
+            new_ranges.emplace_back(range);
+        }
+        std::swap(_ranges, new_ranges);
+        _is_normalized = false;
+    }
+}
+
+inline void SparseRange::reverse() {
+    std::reverse(_ranges.begin(), _ranges.end());
+    _is_normalized = false;
+}
+
 inline SparseRange SparseRange::intersection(const SparseRange& rhs) const {
     SparseRange result;
     for (const auto& r1 : _ranges) {
@@ -344,6 +380,9 @@ inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
         Range r = next(size);
         range->add(r);
         size -= r.span_size();
+        if (!_range->is_normalized()) {
+            break;
+        }
     }
 }
 
