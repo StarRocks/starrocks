@@ -36,6 +36,7 @@ public class AliyunCloudCredential implements CloudCredential {
         this.secretKey = secretKey;
         this.endpoint = endpoint;
     }
+
     @Override
     public void applyToConfiguration(Configuration configuration) {
         configuration.set("fs.oss.impl", "com.aliyun.jindodata.oss.JindoOssFileSystem");
@@ -59,9 +60,9 @@ public class AliyunCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AliyunCloudCredential{" +
-                "accessKey=" + accessKey +
+                "accessKey='" + accessKey + '\'' +
                 ", secretKey='" + secretKey + '\'' +
                 ", endpoint='" + endpoint + '\'' +
                 '}';

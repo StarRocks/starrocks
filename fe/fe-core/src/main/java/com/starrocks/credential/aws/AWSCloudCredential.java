@@ -254,7 +254,7 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public String getCredentialString() {
+    public String toCredString() {
         return "AWSCloudCredential{" +
                 "useAWSSDKDefaultBehavior=" + useAWSSDKDefaultBehavior +
                 ", useInstanceProfile=" + useInstanceProfile +
