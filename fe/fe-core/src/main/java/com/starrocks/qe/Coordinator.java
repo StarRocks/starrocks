@@ -1736,6 +1736,7 @@ public class Coordinator {
 
         int profileLevel = sessionVariable.getPipelineProfileLevel();
         if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
+            // We don't guarantee the detail level profile can work well with visualization feature.
             return queryProfile;
         }
 
@@ -1821,7 +1822,6 @@ public class Coordinator {
 
             mergedInstanceProfile.getChildList().forEach(pair -> {
                 RuntimeProfile pipelineProfile = pair.first;
-                foldUnnecessaryLimitOperators(pipelineProfile);
                 setOperatorStatus(pipelineProfile);
                 newFragmentProfile.addChild(pipelineProfile);
             });
@@ -1932,36 +1932,6 @@ public class Coordinator {
         processTimer.setValue(System.nanoTime() - start);
 
         return newQueryProfile;
-    }
-
-    /**
-     * Remove unnecessary LimitOperator, which has same input rows and output rows
-     * to keep the profile concise
-     */
-    private void foldUnnecessaryLimitOperators(RuntimeProfile pipelineProfile) {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        if (!sessionVariable.isProfileLimitFold()) {
-            return;
-        }
-
-        List<String> foldNames = Lists.newArrayList();
-        for (Pair<RuntimeProfile, Boolean> child : pipelineProfile.getChildList()) {
-            RuntimeProfile operatorProfile = child.first;
-            if (operatorProfile.getName().contains("LIMIT")) {
-                RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
-                Preconditions.checkNotNull(commonMetrics);
-                Counter pullRowNum = commonMetrics.getCounter("PullRowNum");
-                Counter pushRowNum = commonMetrics.getCounter("PushRowNum");
-                if (pullRowNum == null || pushRowNum == null) {
-                    continue;
-                }
-                if (Objects.equals(pullRowNum.getValue(), pushRowNum.getValue())) {
-                    foldNames.add(operatorProfile.getName());
-                }
-            }
-        }
-
-        foldNames.forEach(pipelineProfile::removeChild);
     }
 
     private void setOperatorStatus(RuntimeProfile pipelineProfile) {
