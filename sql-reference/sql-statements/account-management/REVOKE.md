@@ -15,117 +15,149 @@
 
 能撤销的权限因对象 (object) 而异。下面讲解不同对象可以撤销的不同权限。
 
-```SQL
-# System 相关
+#### System 相关
 
+```SQL
 REVOKE
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# Resource group 相关
+#### Resource group 相关
 
+```SQL
 REVOKE
     { ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS} 
+    ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS}
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# Resource 相关
+#### Resource 相关
 
+```SQL
 REVOKE
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, <resource_name>,...] ｜ ALL RESOURCES} 
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# User 相关
+#### User 相关
 
+```SQL
 REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>
+```
 
-# 全局 UDF 相关
+#### 全局 UDF 相关
 
+```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
        | ALL GLOBAL FUNCTIONS }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# Internal catalog 相关
+#### Internal catalog 相关
 
-REVOKE 
+```SQL
+REVOKE
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# External catalog 相关
+#### External catalog 相关
 
+```SQL
 REVOKE  
-   { USAGE | DROP | ALL [PRIVILEGES] } 
+   { USAGE | DROP | ALL [PRIVILEGES] }
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
    FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-# Database 相关
+#### Database 相关
 
+```SQL
 REVOKE 
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
-  
-* 注意：需要执行 set catalog 之后才能使用。
+```
 
-# Table 相关
+注意：需要执行 SET CATALOG 之后才能使用。
 
-REVOKE  
+#### Table 相关
+
+```SQL
+REVOKE
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES} IN 
            { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
+```
 
-* 注意：需要执行 set catalog 之后才能使用。
-* table 还可以用 db.tbl 的方式来表示。
+注意：需要执行 SET CATALOG 之后才能使用。table 还可以用 `db.tbl` 的方式来表示。
+
+```SQL
 REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
+```
 
-# View 相关
+#### View 相关
 
+```SQL
 REVOKE
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
-    
-* 注意：需要执行 set catalog 之后才能使用。 
-* view 还可以用 db.view 的方式来表示。
+```
+
+注意：需要执行 SET CATALOG 之后才能使用。view 还可以用 `db.view` 的方式来表示。
+
+```SQL
 REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
+```
 
-# Materialized view 相关
+#### Materialized view 相关
 
+```SQL
 REVOKE
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { DATABASE <database_name> | ALL [DATABASES] }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
-    
-* 注意：需要执行 set catalog 之后才能使用。  
-* 注意：mv 还可以用 db.mv 的方式来表示。
+```
+
+注意：需要执行 SET CATALOG 之后才能使用。mv 还可以用 `db.mv` 的方式来表示。
+
+```SQL
 REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>};
+```
 
-# Function 相关
+#### Function 相关
 
+```SQL
 REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS } IN 
            { DATABASE <database_name> | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
-    
-* 注意：需要执行 set catalog 之后才能使用。 
-* function 还可以用 db.function 的方式来表示。
+```
+
+注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `db.function` 的方式来表示。
+
+```SQL
 REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
+```
 
-# Storage volume 相关
+#### Storage volume 相关
 
+```SQL
 REVOKE  
     CREATE STORAGE VOLUME 
     ON SYSTEM

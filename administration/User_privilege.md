@@ -457,6 +457,8 @@ GRANT public_sales TO ROLE lineb_query;
    ```SQL
    -- 创建自定义角色。
    CREATE ROLE read_catalog_only;
+   -- 赋予角色目标 Catalog 的 USAGE 权限。
+   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- 切换到对应数据目录。
    SET CATALOG hive_catalog;
    -- 赋予角色所有表的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
@@ -471,6 +473,8 @@ GRANT public_sales TO ROLE lineb_query;
    ```SQL
    -- 创建自定义角色。
    CREATE ROLE write_catalog_only;
+   -- 赋予角色目标 Catalog 的 USAGE 权限。
+   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
    -- 切换到对应数据目录。
    SET CATALOG iceberg_catalog;
    -- 赋予角色所有 Iceberg 表的写入权限。
