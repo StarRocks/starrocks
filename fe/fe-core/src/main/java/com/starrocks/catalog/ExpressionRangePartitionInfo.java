@@ -45,6 +45,7 @@ import static java.util.stream.Collectors.toList;
  * ExpressionRangePartitionInfo replace columns with expressions
  * Some Descriptions:
  * 1. no overwrite old serialized method: read、write and readFields, because we use gson now
+ * 2. As of 2023-09, it's still used to describe auto range using expr like PARTITION BY date_trunc('day', col).
  */
 @Deprecated
 public class ExpressionRangePartitionInfo extends RangePartitionInfo implements GsonPreProcessable, GsonPostProcessable {

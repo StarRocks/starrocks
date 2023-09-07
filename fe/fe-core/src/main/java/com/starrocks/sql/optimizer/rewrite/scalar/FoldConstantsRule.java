@@ -35,12 +35,22 @@ import java.util.List;
 public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     private static final Logger LOG = LogManager.getLogger(FoldConstantsRule.class);
 
+    private final boolean needMonotonicFunc;
+
+    public FoldConstantsRule() {
+        this(false);
+    }
+
+    public FoldConstantsRule(boolean needMonotonicFunc) {
+        this.needMonotonicFunc = needMonotonicFunc;
+    }
+
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         if (call.isAggregate() || notAllConstant(call.getChildren())) {
             return call;
         }
-        return ScalarOperatorEvaluator.INSTANCE.evaluation(call);
+        return ScalarOperatorEvaluator.INSTANCE.evaluation(call, needMonotonicFunc);
     }
 
     @Override

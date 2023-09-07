@@ -186,6 +186,26 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, binaryType);
     }
 
+    public static ConstantOperator createExampleValueByType(Type type) {
+        if (type.isTinyint()) {
+            return createTinyInt((byte) 1);
+        } else if (type.isSmallint()) {
+            return createSmallInt((short) 1);
+        } else if (type.isInt()) {
+            return createInt(1);
+        } else if (type.isBigint()) {
+            return createBigint(1L);
+        } else if (type.isLargeint()) {
+            return createLargeInt(new BigInteger("1"));
+        } else if (type.isDate()) {
+            return createDate(LocalDateTime.of(2000, 1, 1, 00, 00, 00));
+        } else if (type.isDatetime()) {
+            return createDatetime(LocalDateTime.of(2000, 1, 1, 00, 00, 00));
+        } else {
+            throw new IllegalArgumentException("unsupported type: " + type);
+        }
+    }
+
     public boolean isNull() {
         return isNull;
     }
