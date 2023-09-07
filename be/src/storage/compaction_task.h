@@ -231,9 +231,9 @@ protected:
 
     void _try_lock() {
         if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
-            _compaction_lock = std::unique_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
+            _compaction_lock = std::shared_lock(_tablet->get_cumulative_lock(), std::try_to_lock);
         } else {
-            _compaction_lock = std::unique_lock(_tablet->get_base_lock(), std::try_to_lock);
+            _compaction_lock = std::shared_lock(_tablet->get_base_lock(), std::try_to_lock);
         }
     }
 
@@ -294,7 +294,7 @@ protected:
     std::vector<RowsetSharedPtr> _input_rowsets;
     TabletSharedPtr _tablet;
     RowsetSharedPtr _output_rowset;
-    std::unique_lock<std::mutex> _compaction_lock;
+    std::shared_lock<std::shared_mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
 };
