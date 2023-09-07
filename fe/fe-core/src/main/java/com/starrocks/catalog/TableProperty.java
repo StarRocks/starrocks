@@ -97,7 +97,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         public static QueryRewriteConsistencyMode defaultForExternalTable() {
-            return DISABLE;
+            return CHECKED;
         }
 
         public static QueryRewriteConsistencyMode parse(String str) {
