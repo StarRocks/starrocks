@@ -224,7 +224,7 @@ WITH BROKER
 PROPERTIES
 (
     "timeout" = "3600"
-);;
+);
 ```
 
 #### Query data
