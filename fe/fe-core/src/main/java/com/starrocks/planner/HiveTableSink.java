@@ -60,7 +60,7 @@ public class HiveTableSink extends DataSink {
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
 
-        this.cloudConfiguration = connector.getCloudConfiguration();
+        this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
 
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
