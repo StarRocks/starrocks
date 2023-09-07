@@ -23,6 +23,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
@@ -348,6 +349,16 @@ public class InsertStmt extends DmlStmt {
 
         List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
                 Collectors.toList());
+
+        for (Integer partitionColumnID : partitionColumnIDs) {
+            Column partitionColumn = columns.get(partitionColumnID);
+            Type type = partitionColumn.getType();
+            if (type.isBoolean() || type.isIntegerType() || type.isDateType() || type.isStringType()) {
+                continue;
+            }
+            throw new SemanticException("partition column does not support type of " + type);
+        }
+
         return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, props);
     }
 }
