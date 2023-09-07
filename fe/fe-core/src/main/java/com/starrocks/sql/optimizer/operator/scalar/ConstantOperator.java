@@ -501,4 +501,85 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
         throw UnsupportedException.unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
     }
+<<<<<<< HEAD
+=======
+
+    public Optional<ConstantOperator> successor() {
+        return computeValue(1);
+    }
+
+    public Optional<ConstantOperator> predecessor() {
+        return computeValue(-1);
+    }
+
+    private Optional<ConstantOperator> computeValue(int delta) {
+        return computeWithLimits(delta,
+                v -> (byte) (v + delta),
+                v -> (short) (v + delta),
+                v -> v + delta,
+                v -> (long) v + delta,
+                v -> v.add(BigInteger.valueOf(delta)),
+                date -> date.plus(delta, ChronoUnit.DAYS),
+                date -> date.plus(delta, ChronoUnit.SECONDS)
+        );
+    }
+
+    private Optional<ConstantOperator> computeWithLimits(int delta,
+                                                         Function<Byte, Byte> byteFunc,
+                                                         Function<Short, Short> smallFunc,
+                                                         Function<Integer, Integer> intFunc,
+                                                         Function<Long, Long> longFunc,
+                                                         Function<BigInteger, BigInteger> bigintFunc,
+                                                         Function<LocalDateTime, LocalDateTime> dateFunc,
+                                                         Function<LocalDateTime, LocalDateTime> datetimeFunc) {
+        if (type.isTinyint()) {
+            return compute(delta, getTinyInt(), Byte.MAX_VALUE, Byte.MIN_VALUE, byteFunc, ConstantOperator::createTinyInt);
+        } else if (type.isSmallint()) {
+            return compute(delta, getSmallint(), Short.MAX_VALUE, Short.MIN_VALUE, smallFunc, ConstantOperator::createSmallInt);
+        } else if (type.isInt()) {
+            return compute(delta, getInt(), Integer.MAX_VALUE, Integer.MIN_VALUE, intFunc, ConstantOperator::createInt);
+        } else if (type.isBigint()) {
+            return compute(delta, getBigint(), Long.MAX_VALUE, Long.MIN_VALUE, longFunc, ConstantOperator::createBigint);
+        } else if (type.isLargeint()) {
+            return compute(delta, getLargeInt(), MAX_LARGE_INT, MIN_LARGE_INT, bigintFunc, ConstantOperator::createLargeInt);
+        } else if (type.isDatetime()) {
+            return compute(delta, (LocalDateTime) value, LocalDateTime.MAX, LocalDateTime.MIN,
+                    datetimeFunc, ConstantOperator::createDatetime);
+        } else if (type.isDateType()) {
+            return compute(delta, (LocalDateTime) value, LocalDate.MAX.atStartOfDay(), LocalDate.MIN.atStartOfDay(),
+                    dateFunc, ConstantOperator::createDate);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    private <T> Optional<ConstantOperator> compute(int delta,
+            T value, T maxValue, T minValue, Function<T, T> func, Function<T, ConstantOperator> creator) {
+        if ((delta > 0 && value.equals(maxValue)) || (delta < 0 && value.equals(minValue))) {
+            return Optional.empty();
+        } else {
+            return Optional.of(creator.apply(func.apply(value)));
+        }
+    }
+
+    public long distance(ConstantOperator other) {
+        if (type.isTinyint()) {
+            return other.getTinyInt() - getTinyInt();
+        } else if (type.isSmallint()) {
+            return other.getSmallint() - getSmallint();
+        } else if (type.isInt()) {
+            return other.getInt() - getInt();
+        } else if (type.isBigint()) {
+            return other.getBigint() - getBigint();
+        } else if (type.isLargeint()) {
+            return other.getLargeInt().subtract(getLargeInt()).longValue();
+        } else if (type.isDatetime()) {
+            return ChronoUnit.SECONDS.between(getDatetime(), other.getDatetime());
+        } else if (type.isDateType()) {
+            return ChronoUnit.DAYS.between(getDatetime(), other.getDatetime());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported distince for type:" + type);
+        }
+    }
+>>>>>>> 7243a4a1fd ([BugFix] fix range predicate rewrite by canonicalization (#30382))
 }
