@@ -24,9 +24,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -58,6 +60,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
     private final Catalog paimonNativeCatalog;
+    private final HdfsEnvironment hdfsEnvironment;
     private final String catalogType;
     private final String metastoreUris;
     private final String warehousePath;
@@ -65,9 +68,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
-    public PaimonMetadata(String catalogName, Catalog paimonNativeCatalog,
+
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           String catalogType, String metastoreUris, String warehousePath) {
         this.paimonNativeCatalog = paimonNativeCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.catalogType = catalogType;
         this.metastoreUris = metastoreUris;
         this.warehousePath = warehousePath;
@@ -230,5 +235,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return predicates;
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }

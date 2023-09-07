@@ -78,7 +78,7 @@ public class HudiScanNode extends ScanNode {
         }
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
         }
     }
 

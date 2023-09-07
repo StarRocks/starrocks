@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
@@ -45,7 +44,6 @@ public class IcebergConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     private final Map<String, String> properties;
-    private final CloudConfiguration cloudConfiguration;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
@@ -53,7 +51,7 @@ public class IcebergConnector implements Connector {
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
     }
 
@@ -93,7 +91,7 @@ public class IcebergConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new IcebergMetadata(catalogName, getNativeCatalog());
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog());
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -103,9 +101,5 @@ public class IcebergConnector implements Connector {
             this.icebergNativeCatalog = buildIcebergNativeCatalog();
         }
         return icebergNativeCatalog;
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
     }
 }

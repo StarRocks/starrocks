@@ -119,7 +119,7 @@ public class IcebergScanNode extends ScanNode {
         } else {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             if (connector != null) {
-                cloudConfiguration = connector.getCloudConfiguration();
+                cloudConfiguration = connector.getMetadata().getCloudConfiguration();
             }
         }
     }

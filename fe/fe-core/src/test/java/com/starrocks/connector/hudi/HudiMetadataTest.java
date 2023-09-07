@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.hive.CachingHiveMetastore;
@@ -82,7 +82,8 @@ public class HudiMetadataTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        hudiMetadata = new HudiMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider, Optional.empty());
+        hudiMetadata =
+                new HudiMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider, Optional.empty());
     }
 
     @After

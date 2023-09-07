@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -265,5 +266,10 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
         normal.alterView(stmt);
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return normal.getCloudConfiguration();
     }
 }
