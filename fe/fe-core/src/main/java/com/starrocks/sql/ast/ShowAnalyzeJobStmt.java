@@ -51,6 +51,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Catalog", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Table", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
