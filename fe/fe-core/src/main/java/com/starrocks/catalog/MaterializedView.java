@@ -1013,10 +1013,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
-    public TableProperty.QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
-        return tableProperty.getForceExternalTableQueryRewrite();
-    }
-
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
         if (!isLoadTriggeredRefresh()) {
             return false;
@@ -1350,9 +1346,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView()) {
-                if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
-                    return Sets.newHashSet();
-                }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
                 }
@@ -1408,9 +1401,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // skip external table that is not supported for query rewrite, return all partition ?
             // skip check external table if the external does not support rewrite.
             if (!baseTable.isNativeTableOrMaterializedView()) {
-                if (!supportPartialPartitionQueryRewriteForExternalTable(baseTable)) {
-                    return Sets.newHashSet();
-                }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
                 }

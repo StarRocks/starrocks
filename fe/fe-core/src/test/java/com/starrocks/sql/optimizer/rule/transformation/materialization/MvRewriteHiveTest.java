@@ -34,9 +34,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
                 " as " +
                 " SELECT s_suppkey , s_name, n_name" +
                 " from hive0.tpch.supplier join hive0.tpch.nation" +
@@ -78,9 +75,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         createAndRefreshMv("test", "hive_join_mv_2", "create materialized view hive_join_mv_2" +
                 " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
                 " as " +
                 " SELECT s_nationkey , s_name, n_name" +
                 " from hive0.tpch.supplier join hive0.tpch.nation" +
@@ -115,9 +109,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     public void testHiveAggregateMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
                 " as " +
                 " SELECT s_nationkey , n_name, sum(s_acctbal) as total_sum" +
                 " from hive0.tpch.supplier join hive0.tpch.nation" +
@@ -155,9 +146,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_union_mv_1",
                 "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan1 = getFragmentPlan(query1);
@@ -176,15 +164,9 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setUseNthExecPlan(1);
         createAndRefreshMv("test", "hive_union_mv_1",
                 "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
-                "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                ") " +
                 " as " +
                 " SELECT s_suppkey , s_name, n_name" +
                 " from hive0.tpch.supplier join hive0.tpch.nation" +
@@ -204,8 +186,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         createAndRefreshMv("test", "hive_staleness_1",
                 "create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
-                        "\"mv_rewrite_staleness_second\" = \"60\"," +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                        "\"mv_rewrite_staleness_second\" = \"60\"" +
                         ") " +
                         " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey = 5");
 
