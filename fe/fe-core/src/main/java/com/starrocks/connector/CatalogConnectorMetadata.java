@@ -72,7 +72,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         this.informationSchema = informationSchema;
     }
 
-    private ConnectorMetadata metadataOfDb(String dBName) {
+    public ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
         }

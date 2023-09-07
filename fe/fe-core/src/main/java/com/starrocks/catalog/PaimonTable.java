@@ -17,6 +17,9 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.connector.CatalogConnectorMetadata;
+import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -78,7 +81,11 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName);
+        String createTime =
+                ((PaimonMetadata) ((CatalogConnectorMetadata) GlobalStateMgr.getCurrentState().getConnectorMgr()
+                        .getConnector(catalogName).getMetadata()).metadataOfDb(databaseName))
+                        .getTableCreateTime(databaseName, tableName);
+        return String.join(".", catalogName, databaseName, tableName, createTime);
     }
 
     @Override
