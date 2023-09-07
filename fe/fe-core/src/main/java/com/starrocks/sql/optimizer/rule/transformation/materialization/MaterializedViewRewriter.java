@@ -1579,7 +1579,9 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                builder.setPredicate(MvUtils.canonizePredicateForRewrite(
+                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp, optExpression.getInputs());
             } else {
@@ -1591,9 +1593,9 @@ public class MaterializedViewRewriter {
         List<OptExpression> children = Lists.newArrayList();
         for (int i = 0; i < 2; i++) {
             if (optExpression.inputAt(i).getOp() instanceof LogicalJoinOperator) {
-                children.add(pushdownPredicatesForJoin(optExpression.inputAt(i), null));
+                children.add(pushdownPredicatesForJoin(newJoin.inputAt(i), null));
             } else {
-                children.add(optExpression.inputAt(i));
+                children.add(newJoin.inputAt(i));
             }
         }
         return OptExpression.create(newJoin.getOp(), children);
