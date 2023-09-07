@@ -47,12 +47,8 @@ REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>;
 
 #### Global UDF
 
-<<<<<<< HEAD
-REVOKE { 
-=======
 ```SQL
 REVOKE
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
        | ALL GLOBAL FUNCTIONS }
@@ -124,14 +120,10 @@ REVOKE
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
   ```
 
-<<<<<<< HEAD
-REVOKE { 
-=======
 #### Materialized view
 
 ```SQL
 REVOKE
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
@@ -146,14 +138,10 @@ REVOKE
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
   ```
 
-<<<<<<< HEAD
-REVOKE { 
-=======
 #### Function
 
 ```SQL
 REVOKE
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS} IN 
@@ -163,28 +151,10 @@ REVOKE
 
 * You must first run SET CATALOG before you run this command.
 * You can also use db.function to represent a function.
-<<<<<<< HEAD
-REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
-=======
 
   ```SQL
   REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
   ```
-
-#### Storage volume
-
-```SQL
-REVOKE
-    CREATE STORAGE VOLUME 
-    ON SYSTEM
-    FROM { ROLE | USER} {<role_name>|<user_identity>}
-
-REVOKE
-    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
-    FROM { ROLE | USER} {<role_name>|<user_identity>}
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
-```
 
 ### Revoke roles
 
