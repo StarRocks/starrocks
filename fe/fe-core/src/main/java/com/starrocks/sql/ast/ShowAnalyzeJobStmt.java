@@ -21,6 +21,7 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
@@ -31,7 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.StatsConstants;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +51,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Catalog", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Table", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
@@ -64,29 +65,30 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
     public static List<String> showAnalyzeJobs(ConnectContext context,
                                                AnalyzeJob analyzeJob) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "ALL", "ALL", "ALL", "", "", "", "", "", "");
-        long dbId = analyzeJob.getDbId();
-        long tableId = analyzeJob.getTableId();
+        List<String> row = Lists.newArrayList("", InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "ALL", "ALL",
+                "ALL", "", "", "", "", "", "");
         List<String> columns = analyzeJob.getColumns();
-
         row.set(0, String.valueOf(analyzeJob.getId()));
-        if (StatsConstants.DEFAULT_ALL_ID != dbId) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
+        if (!analyzeJob.isAnalyzeAllDb()) {
+            String dbName = analyzeJob.getDbName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
 
             if (db == null) {
-                throw new MetaNotFoundException("No found database: " + dbId);
+                throw new MetaNotFoundException("No found database: " + dbName);
             }
 
-            row.set(1, db.getOriginName());
+            row.set(2, db.getOriginName());
 
-            if (StatsConstants.DEFAULT_ALL_ID != tableId) {
-                Table table = db.getTable(tableId);
+            if (!analyzeJob.isAnalyzeAllTable()) {
+                String tableName = analyzeJob.getTableName();
+                Table table = db.getTable(tableName);
 
                 if (table == null) {
-                    throw new MetaNotFoundException("No found table: " + tableId);
+                    throw new MetaNotFoundException("No found table: " + tableName);
                 }
 
-                row.set(2, table.getName());
+                row.set(3, table.getName());
 
                 // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
@@ -102,26 +104,26 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                         && (columns.size() != table.getBaseSchema().size())) {
                     String str = String.join(",", columns);
                     if (str.length() > 100) {
-                        row.set(3, str.substring(0, 100) + "...");
+                        row.set(4, str.substring(0, 100) + "...");
                     } else {
-                        row.set(3, str);
+                        row.set(4, str);
                     }
                 }
             }
         }
 
-        row.set(4, analyzeJob.getAnalyzeType().name());
-        row.set(5, analyzeJob.getScheduleType().name());
-        row.set(6, analyzeJob.getProperties() == null ? "{}" : analyzeJob.getProperties().toString());
-        row.set(7, analyzeJob.getStatus().name());
+        row.set(5, analyzeJob.getAnalyzeType().name());
+        row.set(6, analyzeJob.getScheduleType().name());
+        row.set(7, analyzeJob.getProperties() == null ? "{}" : analyzeJob.getProperties().toString());
+        row.set(8, analyzeJob.getStatus().name());
         if (LocalDateTime.MIN.equals(analyzeJob.getWorkTime())) {
-            row.set(8, "None");
+            row.set(9, "None");
         } else {
-            row.set(8, analyzeJob.getWorkTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+            row.set(9, analyzeJob.getWorkTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         }
 
         if (null != analyzeJob.getReason()) {
-            row.set(9, analyzeJob.getReason());
+            row.set(10, analyzeJob.getReason());
         }
 
         return row;

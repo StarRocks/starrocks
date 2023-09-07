@@ -159,6 +159,7 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
+import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -1178,9 +1179,10 @@ public class StmtExecutor {
             } catch (MetaNotFoundException ignore) {
                 // If the db or table doesn't exist anymore, we won't check privilege on it
             }
-        } else if (analyzeJob != null) {
-            Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
-                    analyzeJob.getTableId());
+        } else if (analyzeJob != null && analyzeJob.isNative()) {
+            NativeAnalyzeJob nativeAnalyzeJob = (NativeAnalyzeJob) analyzeJob;
+            Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(nativeAnalyzeJob.getDbId(),
+                    nativeAnalyzeJob.getTableId());
             tableNames.forEach(tableName ->
                     checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
                         tableName.getTbl(), analyzeId)

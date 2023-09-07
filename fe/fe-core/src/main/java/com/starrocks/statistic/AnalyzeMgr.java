@@ -104,7 +104,7 @@ public class AnalyzeMgr implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeJob(job);
     }
 
-    public void updateAnalyzeJobWithoutLog(AnalyzeJob job) {
+    public void updateAnalyzeJobWithoutLog(NativeAnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
@@ -123,11 +123,16 @@ public class AnalyzeMgr implements Writable {
         return Lists.newLinkedList(analyzeJobMap.values());
     }
 
-    public void replayAddAnalyzeJob(AnalyzeJob job) {
+    public List<NativeAnalyzeJob> getAllNativeAnalyzeJobList() {
+        return analyzeJobMap.values().stream().filter(AnalyzeJob::isNative).map(job -> (NativeAnalyzeJob) job).
+                collect(Collectors.toList());
+    }
+
+    public void replayAddAnalyzeJob(NativeAnalyzeJob job) {
         analyzeJobMap.put(job.getId(), job);
     }
 
-    public void replayRemoveAnalyzeJob(AnalyzeJob job) {
+    public void replayRemoveAnalyzeJob(NativeAnalyzeJob job) {
         analyzeJobMap.remove(job.getId());
     }
 
@@ -539,7 +544,7 @@ public class AnalyzeMgr implements Writable {
 
         if (null != data) {
             if (null != data.jobs) {
-                for (AnalyzeJob job : data.jobs) {
+                for (NativeAnalyzeJob job : data.jobs) {
                     replayAddAnalyzeJob(job);
                 }
             }
@@ -568,7 +573,7 @@ public class AnalyzeMgr implements Writable {
     public void write(DataOutput out) throws IOException {
         // save history
         SerializeData data = new SerializeData();
-        data.jobs = getAllAnalyzeJobList();
+        data.jobs = getAllNativeAnalyzeJobList();
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
@@ -631,8 +636,8 @@ public class AnalyzeMgr implements Writable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
-            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-            replayAddAnalyzeJob(analyzeJob);
+            NativeAnalyzeJob nativeAnalyzeJob = reader.readJson(NativeAnalyzeJob.class);
+            replayAddAnalyzeJob(nativeAnalyzeJob);
         }
 
         int analyzeStatusSize = reader.readInt();
@@ -656,7 +661,7 @@ public class AnalyzeMgr implements Writable {
 
     private static class SerializeData {
         @SerializedName("analyzeJobs")
-        public List<AnalyzeJob> jobs;
+        public List<NativeAnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
         public List<NativeAnalyzeStatus> nativeStatus;
