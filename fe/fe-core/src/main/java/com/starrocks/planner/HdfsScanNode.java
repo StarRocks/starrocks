@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -94,10 +94,19 @@ public class HdfsScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 
     @Override
@@ -153,7 +162,11 @@ public class HdfsScanNode extends ScanNode {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
                     output.append(prefix)
+<<<<<<< HEAD
                             .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(), slotDescriptor.getColumn().getName(), type));
+=======
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
                 }
             }
         }

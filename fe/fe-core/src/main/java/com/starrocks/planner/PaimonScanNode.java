@@ -17,6 +17,7 @@ package com.starrocks.planner;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -86,11 +87,20 @@ public class PaimonScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
+<<<<<<< HEAD
         PaimonConnector connector = (PaimonConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
+=======
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 
     @Override
@@ -107,7 +117,8 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
-        List<String> fieldNames = tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+        List<String> fieldNames =
+                tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 paimonTable.getCatalogName(), paimonTable, null, -1, predicate, fieldNames);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);

@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.PaimonTable;
+<<<<<<< HEAD
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
@@ -58,5 +59,37 @@ public class PaimonScanNodeTest {
         long totalFileLength = scanNode.getTotalFileLength(split);
 
         Assert.assertEquals(200, totalFileLength);
+=======
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.Test;
+
+import java.util.HashMap;
+
+public class PaimonScanNodeTest {
+    @Test
+    public void testInit(@Mocked GlobalStateMgr globalStateMgr,
+                         @Mocked CatalogConnector connector,
+                         @Mocked PaimonTable table) {
+        String catalog = "XXX";
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+                result = connector;
+                connector.getMetadata().getCloudConfiguration();
+                result = cc;
+                table.getCatalogName();
+                result = catalog;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 }

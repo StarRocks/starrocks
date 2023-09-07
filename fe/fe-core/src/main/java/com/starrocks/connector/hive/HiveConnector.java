@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
@@ -38,7 +37,6 @@ public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
     private final Map<String, String> properties;
-    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
@@ -46,7 +44,7 @@ public class HiveConnector implements Connector {
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
@@ -84,7 +82,13 @@ public class HiveConnector implements Connector {
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.isSearchRecursive(),
+<<<<<<< HEAD
                 internalMgr.enableHmsEventsIncrementalSync()
+=======
+                internalMgr.enableHmsEventsIncrementalSync(),
+                hdfsEnvironment,
+                internalMgr.getMetastoreType()
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
         );
     }
 
@@ -109,9 +113,5 @@ public class HiveConnector implements Connector {
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
     }
 }
