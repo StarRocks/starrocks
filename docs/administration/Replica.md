@@ -150,7 +150,7 @@ ADMIN CANCEL REPAIR TABLE tbl [PARTITION (p1, p2, ...)] ;
 
 Prioritization ensures that severely damaged tablets are repaired first. However, if a high-priority repair task keeps failing, it will result in low-priority tasks remaining unscheduled. Therefore, we dynamically adjust the priority based on the status of each task to ensure that all tasks have a chance to be scheduled.
 
-* If the scheduling fails for 5 consecutive times (e.g., unable to acquire resources, unable to find a suitable source or destination, etc.), the task will be deprioritized.
+* If the scheduling fails 5 consecutive times (e.g., unable to acquire resources, unable to find a suitable source or destination, etc.), the task will be deprioritized.
 * A task will be prioritized if it has not been scheduled for 30 minutes.
 * The priority of a task can’t be adjusted twice within five minutes.
 
@@ -158,25 +158,25 @@ To ensure that the initial priority level is weighted, `VERY_HIGH` tasks can onl
 
 ## Replica Balancing
 
-StarRocks automatically performs replica balancing within a cluster. The main idea of balancing is to create  replicas on a low-load node and delete replicas on the high-load node. More than one storage medium may exist on different BE nodes within the same cluster.   To keep tablets in their original storage medium after balancing, BE nodes are divided based on storage media  , allowing the load balancing to be wisely scheduled .
+StarRocks automatically performs replica balancing within a cluster. The main idea of balancing is to create replicas on a low-load node and delete replicas on the high-load node. More than one storage medium may exist on different BE nodes within the same cluster. To keep tablets in their original storage medium after balancing, BE nodes are divided based on storage media, allowing the load balancing to be wisely scheduled.
 
 Similarly, replica balancing ensures that no replicas of the same Tablet are deployed on BEs of the same host.
 
 ### BE Node Load
 
-ClusterLoadStatistics (CLS) shows the load balancing of each Backend in a cluster and triggersTabletScheduler to balance the cluster. Currently, we  `**Disk Utilization**` and `**Number of Replicas**` to calculate `loadScore` for each BE. The higher the score, the heavier the load on the BE.
+ClusterLoadStatistics (CLS) shows the load balancing of each Backend in a cluster and triggersTabletScheduler to balance the cluster. Currently, we use **Disk Utilization** and **Number of Replicas** to calculate the `loadScore` for each BE. The higher the score, the heavier the load on the BE.
 
 `capacityCoefficient` and `replicaNumCoefficient` (sum to 1) are the weighting factors for `Disk Utilization` and `Number of Replicas` respectively. The `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75% (configurable via the FE configuration item `capacity_used_percent_high_water`), the value is 1. If the utilization is between 50% and 75%, the weight factor increases smoothly based on this formula:
 
 `capacityCoefficient= 2 * disk utilization - 0.5`
 
-This weighting factor ensures that when the disk usage is too high, the load score of this Backend will be higher, forcing to reduce the load on this BE as soon as possible.
+This weighting factor ensures that when the disk usage is too high, the load score of this Backend will be higher, forcing a reduction in the load on this BE as soon as possible.
 
 TabletScheduler will update the CLS every 1 minute.
 
 ### Balancing Policy
 
-TabletScheduler selects a certain number of healthy tablets as candidates for balancing through LoadBalancer in each scheduling round and adjust future scheduling based on these candidate slices.
+TabletScheduler selects a certain number of healthy tablets as candidates for balancing through LoadBalancer in each scheduling round and adjusts future scheduling based on these candidate slices.
 
 ## Resource Control
 
@@ -191,18 +191,18 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
 ### View replica status
 
 1. Global Status Check  
-    The `SHOW PROC '/statistic';`command allows you to view the replica status of the entire cluster.
+    The `SHOW PROC '/statistic';` command allows you to view the replica status of the entire cluster.
 
-    ~~~plain text
-        +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-        | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
-        +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-        | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
-        | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
-        | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
-        | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
-        +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-    ~~~
+  ```plaintext
+  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+  | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
+  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+  | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
+  | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
+  | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
+  | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
+  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+  ```
 
     The `UnhealthyTabletNum` column shows how many unhealthy Tablets are in the corresponding Database. The `InconsistentTabletNum` column shows how many Tablets in the corresponding Database are in a replica inconsistent state. The last `Total` row gives the statistics of the entire cluster. Normally `UnhealthyTabletNum` and `InconsistentTabletNum` should be zero. If they are not zero, you can further check the tablet’s information. As shown above, there is one tablet in the `UM_TEST` database with unhealthy status, then you can use the following command to see which tablet it is.
 
@@ -223,7 +223,7 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
     Users can check the status of replicas of a specific table or partition with the following command and can filter the status by the WHERE statement. For example, to view the status of NORMAL replicas of `p1` and `p2` in `tbl1`.  
     `ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2) WHERE STATUS = "NORMAL";`
 
-    ~~~plain text
+    ```plaintext
     +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
     | TabletId | ReplicaId | BackendId | Version | LastFailedVersion | LastSuccessVersion | CommittedVersion | SchemaHash | VersionNum | IsBad | State  | Status |
     +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
@@ -234,14 +234,14 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
     | 29502433 | 44900737  | 10004     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
     | 29502433 | 48369135  | 10006     | 2       | -1                | -1                 | 1                | -1         | 2          | false | NORMAL | OK     |
     +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
-    ~~~
+    ```
 
     If `IsBad = true`, that means that the replica is corrupted. The `Status` column shows additional information.
     The `ADMIN SHOW REPLICA STATUS` command is mainly used to view the health status of a replica. Users can also view additional information with the following command.  
 
     `SHOW TABLET FROM tbl1;`
 
-    ~~~plain text
+    ```plaintext
     +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
     | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion |     CheckVersionHash | VersionCount | PathHash             | MetaUrl              | CompactionStatus     |
     +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
@@ -249,7 +249,7 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
     | 29502429 | 36885996  | 10002     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -1441285706148429853 | url                  | url                  |
     | 29502429 | 48100551  | 10007     | 1421156361 | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | 784      | 0        | NORMAL | N/A                     | -1           |     -1               | 2            | -4784691547051455525 | url                  | url                  |
     +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+----------------------+--------------+----------------------+----------------------+----------------------+
-    ~~~
+    ```
 
 Additional information includes replica size, number of rows, number of versions, data path where it is located, etc.
 
@@ -258,23 +258,23 @@ Additional information includes replica size, number of rows, number of versions
 In addition, users can check whether the replicas are evenly distributed with the following command  
 `ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;`
 
-~~~plain text
-    +-----------+------------+-------+---------+
-    | BackendId | ReplicaNum | Graph | Percent |
-    +-----------+------------+-------+---------+
-    | 10000     | 7          |       | 7.29 %  |
-    | 10001     | 9          |       | 9.38 %  |
-    | 10002     | 7          |       | 7.29 %  |
-    | 10003     | 7          |       | 7.29 %  |
-    | 10004     | 9          |       | 9.38 %  |
-    | 10005     | 11         | >     | 11.46 % |
-    | 10006     | 18         | >     | 18.75 % |
-    | 10007     | 15         | >     | 15.62 % |
-    | 10008     | 13         | >     | 13.54 % |
-    +-----------+------------+-------+---------+
-    ~~~
+  ```plaintext
+  +-----------+------------+-------+---------+
+  | BackendId | ReplicaNum | Graph | Percent |
+  +-----------+------------+-------+---------+
+  | 10000     | 7          |       | 7.29 %  |
+  | 10001     | 9          |       | 9.38 %  |
+  | 10002     | 7          |       | 7.29 %  |
+  | 10003     | 7          |       | 7.29 %  |
+  | 10004     | 9          |       | 9.38 %  |
+  | 10005     | 11         | >     | 11.46 % |
+  | 10006     | 18         | >     | 18.75 % |
+  | 10007     | 15         | >     | 15.62 % |
+  | 10008     | 13         | >     | 13.54 % |
+  +-----------+------------+-------+---------+
+  ```
 
-Information includes the number of replicas on each BE node, percentage, and simple graphical display is shown above.
+Information includes the number of replicas on each BE node, percentage, and a simple graphical display as shown above.
 
 Tablet Level Status Check  
 
@@ -282,26 +282,26 @@ Users can use the following command to check the status of a specific Tablet. Fo
 
 `SHOW TABLET 29502553;`
 
-~~~plain text
-    +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
-    | DbName                 | TableName | PartitionName | IndexName | DbId     | TableId  | PartitionId | IndexId  | IsSync | DetailCmd                                                                 |
-    +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
-    | default_cluster:test   | test      | test          | test      | 29502391 | 29502428 | 29502427    | 29502428 | true   | SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553'; |
-    +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
-    ~~~
+  ```plain text
+  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+  | DbName                 | TableName | PartitionName | IndexName | DbId     | TableId  | PartitionId | IndexId  | IsSync | DetailCmd                                                                 |
+  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+  | default_cluster:test   | test      | test          | test      | 29502391 | 29502428 | 29502427    | 29502428 | true   | SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553'; |
+  +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
+  ```
 
 Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details 
     `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
 
-    ~~~plain text
-    +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
-    | ReplicaId | BackendId | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | SchemaHash | DataSize | RowCount | State  | IsBad | VersionCount | PathHash             | MetaUrl  | CompactionStatus |
-    +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
-    | 43734060  | 10004     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | -8566523878520798656 | url      | url              |
-    | 29502555  | 10002     | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1885826196444191611  | url      | url              |
-    | 39279319  | 10007     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1656508631294397870  | url      | url              |
-    +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
-~~~
+  ```plain text
+  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+  | ReplicaId | BackendId | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | SchemaHash | DataSize | RowCount | State  | IsBad | VersionCount | PathHash             | MetaUrl  | CompactionStatus |
+  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+  | 43734060  | 10004     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | -8566523878520798656 | url      | url              |
+  | 29502555  | 10002     | 2       | 0           | 2                 | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1885826196444191611  | url      | url              |
+  | 39279319  | 10007     | 2       | 0           | -1                | 0                     | -1               | 0                    | N/A           | -1         | 784      | 0        | NORMAL | false | 2            | 1656508631294397870  | url      | url              |
+  +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
+  ```
 
 Above shows all replicas of the corresponding Tablet. The content shown here is the same as `SHOW TABLET FROM tbl1;`. But here you can clearly see the status of all replicas of a specific Tablet.
 
@@ -309,13 +309,13 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
 
 1. View the tasks that are waiting to be scheduled by `SHOW PROC '/cluster_balance/pending_tablets';`
 
-    ~~~plain text
-    +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-    | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
-    +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-    | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
-    +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
-    ~~~
+  ```plaintext
+  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+  | TabletId | Type   | Status          | State   | OrigPrio | DynmPrio | SrcBe | SrcPath | DestBe | DestPath | Timeout | Create              | LstSched            | LstVisit            | Finished | Rate | FailedSched | FailedRunning | LstAdjPrio          | VisibleVer | VisibleVerHash      | CmtVer | CmtVerHash          | ErrMsg                        |
+  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+  | 4203036  | REPAIR | REPLICA_MISSING | PENDING | HIGH     | LOW      | -1    | -1      | -1     | -1       | 0       | 2019-02-21 15:00:20 | 2019-02-24 11:18:41 | 2019-02-24 11:18:41 | N/A      | N/A  | 2           | 0             | 2019-02-21 15:00:43 | 1          | 0                   | 2      | 0                   | unable to find source replica |
+  +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
+  ```
 
     A breakdown of all the properties is as follows.
 
