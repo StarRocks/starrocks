@@ -43,10 +43,6 @@ namespace starrocks::spill {
 
 // some metrics for spill
 struct SpillProcessMetrics {
-<<<<<<< HEAD
-=======
-public:
->>>>>>> 653ae3e520 ([Enhancement] Refine profile to support visualization refactor(2) (#30381))
     SpillProcessMetrics() = default;
     SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes);
 

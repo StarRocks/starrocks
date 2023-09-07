@@ -40,14 +40,8 @@
 
 namespace starrocks::spill {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
-<<<<<<< HEAD
-    total_spill_bytes = total_spill_bytes_;
-    _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
-    profile->add_child(_spiller_metrics.get(), true, nullptr);
-=======
     DCHECK(profile != nullptr);
     total_spill_bytes = total_spill_bytes_;
->>>>>>> 653ae3e520 ([Enhancement] Refine profile to support visualization refactor(2) (#30381))
 
     std::string parent = "SpillStatistics";
     ADD_TIMER(profile, parent);
