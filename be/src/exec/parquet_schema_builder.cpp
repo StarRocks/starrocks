@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "arrow_schema_converter.h"
+#include "parquet_schema_builder.h"
 
 #include "fmt/format.h"
 #include "gutil/casts.h"
@@ -22,6 +22,7 @@ namespace starrocks {
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     if (node->is_group()) {
@@ -102,8 +103,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         break;
     }
     default:
-        return Status::NotSupported(fmt::format("Unkown supported parquet physical type: {}, column name: {}",
-                                                physical_type, node->name()));
+        // Treat unsupported types as VARCHAR.
+        *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     }
 
     return Status::OK();
@@ -114,12 +115,18 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
     auto logical_type = node->logical_type();
     if (logical_type->is_list()) {
         return get_parquet_type_from_list(node, type_desc);
+    } else if (logical_type->is_map()) {
+        return get_parquet_type_from_map(node, type_desc);
     }
 
-    return Status::NotSupported("Unkown supported parquet physical type");
+    // Treat unsupported types as VARCHAR.
+    *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return Status::OK();
 }
 
 /*
+https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+
 LIST is used to annotate types that should be interpreted as lists.
 
 LIST must always annotate a 3-level structure:
@@ -136,7 +143,7 @@ The element field encodes the list's element type and repetition. Element repeti
 
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     // 1st level.
-    // <list-repetition> group <name> (LIST) 
+    // <list-repetition> group <name> (LIST)
     DCHECK(node->is_group());
     DCHECK(node->logical_type()->is_list());
     *type_desc = TypeDescriptor(TYPE_ARRAY);
@@ -152,11 +159,60 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
     DCHECK(list_group_node->is_group());
 
     // 3rd level.
-    // <list-repetition> group <name> (LIST) 
+    // <list-repetition> group <name> (LIST)
     const auto& child_node = list_group_node->field(0);
     TypeDescriptor child_type_desc;
     RETURN_IF_ERROR(get_parquet_type(child_node, &child_type_desc));
     type_desc->children.emplace_back(std::move(child_type_desc));
+
+    return Status::OK();
+}
+
+/*
+https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+
+MAP is used to annotate types that should be interpreted as a map from keys to values. MAP must annotate a 3-level structure:
+
+<map-repetition> group <name> (MAP) {
+  repeated group key_value {
+    required <key-type> key;
+    <value-repetition> <value-type> value;
+  }
+}
+The outer-most level must be a group annotated with MAP that contains a single field named key_value. The repetition of this level must be either optional or required and determines whether the list is nullable.
+The middle level, named key_value, must be a repeated group with a key field for map keys and, optionally, a value field for map values.
+The key field encodes the map's key type. This field must have repetition required and must always be present.
+The value field encodes the map's value type and repetition. This field can be required, optional, or omitted.
+*/
+
+static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
+    // 1st level.
+    // <map-repetition> group <name> (MAP) {
+    DCHECK(node->is_group());
+    DCHECK(node->logical_type()->is_map());
+    *type_desc = TypeDescriptor(TYPE_MAP);
+
+    auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    DCHECK(group_node->field_count() == 1);
+
+    // 2nd level.
+    // repeated group key_value {
+    auto kv_node = group_node->field(0);
+    auto kv_group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(kv_node);
+    DCHECK(kv_group_node->field_count() == 2);
+    DCHECK(kv_node->is_group());
+
+    // 3rd level.
+    // <list-repetition> group <name> (LIST)
+    const auto& key_node = kv_group_node->field(0);
+    TypeDescriptor key_type_desc;
+    RETURN_IF_ERROR(get_parquet_type(key_node, &key_type_desc));
+    type_desc->children.emplace_back(std::move(key_type_desc));
+
+    const auto& value_node = kv_group_node->field(1);
+    TypeDescriptor value_type_desc;
+    RETURN_IF_ERROR(get_parquet_type(value_node, &value_type_desc));
+    type_desc->children.emplace_back(std::move(value_type_desc));
 
     return Status::OK();
 }

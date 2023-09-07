@@ -82,8 +82,8 @@ set(EXEC_FILES
     jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
-    arrow_schema_converter.cpp
     parquet_scanner.cpp
+    parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
     parquet_builder.cpp
