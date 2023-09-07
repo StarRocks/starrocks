@@ -645,7 +645,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
 
         String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
