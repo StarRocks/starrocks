@@ -1395,6 +1395,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         // 4. write meta
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
         if (rowset_meta_pb.has_txn_meta()) {
+            full_rowset_size = rowset->total_segment_data_size();
             rowset->rowset_meta()->clear_txn_meta();
             rowset->rowset_meta()->set_total_row_size(full_row_size);
             rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
@@ -2659,14 +2660,14 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
         rapidjson::Value current_task(rapidjson::kObjectType);
         current_task.SetObject();
         if (_current_compaction_task_info) {
-            current_task.AddMember("input_rowset_num", _current_compaction_task_info->input_rowsets_num,
+            current_task.AddMember("rowset_count", _current_compaction_task_info->input_rowsets_num,
                                    root.GetAllocator());
-            current_task.AddMember("input_segment_num", _current_compaction_task_info->input_segments_num,
+            current_task.AddMember("segment_count", _current_compaction_task_info->input_segments_num,
                                    root.GetAllocator());
             rapidjson::Value input_data_size;
             format_str = std::to_string(_current_compaction_task_info->input_data_size / divided) + "MB";
             input_data_size.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-            current_task.AddMember("input_data_size", input_data_size, root.GetAllocator());
+            current_task.AddMember("data_size", input_data_size, root.GetAllocator());
             rapidjson::Value start_time;
             format_str = ToStringFromUnixMillis(_current_compaction_task_info->start_time);
             start_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());

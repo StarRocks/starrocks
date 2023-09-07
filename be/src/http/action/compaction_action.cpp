@@ -357,7 +357,7 @@ void CompactionAction::handle(HttpRequest* req) {
         st = _handle_submit_repairs(req, &json_result);
     } else if (_type == CompactionActionType::SHOW_RUNNING_TASK) {
         st = _handle_running_task(req, &json_result);
-    } else if (_type == CompactionActionType::SHOW_NUM) {
+    } else if (_type == CompactionActionType::SHOW_TASK_NUM) {
         st = _handle_show_task_num(req, &json_result);
     } else {
         st = Status::NotSupported("Action not supported");

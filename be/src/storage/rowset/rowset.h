@@ -225,22 +225,6 @@ public:
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
 
-    size_t get_level() const {
-        if (!config::enable_size_tiered_compaction_strategy) {
-            return -1;
-        }
-        size_t size = data_disk_size();
-        int64_t level_size = config::size_tiered_min_level_size * config::size_tiered_level_multiple;
-        size_t level = 0;
-        for (; level < config::size_tiered_level_num; level++) {
-            if (size <= level_size) {
-                return level;
-            }
-            level_size *= config::size_tiered_level_multiple;
-        }
-        return level;
-    }
-
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();

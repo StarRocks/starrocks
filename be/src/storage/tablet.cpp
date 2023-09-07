@@ -1235,6 +1235,16 @@ void Tablet::get_compaction_status(std::string* json_result) {
             compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
             task.AddMember("type", compaction_type_value, root.GetAllocator());
 
+            std::string format_str = std::to_string(compaction_task->get_progress()) + "%";
+            rapidjson::Value progress;
+            progress.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+            task.AddMember("progress", progress, root.GetAllocator());
+
+            rapidjson::Value input_data_size;
+            format_str = std::to_string(compaction_task->input_rowsets_size() / 1024 / 1024) + "MB";
+            input_data_size.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
+            task.AddMember("input_data_size", input_data_size, root.GetAllocator());
+
             rapidjson::Value compaction_rowsets_count;
             compaction_rowsets_count.SetUint64(compaction_rowsets.size());
             task.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
@@ -1259,6 +1269,7 @@ void Tablet::get_compaction_status(std::string* json_result) {
                 input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
             }
             task.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+            task.AddMember("segment_count", compaction_task->input_segments_num(), root.GetAllocator());
             compaction_detail.AddMember("task", task, root.GetAllocator());
         }
         root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());

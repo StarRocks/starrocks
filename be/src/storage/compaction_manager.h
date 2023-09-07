@@ -103,8 +103,8 @@ public:
 
     void get_running_status(std::string* json_result);
 
+    // the caller needs to lock the _tasks_mutex
     uint16_t running_tasks_num() {
-        std::lock_guard lg(_tasks_mutex);
         size_t res = 0;
         for (const auto& it : _running_tasks) {
             res += it.second.size();
@@ -119,11 +119,8 @@ public:
             exceed = true;
         }
         std::lock_guard lg(_tasks_mutex);
-        size_t running_tasks_num = 0;
-        for (const auto& it : _running_tasks) {
-            running_tasks_num += it.second.size();
-        }
-        if (running_tasks_num >= _max_task_num) {
+        size_t running_task_num = running_tasks_num();
+        if (running_task_num >= _max_task_num) {
             VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }

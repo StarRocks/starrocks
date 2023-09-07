@@ -47,7 +47,7 @@ enum CompactionActionType {
     SHOW_REPAIR = 3,
     SUBMIT_REPAIR = 4,
     SHOW_RUNNING_TASK = 5,
-    SHOW_NUM = 6
+    SHOW_TASK_NUM = 6
 };
 
 // This action is used for viewing the compaction status.
