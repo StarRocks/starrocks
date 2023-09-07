@@ -771,16 +771,20 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
         }
 
-        auto base_iter = base_sort_key_unique_ids.cbegin();
-        auto new_iter = new_sort_key_unique_ids.cbegin();
-        while (base_iter != base_sort_key_unique_ids.cend() && new_iter != new_sort_key_unique_ids.cend() &&
-               *base_iter == *new_iter) {
-            ++base_iter;
-            ++new_iter;
+        bool is_sc_sorting = false;
+        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+            is_sc_sorting = true;
+        } else {
+            auto base_iter = base_sort_key_unique_ids.cbegin();
+            auto new_iter = new_sort_key_unique_ids.cbegin();
+            // check wheather new sort keys are just subset of base sort keys
+            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+                ++base_iter;
+                ++new_iter;
+            }
+            is_sc_sorting = (new_iter != new_sort_key_unique_ids.cend());
         }
-        if (base_iter != base_sort_key_unique_ids.cend() || new_iter != new_sort_key_unique_ids.cend()) {
-            sc_params.sc_directly = !sc_params.sc_sorting;
-        }
+        sc_params.sc_directly = is_sc_sorting && !sc_params.sc_sorting;
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get(), _alter_msg_header);
