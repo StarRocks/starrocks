@@ -824,7 +824,8 @@ public class ExplainAnalyzer {
     private static Counter searchMetricFromUpperLevel(NodeInfo nodeInfo, String... nameLevels) {
         for (int i = 0; i < nodeInfo.operatorProfiles.size(); i++) {
             RuntimeProfile operatorProfile = nodeInfo.operatorProfiles.get(i);
-            if (i < nodeInfo.operatorProfiles.size() - 1 && operatorProfile.getName().contains("_SINK (")) {
+            if (i < nodeInfo.operatorProfiles.size() - 1 && (operatorProfile.getName().contains("_SINK (")
+                    || operatorProfile.getName().contains("_BUILD ("))) {
                 continue;
             }
             RuntimeProfile cur = getLastLevel(operatorProfile, nameLevels);
