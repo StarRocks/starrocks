@@ -20,11 +20,11 @@
 
 #include <utility>
 
-#include "arrow_schema_converter.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
+#include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
