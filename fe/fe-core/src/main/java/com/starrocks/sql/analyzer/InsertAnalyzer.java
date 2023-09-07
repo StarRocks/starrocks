@@ -312,10 +312,10 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
         Table table = MetaUtils.getTable(catalogName, dbName, tableName);
 
         if (table instanceof ExternalOlapTable) {
-            Database database = MetaUtils.getDatabase(catalogName, dbName);
             table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
         }
 
