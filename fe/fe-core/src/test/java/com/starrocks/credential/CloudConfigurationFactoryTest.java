@@ -58,10 +58,16 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.AWS);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
+        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS),
+                "false");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "AWSCloudConfiguration{resources='', jars='', cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', " +
+                        "externalId='', region='ZZ', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}");
     }
 
     @Test
@@ -77,10 +83,13 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.getCloudType(), CloudType.ALIYUN);
         TCloudConfiguration tc = new TCloudConfiguration();
         cc.toThrift(tc);
+        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "AliyunCloudConfiguration{resources='', jars='', cred=AliyunCloudCredential{accessKey='XX', secretKey='YY', " +
+                        "endpoint='ZZ'}}");
     }
 
     @Test
@@ -101,7 +110,9 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "AzureCloudConfiguration{resources='', jars='', cred=AzureBlobCloudCredential{endpoint='XX', " +
+                        "storageAccount='XX', sharedKey='XX', container='XX', sasToken='XX'}}");
     }
 
     @Test
@@ -121,7 +132,9 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "AzureCloudConfiguration{resources='', jars='', cred=AzureADLS1CloudCredential{useManagedServiceIdentity=false," +
+                        " oauth2ClientId='XX', oauth2Credential='XX', oauth2Endpoint='XX'}}");
     }
 
     @Test
@@ -144,7 +157,10 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "AzureCloudConfiguration{resources='', jars='', cred=AzureADLS2CloudCredential{oauth2ManagedIdentity=false, " +
+                        "oauth2TenantId='XX', oauth2ClientId='XX', storageAccount='XX', sharedKey='XX', " +
+                        "oauth2ClientSecret='XX', oauth2ClientEndpoint='XX'}}");
     }
 
     @Test
@@ -165,7 +181,10 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "GCPCloudConfiguration{resources='', jars='', cred=GCPCloudCredential{useComputeEngineServiceAccount=false, " +
+                        "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
+                        "impersonationServiceAccount='XX'}}");
     }
 
     @Test
@@ -184,7 +203,9 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(),
+                "HDFSCloudConfiguration{resources='', jars='', cred=HDFSCloudCredential{authentication='simple', username='XX'," +
+                        " password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
     }
 
     @Test
@@ -197,7 +218,7 @@ public class CloudConfigurationFactoryTest {
         Configuration conf = new Configuration();
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
-        System.out.println(cc.toConfString());
+        Assert.assertEquals(cc.toConfString(), "CloudConfiguration{resources='', jars=''}");
     }
 
     @Test
@@ -205,6 +226,8 @@ public class CloudConfigurationFactoryTest {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
-        System.out.println(cred.toCredString());
+        Assert.assertEquals(cred.toCredString(),
+                "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
+                        "sessionToken='', iamRoleArn='', externalId='', region='', endpoint=''}");
     }
 }
