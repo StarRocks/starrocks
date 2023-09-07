@@ -37,9 +37,21 @@ public class ColumnRangePredicate extends RangePredicate {
     // the relation between each Range in RangeSet is 'or'
     private TreeRangeSet<ConstantOperator> columnRanges;
 
+    private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
+
     public ColumnRangePredicate(ColumnRefOperator columnRef, TreeRangeSet<ConstantOperator> columnRanges) {
         this.columnRef = columnRef;
         this.columnRanges = columnRanges;
+        List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
+        if (ConstantOperatorDiscreteDomain.isSupportedType(columnRef.getType())) {
+            for (Range range : this.columnRanges.asRanges()) {
+                Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
+                canonicalRanges.add(canonicalRange);
+            }
+            this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
+        } else {
+            this.canonicalColumnRanges = columnRanges;
+        }
     }
 
     public ColumnRefOperator getColumnRef() {
@@ -82,7 +94,7 @@ public class ColumnRangePredicate extends RangePredicate {
             return false;
         }
         ColumnRangePredicate columnRangePredicate = other.cast();
-        return columnRanges.enclosesAll(columnRangePredicate.columnRanges);
+        return canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
     }
 
     @Override
