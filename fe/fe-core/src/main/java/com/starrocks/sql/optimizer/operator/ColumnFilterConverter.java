@@ -156,7 +156,7 @@ public class ColumnFilterConverter {
 
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
-        if (predicate.getChildren().size() == 0) {
+        if (CollectionUtils.isEmpty(predicate.getChildren())) {
             return;
         }
 
