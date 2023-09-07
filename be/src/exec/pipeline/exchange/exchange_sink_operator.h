@@ -177,6 +177,7 @@ private:
     RuntimeProfile::Counter* _compress_timer = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

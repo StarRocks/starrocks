@@ -60,10 +60,11 @@ public:
         return _writable_file->size();
     }
     std::string path() const {
-        std::ostringstream oss;
-        oss << _dir->dir() << "/" << print_id(_query_id) << "/" << _plan_node_name << "-" << _plan_node_id << "-"
-            << _id;
-        return oss.str();
+        // std::ostringstream oss;
+        // oss << _dir->dir() << "/" << print_id(_query_id) << "/" << _plan_node_name << "-" << _plan_node_id << "-"
+        //     << _id;
+        return fmt::format("{}/{}/{}-{}-{}", _dir->dir(), print_id(_query_id), _plan_node_name, _plan_node_id, _id);
+        // return oss.str();
     }
     uint64_t id() const { return _id; }
 
@@ -229,6 +230,8 @@ LogBlockManager::~LogBlockManager() {
         for (auto& [_, containers] : *container_map) {
             containers.reset();
         }
+        // @TODO context dependency?
+        // @TODO make lifecycle is correct
         std::string container_dir = dir->dir() + "/" + print_id(_query_id);
         WARN_IF_ERROR(dir->fs()->delete_dir(container_dir),
                       fmt::format("cannot delete spill container dir: {}", container_dir));

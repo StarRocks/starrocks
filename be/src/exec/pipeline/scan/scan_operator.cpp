@@ -72,6 +72,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
             RuntimeProfile::ROOT_COUNTER);
 
+    _peak_buffer_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakChunkBufferMemoryUsage", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_ALL),
+            RuntimeProfile::ROOT_COUNTER);
+
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
@@ -227,6 +232,7 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_get_scan_status());
 
     _peak_buffer_size_counter->set(buffer_size());
+    _peak_buffer_memory_usage->set(buffer_memory_usage());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     ChunkPtr res = get_chunk_from_buffer();

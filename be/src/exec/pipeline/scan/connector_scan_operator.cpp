@@ -225,6 +225,12 @@ size_t ConnectorScanOperator::buffer_capacity() const {
     return buffer.limiter()->capacity();
 }
 
+size_t ConnectorScanOperator::buffer_memory_usage() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.memory_usage();
+}
+
 size_t ConnectorScanOperator::default_buffer_capacity() const {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
