@@ -25,6 +25,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -100,7 +105,12 @@ public class HiveMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+<<<<<<< HEAD
         hiveMetadata = new HiveMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider, Optional.empty());
+=======
+        hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
+                Optional.empty(), executorForHmsRefresh);
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
     }
 
     @After
@@ -238,7 +248,7 @@ public class HiveMetadataTest {
 
         Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
-        Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
@@ -260,4 +270,366 @@ public class HiveMetadataTest {
         Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
         Assert.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void createDbTest() throws AlreadyExistsException {
+        ExceptionChecker.expectThrowsWithMsg(AlreadyExistsException.class,
+                "Database Already Exists",
+                () -> hiveMetadata.createDb("db1", new HashMap<>()));
+
+        Map<String, String> conf = new HashMap<>();
+        conf.put("location", "abs://xxx/zzz");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid location URI: abs://xxx/zzz",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        conf.put("not_support_prop", "xxx");
+        ExceptionChecker.expectThrowsWithMsg(IllegalArgumentException.class,
+                "Unrecognized property: not_support_prop",
+                () -> hiveMetadata.createDb("db3", conf));
+
+        conf.clear();
+        hiveMetadata.createDb("db4", conf);
+    }
+
+    @Test
+    public void dropDbTest() {
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Database d1 not empty",
+                () -> hiveMetadata.dropDb("d1", true));
+
+        ExceptionChecker.expectThrowsWithMsg(MetaNotFoundException.class,
+                "Failed to access database empty_db",
+                () -> hiveMetadata.dropDb("empty_db", true));
+    }
+
+    @Test
+    public void testMetastoreType() {
+        Assert.assertEquals(MetastoreType.HMS, MetastoreType.get("hive"));
+        Assert.assertEquals(MetastoreType.GLUE, MetastoreType.get("glue"));
+        Assert.assertEquals(MetastoreType.DLF, MetastoreType.get("dlf"));
+    }
+
+    @Test
+    public void testDropTable() throws DdlException {
+        TableName tableName = new TableName("hive_catalog", "hive_db", "hive_table");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table location will be cleared. 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table hive_catalog.hive_db.hive_table force",
+                () -> hiveMetadata.dropTable(new DropTableStmt(false, tableName, false)));
+
+        hiveMetadata.dropTable(new DropTableStmt(false, tableName, true));
+    }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testFinishSink() {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testAddPartition() throws Exception {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
+                return false;
+            }
+        };
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void renameDirectory(Path source, Path target, Runnable runWhenPathNotExist) {
+            }
+        };
+
+        AnalyzeTestUtil.init();
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
+                throw new StarRocksConnectorException("add partition failed");
+            }
+        };
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testAppendPartition() {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void asyncRenameFiles(
+                    List<CompletableFuture<?>> renameFileFutures,
+                    AtomicBoolean cancelled,
+                    Path writePath,
+                    Path targetPath,
+                    List<String> fileNames) {
+
+            }
+        };
+
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                                  Function<HivePartitionStats, HivePartitionStats> update) {
+                throw new StarRocksConnectorException("ERROR");
+            }
+        };
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test
+    public void testOverwritePartition() throws Exception {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(true);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void renameDirectory(Path source, Path target, Runnable runWhenPathNotExist) {
+            }
+        };
+
+        AnalyzeTestUtil.init();
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test
+    public void testAppendTable() throws Exception {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void asyncRenameFiles(
+                    List<CompletableFuture<?>> renameFileFutures,
+                    AtomicBoolean cancelled,
+                    Path writePath,
+                    Path targetPath,
+                    List<String> fileNames) {
+
+            }
+        };
+
+        AnalyzeTestUtil.init();
+        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test
+    public void testOverwriteTable() throws Exception {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(true);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void renameDirectory(Path source, Path target, Runnable runWhenPathNotExist) {
+            }
+        };
+
+        AnalyzeTestUtil.init();
+        hiveMetadata.finishSink("hive_db", "unpartitioned_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
+    @Test
+    public void tesRecursiveDeleteFiles(@Mocked HiveMetastoreOperations hmsOps,
+                                        @Mocked RemoteFileOperations fileOps,
+                                        @Mocked HiveTable hiveTable) throws Exception {
+        HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+        HiveCommitter.DeleteRecursivelyResult result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertTrue(result.dirNotExists());
+        Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
+
+        new Expectations(fileOps) {
+            {
+                fileOps.pathExists((Path) any);
+                result = new StarRocksConnectorException("ERROR");
+                minTimes = 1;
+            }
+        };
+
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertEquals(Lists.newArrayList("hdfs://aaa/*"), result.getNotDeletedEligibleItems());
+
+        AnalyzeTestUtil.init();
+
+        new Expectations(fileOps) {
+            {
+                fileOps.pathExists((Path) any);
+                result = true;
+                minTimes = 1;
+
+                fileOps.listStatus((Path) any);
+                result = new StarRocksConnectorException("ERROR");
+                minTimes = 1;
+            }
+        };
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertEquals(Lists.newArrayList("hdfs://aaa/*"), result.getNotDeletedEligibleItems());
+
+        Path path = new Path("hdfs://hadoop01:9000/user/hive/warehouse/t1/my.parquet");
+        FileStatus fileStatus = new FileStatus(10, false, 0, 0, 0, 0, null, null, null, path);
+        FileStatus[] mockedStatus = new FileStatus[1];
+        mockedStatus[0] = fileStatus;
+
+        new Expectations(fileOps) {
+            {
+                fileOps.listStatus((Path) any);
+                result = mockedStatus;
+                minTimes = 1;
+
+                fileOps.deleteIfExists((Path) any, false);
+                result = true;
+                minTimes = 1;
+            }
+        };
+
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public boolean fileCreatedByQuery(String fileName, String queryId) {
+                return true;
+            }
+        };
+
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
+
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), true);
+        Assert.assertTrue(result.dirNotExists());
+        Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
+
+        new Expectations(fileOps) {
+            {
+                fileOps.deleteIfExists((Path) any, false);
+                result = false;
+                minTimes = 1;
+            }
+        };
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), true);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertEquals(fileStatus.getPath().toString(), result.getNotDeletedEligibleItems().get(0));
+
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public boolean fileCreatedByQuery(String fileName, String queryId) {
+                return false;
+            }
+        };
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
+
+        FileStatus fileStatus1 = new FileStatus(10, true, 0, 0, 0, 0, null, null, null, path);
+        FileStatus[] mockedStatus1 = new FileStatus[1];
+        mockedStatus1[0] = fileStatus1;
+
+        new Expectations(fileOps) {
+            {
+                fileOps.listStatus(new Path("hdfs://aaa"));
+                result = mockedStatus1;
+                minTimes = 1;
+
+                fileOps.listStatus((Path) any);
+                result = mockedStatus;
+                minTimes = 1;
+            }
+        };
+        result = hiveCommitter.recursiveDeleteFiles(new Path("hdfs://aaa"), false);
+        Assert.assertFalse(result.dirNotExists());
+        Assert.assertTrue(result.getNotDeletedEligibleItems().isEmpty());
+    }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testHiveCommitterPrepare(@Mocked HiveMetastoreOperations hmsOps,
+                                         @Mocked RemoteFileOperations fileOps,
+                                         @Mocked HiveTable hiveTable) {
+        HiveCommitter hiveCommitter = new HiveCommitter(hmsOps, fileOps, Executors.newSingleThreadExecutor(),
+                hiveTable, new Path("hdfs://hadoop01:9000/hive"));
+        new Expectations() {
+            {
+                hiveTable.isUnPartitioned();
+                result = true;
+                minTimes = 1;
+            }
+        };
+
+        PartitionUpdate pu1 = new PartitionUpdate("", null, null, null, 1, 1);
+        PartitionUpdate pu2 = new PartitionUpdate("", null, null, null, 1, 1);
+        hiveCommitter.prepare(Lists.newArrayList(pu1, pu2));
+    }
+
+    @Test
+    public void testIsSamePartition() {
+        Assert.assertFalse(HiveCommitter.checkIsSamePartition(null, null));
+        Assert.assertFalse(HiveCommitter.checkIsSamePartition(new Partition(new HashMap<>(), null, null, null, false), null));
+
+        Map<String, String> map = new HashMap<>();
+        map.put(STARROCKS_QUERY_ID, "abcd");
+        Partition remotePartition = new Partition(map, null, null, null, false);
+        HivePartition hivePartition = new HivePartition(null, null, null, null, null, null, map);
+        Assert.assertTrue(HiveCommitter.checkIsSamePartition(remotePartition, hivePartition));
+    }
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
 }

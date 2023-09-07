@@ -164,8 +164,13 @@ public class HiveMetastoreApiConverter {
         // using hadoop properties from catalog definition
         Configuration configuration = new Configuration();
         if (catalogName != null) {
+<<<<<<< HEAD
             Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
+=======
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();
         }

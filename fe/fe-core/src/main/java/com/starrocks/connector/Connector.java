@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.starrocks.connector.config.ConnectorConfig;
-import com.starrocks.credential.CloudConfiguration;
 
 public interface Connector {
     /**
@@ -33,19 +31,12 @@ public interface Connector {
      * no methods will be called on the connector or any objects that
      * have been returned from the connector.
      */
-    default void shutdown() {}
+    default void shutdown() {
+    }
 
     /**
      * check connector config
      */
-    default void bindConfig(ConnectorConfig config) {}
-
-    /**
-     * TODO: This is a temporary interface used to get cloud configurantion.
-     * After the refactoring of cloud configuration is complete,
-     * it should be placed elsewhere like connector metadata.
-     */
-    default CloudConfiguration getCloudConfiguration() {
-        return null;
+    default void bindConfig(ConnectorConfig config) {
     }
 }

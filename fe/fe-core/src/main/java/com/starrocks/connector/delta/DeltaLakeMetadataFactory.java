@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.delta;
 
 import com.starrocks.connector.HdfsEnvironment;
@@ -43,6 +42,6 @@ public class DeltaLakeMetadataFactory {
         HiveMetastoreOperations hiveMetastoreOperations = new HiveMetastoreOperations(
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum), metastore instanceof CachingHiveMetastore);
 
-        return new DeltaLakeMetadata(hdfsEnvironment.getConfiguration(), catalogName, hiveMetastoreOperations);
+        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, hiveMetastoreOperations);
     }
 }

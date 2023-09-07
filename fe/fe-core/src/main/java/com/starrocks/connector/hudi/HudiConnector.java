@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hudi;
 
 import com.google.common.base.Preconditions;
@@ -34,17 +33,14 @@ import java.util.Map;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
-    private final Map<String, String> properties;
-    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final HudiConnectorInternalMgr internalMgr;
     private final HudiMetadataFactory metadataFactory;
 
     public HudiConnector(ConnectorContext context) {
-        this.properties = context.getProperties();
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Map<String, String> properties = context.getProperties();
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
@@ -81,15 +77,17 @@ public class HudiConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
+<<<<<<< HEAD
                 internalMgr.isSearchRecursive()
+=======
+                internalMgr.isSearchRecursive(),
+                hdfsEnvironment,
+                internalMgr.getMetastoreType()
+>>>>>>> c60edea929 ([Refactor] Move `getCloudConfiguration` to `ConnectorMetadata` from `Connector` (#30476))
         );
     }
 
     public void onCreate() {
-    }
-
-    public CloudConfiguration getCloudConfiguration() {
-        return cloudConfiguration;
     }
 
     @Override
