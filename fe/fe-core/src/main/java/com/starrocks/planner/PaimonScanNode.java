@@ -141,7 +141,7 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
-        long totalFileLength = split.files().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
+        long totalFileLength = split.dataFiles().stream().map(DataFileMeta::fileSize).reduce(0L, Long::sum);
         hdfsScanRange.setFile_length(totalFileLength);
 
         TScanRange scanRange = new TScanRange();

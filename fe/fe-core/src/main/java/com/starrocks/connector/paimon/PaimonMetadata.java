@@ -214,7 +214,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         long rowCount = 0;
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
-            rowCount += dataSplit.files().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+            rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
         }
         if (rowCount == 0) {
             builder.setOutputRowCount(1);
