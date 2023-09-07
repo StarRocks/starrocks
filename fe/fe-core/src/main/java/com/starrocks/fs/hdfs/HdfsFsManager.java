@@ -58,7 +58,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-
 class ConfigurationWrap extends Configuration {
     private static final Logger LOG = LogManager.getLogger(ConfigurationWrap.class);
 
@@ -645,7 +644,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
 
         String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toConfString());
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
@@ -866,7 +865,7 @@ public class HdfsFsManager {
      * <p>
      * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
      */
-    public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
+    public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
 
         String disableCacheHDFS = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
@@ -1097,7 +1096,7 @@ public class HdfsFsManager {
      * for tos
      */
     public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-        throws UserException {
+            throws UserException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1218,10 +1217,9 @@ public class HdfsFsManager {
             throw new UserException("file not found: " + path, e);
         } catch (IllegalArgumentException e) {
             LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
-                      "the arguments like region, IAM, instance profile and so on.");
+                    "the arguments like region, IAM, instance profile and so on.");
             throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
-                                    "You can check the arguments like region, IAM, " +
-                                    "instance profile and so on.", e);
+                    "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("listPath failed", e);
@@ -1248,13 +1246,11 @@ public class HdfsFsManager {
         boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
         boolean destAuthorityNull = (destPathUri.getAuthority() == null);
         if (srcAuthorityNull != destAuthorityNull) {
-            throw new UserException("Different authority info between srcPath: " + srcPath +
-                                    " and destPath: " + destPath);
+            throw new UserException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
         }
         if (!srcAuthorityNull && !destAuthorityNull &&
                 !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-            throw new UserException(
-                "only allow rename in same file system");
+            throw new UserException("only allow rename in same file system");
 
         }
 
