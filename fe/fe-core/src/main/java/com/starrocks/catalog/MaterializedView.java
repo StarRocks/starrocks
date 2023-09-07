@@ -60,10 +60,8 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -103,6 +101,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public enum RefreshMoment {
         IMMEDIATE,
         DEFERRED
+    }
+
+    public enum PlanMode {
+        VALID,
+        INVALID,
+        UNKNOWN
     }
 
     public static class BasePartitionInfo {
@@ -356,6 +360,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
+<<<<<<< HEAD
     // MVRewriteContextCache is a cache that stores metadata related to the materialized view rewrite context.
     // This cache is used during the FE's lifecycle to improve the performance of materialized view
     // rewriting operations.
@@ -415,6 +420,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // just in memory now
     // there are only reads after first-time write
     private MVRewriteContextCache mvRewriteContextCache;
+=======
+    // it is a property in momery, do not serialize it
+    private PlanMode planMode = PlanMode.UNKNOWN;
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -449,8 +458,28 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return active;
     }
 
+<<<<<<< HEAD
     public void setActive(boolean active) {
         this.active = active;
+=======
+    /**
+     * active the materialized again & reload the state.
+     */
+    public void setActive() {
+        this.active = true;
+        // reset mv rewrite cache when it is active again
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public void setInactiveAndReason(String reason) {
+        this.active = false;
+        this.inactiveReason = reason;
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
     }
 
     public String getViewDefineSql() {
@@ -493,8 +522,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.refreshScheme = refreshScheme;
     }
 
+<<<<<<< HEAD
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
+=======
+    public void setPlanMode(PlanMode planMode) {
+        this.planMode = planMode;
+    }
+
+    public boolean isValidPlan() {
+        return !planMode.equals(PlanMode.INVALID);
+    }
+
+    /**
+     * @param base              : The base table of the materialized view to check the updated partition names
+     * @param isQueryRewrite    : Mark the caller is from query rewrite or not, when it's true we can use staleness to
+     *                            optimize.
+     * @return
+     */
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean isQueryRewrite) {
+        return getUpdatedPartitionNamesOfTable(base, false, isQueryRewrite);
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
     }
 
     public int getMaxMVRewriteStaleness() {
@@ -1286,12 +1334,36 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.maintenancePlan = maintenancePlan;
     }
 
+<<<<<<< HEAD
     public MVRewriteContextCache getPlanContext() {
         return mvRewriteContextCache;
     }
 
     public void setPlanContext(MVRewriteContextCache mvRewriteContextCache) {
         this.mvRewriteContextCache = mvRewriteContextCache;
+=======
+    /**
+     * Infer the distribution info based on tables and MV query.
+     * Currently is max{bucket_num of base_table}
+     * TODO: infer the bucket number according to MV pattern and cardinality
+     */
+    @Override
+    public void inferDistribution(DistributionInfo info) throws DdlException {
+        if (info.getBucketNum() == 0) {
+            int inferredBucketNum = 0;
+            for (BaseTableInfo base : getBaseTableInfos()) {
+                if (base.getTable().isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) base.getTable();
+                    DistributionInfo dist = olapTable.getDefaultDistributionInfo();
+                    inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
+                }
+            }
+            if (inferredBucketNum == 0) {
+                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            }
+            info.setBucketNum(inferredBucketNum);
+        }
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
     }
 
     @Override

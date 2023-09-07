@@ -392,6 +392,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
+
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
@@ -1078,6 +1080,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
+<<<<<<< HEAD
+=======
+    // Enable greedy mode in mv rewrite to cut down optimizer time for mv rewrite:
+    // - Use plan cache if possible to avoid regenerating plan tree.
+    // - Use the max plan tree to rewrite in view-delta mode to avoid too many rewrites.
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
+    private boolean enableMaterializedViewRewriteGreedyMode = false;
+
+    // whether to use materialized view plan context cache to reduce mv rewrite time cost
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewPlanCache = true;
+
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
 
@@ -2060,6 +2075,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableMaterializedViewRewriteGreedyMode(boolean enableMaterializedViewRewriteGreedyMode) {
+        this.enableMaterializedViewRewriteGreedyMode = enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public boolean isEnableMaterializedViewRewriteGreedyMode() {
+        return this.enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public void setEnableMaterializedViewPlanCache(boolean enableMaterializedViewPlanCache) {
+        this.enableMaterializedViewPlanCache = enableMaterializedViewPlanCache;
+    }
+
+    public boolean isEnableMaterializedViewPlanCache() {
+        return this.enableMaterializedViewPlanCache;
+    }
+
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
     public String getQueryExcludingMVNames() {
         return queryExcludingMVNames;
     }
