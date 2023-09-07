@@ -5,7 +5,11 @@ create database test_drop_task_${uuid0};
 use test_drop_task_${uuid0};
 -- result:
 -- !result
+<<<<<<< HEAD
 SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT sleep(1000);
+=======
+[UC]SUBMIT TASK test_kill AS CREATE TABLE TEST PROPERTIES ( "replication_num" = "1" ) AS SELECT sleep(20);
+>>>>>>> e6a069462e (reduce case sleep because be can not completely cancel (#30525))
 -- result:
 test_kill	SUBMITTED
 -- !result
