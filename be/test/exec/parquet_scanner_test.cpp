@@ -323,7 +323,7 @@ class ParquetScannerTest : public ::testing::Test {
         ASSERT_EQ(schema.size(), expected_schema.size());
         for (size_t i = 0; i < expected_schema.size(); ++i) {
             ASSERT_EQ(schema[i].col_name(), expected_schema[i].first);
-            ASSERT_EQ(schema[i].type().type, expected_schema[i].second);
+            ASSERT_EQ(schema[i].type().type, expected_schema[i].second) << schema[i].col_name();
         }
     }
 
@@ -686,13 +686,13 @@ TEST_F(ParquetScannerTest, get_file_schema) {
               {"col_json_bool", TYPE_BOOLEAN},
               {"col_json_string", TYPE_VARCHAR},
               // complex type is treat as VARCHAR now.
-              {"col_json_list", TYPE_VARCHAR},
-              {"col_json_map", TYPE_VARCHAR},
-              {"col_json_map_timestamp", TYPE_VARCHAR},
+              {"col_json_list", TYPE_ARRAY},
+              {"col_json_map", TYPE_MAP},
+              {"col_json_map_timestamp", TYPE_MAP},
               {"col_json_struct", TYPE_VARCHAR},
-              {"col_json_list_list", TYPE_VARCHAR},
-              {"col_json_map_list", TYPE_VARCHAR},
-              {"col_json_list_struct", TYPE_VARCHAR},
+              {"col_json_list_list", TYPE_ARRAY},
+              {"col_json_map_list", TYPE_MAP},
+              {"col_json_list_struct", TYPE_ARRAY},
               {"col_json_struct_struct", TYPE_VARCHAR},
               {"col_json_struct_string", TYPE_VARCHAR},
               {"col_json_json_string", TYPE_VARCHAR}}},
@@ -700,7 +700,15 @@ TEST_F(ParquetScannerTest, get_file_schema) {
              {{"col_decimal32", TYPE_DECIMAL32},
               {"col_decimal64", TYPE_DECIMAL64},
               {"col_decimal128_byte_array", TYPE_DECIMAL128},
-              {"col_decimal128_fixed_len_byte_array", TYPE_DECIMAL128}}}};
+              {"col_decimal128_fixed_len_byte_array", TYPE_DECIMAL128}}},
+            {test_exec_dir + "/test_data/parquet_data/nested.parquet",
+             {{"col_int", TYPE_BIGINT},
+              {"col_list_int", TYPE_ARRAY},
+              {"col_list_list_int", TYPE_ARRAY},
+              {"col_map_string_int", TYPE_MAP},
+              {"col_map_map_string_int", TYPE_MAP},
+              {"col_list_map_string_int", TYPE_ARRAY},
+              {"col_map_string_list_int", TYPE_MAP}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
