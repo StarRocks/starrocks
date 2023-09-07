@@ -42,7 +42,6 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -54,15 +53,12 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
-import com.starrocks.task.PriorityLeaderTask;
-import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -360,78 +356,6 @@ public class BrokerLoadJobTest {
         brokerLoadJob.onTaskFinished(attachment);
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
-    }
-
-    @Test
-    public void testPendingTaskOnFinished(@Injectable BrokerPendingTaskAttachment attachment,
-                                          @Mocked GlobalStateMgr globalStateMgr,
-                                          @Injectable Database database,
-                                          @Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
-                                          @Injectable BrokerFileGroup brokerFileGroup1,
-                                          @Injectable BrokerFileGroup brokerFileGroup2,
-                                          @Injectable BrokerFileGroup brokerFileGroup3,
-                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                                          @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
-                                          @Injectable OlapTable olapTable,
-                                          @Mocked LoadingTaskPlanner loadingTaskPlanner) {
-        Config.enable_pipeline_load = false;
-        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
-        brokerLoadJob.setConnectContext(new ConnectContext());
-        Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
-        long taskId = 1L;
-        long tableId1 = 1L;
-        long tableId2 = 2L;
-        long partitionId1 = 3L;
-        long partitionId2 = 4;
-
-        Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToFileGroups = Maps.newHashMap();
-        List<BrokerFileGroup> fileGroups1 = Lists.newArrayList();
-        fileGroups1.add(brokerFileGroup1);
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId1, null), fileGroups1);
-
-        List<BrokerFileGroup> fileGroups2 = Lists.newArrayList();
-        fileGroups2.add(brokerFileGroup2);
-        fileGroups2.add(brokerFileGroup3);
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId2, Lists.newArrayList(partitionId1)), fileGroups2);
-        // add another file groups with different partition id
-        aggKeyToFileGroups.put(new FileGroupAggKey(tableId2, Lists.newArrayList(partitionId2)), fileGroups2);
-
-        Deencapsulation.setField(brokerLoadJob, "fileGroupAggInfo", fileGroupAggInfo);
-        new Expectations() {
-            {
-                attachment.getTaskId();
-                minTimes = 0;
-                result = taskId;
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                fileGroupAggInfo.getAggKeyToFileGroups();
-                minTimes = 0;
-                result = aggKeyToFileGroups;
-                database.getTable(anyLong);
-                minTimes = 0;
-                result = olapTable;
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = 1L;
-                result = 2L;
-                result = 3L;
-                leaderTaskExecutor.submit((LeaderTask) any);
-                minTimes = 0;
-                result = true;
-                priorityLeaderTaskExecutor.submit((PriorityLeaderTask) any);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        brokerLoadJob.onTaskFinished(attachment);
-        Set<Long> finishedTaskIds = Deencapsulation.getField(brokerLoadJob, "finishedTaskIds");
-        Assert.assertEquals(1, finishedTaskIds.size());
-        Assert.assertEquals(true, finishedTaskIds.contains(taskId));
-        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
-        Assert.assertEquals(3, idToTasks.size());
-        Config.enable_pipeline_load = true;
     }
 
     @Test

@@ -203,20 +203,6 @@ public class LoadPlannerTest {
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(4, locationsList.size());
 
-        // load_parallel_instance_num: 2, non pipeline
-        Config.enable_pipeline_load = false;
-        ctx.getSessionVariable().setEnablePipelineEngine(false);
-        Config.load_parallel_instance_num = 2;
-        planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusesList, 2);
-        planner.plan();
-        scanNode = (FileScanNode) planner.getScanNodes().get(0);
-        locationsList = scanNode.getScanRangeLocations(0);
-        Assert.assertEquals(4, locationsList.size());
-        Assert.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
-        Assert.assertEquals(2, planner.getFragments().get(0).getParallelExecNum());
-
         // load_parallel_instance_num: 2, pipeline
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         Config.enable_pipeline_load = true;
