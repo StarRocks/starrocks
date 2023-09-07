@@ -54,6 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.mockito.ArgumentMatchers.any;
+
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -204,7 +206,8 @@ public class LocalMetaStoreTest {
 
         new Expectations(localMetastore) {
             {
-                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
+                localMetastore.onCreate((Database) any, (Table) any, anyString,
+                        any(Map.class), any(List.class), anyBoolean);
                 // don't expect any invoke to this method
                 minTimes = 0;
                 maxTimes = 0;
