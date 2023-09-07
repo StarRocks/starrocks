@@ -5458,25 +5458,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.STRING() != null) {
             ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-            type.setAssignedStrLenInColDefinition();
             return type;
         } else if (context.VARCHAR() != null) {
             ScalarType type = ScalarType.createVarcharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (context.CHAR() != null) {
             ScalarType type = ScalarType.createCharType(length);
-            if (length != -1) {
-                type.setAssignedStrLenInColDefinition();
-            }
             return type;
         } else if (context.SIGNED() != null) {
             return Type.INT;
         } else if (context.HLL() != null) {
             ScalarType type = ScalarType.createHllType();
-            type.setAssignedStrLenInColDefinition();
             return type;
         } else {
             return ScalarType.createType(context.getChild(0).getText());
