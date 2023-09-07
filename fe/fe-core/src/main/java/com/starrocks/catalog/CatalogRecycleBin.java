@@ -729,6 +729,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             long tableId = olapTable.getId();
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
+<<<<<<< HEAD
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
@@ -741,6 +742,28 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                         if (table.isOlapTableOrMaterializedView()) {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
+=======
+                DataProperty dataProperty = olapTable.getPartitionInfo().getDataProperty(partitionId);
+                if (dataProperty == null) {
+                    LOG.warn("can not find data property for table: {}, partitionId: {} ", table.getName(), partitionId);
+                    continue;
+                }
+                TStorageMedium medium = dataProperty.getStorageMedium();
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    long physicalPartitionId = physicalPartition.getId();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                        long indexId = index.getId();
+                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, schemaHash, medium,
+                                table.isCloudNativeTable());
+                        for (Tablet tablet : index.getTablets()) {
+                            long tabletId = tablet.getId();
+                            invertedIndex.addTablet(tabletId, tabletMeta);
+                            if (table.isOlapTableOrMaterializedView()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
+>>>>>>> c8f7966e22 ([Enhancement] Add more case and enhanced metadata partition repair capabilities (#30463))
                             }
                         }
                     }
