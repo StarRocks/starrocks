@@ -117,6 +117,14 @@ struct TypeDescriptor {
         return res;
     }
 
+    static TypeDescriptor create_map_type(TypeDescriptor key, TypeDescriptor value) {
+        TypeDescriptor res;
+        res.type = TYPE_MAP;
+        res.children.push_back(key);
+        res.children.push_back(value);
+        return res;
+    }
+
     static TypeDescriptor create_hll_type() {
         TypeDescriptor ret;
         ret.type = TYPE_HLL;

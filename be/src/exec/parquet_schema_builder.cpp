@@ -146,7 +146,6 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
     // <list-repetition> group <name> (LIST)
     DCHECK(node->is_group());
     DCHECK(node->logical_type()->is_list());
-    *type_desc = TypeDescriptor(TYPE_ARRAY);
 
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     DCHECK(group_node->field_count() == 1);
@@ -163,7 +162,7 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
     const auto& child_node = list_group_node->field(0);
     TypeDescriptor child_type_desc;
     RETURN_IF_ERROR(get_parquet_type(child_node, &child_type_desc));
-    type_desc->children.emplace_back(std::move(child_type_desc));
+    *type_desc = TypeDescriptor::create_array_type(child_type_desc);
 
     return Status::OK();
 }
@@ -190,7 +189,6 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
     // <map-repetition> group <name> (MAP) {
     DCHECK(node->is_group());
     DCHECK(node->logical_type()->is_map());
-    *type_desc = TypeDescriptor(TYPE_MAP);
 
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     DCHECK(group_node->field_count() == 1);
@@ -207,12 +205,12 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
     const auto& key_node = kv_group_node->field(0);
     TypeDescriptor key_type_desc;
     RETURN_IF_ERROR(get_parquet_type(key_node, &key_type_desc));
-    type_desc->children.emplace_back(std::move(key_type_desc));
 
     const auto& value_node = kv_group_node->field(1);
     TypeDescriptor value_type_desc;
     RETURN_IF_ERROR(get_parquet_type(value_node, &value_type_desc));
-    type_desc->children.emplace_back(std::move(value_type_desc));
+
+    *type_desc = TypeDescriptor::create_map_type(key_type_desc, value_type_desc);
 
     return Status::OK();
 }
