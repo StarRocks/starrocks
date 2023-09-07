@@ -478,7 +478,7 @@ We recommend you customize roles to manage privileges and users. The following e
    -- Create a role.
    CREATE ROLE write_catalog_only;
    -- Grant the USAGE privilege on the destination catalog to the role.
-   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
+   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG iceberg_catalog;
    -- Grant the privilege to write data into Iceberg tables.
