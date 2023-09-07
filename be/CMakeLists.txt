@@ -591,6 +591,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
     endif ()
+else ()
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
 endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
