@@ -509,6 +509,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1313,6 +1315,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
     private String hiveTempStagingDir = "/tmp/starrocks";
+
+    @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean enableExprPrunePartition = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2506,6 +2511,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountStarOptimization(boolean v) {
         enableCountStarOptimization = v;
+    }
+
+    public boolean isEnableExprPrunePartition() {
+        return enableExprPrunePartition;
+    }
+
+    public void setEnableExprPrunePartition(boolean enableExprPrunePartition) {
+        this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
     // Serialize to thrift object
