@@ -302,8 +302,9 @@ void list_meta(DataDir* data_dir) {
                st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
                st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
-    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_count, stats.total_meta_bytes,
-           stats.tablets.size(), stats.error_count);
+    printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_count,
+           stats.total_meta_bytes, stats.tablets.size(), stats.update_tablet_count, stats.tablet_count,
+           stats.error_count);
 }
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {
