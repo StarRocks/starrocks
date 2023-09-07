@@ -38,6 +38,8 @@ public class ResourceGroup implements Writable {
     public static final String QUERY_TYPE = "query_type";
     public static final String SOURCE_IP = "source_ip";
     public static final String DATABASES = "db";
+    public static final String PLAN_CPU_COST_RANGE = "plan_cpu_cost_range";
+    public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
