@@ -67,9 +67,7 @@ public:
         }
     }
 
-    Status get_io_status() const {
-        return _io_status;
-    }
+    Status get_io_status() const { return _io_status; }
 
 private:
     std::string _new_file_location();

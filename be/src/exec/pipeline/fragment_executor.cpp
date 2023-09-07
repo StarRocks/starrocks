@@ -1018,14 +1018,16 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         if (partition_expr_ctxs.empty()) {
             if (sink_dop != source_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop,
-                                                                               sink_dop);
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop,
+                        sink_dop);
             } else {
                 fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
             }
         } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs,
-                                                                             source_dop, sink_dop);
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
+                    sink_dop);
         }
     }
 
