@@ -188,7 +188,14 @@ Run the `select current_version();` command or the CLI command `./bin/show_fe_ve
 
 ## How to set the memory size of an FE?
 
-FEs are used to store metadata. You can set the memory size of an FE based on the number of tablets. In StarRocks, you can set the memory size of an FE to 20 GB at most. 10 million tablets occupy about 20 GB of an FE memory.
+The metadata information is stored in the memory used by the FE. You can set the memory size of the FE according to the number of tablets as shown in the diagram below. For example, if the number of tablets is below 1 million, you should allocate a minimum of 16GB of memory to the FE. you can configure Xms and Xmx values in the **JAVA_OPTS=** in the **fe.conf** file, and the Xms and Xmx values should be consistent. Additionally, the configuration should be same across all FEs because each FE can be a Leader.
+
+| Number of tablets    | Memory size of an FE |
+| -------------- | ----------- |
+| below 1 million      | 16 G        |
+| 1 ～ 2 million | 32 G        |
+| 2 ～ 5 million | 64 G        |
+| 5 ～ 10 million   | 128 G       |
 
 ## How does StarRocks calculate its query time?
 
