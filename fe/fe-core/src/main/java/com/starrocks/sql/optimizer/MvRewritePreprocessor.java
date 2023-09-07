@@ -245,7 +245,7 @@ public class MvRewritePreprocessor {
         if (!mvRewriteContextCache.isValidMvPlan()) {
             if (mvRewriteContextCache.getLogicalPlan() != null) {
                 logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, plan:\n {}",
-                        isSyncMV, mv.getName(), mvRewriteContextCache.getLogicalPlan().explain());
+                        isSyncMV, mv.getName(), mvRewriteContextCache.getLogicalPlan().debugString());
             } else {
                 logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}",
                         isSyncMV, mv.getName());

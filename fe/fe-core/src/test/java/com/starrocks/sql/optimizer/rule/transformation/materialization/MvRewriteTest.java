@@ -1723,7 +1723,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testJoinWithConstExprs2() throws Exception {
-        cluster.runSql("test", "set enable_mv_optimizer_trace_log=true;");
         // a.k1/b.k1 are both output
         createAndRefreshMv("test", "test_partition_tbl_mv3",
                 "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +

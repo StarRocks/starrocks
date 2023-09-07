@@ -62,7 +62,7 @@ public class SingleTableMvRewriteRule extends Rule {
                 extractExpr = binder.next();
             }
         }
-        OptimizerTraceUtil.logApplyRule(context.getSessionVariable(), context.getTraceInfo(), this, input, newExpressions);
+        OptimizerTraceUtil.logApplyRule(context, this, input, newExpressions);
 
         for (OptExpression expression : newExpressions) {
             // Insert new OptExpression to memo

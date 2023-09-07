@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerTraceInfo;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
@@ -82,11 +82,13 @@ public class ApplyRuleTask extends OptimizerTask {
                 continue;
             }
             extractExpressions.add(extractExpr);
-            List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
-            newExpressions.addAll(targetExpressions);
+            List<OptExpression> targetExpressions;
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
+                targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            }
 
-            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
-            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
+            newExpressions.addAll(targetExpressions);
+            OptimizerTraceUtil.logApplyRule(context.getOptimizerContext(), rule, extractExpr, targetExpressions);
 
             extractExpr = binder.next();
         }

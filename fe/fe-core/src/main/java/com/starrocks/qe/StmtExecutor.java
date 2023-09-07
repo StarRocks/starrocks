@@ -67,6 +67,8 @@ import com.starrocks.common.QueryDumpLog;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -109,7 +111,6 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -198,8 +199,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.ast.StatementBase.ExplainLevel.OPTIMIZER;
-import static com.starrocks.sql.ast.StatementBase.ExplainLevel.REWRITE;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
@@ -306,7 +305,7 @@ public class StmtExecutor {
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
-        context.getPlannerProfile().build(plannerProfile);
+        Tracers.toRuntimeProfile(plannerProfile);;
         return profile;
     }
 
@@ -426,7 +425,7 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Total")) {
+            try (Timer ignored = Tracers.watchScope("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     if (context.shouldDumpQuery()) {
@@ -563,7 +562,7 @@ public class StmtExecutor {
                         } else {
                             throw e;
                         }
-                        PlannerProfile.addCustomProperties("HMS.RETRY", String.valueOf(i + 1));
+                        Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(i + 1));
                     } catch (RpcException e) {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
@@ -1399,10 +1398,14 @@ public class StmtExecutor {
         if (execPlan == null) {
             explainString += "NOT AVAILABLE";
         } else {
-            if (parsedStmt.getExplainLevel() == OPTIMIZER) {
-                explainString += PlannerProfile.printPlannerTimer(context.getPlannerProfile());
-            } else if (parsedStmt.getExplainLevel() == REWRITE) {
-                explainString += PlannerProfile.printPlannerTrace(context.getPlannerProfile());
+            if (parsedStmt.getTraceMode() == Tracers.Mode.TIMER) {
+                explainString += Tracers.printScopeTimer();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.VARS) {
+                explainString += Tracers.printVars();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.TIMING) {
+                explainString += Tracers.printTiming();
+            } else if (parsedStmt.getTraceMode() == Tracers.Mode.LOGS) {
+                explainString += Tracers.printLogs();
             } else {
                 explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
             }

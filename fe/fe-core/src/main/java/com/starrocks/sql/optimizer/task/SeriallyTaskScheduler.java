@@ -14,15 +14,14 @@
 
 package com.starrocks.sql.optimizer.task;
 
-import com.google.common.base.Stopwatch;
-import com.starrocks.sql.PlannerProfile;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.Memo;
 
 import java.util.Stack;
-import java.util.concurrent.TimeUnit;
 
 public class SeriallyTaskScheduler implements TaskScheduler {
     private final Stack<OptimizerTask> tasks;
@@ -38,10 +37,9 @@ public class SeriallyTaskScheduler implements TaskScheduler {
     @Override
     public void executeTasks(TaskContext context) {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
-        Stopwatch watch = context.getOptimizerContext().getTraceInfo().getStopwatch();
+        long watch = context.getOptimizerContext().getCostTimeMs();
         while (!tasks.empty()) {
-           
-            if (timeout > 0 && watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
+            if (timeout > 0 && watch > timeout) {
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
                 // memo may be null for rule-based optimizer
@@ -63,9 +61,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             }
             OptimizerTask task = tasks.pop();
             context.getOptimizerContext().setTaskContext(context);
-            if (context.getOptimizerContext().getTraceInfo().isTraceOptimizer()) {
-                executeWithRecord(task);
-            } else {
+            try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, task.getClass().getSimpleName())) {
                 task.execute();
             }
         }
@@ -74,18 +70,5 @@ public class SeriallyTaskScheduler implements TaskScheduler {
     @Override
     public void pushTask(OptimizerTask task) {
         tasks.push(task);
-    }
-
-
-    private void executeWithRecord(OptimizerTask task) {
-        String timerName = "";
-        if (task instanceof RewriteTreeTask) {
-            timerName = "Optimizer.RuleBaseOptimize." + task.getClass().getSimpleName();
-        } else {
-            timerName = "Optimizer.CostBaseOptimize." + task.getClass().getSimpleName();
-        }
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(timerName)) {
-            task.execute();
-        }
     }
 }

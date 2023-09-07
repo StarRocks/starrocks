@@ -35,7 +35,6 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -69,11 +68,8 @@ public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
 
     public static LogicalScanOperator prunePartitions(OptimizerContext context,
-            LogicalScanOperator logicalScanOperator) {
-        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer(
-                "RuleBaseOptimize.RewriteTreeTask.ExternalTablePartitionPrune")) {
-            return prunePartitionsImpl(context, logicalScanOperator);
-        }
+                                                      LogicalScanOperator logicalScanOperator) {
+        return prunePartitionsImpl(context, logicalScanOperator);
     }
 
     public static LogicalScanOperator prunePartitionsImpl(OptimizerContext context,

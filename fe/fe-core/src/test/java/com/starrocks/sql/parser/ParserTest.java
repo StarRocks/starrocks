@@ -319,7 +319,7 @@ class ParserTest {
         sqls.add("revoke export on DATABASE db1 from test");
         sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
         sqls.add("SHOW COMPUTE NODES");
-        sqls.add("trace optimizer select 1");
+        sqls.add("trace times select 1");
         sqls.add("select anti from t1 left anti join t2 on true");
         sqls.add("select anti, semi from t1 left semi join t2 on true");
         sqls.add("select * from tbl1 MINUS select * from tbl2");
