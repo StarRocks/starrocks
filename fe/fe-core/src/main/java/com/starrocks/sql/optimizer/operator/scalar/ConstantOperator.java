@@ -325,7 +325,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
         } else if (type.isDecimalV2()) {
-            return String.valueOf(value);
+            // remove trailing zero and use plain string, keep same with BE
+            return ((BigDecimal) value).stripTrailingZeros().toPlainString();
         } else if (type.isDecimalOfAnyVersion()) {
             // align zero, keep same with BE
             int scale = ((ScalarType) type).getScalarScale();
