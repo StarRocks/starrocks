@@ -61,10 +61,8 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -106,6 +104,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public enum RefreshMoment {
         IMMEDIATE,
         DEFERRED
+    }
+
+    public enum PlanMode {
+        VALID,
+        INVALID,
+        UNKNOWN
     }
 
     public static class BasePartitionInfo {
@@ -366,67 +370,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
-    // MVRewriteContextCache is a cache that stores metadata related to the materialized view rewrite context.
-    // This cache is used during the FE's lifecycle to improve the performance of materialized view
-    // rewriting operations.
-    // By caching the metadata related to the materialized view rewrite context,
-    // subsequent materialized view rewriting operations can avoid recomputing this metadata,
-    // which can save time and resources.
-    public static class MVRewriteContextCache {
-        // mv's logical plan
-        private final OptExpression logicalPlan;
-
-        // mv plan's output columns, used for mv rewrite
-        private final List<ColumnRefOperator> outputColumns;
-
-        // column ref factory used when compile mv plan
-        private final ColumnRefFactory refFactory;
-
-        // indidate whether this mv is a SPJG plan
-        // if not, we do not store other fields to save memory,
-        // because we will not use other fields
-        private boolean isValidMvPlan;
-
-        public MVRewriteContextCache() {
-            this.logicalPlan = null;
-            this.outputColumns = null;
-            this.refFactory = null;
-            this.isValidMvPlan = false;
-        }
-
-        public MVRewriteContextCache(
-                OptExpression logicalPlan,
-                List<ColumnRefOperator> outputColumns,
-                ColumnRefFactory refFactory) {
-            this.logicalPlan = logicalPlan;
-            this.outputColumns = outputColumns;
-            this.refFactory = refFactory;
-            this.isValidMvPlan = true;
-        }
-
-        public OptExpression getLogicalPlan() {
-            return logicalPlan;
-        }
-
-        public List<ColumnRefOperator> getOutputColumns() {
-            return outputColumns;
-        }
-
-        public ColumnRefFactory getRefFactory() {
-            return refFactory;
-        }
-
-        public boolean isValidMvPlan() {
-            return isValidMvPlan;
-        }
-    }
-
-    // Materialized view plan cache used for mv rewrite, it is kept in memory for now.
-    // NOTE: Invalidate this when the materialized view is activated again.
-    // TODO: Add more policies to valid/invalidate this:
-    //  - When session variables changed
-    //  - When executes multi times.
-    private MVRewriteContextCache mvRewriteContextCache;
+    // it is a property in momery, do not serialize it
+    private PlanMode planMode = PlanMode.UNKNOWN;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -498,14 +443,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
-        // reset mv rewrite cache when it is active again
-        this.mvRewriteContextCache = null;
         this.active = true;
+        // reset mv rewrite cache when it is active again
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
 
     public void setInactiveAndReason(String reason) {
         this.active = false;
         this.inactiveReason = reason;
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
 
     public String getInactiveReason() {
@@ -550,6 +496,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    public void setPlanMode(PlanMode planMode) {
+        this.planMode = planMode;
+    }
+
+    public boolean isValidPlan() {
+        return !planMode.equals(PlanMode.INVALID);
     }
 
     /**
@@ -1473,14 +1427,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setMaintenancePlan(ExecPlan maintenancePlan) {
         this.maintenancePlan = maintenancePlan;
-    }
-
-    public MVRewriteContextCache getPlanContext() {
-        return mvRewriteContextCache;
-    }
-
-    public void setPlanContext(MVRewriteContextCache mvRewriteContextCache) {
-        this.mvRewriteContextCache = mvRewriteContextCache;
     }
 
     /**

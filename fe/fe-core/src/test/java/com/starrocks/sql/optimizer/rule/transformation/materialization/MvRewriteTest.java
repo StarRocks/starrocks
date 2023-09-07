@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
@@ -28,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -587,6 +589,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 100" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(false);
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
@@ -603,6 +606,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 99" +
                 " group by v1, test_all_type.t1d";
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewPlanCache(true);
         String plan3 = getFragmentPlan(query3);
         PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
@@ -2289,4 +2293,307 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "test_empty_partition_mv1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testJoinWithConstExprs1() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.k1=b.k1 and a.v1=b.v1\n" +
+                        "group by a.k1, a.v1;");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1 = '2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.k1=b.k1 " +
+                    "where a.k1 = '2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should rollup
+        {
+            String query = "select a.k1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1='2020-01-01' and a.v1=1 " +
+                    "group by a.k1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs2() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
+                        "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "left join test_partition_tbl2 as b " +
+                        "on a.k1=b.k1 and a.v1=b.v1\n" +
+                        "group by a.k1, b.k1, a.v1, b.v1;");
+        {
+            String query = "SELECT a.k1 as a_k1, b.k1 as b_k1, " +
+                    "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
+                    "FROM test_partition_tbl1 as a \n" +
+                    "left join test_partition_tbl2 as b " +
+                    "on a.k1=b.k1 and a.v1=b.v1 and a.k1=b.k1 and b.v1=a.v1 \n" +
+                    "group by a.k1, b.k1, a.v1, b.v1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            String query = "select a.k1, b.k1, a.v1, b.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, b.k1, a.v1,b.v1;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.k1=b.k1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', " +
+                    "9: b_k1 IS NOT NULL\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        // should be rollup
+        {
+            String query = "select a.k1,a.v1, sum(a.v1) " +
+                    "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.v1=b.v1 and a.v1=b.v1 " +
+                    "where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
+                    "group by a.k1, a.v1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_k1 = '2020-01-01', 9: b_k1 = '2020-01-01'\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs3() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 and a.v2=b.v2 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_partition_tbl_mv3");
+        }
+
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 and a.v2=b.v2 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: a_v1 = 1, 9: a_v2 = 1\n" +
+                    "     partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs4() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, " TABLE: test_partition_tbl_mv3\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 8: a_v1 = 1, 12: b_v2 = 1\n" +
+                    "     partitions=6/6");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testJoinWithConstExprs5() throws Exception {
+        // a.k1/b.k1 are both output
+        createAndRefreshMv("test", "test_partition_tbl_mv3",
+                "CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
+                        "PARTITION BY a_k1\n" +
+                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                        "REFRESH ASYNC\n" +
+                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                        "FROM test_partition_tbl1 as a \n" +
+                        "join test_partition_tbl2 as b " +
+                        "on a.v1=b.v1 and a.v1=b.v2 \n");
+        // should not be rollup
+        {
+            // if a.k1=b.k1
+            String query = "select a.k1, a.v1 " +
+                    "FROM test_partition_tbl1 as a join test_partition_tbl2 as b " +
+                    "on a.v1=b.v1 " +
+                    "where a.v1=1 and b.v2=1 ;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains(plan, "PREDICATES: 8: a_v1 = 1, 11: b_v1 = 1, 12: b_v2 = 1\n" +
+                    "     partitions=6/6\n" +
+                    "     rollup: test_partition_tbl_mv3");
+        }
+
+        starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testPlanCache() throws Exception {
+        {
+            String mvSql = "create materialized view agg_join_mv_1" +
+                    " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                    " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                    " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100" +
+                    " group by v1, test_all_type.t1d";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "agg_join_mv_1");
+            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContext);
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContext);
+            starRocksAssert.dropMaterializedView("agg_join_mv_1");
+        }
+
+        {
+            String mvSql = "create materialized view mv_with_window" +
+                    " distributed by hash(t1d) as" +
+                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
+                    " from test_all_type";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "mv_with_window");
+            MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContext);
+            Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            starRocksAssert.dropMaterializedView("mv_with_window");
+        }
+
+        {
+            for (int i = 0; i < 1010; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                String mvSql = String.format("create materialized view %s" +
+                        " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                        " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                        " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                        " where t0.v1 < 100" +
+                        " group by v1, test_all_type.t1d", mvName);
+                starRocksAssert.withMaterializedView(mvSql);
+
+                MaterializedView mv = getMv("test", mvName);
+                MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                Assert.assertNotNull(planContext);
+            }
+            for (int i = 0; i < 1010; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                starRocksAssert.dropMaterializedView(mvName);
+            }
+        }
+    }
+>>>>>>> 0f7f0a9fa9 ([Enhancement] optimize mv plan cache by using lru cache (#30361))
 }
