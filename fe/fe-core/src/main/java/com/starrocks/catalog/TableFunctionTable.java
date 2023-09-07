@@ -36,7 +36,6 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
@@ -60,6 +59,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 import static com.google.common.base.Verify.verify;
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
 
@@ -71,6 +71,7 @@ public class TableFunctionTable extends Table {
 
     private String path;
     private String format;
+    private String compressionType;
     private final Map<String, String> properties;
     @Nullable
     private List<Integer> partitionColumnIDs;
@@ -98,7 +99,7 @@ public class TableFunctionTable extends Table {
     }
 
     // Ctor for unload data via table function
-    public TableFunctionTable(String path, String format, List<Column> columns,
+    public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
                               @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
                               Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
@@ -106,6 +107,7 @@ public class TableFunctionTable extends Table {
         verify(!(partitionColumnIDs != null && writeSingleFile));
         this.path = path;
         this.format = format;
+        this.compressionType = compressionType;
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         this.properties = properties;
@@ -143,7 +145,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setColumns(tColumns);
         tTableFunctionTable.setFile_format(format);
         tTableFunctionTable.setWrite_single_file(writeSingleFile);
-        tTableFunctionTable.setCompression_type(TCompressionType.SNAPPY);
+        tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
         }

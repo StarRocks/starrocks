@@ -158,6 +158,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
             ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
+// for UT only
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
         const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
         const std::vector<FileColumnId>& file_column_ids) {

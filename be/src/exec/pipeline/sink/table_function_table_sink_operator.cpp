@@ -35,6 +35,8 @@ inline std::string value_to_string(const ColumnPtr& column) {
                     } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
                                          std::is_same_v<T, float> || std::is_same_v<T, double>) {
                         res = std::to_string(arg);
+                    } else if constexpr (std::is_same_v<T, std::monostate>) {
+                        res = "null";
                     }
                 },
                 variant);

@@ -54,6 +54,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -370,15 +371,16 @@ public class InsertAnalyzer {
         String path = props.get("path");
         String format = props.get("format");
         String partitionBy = props.get("partition_by");
+        String compressionType = props.get("compression");
 
         // validate properties
         if (path == null) {
             throw new SemanticException(
-                    "path is mandatory in table function. \"path\" = \"hdfs://path/to/your/location/prefix\"");
+                    "path is a mandatory property. \"path\" = \"hdfs://path/to/your/location/\"");
         }
 
         if (format == null) {
-            throw new SemanticException("format is mandatory in table function. " +
+            throw new SemanticException("format is a mandatory property. " +
                     "Use \"path\" = \"parquet\" as only parquet format is supported now");
         }
 
@@ -386,12 +388,23 @@ public class InsertAnalyzer {
             throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
         }
 
+        if (compressionType == null) {
+            throw new SemanticException("compression is a mandatory property. " +
+                    "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
+                    "(uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+        }
+
+        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
+            throw new SemanticException("compression type " + compressionType + " is not supported. " +
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+        }
+
         if (writeSingleFile && partitionBy != null) {
-            throw new SemanticException("cannot use partition by and single simultaneously");
+            throw new SemanticException("cannot use partition_by and single simultaneously");
         }
 
         if (writeSingleFile) {
-            return new TableFunctionTable(path, format, columns, null, true, props);
+            return new TableFunctionTable(path, format, compressionType, columns, null, true, props);
         }
 
         if (partitionBy == null) {
@@ -399,7 +412,7 @@ public class InsertAnalyzer {
             if (path.endsWith("/")) {
                 path += "data_";
             }
-            return new TableFunctionTable(path, format, columns, null, false, props);
+            return new TableFunctionTable(path, format, compressionType, columns, null, false, props);
         }
 
         // extra validation for using partitionBy
@@ -424,7 +437,7 @@ public class InsertAnalyzer {
 
         List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
                 Collectors.toList());
-        return new TableFunctionTable(path, format, columns, partitionColumnIDs, false, props);
+        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, props);
     }
 
     public static boolean isUnSupportedPartitionColumnType(Type type) {
