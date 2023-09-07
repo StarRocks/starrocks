@@ -770,10 +770,16 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (auto idx : new_sort_key_idxes) {
             new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema()->column(idx).unique_id());
         }
-        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
-                          base_sort_key_unique_ids.begin())
-                    .first != new_sort_key_unique_ids.end()) {
-            sc_params.sc_directly = !(sc_params.sc_sorting = true);
+
+        auto base_iter = base_sort_key_unique_ids.cbegin();
+        auto new_iter = new_sort_key_unique_ids.cbegin();
+        while (base_iter != base_sort_key_unique_ids.cend() && new_iter != new_sort_key_unique_ids.cend() &&
+               *base_iter == *new_iter) {
+            ++base_iter;
+            ++new_iter;
+        }
+        if (base_iter != base_sort_key_unique_ids.cend() || new_iter != new_sort_key_unique_ids.cend()) {
+            sc_params.sc_directly = !sc_params.sc_sorting;
         }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
