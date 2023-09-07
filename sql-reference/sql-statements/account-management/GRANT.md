@@ -273,11 +273,12 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
    ```SQL
    -- 创建自定义角色。
    CREATE ROLE read_catalog_only;
+   -- 赋予角色目标 Catalog 的 USAGE 权限。
+   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- 切换到对应数据目录。
    SET CATALOG hive_catalog;
    -- 赋予角色所有表和视图的查询权限。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   ```
 
 ### 全局、数据库级、表级以及分区级备份恢复权限
 
