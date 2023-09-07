@@ -27,12 +27,8 @@ Before a GRANT operation is performed, make sure that the related user or role h
 GRANT
     { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
     ON SYSTEM
-<<<<<<< HEAD
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 
 #### Resource group
 
@@ -49,22 +45,11 @@ GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-<<<<<<< HEAD
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 
 #### Global UDF
 
-<<<<<<< HEAD
-GRANT { 
-    { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
-       | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
@@ -72,7 +57,6 @@ GRANT
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 
 #### Internal catalog
 
@@ -80,12 +64,8 @@ GRANT
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-<<<<<<< HEAD
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 
 #### External catalog
 
@@ -93,12 +73,8 @@ GRANT
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-<<<<<<< HEAD
-   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
-=======
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 
 #### Database
 
@@ -146,15 +122,11 @@ GRANT
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
   ```
-
-<<<<<<< HEAD
-GRANT { 
-=======
+  
 #### Materialized view
 
 ```SQL
 GRANT
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
@@ -168,15 +140,11 @@ GRANT
   ```SQL
   GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
   ```
-
-<<<<<<< HEAD
-GRANT { 
-=======
+  
 #### Function
 
 ```SQL
 GRANT
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS} IN 
@@ -191,30 +159,12 @@ GRANT
   GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
   ```
 
-<<<<<<< HEAD
-GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ];
-=======
 #### User
 
 ```SQL
 GRANT IMPERSONATE
 ON USER <user_identity>
 TO USER <user_identity> [ WITH GRANT OPTION ]
-```
-
-#### Storage volume
-
-```SQL
-GRANT
-    CREATE STORAGE VOLUME
-    ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-
-GRANT  
-    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
 ```
 
 ### Grant roles to roles or users
@@ -332,27 +282,6 @@ We recommend you customize roles to manage privileges and users. The following e
    SET CATALOG hive_catalog;
    -- Grant the privileges to query all tables and all views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-<<<<<<< HEAD
-=======
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
-   ```
-
-   Note: You can query only Hive table views (since v3.1).
-
-### Grant write-only privileges on a specific external catalog
-
-You can only write data into Iceberg tables (since v3.1).
-
-   ```SQL
-   -- Create a role.
-   CREATE ROLE write_catalog_only;
-   -- Grant the USAGE privilege on the destination catalog to the role.
-   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
-   -- Switch to the corresponding catalog.
-   SET CATALOG iceberg_catalog;
-   -- Grant the privilege to write data into Iceberg tables.
-   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
->>>>>>> 4c6d0aece5 ([Doc] privilege faq, set catalog behavior change, grant/revoke format (backport #30527) (#30543))
    ```
 
 ### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
