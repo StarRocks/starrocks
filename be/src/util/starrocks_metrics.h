@@ -121,7 +121,6 @@ public:
     METRIC_DEFINE_INT_COUNTER(finish_task_requests_failed, MetricUnit::REQUESTS);
 
     // Compaction Task Metric
-    // --------------------
     // compaction task num, including all finished tasks and failed tasks
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);
@@ -207,8 +206,7 @@ public:
     IntGaugeMetricsMap disks_state;
 
     // Compaction Task Metric
-    // --------------------
-    // compaction score, the max compaction score of all tablets.
+    // the max compaction score of all tablets.
     // Record base and cumulative scores separately, because
     // we need to get the larger of the two.
     METRIC_DEFINE_INT_GAUGE(tablet_cumulative_max_compaction_score, MetricUnit::NOUNIT);

@@ -119,7 +119,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
     if (tablet->updates() != nullptr) {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
         StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
-        DeferOp op([&] { StarRocksMetrics::instance()->running_update_compaction_task_num.decrement(1); });
+        DeferOp op([&] { StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1); });
         Status res;
         if (rowset_ids_string.empty()) {
             res = tablet->updates()->compaction(mem_tracker);
@@ -146,7 +146,7 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
         }
         if (!res.ok()) {
             StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
-            LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
+            LOG(WARNING) << "failed to perform update compaction. res=" << res.get_error_msg()
                          << ", tablet=" << tablet->full_name();
             return res;
         }

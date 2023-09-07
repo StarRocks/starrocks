@@ -49,7 +49,7 @@ Status BaseCompaction::compact() {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
-        StarRocksMetrics::instance()->running_base_compaction_task_num.decrement(1);
+        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
     });
 
     // 2. do base compaction, merge rowsets

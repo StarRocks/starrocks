@@ -963,7 +963,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->running_update_compaction_task_num.decrement(1);
+    StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
     if (!res.ok()) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()

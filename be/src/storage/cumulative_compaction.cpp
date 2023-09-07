@@ -34,7 +34,7 @@ Status CumulativeCompaction::compact() {
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
     StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
-    DeferOp op([&] { StarRocksMetrics::instance()->running_cumulative_compaction_task_num.decrement(1); });
+    DeferOp op([&] { StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(-1); });
     std::unique_lock lock(_tablet->get_cumulative_lock(), std::try_to_lock);
     if (!lock.owns_lock()) {
         return Status::OK();

@@ -147,9 +147,9 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             for (auto& candidate : candidates) {
                 if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
                     if (iter->type == CompactionType::BASE_COMPACTION) {
-                        StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+                        StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
                     } else {
-                        StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+                        StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
                     }
                     iter = _compaction_candidates.erase(iter);
                     has_erase = true;
@@ -181,9 +181,9 @@ void CompactionManager::remove_candidate(int64_t tablet_id) {
     for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
         if (tablet_id == iter->tablet->tablet_id()) {
             if (iter->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
             } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
             }
             iter = _compaction_candidates.erase(iter);
             break;
@@ -202,12 +202,6 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
     if (tablet->tablet_state() != TABLET_RUNNING) {
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
                 << ", not RUNNING";
-        return false;
-    }
-
-    if (tablet->has_compaction_task()) {
-        // tablet already has a running compaction task, skip it
-        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because there is another running compaction task.";
         return false;
     }
 
@@ -283,9 +277,9 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
             _compaction_candidates.erase(iter);
             _last_score = candidate->score;
             if (candidate->type == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->wait_base_compaction_task_num.decrement(1);
+                StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(-1);
             } else {
-                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.decrement(1);
+                StarRocksMetrics::instance()->wait_cumulative_compaction_task_num.increment(-1);
             }
             return true;
         }
@@ -377,13 +371,13 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _data_dir_to_cumulative_task_num_map[data_dir]++;
         _cumulative_compaction_concurrency++;
-    StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
+        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(1);
     } else {
         _data_dir_to_base_task_num_map[data_dir]++;
         _base_compaction_concurrency++;
-    StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
+        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->running_base_compaction_task_num.increment(1);
     }
     return true;
 }
@@ -403,11 +397,11 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
                 if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
                     _data_dir_to_cumulative_task_num_map[data_dir]--;
                     _cumulative_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.decrement(1);
+                    StarRocksMetrics::instance()->running_cumulative_compaction_task_num.increment(-1);
                 } else {
                     _data_dir_to_base_task_num_map[data_dir]--;
                     _base_compaction_concurrency--;
-                    StarRocksMetrics::instance()->running_base_compaction_task_num.decrement(1);
+                    StarRocksMetrics::instance()->running_base_compaction_task_num.increment(-1);
                 }
             }
             if (iter->second.empty()) {
