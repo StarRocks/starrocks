@@ -25,6 +25,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
     }
 
     @Test
