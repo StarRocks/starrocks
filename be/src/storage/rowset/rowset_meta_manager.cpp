@@ -91,6 +91,10 @@ Status RowsetMetaManager::traverse_rowset_metas(
         RowsetId rowset_id;
         rowset_id.init(std::string_view(parts[2].data(), parts[2].size()));
         std::vector<StringPiece> uid_parts = strings::Split(parts[1], "-");
+        if (uid_parts.size() != 2) {
+            LOG(WARNING) << "invalid rowset key:" << key << ", uid splitted size:" << uid_parts.size();
+            return true;
+        }
         std::string_view p1(uid_parts[0].data(), uid_parts[0].size());
         std::string_view p2(uid_parts[1].data(), uid_parts[1].size());
         TabletUid tablet_uid(p1, p2);
