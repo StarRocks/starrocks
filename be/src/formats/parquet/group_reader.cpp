@@ -466,6 +466,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     }
 
     size_t count = *row_count;
+    size_t real_count = count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
@@ -476,6 +477,10 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
                                                              (*chunk)->get_column_by_slot_id(slot_id).get());
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
+        }
+        real_count = col_idx == read_columns[0] ? count : real_count;
+        if (UNLIKELY(real_count != count)) {
+            return Status::InternalError(strings::Substitute("Unmatched row count, $0", _param.file->filename()));
         }
     }
 
