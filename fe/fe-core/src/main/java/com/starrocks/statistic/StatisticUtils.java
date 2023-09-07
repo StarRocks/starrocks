@@ -168,17 +168,6 @@ public class StatisticUtils {
         ScalarType bucketsType = ScalarType.createMaxVarcharType();
         ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
 
-        // varchar type column need call setAssignedStrLenInColDefinition here,
-        // otherwise it will be set length to 1 at analyze
-        columnNameType.setAssignedStrLenInColDefinition();
-        tableNameType.setAssignedStrLenInColDefinition();
-        partitionNameType.setAssignedStrLenInColDefinition();
-        dbNameType.setAssignedStrLenInColDefinition();
-        maxType.setAssignedStrLenInColDefinition();
-        minType.setAssignedStrLenInColDefinition();
-        bucketsType.setAssignedStrLenInColDefinition();
-        mostCommonValueType.setAssignedStrLenInColDefinition();
-
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
                     new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
