@@ -68,6 +68,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -137,6 +138,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
 
+    public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
+
+    public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -154,6 +159,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+
+    // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
+    // 2. external table can be rewritten by default if not specific.
+    // 3. you can use `query_rewrite_consistency` to control mv's rewrite consistency.
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
@@ -321,6 +330,23 @@ public class PropertyAnalyzer {
             }
         }
         return partitionLiveNumber;
+    }
+
+    public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+        long bucketSize = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
+            try {
+                bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize <= 0) {
+                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new AnalysisException("Bucket size is not set");
+        }
     }
 
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv) {
@@ -753,6 +779,26 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    public static int analyzePrimaryIndexCacheExpireSecProp(Map<String, String> properties, String propKey, int defaultVal)
+            throws AnalysisException {
+        int val = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
+            String valStr = properties.get(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            try {
+                val = Integer.parseInt(valStr);
+                if (val < 0) {
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                            + " must not be less than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                        + " must be integer: " + valStr);
+            }
+            properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+        }
+        return val;
+    }
+
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, OlapTable table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
@@ -845,7 +891,7 @@ public class PropertyAnalyzer {
 
         BaseTableInfo tableInfo;
         if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getName(), table.getId());
         } else {
             tableInfo = new BaseTableInfo(catalogName, dbName, table.getName(), table.getTableIdentifier());
         }
@@ -1018,6 +1064,19 @@ public class PropertyAnalyzer {
         }
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
         return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+    }
+
+    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
+        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
+            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+            if (type.equalsIgnoreCase("LOCAL")) {
+                return TPersistentIndexType.LOCAL;
+            } else {
+                throw new AnalysisException("Invalid persistent index type: " + type);
+            }
+        }
+        return TPersistentIndexType.LOCAL;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,

@@ -63,6 +63,10 @@ Status HiveDataSource::_check_all_slots_nullable() {
     return Status::OK();
 }
 
+std::string HiveDataSource::name() const {
+    return "HiveDataSource";
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -424,7 +428,16 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
         required_fields.append(",");
     }
     required_fields = required_fields.substr(0, required_fields.size() - 1);
-
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
     std::map<std::string, std::string> jni_scanner_params;
     jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
     jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
@@ -434,6 +447,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
+    jni_scanner_params["nested_fields"] = nested_fields;
 
     string option_info = "";
     if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {

@@ -50,6 +50,10 @@ const TupleDescriptor* ESDataSourceProvider::tuple_descriptor(RuntimeState* stat
 ESDataSource::ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.es_scan_range) {}
 
+std::string ESDataSource::name() const {
+    return "ESDataSource";
+}
+
 Status ESDataSource::open(RuntimeState* state) {
     _runtime_state = state;
     const TEsScanNode& es_scan_node = _provider->_es_scan_node;

@@ -37,6 +37,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/update_compaction_state.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -52,6 +53,7 @@ public:
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_cumulative_point(0);
         _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -100,6 +102,7 @@ protected:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
         (void)fs::remove_all(kTestDirectory);
     }
 
@@ -208,8 +211,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -265,8 +268,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -316,8 +319,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         if (i == 1) {
             ASSERT_OK(delta_writer->write(chunks[i], indexes_empty.data(), indexes_empty.size()));
@@ -365,8 +368,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -410,8 +413,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
         ASSERT_OK(delta_writer->finish());
@@ -422,8 +425,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     }
     {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
         ASSERT_OK(delta_writer->finish());
@@ -469,8 +472,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     size_t chunk_index = 0;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         for (int seg_cnt = 0; seg_cnt <= i; seg_cnt++) {
             ASSERT_OK(delta_writer->write(chunks[chunk_index], indexes_list[chunk_index].data(),
@@ -485,8 +488,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     }
     {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
         ASSERT_OK(delta_writer->finish());
@@ -532,8 +535,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -582,8 +585,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer =
-                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
+                                                _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[chunk_write_without_order[i]], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -602,6 +605,19 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+    // check compaction state
+    ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
+    RowsetPtr output_rowset = std::make_shared<Rowset>(
+            &tablet, std::make_shared<RowsetMetadata>(txn_log->op_compaction().output_rowset()));
+    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get(), _update_mgr.get());
+    for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
+        ASSERT_OK(compaction_state->load_segments(output_rowset.get(), _tablet_schema, i));
+        auto& pk_col = compaction_state->pk_cols[i];
+        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage());
+        compaction_state->release_segments(i);
+        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
+    }
+    // publish version
     ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -620,8 +636,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
-                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, false},
+                                           CompactionParam{HORIZONTAL_COMPACTION, 5, true},
+                                           CompactionParam{VERTICAL_COMPACTION, 1, true}),
                          to_string_param_name);
 
 } // namespace starrocks::lake

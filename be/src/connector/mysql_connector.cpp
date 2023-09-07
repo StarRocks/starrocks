@@ -90,6 +90,10 @@ Status MySQLDataSource::_init_params(RuntimeState* state) {
     return Status::OK();
 }
 
+std::string MySQLDataSource::name() const {
+    return "MySQLDataSource";
+}
+
 Status MySQLDataSource::open(RuntimeState* state) {
     _init_params(state);
     DCHECK(state != nullptr);

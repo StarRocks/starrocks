@@ -40,7 +40,6 @@ public class CloudConfigurationFactory {
             new AliyunCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider());
 
-
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
             CloudConfiguration cloudConfiguration = factory.build(properties);

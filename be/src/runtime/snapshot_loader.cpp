@@ -548,17 +548,17 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
-    // We just replace the table_schema in tabletMeta using the schema
-    // in snapshot_meta.
-    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
-    std::shared_lock rdlock(tablet->get_header_lock());
-    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
-    rdlock.unlock();
-
-    TabletMetaPB metapb;
-    new_tablet_meta->to_meta_pb(&metapb);
-    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
-    tablet->set_tablet_meta(new_tablet_meta);
+    /*
+     * just reset the tablet_schema using the schema in snapshot_meta
+     * 
+     * we do not use tablet_meta copy to avoid the TabletUpdates
+     * inconsistent problem.
+     * 
+     * we also do not use the snapshot_meta to construct a new
+     * tablet to replace the old one here, because it may easy
+     * to forget reset some variable in the snapshot_meta.
+    */
+    tablet->tablet_meta()->reset_tablet_schema_for_restore(snapshot_meta.tablet_meta().schema());
     tablet->save_meta();
 
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));

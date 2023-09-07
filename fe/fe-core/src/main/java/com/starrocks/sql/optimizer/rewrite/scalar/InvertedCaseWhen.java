@@ -434,7 +434,12 @@ public class InvertedCaseWhen {
                         invertedCaseWhen.getBranchToNull().map(NegateFilterShuttle.getInstance()::negateFilter)
                                 .orElse(ConstantOperator.TRUE));
             } else {
-                return Optional.of(invertedCaseWhen.getBranchToNull().orElse(ConstantOperator.FALSE));
+                if (invertedCaseWhen.getBranchToNull().isPresent()) {
+                    return Optional.of(buildIfThen(invertedCaseWhen.getBranchToNull().get(),
+                            ConstantOperator.TRUE, ConstantOperator.FALSE));
+                } else {
+                    return Optional.of(ConstantOperator.FALSE);
+                }
             }
         }
 

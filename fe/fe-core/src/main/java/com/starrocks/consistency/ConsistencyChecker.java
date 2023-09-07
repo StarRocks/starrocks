@@ -44,6 +44,8 @@ import com.starrocks.catalog.MetaObject;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PhysicalPartitionImpl;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
@@ -295,11 +297,11 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                         // sort partitions
                         Queue<MetaObject> partitionQueue =
-                                new PriorityQueue<>(Math.max(table.getAllPartitions().size(), 1), COMPARATOR);
-                        for (Partition partition : table.getPartitions()) {
+                                new PriorityQueue<>(Math.max(table.getAllPhysicalPartitions().size(), 1), COMPARATOR);
+                        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                             // check partition's replication num. if 1 replication. skip
-                            if (table.getPartitionInfo().getReplicationNum(partition.getId()) == (short) 1) {
-                                LOG.debug("partition[{}]'s replication num is 1. ignore", partition.getId());
+                            if (table.getPartitionInfo().getReplicationNum(partition.getParentId()) == (short) 1) {
+                                LOG.debug("partition[{}]'s replication num is 1. ignore", partition.getParentId());
                                 continue;
                             }
 
@@ -309,11 +311,15 @@ public class ConsistencyChecker extends FrontendDaemon {
                                         Partition.PARTITION_INIT_VERSION);
                                 continue;
                             }
-                            partitionQueue.add(partition);
+                            if (partition instanceof Partition) {
+                                partitionQueue.add((Partition) partition);
+                            } else if (partition instanceof PhysicalPartitionImpl) {
+                                partitionQueue.add((PhysicalPartitionImpl) partition);
+                            }
                         }
 
                         while ((chosenOne = partitionQueue.poll()) != null) {
-                            Partition partition = (Partition) chosenOne;
+                            PhysicalPartition partition = (PhysicalPartition) chosenOne;
 
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =

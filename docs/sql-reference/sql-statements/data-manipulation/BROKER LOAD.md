@@ -229,9 +229,9 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab = "/keytab/hive.keytab",
-    "kerberos_keytab_content = "YWFhYWFh"
+    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab" = "/keytab/hive.keytab",
+    "kerberos_keytab_content" = "YWFhYWFh"
     ```
 
     The following table describes the parameters in `StorageCredentialParams`.
@@ -637,6 +637,14 @@ If the columns of the data file cannot be mapped one on one in sequence to the c
   - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
 
 For detailed examples, see [Configure column mapping](#configure-column-mapping).
+
+## Related configuration items
+
+The [FE configuration item](../../../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+
+In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
+
+Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter described above. You can use [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
 
 ## Examples
 

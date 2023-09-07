@@ -391,15 +391,20 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     }
 
     root_path = _location_provider->txn_log_root_location(tablet_id);
-    // It's ok to ignore the error here.
-    (void)fs->iterate_dir(root_path, scan_cb);
+    st = fs->iterate_dir(root_path, scan_cb);
+    st.permit_unchecked_error();
 
     for (const auto& obj : objects) {
         erase_metacache(obj);
-        (void)fs->delete_file(obj);
+        st = fs->delete_file(obj);
+        st.permit_unchecked_error();
     }
     //drop tablet schema from metacache;
     erase_metacache(tablet_schema_cache_key(tablet_id));
+
+    std::unique_lock wrlock(_meta_lock);
+    _tablet_in_writing_txn_size.erase(tablet_id);
+
     return Status::OK();
 }
 
@@ -923,7 +928,8 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     } else if (!st.ok()) {
         return st;
     } else {
-        (void)fs::delete_file(txn_log_path);
+        st = fs::delete_file(txn_log_path);
+        st.permit_unchecked_error();
         return Status::OK();
     }
 }
@@ -1003,6 +1009,33 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
         (void)_metacache->adjust_capacity(delta);
         VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
     }
+}
+
+int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
+    int64_t size = 0;
+    std::shared_lock rdlock(_meta_lock);
+    const auto& it = _tablet_in_writing_txn_size.find(tablet_id);
+    if (it != _tablet_in_writing_txn_size.end()) {
+        for (auto& [k, v] : it->second) {
+            size += v;
+        }
+    }
+    VLOG(1) << "tablet " << tablet_id << " in writing data size: " << size;
+    return size;
+}
+
+void TabletManager::set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id]
+            << " size: " << size << " txn_id: " << txn_id;
+    _tablet_in_writing_txn_size[tablet_id][txn_id] = size;
+}
+
+void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id) {
+    std::unique_lock wrlock(_meta_lock);
+    VLOG(1) << "remove tablet " << tablet_id
+            << "in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id] << " txn_id: " << txn_id;
+    _tablet_in_writing_txn_size[tablet_id].erase(txn_id);
 }
 
 } // namespace starrocks::lake

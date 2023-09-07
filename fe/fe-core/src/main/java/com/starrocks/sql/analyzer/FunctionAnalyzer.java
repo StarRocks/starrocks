@@ -29,6 +29,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.ExprUtil;
 import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
@@ -171,12 +172,6 @@ public class FunctionAnalyzer {
         Expr arg = functionCallExpr.getChild(0);
         if (arg == null) {
             return;
-        }
-
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
-            if (fnParams.isDistinct()) {
-                throw new SemanticException("array_agg does not support DISTINCT", functionCallExpr.getPos());
-            }
         }
 
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
@@ -359,6 +354,47 @@ public class FunctionAnalyzer {
                         !functionCallExpr.getChild(2).isConstant()) {
                     throw new SemanticException(
                             "percentile_approx requires the third parameter's type is numeric constant type");
+                }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
+            Long k = null;
+            Long counterNum = null;
+            Expr kExpr = null;
+            Expr counterNumExpr = null;
+            if (functionCallExpr.hasChild(1)) {
+                kExpr = functionCallExpr.getChild(1);
+                if (!ExprUtil.isPositiveConstantInteger(kExpr)) {
+                    throw new SemanticException(
+                            "The second parameter of APPROX_TOP_K must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), kExpr.getPos());
+                }
+                k = ExprUtil.getIntegerConstant(kExpr);
+            }
+            if (functionCallExpr.hasChild(2)) {
+                counterNumExpr = functionCallExpr.getChild(2);
+                if (!ExprUtil.isPositiveConstantInteger(counterNumExpr)) {
+                    throw new SemanticException(
+                            "The third parameter of APPROX_TOP_K must be a constant positive integer: " +
+                                    functionCallExpr.toSql(), counterNumExpr.getPos());
+                }
+                counterNum = ExprUtil.getIntegerConstant(counterNumExpr);
+            }
+            if (k != null && k > 10000) {
+                throw new SemanticException("The maximum number of the second parameter is 10000" +
+                        functionCallExpr.toSql(), kExpr.getPos());
+            }
+            if (counterNum != null) {
+                Preconditions.checkNotNull(k);
+                if (counterNum > 10000) {
+                    throw new SemanticException("The maximum number of the third parameter is 10000" +
+                            functionCallExpr.toSql(), counterNumExpr.getPos());
+                }
+                if (k > counterNum) {
+                    throw new SemanticException(
+                            "The second parameter must be smaller than or equal to the third parameter" +
+                                    functionCallExpr.toSql(), kExpr.getPos());
                 }
             }
         }

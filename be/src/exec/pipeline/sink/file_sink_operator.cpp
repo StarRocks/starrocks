@@ -108,8 +108,9 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         _sender->close(final_status);
         _sender.reset();
 
-        _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                         state->fragment_instance_id());
+        auto st = _state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+        st.permit_unchecked_error();
     }
     SinkIOBuffer::close(state);
 }
@@ -202,7 +203,7 @@ Status FileSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) 
 FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> t_output_expr,
                                                  std::shared_ptr<ResultFileOptions> file_opts, int32_t _num_sinkers,
                                                  FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+        : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _t_output_expr(std::move(t_output_expr)),
           _file_opts(std::move(file_opts)),
           _num_sinkers(_num_sinkers),

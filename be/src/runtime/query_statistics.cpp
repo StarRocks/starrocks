@@ -148,11 +148,21 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
-    scan_rows += statistics.scan_rows();
-    scan_bytes += statistics.scan_bytes();
-    cpu_ns += statistics.cpu_cost_ns();
-    spill_bytes += statistics.spill_bytes();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    if (statistics.has_scan_rows()) {
+        scan_rows += statistics.scan_rows();
+    }
+    if (statistics.has_scan_bytes()) {
+        scan_bytes += statistics.scan_bytes();
+    }
+    if (statistics.has_cpu_cost_ns()) {
+        cpu_ns += statistics.cpu_cost_ns();
+    }
+    if (statistics.has_spill_bytes()) {
+        spill_bytes += statistics.spill_bytes();
+    }
+    if (statistics.has_mem_cost_bytes()) {
+        mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    }
     {
         std::lock_guard l(_lock);
         for (int i = 0; i < statistics.stats_items_size(); ++i) {

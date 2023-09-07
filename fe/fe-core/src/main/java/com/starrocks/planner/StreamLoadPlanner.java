@@ -199,8 +199,11 @@ public class StreamLoadPlanner {
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
+        if (destTable.getAutomaticBucketSize() > 0) {
+            olapTableSink.setAutomaticBucketSize(destTable.getAutomaticBucketSize());
+        }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, olapTableSink.missAutoIncrementColumn());
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns, olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 

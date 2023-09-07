@@ -241,6 +241,7 @@ LOCALTIME: 'LOCALTIME';
 LOCALTIMESTAMP: 'LOCALTIMESTAMP';
 LOCATION: 'LOCATION';
 LOCATIONS: 'LOCATIONS';
+LOGS: 'LOGS';
 LOGICAL: 'LOGICAL';
 MANUAL: 'MANUAL';
 MAP: 'MAP';
@@ -546,7 +547,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ~'+' .*? '*/' -> channel(HIDDEN)
+    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
     ;
 
 SEMICOLON: ';';

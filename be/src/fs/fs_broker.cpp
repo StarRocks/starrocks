@@ -85,9 +85,9 @@ static Status to_status(const TBrokerOperationStatus& st) {
 template <typename Method, typename Request, typename Response>
 static Status call_method(const TNetworkAddress& broker, Method method, const Request& request, Response* response,
                           int retry_count = 1, int timeout_ms = DEFAULT_TIMEOUT_MS) {
-    Status status;
     TFileBrokerServiceClient* client;
 #ifndef BE_TEST
+    Status status;
     BrokerServiceConnection conn(client_cache(), broker, timeout_ms, &status);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to get broker client: " << status;
@@ -214,7 +214,10 @@ public:
         FileSystem::on_file_write_open(this);
     }
 
-    ~BrokerWritableFile() override { (void)BrokerWritableFile::close(); }
+    ~BrokerWritableFile() override {
+        auto st = BrokerWritableFile::close();
+        st.permit_unchecked_error();
+    }
 
     Status append(const Slice& data) override {
         TBrokerPWriteRequest request;

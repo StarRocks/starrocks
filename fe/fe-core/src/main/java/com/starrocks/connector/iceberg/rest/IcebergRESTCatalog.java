@@ -59,7 +59,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private static final String TABULAR_API = "https://api.tabular.io/ws";
     // This parameter we don't expose to user, just some people are using docker hosted tabular, it's url may
     // not the "https://api.tabular.io/ws"
-    public static final String KEY_ENABLE_TABULAR_SUPPORT = "enable_tabular_support";
+    public static final String KEY_DISABLE_TABULAR_SUPPORT = "disable_tabular_support";
     public static final String KEY_CREDENTIAL_WITH_PREFIX = ICEBERG_CUSTOM_PROPERTIES_PREFIX + "credential";
 
     private final Configuration conf;
@@ -80,9 +80,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        if (copiedProperties.get("uri").equalsIgnoreCase(TABULAR_API)) {
+        if (!copiedProperties.containsKey(KEY_DISABLE_TABULAR_SUPPORT)) {
             copiedProperties.put("header.x-tabular-s3-access", "vended_credentials");
-            copiedProperties.put(KEY_ENABLE_TABULAR_SUPPORT, "true");
         }
 
         delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);

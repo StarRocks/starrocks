@@ -219,6 +219,19 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return null;
     }
 
+    public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+        for (Partition partition : idToPartition.values().stream()
+                .map(RecyclePartitionInfo::getPartition)
+                .collect(Collectors.toList())) {
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                if (subPartition.getId() == physicalPartitionId) {
+                    return subPartition;
+                }
+            }
+        }
+        return null;
+    }
+
     public synchronized short getPartitionReplicationNum(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
         if (partitionInfo != null) {
@@ -730,7 +743,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             long tableId = olapTable.getId();
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
-                TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                DataProperty dataProperty = olapTable.getPartitionInfo().getDataProperty(partitionId);
+                if (dataProperty == null) {
+                    LOG.warn("can not find data property for table: {}, partitionId: {} ", table.getName(), partitionId);
+                    continue;
+                }
+                TStorageMedium medium = dataProperty.getStorageMedium();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     long physicalPartitionId = physicalPartition.getId();
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {

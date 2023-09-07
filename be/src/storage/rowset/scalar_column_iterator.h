@@ -96,7 +96,7 @@ public:
     int dict_size();
 
 private:
-    static void _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
+    static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
 

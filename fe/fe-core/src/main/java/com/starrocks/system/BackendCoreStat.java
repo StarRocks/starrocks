@@ -114,7 +114,7 @@ public class BackendCoreStat {
         if (avgCoreNum <= 24) {
             return Math.max(1, avgCoreNum / 3);
         } else {
-            return Math.max(8, avgCoreNum / 4);
+            return Math.min(32, avgCoreNum / 4);
         }
     }
 }

@@ -153,6 +153,7 @@ statement
     | dropResourceGroupStatement
     | alterResourceGroupStatement
     | showResourceGroupStatement
+    | showResourceGroupUsageStatement
 
     // External Resource Statement
     | createResourceStatement
@@ -1187,6 +1188,11 @@ showResourceGroupStatement
     | SHOW RESOURCE GROUPS ALL?
     ;
 
+showResourceGroupUsageStatement
+    : SHOW USAGE RESOURCE GROUP identifier
+    | SHOW USAGE RESOURCE GROUPS
+    ;
+
 createResourceStatement
     : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
     ;
@@ -2192,7 +2198,7 @@ aggregationFunction
     | MAX '(' setQuantifier? expression ')'
     | MIN '(' setQuantifier? expression ')'
     | SUM '(' setQuantifier? expression ')'
-    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
     ;
 
@@ -2308,7 +2314,7 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE (OPTIMIZER | REWRITE)
+    : TRACE (ALL | LOGS | TIMES | VALUES) identifier?
     ;
 
 partitionDesc
@@ -2582,6 +2588,7 @@ number
 
 nonReserved
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2596,7 +2603,7 @@ nonReserved
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
     | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE

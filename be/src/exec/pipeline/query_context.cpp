@@ -44,6 +44,7 @@ QueryContext::QueryContext()
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
+    _lifetime_sw.start();
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -84,7 +85,8 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        query_trace->dump();
+        auto st = query_trace->dump();
+        st.permit_unchecked_error();
     }
 }
 

@@ -174,12 +174,12 @@ public:
     // base lock
     void obtain_base_compaction_lock() { _base_lock.lock(); }
     void release_base_compaction_lock() { _base_lock.unlock(); }
-    std::mutex& get_base_lock() { return _base_lock; }
+    std::shared_mutex& get_base_lock() { return _base_lock; }
 
     // cumulative lock
     void obtain_cumulative_lock() { _cumulative_lock.lock(); }
     void release_cumulative_lock() { _cumulative_lock.unlock(); }
-    std::mutex& get_cumulative_lock() { return _cumulative_lock; }
+    std::shared_mutex& get_cumulative_lock() { return _cumulative_lock; }
 
     std::shared_mutex& get_migration_lock() { return _migration_lock; }
     // should use with migration lock.
@@ -207,8 +207,10 @@ public:
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
 
-    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status; }
-    void set_last_cumu_compaction_failure_status(TStatusCode::type st) { _last_cumu_compaction_failure_status = st; }
+    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status.load(); }
+    void set_last_cumu_compaction_failure_status(TStatusCode::type st) {
+        _last_cumu_compaction_failure_status.store(st);
+    }
 
     int64_t last_base_compaction_failure_time() { return _last_base_compaction_failure_millis; }
     void set_last_base_compaction_failure_time(int64_t millis) { _last_base_compaction_failure_millis = millis; }
@@ -267,7 +269,7 @@ public:
 
     void stop_compaction();
 
-    void reset_compaction();
+    void reset_compaction_status();
 
     bool enable_compaction();
 
@@ -296,6 +298,14 @@ public:
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
     void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
+
+    int64_t data_size();
+
+    int64_t in_writing_data_size();
+
+    void add_in_writing_data_size(int64_t txn_id, int64_t delta);
+
+    void remove_in_writing_data_size(int64_t txn_id);
 
     // verify all rowsets of current(max) version in this tablet
     [[nodiscard]] Status verify();
@@ -353,8 +363,8 @@ private:
     // it will be used in econ-mode in the future
     std::shared_mutex _meta_store_lock;
     std::mutex _ingest_lock;
-    std::mutex _base_lock;
-    std::mutex _cumulative_lock;
+    std::shared_mutex _base_lock;
+    std::shared_mutex _cumulative_lock;
 
     std::shared_mutex _migration_lock;
     // should use with migration lock.
@@ -385,10 +395,12 @@ private:
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
-    std::shared_ptr<CompactionTask> _compaction_task;
     bool _enable_compaction = true;
 
     std::mutex _compaction_task_lock;
+
+    // used for default base cumulative compaction strategy to control the
+    bool _has_running_compaction = false;
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure
@@ -400,13 +412,15 @@ private:
     // timestamp of last base compaction success
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
 
-    TStatusCode::type _last_cumu_compaction_failure_status = TStatusCode::OK;
+    std::atomic<TStatusCode::type> _last_cumu_compaction_failure_status = TStatusCode::OK;
 
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
 
     std::unique_ptr<BinlogManager> _binlog_manager;
+
+    std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
 };
 
 inline bool Tablet::init_succeeded() {

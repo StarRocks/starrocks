@@ -371,6 +371,8 @@ public class OperationType {
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
 
+    public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
+
     // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
@@ -402,6 +404,13 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    // modify table property bucket size
+    public static final short OP_MODIFY_BUCKET_SIZE = 11140;
+
+    // external table analyze
+    public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
+    public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
@@ -486,6 +495,9 @@ public class OperationType {
 
     // Pipe operations log
     public static final short OP_PIPE = 12200;
+
+    // Primary key
+    public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

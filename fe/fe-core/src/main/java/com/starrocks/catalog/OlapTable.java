@@ -982,9 +982,17 @@ public class OlapTable extends Table {
      */
     public void inferDistribution(DistributionInfo info) throws DdlException {
         if (info.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
-                    5, Config.enable_auto_tablet_distribution);
-            info.setBucketNum(numBucket);
+            if (info.getType() == DistributionInfo.DistributionInfoType.HASH) {
+                // infer bucket num
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
+                        5, Config.enable_auto_tablet_distribution);
+                info.setBucketNum(numBucket);
+            } else if (info.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+                int numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
+                info.setBucketNum(numBucket);
+            } else {
+                throw new DdlException("Unknown distribution info type: " + info.getType());
+            }
         }
     }
 
@@ -1190,6 +1198,14 @@ public class OlapTable extends Table {
         return idToPartition.values().stream()
                 .flatMap(partition -> partition.getSubPartitions().stream())
                 .collect(Collectors.toList());
+    }
+
+    public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+        List<PhysicalPartition> physicalPartitions = idToPartition.values().stream()
+                .flatMap(partition -> partition.getSubPartitions().stream()).collect(Collectors.toList());
+        physicalPartitions.addAll(tempPartitions.getAllPartitions().stream()
+                .flatMap(partition -> partition.getSubPartitions().stream()).collect(Collectors.toList()));
+        return physicalPartitions;
     }
 
     // get all partitions except temp partitions
@@ -1666,7 +1682,6 @@ public class OlapTable extends Table {
             tableProperty.write(out);
         }
         tempPartitions.write(out);
-        out.writeInt(maxColUniqueId);
     }
 
     @Override
@@ -1767,7 +1782,6 @@ public class OlapTable extends Table {
         }
         tempPartitions.unsetPartitionInfo();
 
-        maxColUniqueId = in.readInt();
         // In the present, the fullSchema could be rebuilt by schema change while the
         // properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as
@@ -2112,6 +2126,13 @@ public class OlapTable extends Table {
         return false;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        if (tableProperty != null) {
+            return tableProperty.primaryIndexCacheExpireSec();
+        }
+        return 0;
+    }
+
     public String getPersistentIndexTypeString() {
         if (tableProperty != null) {
             return tableProperty.getPersistentIndexTypeString();
@@ -2156,6 +2177,16 @@ public class OlapTable extends Table {
         tableProperty.buildEnablePersistentIndex();
     }
 
+    public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+                        Integer.valueOf(primaryIndexCacheExpireSec).toString());
+        tableProperty.buildPrimaryIndexCacheExpireSec();
+    }
+
     public void setPersistentIndexType(TPersistentIndexType persistentIndexType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2190,6 +2221,26 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Boolean.valueOf(enableReplicatedStorage).toString());
         tableProperty.buildReplicatedStorage();
+    }
+
+    public Long getAutomaticBucketSize() {
+        if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
+            return (long) 0;
+        }
+        if (tableProperty != null) {
+            return tableProperty.getBucketSize();
+        }
+        return (long) 0;
+    }
+
+    public void setAutomaticBucketSize(long bucketSize) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
+                        String.valueOf(bucketSize));
+        tableProperty.buildBucketSize();
     }
 
     public TWriteQuorumType writeQuorum() {

@@ -451,9 +451,9 @@ public class TabletInvertedIndex {
 
                     // validate partition
                     long partitionId = tabletMeta.getPartitionId();
-                    Partition partition = table.getPartition(partitionId);
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
-                        partition = recycleBin.getPartition(partitionId);
+                        partition = recycleBin.getPhysicalPartition(partitionId);
                         if (partition != null) {
                             isInRecycleBin = true;
                         } else {
@@ -605,8 +605,7 @@ public class TabletInvertedIndex {
         writeLock();
         try {
             tabletMetaMap.putIfAbsent(tabletId, tabletMeta);
-
-            LOG.debug("add tablet: {}", tabletId);
+            LOG.debug("add tablet: {} tabletMeta: {}", tabletId, tabletMeta);
         } finally {
             writeUnlock();
         }

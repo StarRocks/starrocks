@@ -25,7 +25,7 @@ HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t i
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_builder,
                                              PartialRuntimeFilterMerger* partial_rf_merger,
                                              const TJoinDistributionMode::type distribution_mode)
-        : Operator(factory, id, name, plan_node_id, driver_sequence),
+        : Operator(factory, id, name, plan_node_id, false, driver_sequence),
           _join_builder(std::move(join_builder)),
           _partial_rf_merger(partial_rf_merger),
           _distribution_mode(distribution_mode) {}

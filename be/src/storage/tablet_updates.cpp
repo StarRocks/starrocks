@@ -925,7 +925,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     std::lock_guard lg(_index_lock);
     // 2. load primary index, using it in finalize step.
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     // empty rowset does not need to load in-memory primary index, so skip it
     if (rowset->has_data_files() || _tablet.get_enable_persistent_index()) {
@@ -1096,7 +1096,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     std::lock_guard lg(_index_lock);
     // 2. load index
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
 
     auto failure_handler = [&](const std::string& msg, bool remove_update_state) {
@@ -1856,7 +1856,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // 1. load index
     std::lock_guard lg(_index_lock);
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     auto st = index.load(&_tablet);
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
@@ -3173,7 +3173,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
     }
 
     auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     index.unload();
     update_manager->index_cache().release(index_entry);
@@ -3378,7 +3378,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     auto update_manager = StorageEngine::instance()->update_manager();
     auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     index.unload();
     update_manager->index_cache().release(index_entry);
@@ -3681,7 +3681,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     auto update_manager = StorageEngine::instance()->update_manager();
     auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
-    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
     index.unload();
     update_manager->index_cache().release(index_entry);
@@ -4105,7 +4105,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         auto manager = StorageEngine::instance()->update_manager();
         auto& index_cache = manager->index_cache();
         auto index_entry = index_cache.get_or_create(tablet_id);
-        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+        index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
         index_entry->value().unload();
         index_cache.release(index_entry);
 
@@ -4406,7 +4406,7 @@ Status TabletUpdates::get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& 
     }
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
-    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(*tablet));
     bool enable_persistent_index = tablet->get_enable_persistent_index();
     auto& index = index_entry->value();
     auto st = index.load(tablet);

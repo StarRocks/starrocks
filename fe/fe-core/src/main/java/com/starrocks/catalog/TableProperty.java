@@ -97,7 +97,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         public static QueryRewriteConsistencyMode defaultForExternalTable() {
-            return DISABLE;
+            return CHECKED;
         }
 
         public static QueryRewriteConsistencyMode parse(String str) {
@@ -151,6 +151,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // and it's null in SHARED NOTHGING
     TPersistentIndexType persistendIndexType;
 
+    private int primaryIndexCacheExpireSec = 0;
+
     /*
      * the default storage volume of this table.
      * DEFAULT: depends on FE's config 'run_mode'
@@ -174,6 +176,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
+
+    // the default automatic bucket size
+    private long bucketSize = 0;
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
@@ -242,6 +247,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
                 break;
+            case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+                buildPrimaryIndexCacheExpireSec();
+                break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
@@ -250,6 +258,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
+                break;
+            case OperationType.OP_MODIFY_BUCKET_SIZE:
+                buildBucketSize();
                 break;
             case OperationType.OP_MODIFY_BINLOG_CONFIG:
                 buildBinlogConfig();
@@ -275,6 +286,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
         buildResourceGroup();
+        buildConstraint();
         return this;
     }
 
@@ -460,9 +472,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildBucketSize() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE) != null) {
+            bucketSize = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE));
+        }
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
+        return this;
+    }
+
+    public TableProperty buildPrimaryIndexCacheExpireSec() {
+        primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
         return this;
     }
 
@@ -488,15 +513,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
 
     public TableProperty buildConstraint() {
-        try {
-            uniqueConstraints = UniqueConstraint.parse(
-                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
-        } catch (SemanticException e) {
-            LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                uniqueConstraints = UniqueConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
+            }
         }
 
-        foreignKeyConstraints = ForeignKeyConstraint.parse(
-                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                foreignKeyConstraints = ForeignKeyConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse foreign key constraints, ignore this foreign key constraints", e);
+            }
+        }
         return this;
     }
 
@@ -604,6 +637,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public int primaryIndexCacheExpireSec() {
+        return primaryIndexCacheExpireSec;
+    }
+
     public String getPersistentIndexTypeString() {
         return persistentIndexTypeToString(persistendIndexType);
     }
@@ -618,6 +655,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean enableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+
+    public long getBucketSize() {
+        return bucketSize;
     }
 
     public String getStorageVolume() {
@@ -722,6 +763,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+        buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
@@ -731,6 +773,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildReplicatedStorage();
         buildQueryRewrite();
+        buildBucketSize();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildConstraint();

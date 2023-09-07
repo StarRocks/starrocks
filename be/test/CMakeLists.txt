@@ -149,8 +149,9 @@ set(EXEC_FILES
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
-        ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+        ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -382,6 +383,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./storage/compaction_parallelization_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

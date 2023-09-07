@@ -49,6 +49,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
@@ -255,7 +256,7 @@ public class PlanFragmentBuilder {
         view.setMaintenancePlan(execPlan);
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
-        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
+        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
                 view.writeQuorum(), view.enableReplicatedStorage(), false, false);
         execPlan.getTopFragment().setSink(tableSink);
 
@@ -658,7 +659,11 @@ public class PlanFragmentBuilder {
         }
 
         // get all column access path, and mark paths which one is predicate used
-        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan) {
+        private List<ColumnAccessPath> computeAllColumnAccessPath(PhysicalScanOperator scan, ExecPlan context) {
+            if (!context.getConnectContext().getSessionVariable().isCboPredicateSubfieldPath()) {
+                return scan.getColumnAccessPaths();
+            }
+
             if (scan.getPredicate() == null) {
                 return scan.getColumnAccessPaths();
             }
@@ -725,21 +730,25 @@ public class PlanFragmentBuilder {
                     return selectTabletIds != null && !selectTabletIds.isEmpty();
                 }).collect(Collectors.toList());
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
-                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
-                    Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                     final Partition partition = referenceTable.getPartition(partitionId);
-                    final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
-                    List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
-                    Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-                    for (int i = 0; i < allTabletIds.size(); i++) {
-                        tabletId2BucketSeq.put(allTabletIds.get(i), i);
+
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(physicalPartition.getId());
+                        Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+                        final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+                        List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
+                        totalTabletsNum += selectedTable.getTablets().size();
+                        for (int i = 0; i < allTabletIds.size(); i++) {
+                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                        }
+                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                        List<Tablet> tablets =
+                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
                     }
-                    totalTabletsNum += selectedTable.getTablets().size();
-                    scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                    List<Tablet> tablets =
-                            selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
-                    scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
@@ -763,7 +772,7 @@ public class PlanFragmentBuilder {
             }
 
             // set column access path
-            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node));
+            scanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -889,7 +898,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
                     context.getColRefToExpr()
-                            .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
+                            .putIfAbsent(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
             }
             minMaxTuple.computeMemLayout();
@@ -1902,8 +1911,14 @@ public class PlanFragmentBuilder {
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
+                    replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
+                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            IS_NONSTRICT_SUPERTYPE_OF));
+                    replaceExpr.getParams().setIsDistinct(false);
                 }
-                Preconditions.checkState(replaceExpr != null);
+                Preconditions.checkState(replaceExpr != null, functionName + " does not support distinct");
                 ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);
