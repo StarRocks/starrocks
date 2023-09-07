@@ -258,8 +258,8 @@ TEST_F(HyperLogLogFunctionsTest, base64ToEmptyHllTest) {
         Columns columns;
         columns.push_back(col);
 
-        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
-        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        auto resultCol = HyperloglogFunctions::base64_to_hll(ctx, columns);
+        ColumnViewer<TYPE_HLL> viewer(resultCol.value());
         ASSERT_EQ(0, viewer.value(0)->estimate_cardinality());
     }
 }
@@ -269,7 +269,6 @@ TEST_F(HyperLogLogFunctionsTest, base64ToHllTest) {
 
     { // explicit hll
         HyperLogLog hll;
-        int HLL_EXPLICLIT_INT64_NUM = 160;
         for (int i = 0; i < HLL_EXPLICLIT_INT64_NUM; i++) {
             hll.update(hash(i));
         }
@@ -297,9 +296,9 @@ TEST_F(HyperLogLogFunctionsTest, base64ToHllTest) {
         columns.push_back(col);
 
         // base64 string to hll
-        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+        auto resultCol = HyperloglogFunctions::base64_to_hll(ctx, columns);
 
-        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ColumnViewer<TYPE_HLL> viewer(resultCol.value());
         ASSERT_EQ(HLL_EXPLICLIT_INT64_NUM, viewer.value(0)->estimate_cardinality());
     }
 }
@@ -331,9 +330,9 @@ TEST_F(HyperLogLogFunctionsTest, base64ToExplicitHllTest) {
         columns.push_back(col);
 
         // base64 string to hll
-        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+        auto resultCol = HyperloglogFunctions::base64_to_hll(ctx, columns);
 
-        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ColumnViewer<TYPE_HLL> viewer(resultCol.value());
         for (int i = 0; i < HLL_EXPLICLIT_INT64_NUM; i++) {
             ASSERT_EQ(i + 1, viewer.value(i)->estimate_cardinality());
         }
@@ -368,9 +367,9 @@ TEST_F(HyperLogLogFunctionsTest, base64ToSparseHllTest) {
         columns.push_back(col);
 
         // base64 string to hll
-        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+        auto resultCol = HyperloglogFunctions::base64_to_hll(ctx, columns);
 
-        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ColumnViewer<TYPE_HLL> viewer(resultCol.value());
         for (int i = 0; i < HLL_SPARSE_THRESHOLD; i++) {
             auto cardinality = viewer.value(i)->estimate_cardinality();
             if (i < HLL_EXPLICLIT_INT64_NUM) {
@@ -408,9 +407,9 @@ TEST_F(HyperLogLogFunctionsTest, base64ToFullHllTest) {
         columns.push_back(col);
 
         // base64 string to hll
-        auto resultCol = HyperloglogFunction::base64_to_hll(ctx, columns);
+        auto resultCol = HyperloglogFunctions::base64_to_hll(ctx, columns);
 
-        ColumnViewer<TYPE_HLL> viewer(resultCol);
+        ColumnViewer<TYPE_HLL> viewer(resultCol.value());
         for (int i = 0; i < HLL_SPARSE_THRESHOLD + 100; i++) {
             auto cardinality = viewer.value(i)->estimate_cardinality();
             if (i < HLL_EXPLICLIT_INT64_NUM) {
