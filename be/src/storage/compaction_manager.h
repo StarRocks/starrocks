@@ -63,7 +63,7 @@ public:
         size_t compaction_score = 0;
     };
 
-    struct CompactionTaskNum{
+    struct CompactionTaskNum {
         size_t running_total_num = 0;
         size_t running_base_num = 0;
         size_t running_cumu_num = 0;
@@ -72,8 +72,9 @@ public:
         size_t waiting_base_num = 0;
         size_t waiting_cumu_num = 0;
 
-        std::string to_string(){
-            return strings::Substitute("$0 $1 $2 $3 $4 $5 $6",running_total_num,running_base_num,running_cumu_num,running_update_num,waiting_total_num,waiting_base_num,waiting_cumu_num);
+        std::string to_string() {
+            return strings::Substitute("$0 $1 $2 $3 $4 $5 $6", running_total_num, running_base_num, running_cumu_num,
+                                       running_update_num, waiting_total_num, waiting_base_num, waiting_cumu_num);
         }
     };
 

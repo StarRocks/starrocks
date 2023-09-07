@@ -18,6 +18,8 @@
 #include <thread>
 
 #include "storage/data_dir.h"
+#include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 
@@ -573,70 +575,70 @@ int CompactionManager::get_waiting_task_num() {
 }
 
 Status CompactionManager::get_running_task_status(std::vector<RunningCompactionMetric>& base_metric,
-std::vector<RunningCompactionMetric>& cumu_metric,
-std::vector<RunningCompactionMetric>& update_metric) {
-// get status of base and cumulative tasks
-{
-std::lock_guard lg(_tasks_mutex);
+                                                  std::vector<RunningCompactionMetric>& cumu_metric,
+                                                  std::vector<RunningCompactionMetric>& update_metric) {
+    // get status of base and cumulative tasks
+    {
+        std::lock_guard lg(_tasks_mutex);
 
-float divided = 1024 * 1024;
+        float divided = 1024 * 1024;
 
-for (const auto& tablet_element : _running_tasks) {
-for (const auto& task : tablet_element.second) {
-RunningCompactionMetric metric;
-        metric.tablet_id = task->task_id();
-        CompactionType type = task->compaction_type();
-        metric.type = to_string(type);
-        metric.partition_id = task->tablet()->partition_id();
-        metric.tablet_id = task->tablet()->tablet_id();
-        metric.start_time = ToStringFromUnixMillis(task->get_start_time());
-        metric.algorithm =
-        task->get_compaction_algorithm() == HORIZONTAL_COMPACTION ? "horizontal" : "vertical";
-        metric.input_rowset_num = task->input_rowsets().size();
-        metric.input_segment_num = task->input_segments_num();
-        metric.input_data_size = std::to_string(task->input_rowsets_size() / divided) + "MB";
-        metric.compaction_score = task->compaction_score();
-        metric.progress = std::to_string(task->get_progress()) + "%";
-        for (int i = 0; i < task->input_rowsets().size(); ++i) {
-        RowsetSharedPtr rowset = task->input_rowsets()[i];
-        bool delete_flag = task->tablet()->version_for_delete_predicate(rowset->version());
-        const Version& ver = rowset->version();
-        std::string rowset_str =
-        strings::Substitute("version:[$0-$1] seg_num:$2 $3 $4 $5MB", ver.first, ver.second,
-        rowset->num_segments(), (delete_flag ? "DELETE" : "DATA"),
-        SegmentsOverlapPB_Name(rowset->rowset_meta()->segments_overlap()),
-        rowset->data_disk_size() / divided);
-        metric.input_rowsets.push_back(rowset_str);
-        }
+        for (const auto& tablet_element : _running_tasks) {
+            for (const auto& task : tablet_element.second) {
+                RunningCompactionMetric metric;
+                metric.tablet_id = task->task_id();
+                CompactionType type = task->compaction_type();
+                metric.type = to_string(type);
+                metric.partition_id = task->tablet()->partition_id();
+                metric.tablet_id = task->tablet()->tablet_id();
+                metric.start_time = ToStringFromUnixMillis(task->get_start_time());
+                metric.algorithm =
+                        task->get_compaction_algorithm() == HORIZONTAL_COMPACTION ? "horizontal" : "vertical";
+                metric.input_rowset_num = task->input_rowsets().size();
+                metric.input_segment_num = task->input_segments_num();
+                metric.input_data_size = std::to_string(task->input_rowsets_size() / divided) + "MB";
+                metric.compaction_score = task->compaction_score();
+                metric.progress = std::to_string(task->get_progress()) + "%";
+                for (int i = 0; i < task->input_rowsets().size(); ++i) {
+                    RowsetSharedPtr rowset = task->input_rowsets()[i];
+                    bool delete_flag = task->tablet()->version_for_delete_predicate(rowset->version());
+                    const Version& ver = rowset->version();
+                    std::string rowset_str =
+                            strings::Substitute("version:[$0-$1] seg_num:$2 $3 $4 $5MB", ver.first, ver.second,
+                                                rowset->num_segments(), (delete_flag ? "DELETE" : "DATA"),
+                                                SegmentsOverlapPB_Name(rowset->rowset_meta()->segments_overlap()),
+                                                rowset->data_disk_size() / divided);
+                    metric.input_rowsets.push_back(rowset_str);
+                }
 
-        if (type == CUMULATIVE_COMPACTION) {
-        cumu_metric.push_back(metric);
-        } else if (type == BASE_COMPACTION) {
-        base_metric.push_back(metric);
-        } else {
-        return Status::InvalidArgument(fmt::format("unknown compaction type {}", type));
+                if (type == CUMULATIVE_COMPACTION) {
+                    cumu_metric.push_back(metric);
+                } else if (type == BASE_COMPACTION) {
+                    base_metric.push_back(metric);
+                } else {
+                    return Status::InvalidArgument(fmt::format("unknown compaction type {}", type));
+                }
+            }
         }
-        }
-        }
-        }
+    }
 
-        // get status of update tasks
-        std::vector<TabletSharedPtr> tablets;
-        StorageEngine::instance()->tablet_manager()->get_all_tablets(&tablets);
-        for (const auto& tablet : tablets) {
+    // get status of update tasks
+    std::vector<TabletSharedPtr> tablets;
+    StorageEngine::instance()->tablet_manager()->get_all_tablets(&tablets);
+    for (const auto& tablet : tablets) {
         if (tablet->updates() == nullptr) {
-        // not primary key tablet
-        continue;
+            // not primary key tablet
+            continue;
         }
         RunningCompactionMetric metric;
         if (tablet->updates()->get_running_task_status(metric)) {
-        // has running compaction task
-        update_metric.push_back(metric);
+            // has running compaction task
+            update_metric.push_back(metric);
         }
-        }
+    }
 
-        return Status::OK();
-        }
+    return Status::OK();
+}
 
 Status CompactionManager::get_waiting_tasks_status(std::vector<WaitingCompactionMetric>& base_metric,
                                                    std::vector<WaitingCompactionMetric>& cumu_metric) {
@@ -664,51 +666,51 @@ Status CompactionManager::get_waiting_tasks_status(std::vector<WaitingCompaction
 }
 
 Status CompactionManager::get_compaction_task_num(CompactionTaskNum& compaction_task_num) {
-// get running task num
-{
-std::lock_guard lg(_tasks_mutex);
+    // get running task num
+    {
+        std::lock_guard lg(_tasks_mutex);
         compaction_task_num.running_total_num = running_tasks_num();
         for (const auto& table_tasks : _running_tasks) {
-        for (const auto& task : table_tasks.second) {
-        if (task->compaction_type() == CUMULATIVE_COMPACTION) {
-        compaction_task_num.running_cumu_num++;
-        } else if (task->compaction_type() == BASE_COMPACTION) {
-        compaction_task_num.running_base_num++;
-        } else {
-        return Status::InvalidArgument(fmt::format("unknown compaction type {}", task->compaction_type()));
+            for (const auto& task : table_tasks.second) {
+                if (task->compaction_type() == CUMULATIVE_COMPACTION) {
+                    compaction_task_num.running_cumu_num++;
+                } else if (task->compaction_type() == BASE_COMPACTION) {
+                    compaction_task_num.running_base_num++;
+                } else {
+                    return Status::InvalidArgument(fmt::format("unknown compaction type {}", task->compaction_type()));
+                }
+            }
         }
-        }
-        }
-        }
-        // get running task num of update compaction
-        std::vector<TabletSharedPtr> tablets;
-        StorageEngine::instance()->tablet_manager()->get_all_tablets(&tablets);
-        for (const auto& tablet : tablets) {
+    }
+    // get running task num of update compaction
+    std::vector<TabletSharedPtr> tablets;
+    StorageEngine::instance()->tablet_manager()->get_all_tablets(&tablets);
+    for (const auto& tablet : tablets) {
         if (tablet->updates() == nullptr) {
-        // not primary key tablet
-        continue;
+            // not primary key tablet
+            continue;
         }
         if (tablet->updates()->has_running_task()) {
-        compaction_task_num.running_update_num++;
+            compaction_task_num.running_update_num++;
         }
-        }
-        compaction_task_num.running_total_num += compaction_task_num.running_update_num;
+    }
+    compaction_task_num.running_total_num += compaction_task_num.running_update_num;
 
-        // get waiting task num
-        {
+    // get waiting task num
+    {
         std::lock_guard lg(_candidates_mutex);
         compaction_task_num.waiting_total_num = _compaction_candidates.size();
         for (auto& candidate : _compaction_candidates) {
-        if (candidate.type == CUMULATIVE_COMPACTION) {
-        compaction_task_num.waiting_cumu_num++;
-        } else if (candidate.type == BASE_COMPACTION) {
-        compaction_task_num.waiting_base_num++;
-        } else {
-        return Status::InvalidArgument(fmt::format("unknown compaction type {}", candidate.type));
+            if (candidate.type == CUMULATIVE_COMPACTION) {
+                compaction_task_num.waiting_cumu_num++;
+            } else if (candidate.type == BASE_COMPACTION) {
+                compaction_task_num.waiting_base_num++;
+            } else {
+                return Status::InvalidArgument(fmt::format("unknown compaction type {}", candidate.type));
+            }
         }
-        }
-        }
-        return Status::OK();
-        }
+    }
+    return Status::OK();
+}
 
 } // namespace starrocks
