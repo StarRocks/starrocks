@@ -40,32 +40,35 @@
 
 namespace starrocks::spill {
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
+    DCHECK(profile != nullptr);
     total_spill_bytes = total_spill_bytes_;
-    _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
-    profile->add_child(_spiller_metrics.get(), true, nullptr);
 
-    append_data_timer = ADD_TIMER(_spiller_metrics.get(), "AppendDataTime");
-    spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
-    flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
-    write_io_timer = ADD_TIMER(_spiller_metrics.get(), "WriteIOTime");
-    restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
-    restore_from_buffer_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
-    read_io_timer = ADD_TIMER(_spiller_metrics.get(), "ReadIOTime");
-    flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesFlushToDisk", TUnit::BYTES);
-    restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromDisk", TUnit::BYTES);
-    serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SerializeTime");
-    deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "DeserializeTime");
-    mem_table_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    std::string parent = "SpillStatistics";
+    ADD_TIMER(profile, parent);
 
-    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
-    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
-    restore_from_mem_table_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemTable", TUnit::UNIT);
-    restore_from_mem_table_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemTable", TUnit::UNIT);
-    partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
+    spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
+    flush_timer = ADD_CHILD_TIMER(profile, "FlushTime", parent);
+    write_io_timer = ADD_CHILD_TIMER(profile, "WriteIOTime", parent);
+    restore_rows = ADD_CHILD_COUNTER(profile, "RowsRestored", TUnit::UNIT, parent);
+    restore_from_buffer_timer = ADD_CHILD_TIMER(profile, "RestoreTime", parent);
+    read_io_timer = ADD_CHILD_TIMER(profile, "ReadIOTime", parent);
+    flush_bytes = ADD_CHILD_COUNTER(profile, "BytesFlushToDisk", TUnit::BYTES, parent);
+    restore_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromDisk", TUnit::BYTES, parent);
+    serialize_timer = ADD_CHILD_TIMER(profile, "SerializeTime", parent);
+    deserialize_timer = ADD_CHILD_TIMER(profile, "DeserializeTime", parent);
+    mem_table_peak_memory_usage = profile->AddHighWaterMarkCounter(
+            "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
+    input_stream_peak_memory_usage = profile->AddHighWaterMarkCounter(
+            "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
+
+    shuffle_timer = ADD_CHILD_TIMER(profile, "ShuffleTime", parent);
+    split_partition_timer = ADD_CHILD_TIMER(profile, "SplitPartitionTime", parent);
+    restore_from_mem_table_rows = ADD_CHILD_COUNTER(profile, "RowsRestoreFromMemTable", TUnit::UNIT, parent);
+    restore_from_mem_table_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromMemTable", TUnit::UNIT, parent);
+    partition_writer_peak_memory_usage =
+            profile->AddHighWaterMarkCounter("PartitionWriterPeakMemoryBytes", TUnit::BYTES,
+                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
 }
 
 Status Spiller::prepare(RuntimeState* state) {

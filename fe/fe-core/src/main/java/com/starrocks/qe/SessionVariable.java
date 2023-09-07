@@ -2486,19 +2486,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
-        switch (pipelineProfileLevel) {
-            case 0:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
-                break;
-            case 1:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.ALL_METRICS);
-                break;
-            case 2:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
-                break;
-            default:
-                tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
-                break;
+        if (pipelineProfileLevel == 2) {
+            tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
+        } else {
+            tResult.setPipeline_profile_level(TPipelineProfileLevel.MERGE);
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
