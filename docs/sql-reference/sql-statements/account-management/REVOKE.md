@@ -186,7 +186,7 @@ REVOKE <role_name> [,<role_name>, ...] FROM USER <user_identity>
 | resourcegroup_name | The resource group name                         |
 | resource_name      | The resource name.                              |
 | function_name      | The function name.                              |
-| catalog_name       | The name of the External Catalog.               |
+| catalog_name       | The name of the external catalog.               |
 | database_name      | The database name.                              |
 | table_name         | The table name.                                 |
 | view_name          | The view name.                                  |
