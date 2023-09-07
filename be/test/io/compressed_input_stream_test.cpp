@@ -18,12 +18,12 @@
 
 #include <memory>
 
+#include "fs/fs_posix.h"
 #include "io/string_input_stream.h"
 #include "testutil/assert.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/stream_compression.h"
 #include "util/random.h"
-
 namespace starrocks::io {
 
 class CompressedInputStreamTest : public ::testing::Test {
@@ -97,6 +97,33 @@ TEST_F(CompressedInputStreamTest, test_LZ4F) {
     for (const auto& t : cases) {
         test(t);
     }
+}
+
+TEST_F(CompressedInputStreamTest, test_Snappy) {
+    auto fs = new_fs_posix();
+    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy";
+    auto st = fs->new_random_access_file(path);
+    ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+    auto file = std::move(st.value());
+
+    using DecompressorPtr = std::shared_ptr<StreamCompression>;
+    std::unique_ptr<StreamCompression> dec;
+    StreamCompression::create_decompressor(CompressionTypePB::SNAPPY, &dec);
+
+    auto compressed_input_stream =
+            std::make_shared<io::CompressedInputStream>(file->stream(), DecompressorPtr(dec.release()));
+
+    char buf[1024];
+    std::string out;
+    for (;;) {
+        auto st = compressed_input_stream->read(buf, sizeof(buf) - 1);
+        ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+        uint64_t sz = st.value();
+        if (sz == 0) break;
+        buf[sz] = 0;
+        out += buf;
+    }
+    std::cout << out << "\n";
 }
 
 } // namespace starrocks::io
