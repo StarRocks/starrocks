@@ -148,6 +148,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -904,6 +905,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZE_STATUS: {
                 data = NativeAnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS: {
+                data = ExternalAnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS: {
+                data = ExternalAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }
