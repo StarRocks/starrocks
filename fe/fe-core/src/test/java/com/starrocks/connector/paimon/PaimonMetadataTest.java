@@ -80,8 +80,16 @@ public class PaimonMetadataTest {
         meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
                 1, 1, 1, DUMMY_LEVEL));
 
-        this.splits.add(new DataSplit(1L, row1, 1, meta1, false));
-        this.splits.add(new DataSplit(1L, row2, 1, meta2, false));
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1).withDataFiles(meta1)
+                .isStreaming(false).build());
+        this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1).withDataFiles(meta2)
+                .isStreaming(false).build());
+    }
+
+    @Test
+    public void testRowCount() {
+        long rowCount = metadata.getRowCount(splits);
+        Assert.assertEquals(900, rowCount);
     }
 
     @Test
