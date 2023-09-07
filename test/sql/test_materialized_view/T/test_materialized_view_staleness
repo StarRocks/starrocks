@@ -13,8 +13,7 @@ drop materialized view if exists mv1;
 CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL
 properties (
     "replication_num" = "1",
-    "mv_rewrite_staleness_second" = "10",
-    "session.enable_optimizer_trace_log" = "true"
+    "mv_rewrite_staleness_second" = "10"
 )
  AS SELECT k1,sum(k2) FROM t1 group by k1;
 

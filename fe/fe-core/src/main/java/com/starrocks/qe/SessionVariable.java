@@ -336,6 +336,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String ENABLE_MV_OPTIMIZER_TRACE_LOG = "enable_mv_optimizer_trace_log";
+
+    // command, file
+    public static final String TRACE_LOG_MODE = "trace_log_mode";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
@@ -996,14 +999,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
-    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
-    private boolean enableOptimizerTraceLog = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_MV_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
-    private boolean enableMVOptimizerTraceLog = false;
-
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
+
+    // command, file
+    @VarAttr(name = TRACE_LOG_MODE, flag = VariableMgr.INVISIBLE)
+    private String traceLogMode = "command";
 
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
@@ -1075,6 +1076,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getThriftPlanProtocol() {
         return thriftPlanProtocol;
+    }
+
+    public void setTraceLogMode(String traceLogMode) {
+        this.traceLogMode = traceLogMode;
+    }
+
+    public String getTraceLogMode() {
+        return traceLogMode;
     }
 
     public void setPartialUpdateMode(String mode) {
@@ -2135,22 +2144,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setJoinImplementationMode(String joinImplementationMode) {
         this.joinImplementationMode = joinImplementationMode;
-    }
-
-    public boolean isEnableOptimizerTraceLog() {
-        return enableOptimizerTraceLog;
-    }
-
-    public void setEnableOptimizerTraceLog(boolean val) {
-        this.enableOptimizerTraceLog = val;
-    }
-
-    public boolean isEnableMVOptimizerTraceLog() {
-        return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
-    }
-
-    public void setEnableMVOptimizerTraceLog(boolean val) {
-        this.enableMVOptimizerTraceLog = val;
     }
 
     public boolean isRuntimeFilterOnExchangeNode() {
