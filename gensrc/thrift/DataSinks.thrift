@@ -242,7 +242,7 @@ struct THiveTableSink {
 }
 
 struct TTableFunctionTableSink {
-    1: optional Descriptors.TTableFunctionTable target_table // replace with fields required?
+    1: optional Descriptors.TTableFunctionTable target_table
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 

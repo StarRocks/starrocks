@@ -22,11 +22,19 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -258,5 +266,88 @@ public class InsertStmt extends DmlStmt {
 
     public Map<String, String> getTableFunctionProperties() {
         return tableFunctionProperties;
+    }
+
+    public Table makeTableFunctionTable() {
+        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
+        // fetch schema from query
+        QueryRelation query = getQueryStatement().getQueryRelation();
+        List<Field> allFields = query.getRelationFields().getAllFields();
+        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
+                field.getType(), field.isNullable())).collect(Collectors.toList());
+
+        // parse table function properties
+        Map<String, String> props = getTableFunctionProperties();
+        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+        String path = props.get("path");
+        String format = props.get("format");
+        String partitionBy = props.get("partition_by");
+        String compressionType = props.get("compression");
+
+        // validate properties
+        if (path == null) {
+            throw new SemanticException(
+                    "path is a mandatory property. \"path\" = \"s3://path/to/your/location/\"");
+        }
+
+        if (format == null) {
+            throw new SemanticException("format is a mandatory property. " +
+                    "Use \"path\" = \"parquet\" as only parquet format is supported now");
+        }
+
+        if (!format.equalsIgnoreCase("parquet")) {
+            throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
+        }
+
+        if (compressionType == null) {
+            throw new SemanticException("compression is a mandatory property. " +
+                    "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
+                    "(uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+        }
+
+        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
+            throw new SemanticException("compression type " + compressionType + " is not supported. " +
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, lzo, bz2).");
+        }
+
+        if (writeSingleFile && partitionBy != null) {
+            throw new SemanticException("cannot use partition_by and single simultaneously");
+        }
+
+        if (writeSingleFile) {
+            return new TableFunctionTable(path, format, compressionType, columns, null, true, props);
+        }
+
+        if (partitionBy == null) {
+            // prepend `data_` if path ends with forward slash
+            if (path.endsWith("/")) {
+                path += "data_";
+            }
+            return new TableFunctionTable(path, format, compressionType, columns, null, false, props);
+        }
+
+        // extra validation for using partitionBy
+        if (!path.endsWith("/")) {
+            throw new SemanticException(
+                    "If partition_by is used, path should be a directory ends with forward slash(/)");
+        }
+
+        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+
+        // parse and validate partition columns
+        List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
+        partitionColumnNames.replaceAll(String::trim);
+        partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
+
+        List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
+                !columnNames.contains(col)).collect(Collectors.toList());
+        if (!unmatchedPartitionColumnNames.isEmpty()) {
+            throw new SemanticException("partition columns expected to be a subset of " + columnNames +
+                    ", but got extra columns: " + unmatchedPartitionColumnNames);
+        }
+
+        List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
+                Collectors.toList());
+        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, props);
     }
 }

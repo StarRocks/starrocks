@@ -1571,19 +1571,13 @@ public class StmtExecutor {
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
 
         final Table targetTable;
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
             targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-        }
-
-        Database database;
-        if (targetTable instanceof TableFunctionTable) {
-            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        } else {
-            database = new Database();
         }
 
         if (isExplainAnalyze) {
