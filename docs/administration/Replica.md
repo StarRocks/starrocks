@@ -150,7 +150,7 @@ ADMIN CANCEL REPAIR TABLE tbl [PARTITION (p1, p2, ...)] ;
 
 Prioritization ensures that severely damaged tablets are repaired first. However, if a high-priority repair task keeps failing, it will result in low-priority tasks remaining unscheduled. Therefore, we dynamically adjust the priority based on the status of each task to ensure that all tasks have a chance to be scheduled.
 
-* If the scheduling fails 5 consecutive times (e.g., unable to acquire resources, unable to find a suitable source or destination, etc.), the task will be deprioritized.
+* If the scheduling fails for 5 consecutive times (e.g., unable to acquire resources, unable to find a suitable source or destination, etc.), the task will be deprioritized.
 * A task will be prioritized if it has not been scheduled for 30 minutes.
 * The priority of a task can’t be adjusted twice within five minutes.
 
@@ -158,25 +158,25 @@ To ensure that the initial priority level is weighted, `VERY_HIGH` tasks can onl
 
 ## Replica Balancing
 
-StarRocks automatically performs replica balancing within a cluster. The main idea of balancing is to create replicas on a low-load node and delete replicas on the high-load node. More than one storage medium may exist on different BE nodes within the same cluster. To keep tablets in their original storage medium after balancing, BE nodes are divided based on storage media, allowing the load balancing to be wisely scheduled.
+StarRocks automatically performs replica balancing within a cluster. The main idea of balancing is to create  replicas on a low-load node and delete replicas on the high-load node. More than one storage medium may exist on different BE nodes within the same cluster.   To keep tablets in their original storage medium after balancing, BE nodes are divided based on storage media  , allowing the load balancing to be wisely scheduled .
 
 Similarly, replica balancing ensures that no replicas of the same Tablet are deployed on BEs of the same host.
 
 ### BE Node Load
 
-ClusterLoadStatistics (CLS) shows the load balancing of each Backend in a cluster and triggersTabletScheduler to balance the cluster. Currently, we use **Disk Utilization** and **Number of Replicas** to calculate the `loadScore` for each BE. The higher the score, the heavier the load on the BE.
+ClusterLoadStatistics (CLS) shows the load balancing of each Backend in a cluster and triggersTabletScheduler to balance the cluster. Currently, we  `**Disk Utilization**` and `**Number of Replicas**` to calculate `loadScore` for each BE. The higher the score, the heavier the load on the BE.
 
 `capacityCoefficient` and `replicaNumCoefficient` (sum to 1) are the weighting factors for `Disk Utilization` and `Number of Replicas` respectively. The `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75% (configurable via the FE configuration item `capacity_used_percent_high_water`), the value is 1. If the utilization is between 50% and 75%, the weight factor increases smoothly based on this formula:
 
 `capacityCoefficient= 2 * disk utilization - 0.5`
 
-This weighting factor ensures that when the disk usage is too high, the load score of this Backend will be higher, forcing a reduction in the load on this BE as soon as possible.
+This weighting factor ensures that when the disk usage is too high, the load score of this Backend will be higher, forcing to reduce the load on this BE as soon as possible.
 
 TabletScheduler will update the CLS every 1 minute.
 
 ### Balancing Policy
 
-TabletScheduler selects a certain number of healthy tablets as candidates for balancing through LoadBalancer in each scheduling round and adjusts future scheduling based on these candidate slices.
+TabletScheduler selects a certain number of healthy tablets as candidates for balancing through LoadBalancer in each scheduling round and adjust future scheduling based on these candidate slices.
 
 ## Resource Control
 
@@ -191,31 +191,31 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
 ### View replica status
 
 1. Global Status Check  
-    The `SHOW PROC '/statistic';` command allows you to view the replica status of the entire cluster.
+    The `SHOW PROC '/statistic';`command allows you to view the replica status of the entire cluster.
 
-  ```plaintext
-  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-  | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
-  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-  | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
-  | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
-  | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
-  | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
-  +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
-  ```
+    ```plaintext
+    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+    | DbId     | DbName                      | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum |
+    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+    | 35153636 | default_cluster:DF_Newrisk  | 3        | 3            | 3        | 96        | 288        | 0                  | 0                     |
+    | 48297972 | default_cluster:PaperData   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     |
+    | 5909381  | default_cluster:UM_TEST     | 7        | 7            | 10       | 320       | 960        | 1                  | 0                     |
+    | Total    | 240                         | 10       | 10           | 13       | 416       | 1248       | 1                  | 0                     |
+    +----------+-----------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+
+    ```
 
     The `UnhealthyTabletNum` column shows how many unhealthy Tablets are in the corresponding Database. The `InconsistentTabletNum` column shows how many Tablets in the corresponding Database are in a replica inconsistent state. The last `Total` row gives the statistics of the entire cluster. Normally `UnhealthyTabletNum` and `InconsistentTabletNum` should be zero. If they are not zero, you can further check the tablet’s information. As shown above, there is one tablet in the `UM_TEST` database with unhealthy status, then you can use the following command to see which tablet it is.
 
     `SHOW PROC '/statistic/5909381';`  
     where `5909381` is the corresponding DbId.
 
-    ~~~plain text
+    ```plaintext
     +------------------+---------------------+
     | UnhealthyTablets | InconsistentTablets |
     +------------------+---------------------+
     | [40467980]       | []                  |
     +------------------+---------------------+
-    ~~~
+    ```
 
     The above result shows the specific unhealthy Tablet ID (40467980). Next, we will describe how to check the status of each replica of a specific Tablet.
 
@@ -274,7 +274,7 @@ In addition, users can check whether the replicas are evenly distributed with th
   +-----------+------------+-------+---------+
   ```
 
-Information includes the number of replicas on each BE node, percentage, and a simple graphical display as shown above.
+Information includes the number of replicas on each BE node, percentage, and simple graphical display is shown above.
 
 Tablet Level Status Check  
 
@@ -282,7 +282,7 @@ Users can use the following command to check the status of a specific Tablet. Fo
 
 `SHOW TABLET 29502553;`
 
-  ```plain text
+  ```plaintext
   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
   | DbName                 | TableName | PartitionName | IndexName | DbId     | TableId  | PartitionId | IndexId  | IsSync | DetailCmd                                                                 |
   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
@@ -293,7 +293,7 @@ Users can use the following command to check the status of a specific Tablet. Fo
 Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details 
     `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
 
-  ```plain text
+  ```plaintext
   +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
   | ReplicaId | BackendId | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | SchemaHash | DataSize | RowCount | State  | IsBad | VersionCount | PathHash             | MetaUrl  | CompactionStatus |
   +-----------+-----------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+------------+----------+----------+--------+-------+--------------+----------------------+----------+------------------+
@@ -317,29 +317,29 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
   ```
 
-    A breakdown of all the properties is as follows.
+  A breakdown of all the properties is as follows.
 
-    * TabletId: The ID of the Tablet that is waiting for scheduling. A task for each Tablet
-    * Type: The type of task, either REPAIR or BALANCE
-    * Status: The current status of the Tablet, such as `REPLICA_MISSING`
-    * State: the state of this scheduling task, may be `PENDING`/`RUNNING`/`FINISHED`/`CANCELLED`/`TIMEOUT`/`UNEXPECTED`
-    * OrigPrio: The initial priority
-    * DynmPrio: The dynamic priority
-    * SrcBe: The ID of the source BE node
-    * SrcPath: The path of the source BE node
-    * DestBe: The ID of the destination BE node
-    * DestPath: The path of the destination BE node
-    * Timeout: When the task is scheduled successfully, the timeout of the task is shown here in seconds
-    * Create: The time when the task was created
-    * LstSched: The time the task was last scheduled
-    * LstVisit: The time the task was last accessed. Here " accessed " refers to scheduling, task execution reporting, etc.
-    * Finished: The time when the task was finished.
-    * Rate: The data copy rate of the clone task
-    * FailedSched: The number of times the task scheduling failed
-    * FailedRunning: The number of times the task failed to execute
-    * LstAdjPrio: The time the task priority was last adjusted
-    * CmtVer/CmtVerHash/VisibleVer/VisibleVerHash: Version information used to execute the clone task
-    * ErrMsg: The error message when the task is scheduled and run
+  * TabletId: The ID of the Tablet that is waiting for scheduling. A task for each Tablet
+  * Type: The type of task, either REPAIR or BALANCE
+  * Status: The current status of the Tablet, such as `REPLICA_MISSING`
+  * State: the state of this scheduling task, may be `PENDING`/`RUNNING`/`FINISHED`/`CANCELLED`/`TIMEOUT`/`UNEXPECTED`
+  * OrigPrio: The initial priority
+  * DynmPrio: The dynamic priority
+  * SrcBe: The ID of the source BE node
+  * SrcPath: The path of the source BE node
+  * DestBe: The ID of the destination BE node
+  * DestPath: The path of the destination BE node
+  * Timeout: When the task is scheduled successfully, the timeout of the task is shown here in seconds
+  * Create: The time when the task was created
+  * LstSched: The time the task was last scheduled
+  * LstVisit: The time the task was last accessed. Here " accessed " refers to scheduling, task execution reporting, etc.
+  * Finished: The time when the task was finished.
+  * Rate: The data copy rate of the clone task
+  * FailedSched: The number of times the task scheduling failed
+  * FailedRunning: The number of times the task failed to execute
+  * LstAdjPrio: The time the task priority was last adjusted
+  * CmtVer/CmtVerHash/VisibleVer/VisibleVerHash: Version information used to execute the clone task
+  * ErrMsg: The error message when the task is scheduled and run
 
 2. View the running tasks  
     `SHOW PROC '/cluster_balance/running_tablets';`  
