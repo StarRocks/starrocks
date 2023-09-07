@@ -730,7 +730,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             long tableId = olapTable.getId();
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
-                TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+                DataProperty dataProperty = olapTable.getPartitionInfo().getDataProperty(partitionId);
+                if (dataProperty == null) {
+                    LOG.warn("can not find data property for table: {}, partitionId: {} ", table.getName(), partitionId);
+                    continue;
+                }
+                TStorageMedium medium = dataProperty.getStorageMedium();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
