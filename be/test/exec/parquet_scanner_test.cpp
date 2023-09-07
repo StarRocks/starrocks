@@ -315,15 +315,16 @@ class ParquetScannerTest : public ::testing::Test {
         broker_scan_range->ranges = ranges;
 
         auto scanner = ParquetScanner(state, profile, *broker_scan_range, counter, true);
-        ASSERT_OK(scanner.open());
+        EXPECT_OK(scanner.open());
         DeferOp defer([&scanner] { scanner.close(); });
 
         std::vector<SlotDescriptor> schema;
-        ASSERT_OK(scanner.get_schema(&schema));
-        ASSERT_EQ(schema.size(), expected_schema.size());
+        EXPECT_OK(scanner.get_schema(&schema));
+        EXPECT_EQ(schema.size(), expected_schema.size());
         for (size_t i = 0; i < expected_schema.size(); ++i) {
-            ASSERT_EQ(schema[i].col_name(), expected_schema[i].first);
-            ASSERT_TRUE(schema[i].type() == expected_schema[i].second) << schema[i].col_name();
+            EXPECT_EQ(schema[i].col_name(), expected_schema[i].first);
+            EXPECT_TRUE(schema[i].type() == expected_schema[i].second)
+                    << schema[i].col_name() << " got: " << schema[i].type().debug_string();
         }
     }
 
@@ -671,44 +672,62 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
 TEST_F(ParquetScannerTest, get_file_schema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
             {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet",
-             {{"col_datetime", TypeDescriptor{TYPE_DATETIME}}}},
+             {{"col_datetime", TypeDescriptor::from_logical_type(TYPE_DATETIME)}}},
             {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
-             {{"col_json_int8", TypeDescriptor{TYPE_INT}},
-              {"col_json_int16", TypeDescriptor{TYPE_INT}},
-              {"col_json_int32", TypeDescriptor{TYPE_INT}},
-              {"col_json_int64", TypeDescriptor{TYPE_BIGINT}},
-              {"col_json_uint8", TypeDescriptor{TYPE_INT}},
-              {"col_json_uint16", TypeDescriptor{TYPE_INT}},
-              {"col_json_uint32", TypeDescriptor{TYPE_BIGINT}},
-              {"col_json_uint64", TypeDescriptor{TYPE_BIGINT}},
-              {"col_json_timestamp", TypeDescriptor{TYPE_DATETIME}},
-              {"col_json_float32", TypeDescriptor{TYPE_FLOAT}},
-              {"col_json_float64", TypeDescriptor{TYPE_DOUBLE}},
-              {"col_json_bool", TypeDescriptor{TYPE_BOOLEAN}},
-              {"col_json_string", TypeDescriptor{TYPE_VARCHAR}},
-              {"col_json_list", TypeDescriptor{TYPE_ARRAY}},
-              {"col_json_map", TypeDescriptor{TYPE_MAP}},
-              {"col_json_map_timestamp", TypeDescriptor{TYPE_MAP}},
-              {"col_json_struct", TypeDescriptor{TYPE_VARCHAR}},
-              {"col_json_list_list", TypeDescriptor{TYPE_ARRAY}},
-              {"col_json_map_list", TypeDescriptor{TYPE_MAP}},
-              {"col_json_list_struct", TypeDescriptor{TYPE_ARRAY}},
-              {"col_json_struct_struct", TypeDescriptor{TYPE_VARCHAR}},
-              {"col_json_struct_string", TypeDescriptor{TYPE_VARCHAR}},
-              {"col_json_json_string", TypeDescriptor{TYPE_VARCHAR}}}},
+             {{"col_json_int8", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int16", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int32", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_int64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_uint8", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_uint16", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_json_uint32", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_uint64", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_json_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_json_float32", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_json_float64", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_json_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_json_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_json_list", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_map", TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_map_timestamp",
+               TypeDescriptor::create_map_type(TypeDescriptor::from_logical_type(TYPE_DATETIME),
+                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_json_struct", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_json_list_list", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                             TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_json_map_list",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_json_list_struct", TypeDescriptor::create_array_type(TypeDescriptor::create_varchar_type(1048576))},
+              {"col_json_struct_struct", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_json_struct_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_json_json_string", TypeDescriptor::create_varchar_type(1048576)}}},
             {test_exec_dir + "/test_data/parquet_data/decimal.parquet",
-             {{"col_decimal32", TypeDescriptor{TYPE_DECIMAL32}},
-              {"col_decimal64", TypeDescriptor{TYPE_DECIMAL64}},
-              {"col_decimal128_byte_array", TypeDescriptor{TYPE_DECIMAL128}},
-              {"col_decimal128_fixed_len_byte_array", TypeDescriptor{TYPE_DECIMAL128}}}},
+             {{"col_decimal32", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2)},
+              {"col_decimal64", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2)},
+              {"col_decimal128_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)},
+              {"col_decimal128_fixed_len_byte_array", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 2)}}},
             {test_exec_dir + "/test_data/parquet_data/nested.parquet",
-             {{"col_int", TypeDescriptor{TYPE_BIGINT}},
-              {"col_list_int", TypeDescriptor{TYPE_ARRAY}},
-              {"col_list_list_int", TypeDescriptor{TYPE_ARRAY}},
-              {"col_map_string_int", TypeDescriptor{TYPE_MAP}},
-              {"col_map_map_string_int", TypeDescriptor{TYPE_MAP}},
-              {"col_list_map_string_int", TypeDescriptor{TYPE_ARRAY}},
-              {"col_map_string_list_int", TypeDescriptor{TYPE_MAP}}}}};
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_list_map_string_int",
+               TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_list_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT)))}}}};
 
     for (const auto& test_case : test_cases) {
         check_schema(test_case.first, test_case.second);
