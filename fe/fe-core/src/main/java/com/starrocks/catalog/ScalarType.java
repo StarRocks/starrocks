@@ -77,7 +77,6 @@ public class ScalarType extends Type implements Cloneable {
     // Only used for type CHAR.
     @SerializedName(value = "len")
     private int len = -1;
-    private boolean isAssignedStrLenInColDefinition = false;
 
     // Only used if type is DECIMAL. -1 (for both) is used to represent a
     // decimal with any precision and scale.
@@ -286,20 +285,17 @@ public class ScalarType extends Type implements Cloneable {
 
     public static ScalarType createDefaultString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
     // Use for Hive string now.
     public static ScalarType createDefaultExternalTableString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
     public static ScalarType createMaxVarcharType() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
-        stringType.setAssignedStrLenInColDefinition();
         return stringType;
     }
 
@@ -701,14 +697,6 @@ public class ScalarType extends Type implements Cloneable {
 
     public void setLength(int len) {
         this.len = len;
-    }
-
-    public boolean isAssignedStrLenInColDefinition() {
-        return isAssignedStrLenInColDefinition;
-    }
-
-    public void setAssignedStrLenInColDefinition() {
-        this.isAssignedStrLenInColDefinition = true;
     }
 
     // add scalar infix to override with getPrecision
