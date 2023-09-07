@@ -42,6 +42,7 @@
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
 #include "util/coding.h"
@@ -1133,7 +1134,6 @@ Status TabletMetaManager::remove_tablet_meta(DataDir* store, WriteBatch* batch, 
 }
 
 Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool detail) {
-    // TODO(cbl): implement detail
     KVStore* meta = store->get_meta();
 
     auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
@@ -1173,15 +1173,43 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
     stats->total_size += stats->tablet_size;
     stats->total_bytes += stats->tablet_bytes;
+    stats->total_size += stats->update_tablet_size;
+    stats->total_bytes += stats->update_tablet_bytes;
 
-    auto traverse_rst_func = [&](std::string_view key, std::string_view value) -> bool {
-        stats->rst_size++;
-        stats->rst_bytes += value.size();
-        return true;
-    };
-    RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, "rst_", traverse_rst_func));
-    stats->total_size += stats->rst_size;
-    stats->total_bytes += stats->rst_bytes;
+    RowsetMetaManager::traverse_rowset_metas(
+            meta, [&](const TabletUid& tablet_uid, const RowsetId& rowset_id, std::string_view value) -> bool {
+                stats->rowset_size++;
+                stats->rowset_bytes += value.size();
+                if (detail) {
+                    bool parsed = false;
+                    auto rowset_meta = std::make_shared<RowsetMeta>(value, &parsed);
+                    if (!parsed) {
+                        LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+                        return true;
+                    }
+                    if (rowset_meta->tablet_uid() != tablet_uid) {
+                        LOG(WARNING) << "tablet uid is not equal, skip the rowset"
+                                     << ", rowset_id=" << rowset_meta->rowset_id()
+                                     << ", in_put_tablet_uid=" << tablet_uid
+                                     << ", tablet_uid in rowset meta=" << rowset_meta->tablet_uid();
+                        return true;
+                    }
+                    auto itr = stats->tablets.find(rowset_meta->tablet_id());
+                    if (itr == stats->tablets.end()) {
+                        // reduce print warning log here, cause there may be many orphan rowsets
+                        stats->error_size++;
+                        LOG_EVERY_SECOND(WARNING)
+                                << "rst_ rowset without tablet tablet_id:" << rowset_meta->tablet_id()
+                                << " rowset_id:" << rowset_meta->rowset_id() << " version:" << rowset_meta->version();
+                    } else {
+                        itr->second.rowset_size++;
+                        itr->second.rowset_bytes += value.size();
+                    }
+                }
+                return true;
+            });
+    stats->total_size += stats->rowset_size;
+    stats->total_bytes += stats->rowset_bytes;
 
     auto traverse_log_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
@@ -1197,6 +1225,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_meta_log without tablet tablet_id:" << tid << " logid:" << logid;
+                stats->error_size++;
             } else {
                 itr->second.log_size++;
                 itr->second.log_bytes += value.size();
@@ -1218,7 +1247,8 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid;
+                LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid << " rssid:" << rssid
+                             << " version:" << version;
                 stats->error_size++;
             } else {
                 itr->second.delvec_size++;
@@ -1269,7 +1299,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
-                LOG(WARNING) << "tablet_rowset without tablet tablet_id:" << tid;
+                LOG(WARNING) << "pending_rowset without tablet tablet_id:" << tid << " version:" << version;
                 stats->error_size++;
             } else {
                 itr->second.pending_rowset_size++;

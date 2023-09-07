@@ -288,8 +288,8 @@ void list_meta(DataDir* data_dir) {
                st.meta_bytes, st.log_size, st.log_bytes, st.delvec_size, st.delvec_bytes, st.rowset_size,
                st.rowset_bytes, st.pending_rowset_size, st.pending_rowset_bytes);
     }
-    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_size, stats.total_bytes,
-           stats.tablets.size(), stats.error_size);
+    printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_size,
+           stats.total_bytes, stats.tablets.size(), stats.update_tablet_size, stats.tablet_size, stats.error_size);
 }
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {
