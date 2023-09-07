@@ -152,15 +152,16 @@ public class StatisticUtils {
             future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                        statsConnectCtx.setThreadLocalInfo();
-                        statsConnectCtx.setStatisticsConnection(true);
+                        try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
+                            statsConnectCtx.setThreadLocalInfo();
+                            statsConnectCtx.setStatisticsConnection(true);
 
-                        statisticExecutor.collectStatistics(statsConnectCtx,
-                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        collectPartitionIds, null, analyzeType,
-                                        StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                            statisticExecutor.collectStatistics(statsConnectCtx,
+                                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                            collectPartitionIds, null, analyzeType,
+                                            StatsConstants.ScheduleType.ONCE,
+                                            analyzeStatus.getProperties()), analyzeStatus, false);
+                        }
                     });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);

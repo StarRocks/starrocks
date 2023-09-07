@@ -38,7 +38,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setCatalog(ctx.getCurrentCatalog());
             ctx.getPlannerProfile().reset();
 
-            executor = ctx.executeSql(context.getDefinition());
+            executor = executeSql(ctx, context.getDefinition());
         } finally {
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());

@@ -55,8 +55,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
@@ -78,7 +77,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
 
-            try {
+            try (ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext()) {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
                 for (ColumnStatsCacheKey key : keys) {
@@ -86,7 +85,6 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     columns.add(key.column);
                 }
 
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();

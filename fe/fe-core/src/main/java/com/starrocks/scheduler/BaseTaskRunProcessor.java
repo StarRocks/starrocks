@@ -19,7 +19,10 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang3.StringUtils;
 
 public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
@@ -32,8 +35,18 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
     public void postTaskRun(TaskRunContext context) throws Exception {
         if (StringUtils.isNotEmpty(context.getPostRun())) {
             ConnectContext ctx = context.getCtx();
-            ctx.executeSql(context.getPostRun());
+            executeSql(ctx, context.getPostRun());
         }
+    }
+
+    protected StmtExecutor executeSql(ConnectContext ctx, String sql) throws Exception {
+        StatementBase sqlStmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(ctx, sqlStmt);
+        ctx.setExecutor(executor);
+        ctx.setThreadLocalInfo();
+        executor.execute();
+        return executor;
     }
 
     protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {

@@ -39,6 +39,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -106,6 +107,7 @@ public final class QeProcessorImpl implements QeProcessor {
     public void unregisterQuery(TUniqueId queryId) {
         QueryInfo info = coordinatorMap.remove(queryId);
         if (info != null) {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }

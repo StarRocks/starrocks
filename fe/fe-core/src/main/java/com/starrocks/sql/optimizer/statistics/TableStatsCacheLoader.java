@@ -36,8 +36,7 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
     public @NonNull CompletableFuture<Optional<TableStatistic>> asyncLoad(@NonNull TableStatsCacheKey cacheKey, @
             NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.partitionId);
                 if (statisticData.size() == 0) {
@@ -59,11 +58,10 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
             @NonNull Iterable<? extends @NonNull TableStatsCacheKey> cacheKey,
             @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            try {
+            try (ConnectContext connectContext = StatisticUtils.buildConnectContext()) {
                 TableStatsCacheKey tableStatsCacheKey = cacheKey.iterator().next();
                 long tableId = tableStatsCacheKey.getTableId();
 
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, tableStatsCacheKey.getTableId());
 
