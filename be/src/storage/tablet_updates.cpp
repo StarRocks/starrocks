@@ -2653,6 +2653,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     float divided = 1024 * 1024;
 
     // print current task
+    std::string format_str;
     {
     std::lock_guard<std::mutex> rl(_compaction_metric_lock);
     rapidjson::Value current_task(rapidjson::kObjectType);
@@ -2675,7 +2676,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     }
 
     rapidjson::Value last_compaction_success_time;
-    std::string format_str = ToStringFromUnixMillis(_last_compaction_success_millis.load());
+    format_str = ToStringFromUnixMillis(_last_compaction_success_millis.load());
     last_compaction_success_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
     root.AddMember("last compaction success time", last_compaction_success_time, root.GetAllocator());
 
