@@ -6,7 +6,7 @@ Query all catalogs in the current StarRocks cluster, including the internal cata
 
 > **NOTE**
 >
-> SHOW CATALOGS returns external catalogs to users who have the USAGE privilege on that external catalog. If users or roles do not have this privilege, this command returns only the default_catalog.
+> SHOW CATALOGS returns external catalogs to users who have the USAGE privilege on that external catalog. If users or roles do not have this privilege on any external catalog, this command returns only the default_catalog.
 
 ## Syntax
 
