@@ -21,27 +21,43 @@
 
 namespace starrocks::pipeline {
 
-inline std::string value_to_string(const ColumnPtr& column) {
-    auto v = column->get(0);
-    std::string res;
-    v.visit([&](auto& variant) {
-        std::visit(
-                [&](auto&& arg) {
-                    using T = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<T, Slice> || std::is_same_v<T, TimestampValue> ||
-                                  std::is_same_v<T, DateValue> || std::is_same_v<T, decimal12_t> ||
-                                  std::is_same_v<T, DecimalV2Value>) {
-                        res = arg.to_string();
-                    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> ||
-                                         std::is_same_v<T, float> || std::is_same_v<T, double>) {
-                        res = std::to_string(arg);
-                    } else if constexpr (std::is_same_v<T, std::monostate>) {
-                        res = "null";
-                    }
-                },
-                variant);
-    });
-    return res;
+// TODO(letian-jiang): optimize
+StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
+    auto datum = column->get(0);
+    if (datum.is_null()) {
+        return "null";
+    }
+
+    switch (type_desc.type) {
+    case TYPE_BOOLEAN: {
+        return datum.get_uint8() ? "true" : "false";
+    }
+    case TYPE_TINYINT: {
+        return std::to_string(datum.get_int8());
+    }
+    case TYPE_SMALLINT: {
+        return std::to_string(datum.get_int16());
+    }
+    case TYPE_INT: {
+        return std::to_string(datum.get_int32());
+    }
+    case TYPE_BIGINT: {
+        return std::to_string(datum.get_int64());
+    }
+    case TYPE_DATE: {
+        return datum.get_date().to_string();
+    }
+    case TYPE_DATETIME: {
+        return datum.get_timestamp().to_string();
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR: {
+        return datum.get_slice().to_string();
+    }
+    default: {
+        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+    }
+    }
 }
 
 inline std::string get_partition_location(const string& path, const std::vector<std::string>& names,
@@ -137,7 +153,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     std::vector<std::string> partition_column_values(_partition_exprs.size());
     for (size_t i = 0; i < _partition_exprs.size(); ++i) {
         ASSIGN_OR_RETURN(auto column, _partition_exprs[i]->evaluate(chunk.get()));
-        partition_column_values[i] = value_to_string(column);
+        ASSIGN_OR_RETURN(partition_column_values[i], column_to_string(_partition_exprs[i]->root()->type(), column))
     }
     string partition_location = get_partition_location(_path, _partition_column_names, partition_column_values);
 
