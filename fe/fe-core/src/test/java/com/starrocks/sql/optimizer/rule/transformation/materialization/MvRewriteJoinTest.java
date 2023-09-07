@@ -129,7 +129,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
             String query = "select a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
                     "on a.k1=b.k1 where a.k1 = '2020-01-01' and a.v1 = 1 and b.k1 = '2020-01-01' and b.v1 = 2;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: v1 = 1, 7: k1 = '2020-01-01', 10: b_v1 = 2\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 7: k1 = '2020-01-01', 8: v1 = 1, 10: b_v1 = 2\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -150,7 +150,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
                     " where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
                     " and a.v1=1 and b.v1=1;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 8: v1 = 1, 7: k1 = '2020-01-01', 10: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 7: k1 = '2020-01-01', 8: v1 = 1, 10: b_v1 = 1\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -182,7 +182,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
                     "on a.k1=b.k1 where a.k1 = '2020-01-01' and a.v1 = 1 and b.k1 = '2020-01-01' and b.v1 = 2 " +
                     "group by a.k1, a.v1, a.v2, b.v1;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 9: v1 = 1, 8: k1 = '2020-01-01', 11: b_v1 = 2\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1, 11: b_v1 = 2\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
@@ -204,7 +204,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
                     " where a.k1='2020-01-01' and b.k1 = '2020-01-01' " +
                     " and a.v1=1 and b.v1=1 group by a.k1, a.v1, a.v2, b.v1;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "PREDICATES: 9: v1 = 1, 8: k1 = '2020-01-01', 11: b_v1 = 1\n" +
+            PlanTestBase.assertContains(plan, "PREDICATES: 8: k1 = '2020-01-01', 9: v1 = 1, 11: b_v1 = 1\n" +
                     "     partitions=1/6\n" +
                     "     rollup: test_partition_tbl_mv2");
         }
