@@ -22,10 +22,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class GCPCloudConfiguration implements CloudConfiguration {
+public class GCPCloudConfiguration extends CloudConfiguration {
 
     private final GCPCloudCredential gcpCloudCredential;
 
@@ -36,15 +35,16 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         gcpCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         gcpCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -55,12 +55,12 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: Support gcp credential
         return gcpCloudCredential.toFileStoreInfo();
     }
 
     @Override
-    public String getCredentialString() {
-        return gcpCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("GCPCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                gcpCloudCredential.toCredString());
     }
 }
