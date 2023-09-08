@@ -47,5 +47,11 @@ public class ResourceGroupMgrTest {
             ResourceGroupClassifier.QueryType queryType = ResourceGroupClassifier.QueryType.fromStatement(stmt);
             Assert.assertEquals(ResourceGroupClassifier.QueryType.SELECT, queryType);
         }
+        {
+            String sql = "show running queries";
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+            ResourceGroupClassifier.QueryType queryType = ResourceGroupClassifier.QueryType.fromStatement(stmt);
+            Assert.assertEquals(ResourceGroupClassifier.QueryType.SELECT, queryType);
+        }
     }
 }
