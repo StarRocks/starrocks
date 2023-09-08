@@ -49,8 +49,8 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                 ASSERT LE 1
                                     AGGREGATE ([GLOBAL] aggregate [{99: sum=sum(99: sum), 100: count=sum(100: count)}] group by [[]] having [null]
                                         EXCHANGE GATHER
-                                            AGGREGATE ([LOCAL] aggregate [{99: sum=sum(40: c_sum), 100: count=sum(39: c_count)}] group by [[]] having [null]
-                                                SCAN (mv[customer_agg_mv1] columns[37: c_acctbal, 38: substring_phone, 39: c_count, 40: c_sum] predicate[37: c_acctbal > 0.00 AND 38: substring_phone IN (21, 28, 24, 32, 35, 34, 37)])
+                                            AGGREGATE ([LOCAL] aggregate [{99: sum=sum(49: c_sum), 100: count=sum(48: c_count)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[46: c_acctbal, 47: substring_phone, 48: c_count, 49: c_sum] predicate[46: c_acctbal > 0.00 AND 47: substring_phone = 21 OR 47: substring_phone = 24 OR 47: substring_phone = 28 OR 47: substring_phone = 32 OR 47: substring_phone = 34 OR 47: substring_phone = 35 OR 47: substring_phone = 37])
                         EXCHANGE SHUFFLE[21]
                             SCAN (table[orders] columns[21: o_custkey] predicate[null])
 [end]
