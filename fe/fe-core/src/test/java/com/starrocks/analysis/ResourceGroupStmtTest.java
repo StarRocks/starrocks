@@ -1,5 +1,6 @@
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
@@ -899,5 +900,328 @@ public class ResourceGroupStmtTest {
         }
 
         starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_max_cpu_cores");
+    }
+
+    @Test
+    public void testChooseResourceGroupWithPlanCost() throws Exception {
+        String createRg1SQL = "create resource group rg1_plan_cost\n" +
+                "to (\n" +
+                "   user='rg1_user1'," +
+                "   plan_cpu_cost_range='[0, 1000)'," +
+                "   plan_mem_cost_range='[100, 200)'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+        String createRg2SQL = "create resource group rg2_plan_cost\n" +
+                "to (\n" +
+                "   user='rg1_user1'," +
+                "   plan_cpu_cost_range='[0, 1000)'," +
+                "   plan_mem_cost_range='[151, 200)'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+        String createRg3SQL = "create resource group rg3_plan_cost\n" +
+                "to (\n" +
+                "   user='rg1_user1'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+        starRocksAssert.executeResourceGroupDdlSql(createRg1SQL);
+        starRocksAssert.executeResourceGroupDdlSql(createRg2SQL);
+        starRocksAssert.executeResourceGroupDdlSql(createRg3SQL);
+
+        final String qualifiedUser = "rg1_user1";
+        final String remoteIp = "192.168.2.4";
+
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(
+                        new UserIdentity(qualifiedUser, "%")
+                )
+        );
+        starRocksAssert.getCtx().setRemoteIP(remoteIp);
+
+        {
+            starRocksAssert.getCtx().getAuditEventBuilder().setPlanCpuCosts(100);
+            starRocksAssert.getCtx().getAuditEventBuilder().setPlanMemCosts(150);
+
+            TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                    starRocksAssert.getCtx(),
+                    ResourceGroupClassifier.QueryType.SELECT,
+                    null);
+            Assert.assertEquals("rg1_plan_cost", wg.getName());
+        }
+
+        {
+            starRocksAssert.getCtx().getAuditEventBuilder().setPlanCpuCosts(10000);
+            starRocksAssert.getCtx().getAuditEventBuilder().setPlanMemCosts(150);
+
+            TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                    starRocksAssert.getCtx(),
+                    ResourceGroupClassifier.QueryType.SELECT,
+                    null);
+            Assert.assertEquals("rg3_plan_cost", wg.getName());
+        }
+
+        starRocksAssert.executeResourceGroupDdlSql("drop resource group rg1_plan_cost");
+        starRocksAssert.executeResourceGroupDdlSql("drop resource group rg2_plan_cost");
+        starRocksAssert.executeResourceGroupDdlSql("drop resource group rg3_plan_cost");
+    }
+
+    @Test
+    public void testCreateWithLegalPlanCostRange() throws Exception {
+        String createSQLTemplate = "create resource group rg_valid_plan_cost_range\n" +
+                "to (\n" +
+                "   user='rg1_if_not_exists'," +
+                "   plan_cpu_cost_range='%s'," +
+                "   plan_mem_cost_range='%s'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        class TestCase {
+            final String planCpuCostRange;
+            final String PlanMemCostRange;
+            final String expectedOutput;
+
+            public TestCase(String planCpuCostRange, String planMemCostRange, String expectedOutput) {
+                this.planCpuCostRange = planCpuCostRange;
+                PlanMemCostRange = planMemCostRange;
+                this.expectedOutput = expectedOutput;
+            }
+        }
+
+        List<TestCase> testCases = ImmutableList.of(
+                new TestCase("[1.12345678901234567,10.2)", "[2, 100.2)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                new TestCase("[1.1,10.2)", "[2, 100.2)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+
+                new TestCase("[-1,10)", "[2, 100)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
+                new TestCase("[0, 10)", "[0, 100)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+                new TestCase(" [ 0,  10) ", "  [ 0,  100  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+
+                new TestCase(" [ -infinity,  infinity) ", "  [ 0,  infinity  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))"),
+                new TestCase(" [ -Infinity,  INFINITY) ", "  [ 0,  INFINITY  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))"),
+                new TestCase(" [ -INFINITY,  infinity) ", "  [ 0,  infinity  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_if_not_exists, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))")
+        );
+        for (TestCase c : testCases) {
+            String createSQL = String.format(createSQLTemplate, c.planCpuCostRange, c.PlanMemCostRange);
+            starRocksAssert.executeResourceGroupDdlSql(createSQL);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_plan_cost_range");
+            String actual = rowsToString(rows);
+            Assert.assertEquals(c.expectedOutput, actual);
+
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
+        }
+    }
+
+    @Test
+    public void testAlterWithLegalPlanCostRange() throws Exception {
+        String createSQL = "create resource group rg_valid_plan_cost_range\n" +
+                "to (\n" +
+                "   user='rg1_user'," +
+                "   plan_cpu_cost_range='[100, 1000)'," +
+                "   plan_mem_cost_range='[0, 100)'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        String alterTemplate = "ALTER RESOURCE GROUP rg_valid_plan_cost_range \n" +
+                "ADD \n" +
+                "   (user='rg1_user', plan_cpu_cost_range='%s', plan_mem_cost_range='%s')";
+
+        class TestCase {
+            final String planCpuCostRange;
+            final String PlanMemCostRange;
+            final String expectedOutput;
+
+            public TestCase(String planCpuCostRange, String planMemCostRange, String expectedOutput) {
+                this.planCpuCostRange = planCpuCostRange;
+                PlanMemCostRange = planMemCostRange;
+                this.expectedOutput = expectedOutput;
+            }
+        }
+
+        List<TestCase> testCases = ImmutableList.of(
+                new TestCase("[1.12345678901234567,10.2)", "[2, 100.2)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1234567890123457, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+                new TestCase("[1.1,10.2)", "[2, 100.2)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.1, 10.2), plan_mem_cost_range=[2.0, 100.2))"),
+
+                new TestCase("[-1,10)", "[2, 100)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-1.0, 10.0), plan_mem_cost_range=[2.0, 100.0))"),
+                new TestCase("[0, 10)", "[0, 100)",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+                new TestCase(" [ 0,  10) ", "  [ 0,  100  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[0.0, 10.0), plan_mem_cost_range=[0.0, 100.0))"),
+
+                new TestCase(" [ -infinity,  infinity) ", "  [ 0,  infinity  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))"),
+                new TestCase(" [ -Infinity,  INFINITY) ", "  [ 0,  INFINITY  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))"),
+                new TestCase(" [ -INFINITY,  infinity) ", "  [ 0,  infinity  )  ",
+                        "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[100.0, 1000.0), plan_mem_cost_range=[0.0, 100.0))\n" +
+                                "rg_valid_plan_cost_range|17|20.0%|null|0|0|0|11|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[-Infinity, Infinity), plan_mem_cost_range=[0.0, Infinity))")
+        );
+        for (TestCase c : testCases) {
+            starRocksAssert.executeResourceGroupDdlSql(createSQL);
+
+            String alterSQL = String.format(alterTemplate, c.planCpuCostRange, c.PlanMemCostRange);
+            starRocksAssert.executeResourceGroupDdlSql(alterSQL);
+
+            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg_valid_plan_cost_range");
+            String actual = rowsToString(rows);
+            Assert.assertEquals(c.expectedOutput, actual);
+
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
+        }
+
+    }
+
+    @Test
+    public void testCreateWithIllegalPlanCostRange() {
+        String createSQLTemplate = "create resource group rg_valid_plan_cost_range\n" +
+                "to (\n" +
+                "   user='rg1_if_not_exists'," +
+                "   plan_cpu_cost_range='%s'," +
+                "   plan_mem_cost_range='%s'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        class TestCase {
+            final String planCpuCostRange;
+            final String PlanMemCostRange;
+            final String expectedErrMsg;
+
+            public TestCase(String planCpuCostRange, String planMemCostRange) {
+                this.planCpuCostRange = planCpuCostRange;
+                PlanMemCostRange = planMemCostRange;
+                this.expectedErrMsg = ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE;
+            }
+        }
+
+        List<TestCase> testCases = ImmutableList.of(
+                new TestCase("a [1, 10)", "[2, 100)"),
+                new TestCase("[1, 10)", "[2, 100) b"),
+
+                new TestCase("[1, 10]", "[2, 100)"),
+
+                new TestCase("[1,1 0)", "[2, 100)"),
+                new TestCase("[1,1.1.0)", "[2, 100)"),
+                new TestCase("[2, 100)", "[-1-2, 1.0)"),
+                new TestCase("[- 1, 1.0)", "[2, 100)"),
+                new TestCase("[I nfinity, 10)", "[2, 100)"),
+
+                new TestCase("[1000,10)", "[2, 100)"),
+                new TestCase("[1000,-1)", "[2, 100)"),
+                new TestCase("[1000,-infinity)", "[2, 100)"),
+                new TestCase("[infinity,1000)", "[2, 100)"),
+
+                new TestCase("[abc, 1000)", "[2, 100)")
+        );
+        for (TestCase c : testCases) {
+            String sql = String.format(createSQLTemplate, c.planCpuCostRange, c.PlanMemCostRange);
+            Assert.assertThrows(c.expectedErrMsg, SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+        }
+    }
+
+    @Test
+    public void testAlterWithIllegalPlanCostRange() throws Exception {
+        String createSQL = "create resource group rg_valid_plan_cost_range\n" +
+                "to (\n" +
+                "   user='rg1_user'," +
+                "   plan_cpu_cost_range='[100, 1000)'," +
+                "   plan_mem_cost_range='[0, 100)'" +
+                ")\n" +
+                "   with (" +
+                "   'mem_limit' = '20%'," +
+                "   'cpu_core_limit' = '17'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        String alterTemplate = "ALTER RESOURCE GROUP rg_valid_plan_cost_range \n" +
+                "ADD \n" +
+                "   (user='rg1_user', plan_cpu_cost_range='%s', plan_mem_cost_range='%s')";
+
+        class TestCase {
+            final String planCpuCostRange;
+            final String PlanMemCostRange;
+            final String expectedErrMsg;
+
+            public TestCase(String planCpuCostRange, String planMemCostRange) {
+                this.planCpuCostRange = planCpuCostRange;
+                PlanMemCostRange = planMemCostRange;
+                this.expectedErrMsg = ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE;
+            }
+        }
+
+        List<TestCase> testCases = ImmutableList.of(
+                new TestCase("[1, 10]", "[2, 100)"),
+
+                new TestCase("[1,1 0)", "[2, 100)"),
+                new TestCase("[1,1.1.0)", "[2, 100)"),
+                new TestCase("[-1-2, 1.0)", "[2, 100)"),
+                new TestCase("[- 1, 1.0)", "[2, 100)"),
+                new TestCase("[I nfinity, 10)", "[2, 100)"),
+
+                new TestCase("[1000,10)", "[2, 100)"),
+                new TestCase("[1000,-1)", "[2, 100)"),
+                new TestCase("[1000,-infinity)", "[2, 100)"),
+                new TestCase("[infinity,1000)", "[2, 100)"),
+
+                new TestCase("[abc, 1000)", "[2, 100)")
+        );
+        for (TestCase c : testCases) {
+            starRocksAssert.executeResourceGroupDdlSql(createSQL);
+
+            String alterSQL = String.format(alterTemplate, c.planCpuCostRange, c.PlanMemCostRange);
+            Assert.assertThrows(c.expectedErrMsg, SemanticException.class,
+                    () -> starRocksAssert.executeResourceGroupDdlSql(alterSQL));
+
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_valid_plan_cost_range");
+        }
     }
 }

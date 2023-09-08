@@ -91,6 +91,22 @@ public class ResourceGroupAnalyzer {
                         databaseIds.add(db.getId());
                     }
                     classifier.setDatabases(databaseIds);
+                } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_CPU_COST_RANGE)) {
+                    ResourceGroupClassifier.CostRange planCpuCostRange = ResourceGroupClassifier.CostRange.fromString(value);
+                    if (planCpuCostRange == null) {
+                        throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
+                                        + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
+                                ResourceGroup.PLAN_CPU_COST_RANGE, eqPred.toSql()));
+                    }
+                    classifier.setPlanCpuCostRange(planCpuCostRange);
+                } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_MEM_COST_RANGE)) {
+                    ResourceGroupClassifier.CostRange planMemCostRange = ResourceGroupClassifier.CostRange.fromString(value);
+                    if (planMemCostRange == null) {
+                        throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
+                                        + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
+                                ResourceGroup.PLAN_MEM_COST_RANGE, eqPred.toSql()));
+                    }
+                    classifier.setPlanMemCostRange(planMemCostRange);
                 } else {
                     throw new SemanticException(String.format("Unsupported classifier specifier: '%s'", key));
                 }
