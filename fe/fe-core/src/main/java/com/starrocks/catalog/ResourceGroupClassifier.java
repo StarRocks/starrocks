@@ -20,6 +20,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
@@ -253,9 +257,21 @@ public class ResourceGroupClassifier implements Writable {
         SYSTEM_OTHER;
 
         public static QueryType fromTQueryType(TQueryType type) {
-            return type == TQueryType.LOAD
-                    ? ResourceGroupClassifier.QueryType.INSERT
-                    : ResourceGroupClassifier.QueryType.SELECT;
+            return type == TQueryType.LOAD ? INSERT : SELECT;
+        }
+
+        public static QueryType fromStatement(StatementBase stmt) {
+            if (stmt instanceof QueryStatement) {
+                return SELECT;
+            }
+            if (stmt instanceof DmlStmt) {
+                return INSERT;
+            }
+            if (stmt instanceof LoadStmt) {
+                return INSERT;
+            }
+
+            return SELECT;
         }
     }
 

@@ -200,6 +200,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.CoordinatorPreprocessor.prepareResourceGroup;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 // Do one COM_QUERY process.
@@ -476,6 +477,9 @@ public class StmtExecutor {
                 return;
             }
             if (isForwardToLeader()) {
+                // Write the resource group information to audit log.
+                prepareResourceGroup(context, ResourceGroupClassifier.QueryType.fromStatement(parsedStmt));
+
                 forwardToLeader();
                 return;
             } else {
