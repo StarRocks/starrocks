@@ -284,9 +284,6 @@ public class PaimonMetadata implements ConnectorMetadata {
             if (iterator != null) {
                 iterator.close();
             }
-            if (recordReader != null) {
-                recordReader.close();
-            }
         }
         return 0;
     }
