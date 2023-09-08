@@ -14,6 +14,8 @@
 
 package com.starrocks.feature;
 
+import com.google.common.collect.ImmutableList;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,9 +27,8 @@ public class ProductFeature {
 
     private static final List<ProductFeature> FEATURES;
 
-    public ProductFeature(String name, String version, String description, String link) {
+    public ProductFeature(String name, String description, String link) {
         this.name = name;
-        this.version = version;
         this.description = description;
         this.link = link;
     }
@@ -40,7 +41,6 @@ public class ProductFeature {
         return version;
     }
 
-
     public String getDescription() {
         return description;
     }
@@ -50,8 +50,14 @@ public class ProductFeature {
     }
 
     static {
-        FEATURES = new ArrayList<>();
-        // please add your feature to this list
+        List<ProductFeature> features = new ArrayList<>();
+        // add features here
+        features.add(new ProductFeature(
+                "RBAC",
+                "privilege system with full RBAC functionalities, supporting role inheritance and default roles.",
+                "https://docs.starrocks.io/en-us/latest/administration/privilege_overview"
+        ));
+        FEATURES = ImmutableList.copyOf(features);
     }
 
     // get all features
