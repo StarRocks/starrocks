@@ -4351,4 +4351,217 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteNonmatch("SELECT count(distinct k1) FROM count_tbl_1", "select count(*) from count_tbl_1");
         starRocksAssert.dropTable("count_tbl_1");
     }
+
+    @Test
+    public void testRangePredicateRewrite() throws Exception {
+        // range predicate with partition prune
+        {
+            // test int type
+            starRocksAssert.withTable("create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+
+            starRocksAssert.withTable("CREATE TABLE test_sr_table_join(\n" +
+                    "fdate int,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "fqqid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(fqqid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+            starRocksAssert.dropTable("dim_test_sr_table");
+            starRocksAssert.dropTable("test_sr_table_join");
+        }
+
+        {
+            // test date type
+            starRocksAssert.withTable("create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+
+            starRocksAssert.withTable("CREATE TABLE test_sr_table_join(\n" +
+                    "fdate date,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "fqqid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(fqqid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+
+            {
+                String mv = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                String query = "select t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "FROM test_sr_table_join t1\n" +
+                        "LEFT JOIN dim_test_sr_table t2\n" +
+                        "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                        "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
+                        "GROUP BY fdate, fplat_form_itg2_name";
+                testRewriteOK(mv, query);
+            }
+            starRocksAssert.dropTable("dim_test_sr_table");
+            starRocksAssert.dropTable("test_sr_table_join");
+        }
+    }
+
+    @Test
+    public void testMvOnHiveView() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_on_hive_view_1 " +
+                "DISTRIBUTED by hash(c_custkey) buckets 10" +
+                " properties (" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"TRUE\"\n" +
+                ")\n" +
+                "As select * from hive0.tpch.customer_view;");
+        String query = "select * from hive0.tpch.customer_view";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
+        starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
+    }
 }

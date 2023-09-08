@@ -95,9 +95,8 @@ struct TLoadErrorHubInfo {
 }
 
 enum TPipelineProfileLevel {
-  CORE_METRICS,
-  ALL_METRICS,
-  DETAIL
+  MERGE = 1;
+  DETAIL = 2;
 }
 
 enum TSpillMode {
@@ -219,6 +218,8 @@ struct TQueryOptions {
   101: optional i64 runtime_profile_report_interval = 30;
 
   102: optional bool enable_collect_table_level_scan_stats;
+
+  103: optional i32 interleaving_group_size;
 }
 
 

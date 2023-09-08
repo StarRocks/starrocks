@@ -21,10 +21,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class AzureCloudConfiguration implements CloudConfiguration {
+public class AzureCloudConfiguration extends CloudConfiguration {
 
     private final AzureStorageCloudCredential azureStorageCloudCredential;
 
@@ -34,15 +33,16 @@ public class AzureCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
-        Map<String, String> properties = new HashMap<>();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
         azureStorageCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        super.applyToConfiguration(configuration);
         azureStorageCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -57,7 +57,8 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public String getCredentialString() {
-        return azureStorageCloudCredential.getCredentialString();
+    public String toConfString() {
+        return String.format("AzureCloudConfiguration{%s, cred=%s}", getCommonFieldsString(),
+                azureStorageCloudCredential.toCredString());
     }
 }

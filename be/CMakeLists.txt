@@ -591,6 +591,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
     endif ()
+else ()
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
 endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
@@ -1042,6 +1044,7 @@ install(FILES
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j2.properties
+    ${BASE_DIR}/../conf/udf_security.policy
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

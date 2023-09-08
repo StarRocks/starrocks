@@ -249,7 +249,7 @@ public class HiveMetastoreApiConverter {
         Configuration configuration = new Configuration();
         if (catalogName != null) {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-            CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
+            CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();
         }

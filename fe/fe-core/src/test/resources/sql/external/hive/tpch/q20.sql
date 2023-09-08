@@ -164,7 +164,7 @@ OutPut Exchange Id: 19
 17:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 9: n_name = 'ARGENTINA'
-MIN/MAX PREDICATES: 49: n_name <= 'ARGENTINA', 50: n_name >= 'ARGENTINA'
+MIN/MAX PREDICATES: 9: n_name <= 'ARGENTINA', 9: n_name >= 'ARGENTINA'
 partitions=1/1
 avgRowSize=29.0
 cardinality: 1
@@ -338,7 +338,7 @@ OutPut Exchange Id: 03
 0:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 29: l_suppkey IS NOT NULL, 37: l_shipdate >= '1993-01-01', 37: l_shipdate < '1994-01-01'
-MIN/MAX PREDICATES: 47: l_shipdate >= '1993-01-01', 48: l_shipdate < '1994-01-01'
+MIN/MAX PREDICATES: 37: l_shipdate >= '1993-01-01', 37: l_shipdate < '1994-01-01'
 partitions=1/1
 avgRowSize=24.0
 cardinality: 86738152

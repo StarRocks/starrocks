@@ -29,18 +29,64 @@ import org.apache.hadoop.util.Progressable;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 public class MockedRemoteFileSystem extends FileSystem {
-    private final List<LocatedFileStatus> files;
+    public static final String HDFS_HOST = "hdfs://127.0.0.1:10000";
+    public static final String HDFS_HIVE_TABLE = HDFS_HOST + "/hive.db/hive_tbl";
+    public static final String HDFS_RECURSIVE_TABLE = HDFS_HOST + "/hive.db/recursive_tbl";
 
-    public static final String TEST_PATH_1_STR = "hdfs://127.0.0.1:10000/hive.db/hive_tbl/000000_0";
-    public static final Path TEST_PATH_1 = new Path(TEST_PATH_1_STR);
-    public static final List<LocatedFileStatus> TEST_FILES = ImmutableList.of(locatedFileStatus(TEST_PATH_1));
+    private Map<String, List<LocatedFileStatus>> fileEntries;
+    private String hdfsTable;
 
-    public MockedRemoteFileSystem(List<LocatedFileStatus> files) {
-        this.files = files;
+    public MockedRemoteFileSystem(String tbl) {
+        if (tbl == HDFS_HIVE_TABLE) {
+            this.fileEntries = createHiveEntries();
+        } else if (tbl == HDFS_RECURSIVE_TABLE) {
+            this.fileEntries = createRecursiveEntries();
+        }
+        this.hdfsTable = tbl;
+    }
+
+    private Map<String, List<LocatedFileStatus>> createHiveEntries() {
+        Map<String, List<LocatedFileStatus>> hiveEntries = new HashMap<String, List<LocatedFileStatus>>();
+        List<LocatedFileStatus> tblDirs = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_HIVE_TABLE + "/000000_0"), false)
+                );
+        hiveEntries.put(HDFS_HIVE_TABLE, tblDirs);
+
+        return hiveEntries;
+    }
+
+    private Map<String, List<LocatedFileStatus>> createRecursiveEntries() {
+        Map<String, List<LocatedFileStatus>> recEntries = new HashMap<String, List<LocatedFileStatus>>();
+        List<LocatedFileStatus> tblDirs = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir1"), true),
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir2"), true),
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/.subdir3"), true)
+                );
+        recEntries.put(HDFS_RECURSIVE_TABLE, tblDirs);
+
+        List<LocatedFileStatus> subDir1 = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir1/000000_0"), false),
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir1/000000_1"), false)
+                );
+        recEntries.put(HDFS_RECURSIVE_TABLE + "/subdir1", subDir1);
+
+        List<LocatedFileStatus> subDir2 = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/subdir2/.000000_2"), false)
+                );
+        recEntries.put(HDFS_RECURSIVE_TABLE + "/subdir2", subDir2);
+
+        List<LocatedFileStatus> subDir3 = ImmutableList.of(
+                locatedFileStatus(new Path(HDFS_RECURSIVE_TABLE + "/.subdir3/000000_3"), false)
+                );
+        recEntries.put(HDFS_RECURSIVE_TABLE + "/.subdir3", subDir3);
+
+        return recEntries;
     }
 
     @Override
@@ -48,14 +94,14 @@ public class MockedRemoteFileSystem extends FileSystem {
         return false;
     }
 
-    public static LocatedFileStatus locatedFileStatus(Path path) {
-        return locatedFileStatus(path, 20, 1234567890);
+    public static LocatedFileStatus locatedFileStatus(Path path, boolean isDir) {
+        return locatedFileStatus(path, isDir, 20, 1234567890);
     }
 
-    public static LocatedFileStatus locatedFileStatus(Path path, long fileLength, long modificationTime) {
+    public static LocatedFileStatus locatedFileStatus(Path path, boolean isDir, long fileLength, long modificationTime) {
         return new LocatedFileStatus(
                 fileLength,
-                false,
+                isDir,
                 0,
                 0L,
                 modificationTime,
@@ -69,10 +115,18 @@ public class MockedRemoteFileSystem extends FileSystem {
                         new String[] {"localhost"}, 0, fileLength)});
     }
 
+    public static String formatFilePath(String filepath) {
+        if (filepath.startsWith("/")) {
+            filepath = HDFS_HOST + filepath;
+        }
+        filepath = filepath.replaceAll(" ", "");
+        return filepath;
+    }
+
     @Override
     public RemoteIterator<LocatedFileStatus> listLocatedStatus(Path f) {
         return new RemoteIterator<LocatedFileStatus>() {
-            private final Iterator<LocatedFileStatus> iterator = files.iterator();
+            private final Iterator<LocatedFileStatus> iterator = locatedFileList(f).iterator();
 
             @Override
             public boolean hasNext() {
@@ -82,6 +136,11 @@ public class MockedRemoteFileSystem extends FileSystem {
             @Override
             public LocatedFileStatus next() {
                 return iterator.next();
+            }
+
+            public List<LocatedFileStatus> locatedFileList(Path f) {
+                String key = hdfsTable == HDFS_HIVE_TABLE ? HDFS_HIVE_TABLE : formatFilePath(f.toString());
+                return fileEntries.get(key);
             }
         };
     }
@@ -144,6 +203,17 @@ public class MockedRemoteFileSystem extends FileSystem {
 
     @Override
     public FileStatus getFileStatus(Path path) {
-        return TEST_FILES.get(0);
+        if (hdfsTable == HDFS_HIVE_TABLE) {
+            return fileEntries.get(HDFS_HIVE_TABLE).get(0);
+        }
+
+        Path parent = path.getParent();
+        List<LocatedFileStatus> entries = fileEntries.get(formatFilePath(parent.toString()));
+        for (int i = 0; i < entries.size(); ++i) {
+            if (entries.get(i).getPath() == path) {
+                return entries.get(i);
+            }
+        }
+        return null;
     }
 }

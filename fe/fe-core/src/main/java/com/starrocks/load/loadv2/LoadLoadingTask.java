@@ -132,19 +132,11 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     public void prepare() throws UserException {
-        if (!Config.enable_pipeline_load) {
-            planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
-                    partialUpdateMode);
-            planner.setConnectContext(context);
-            planner.plan(loadId, fileStatusList, fileNum);
-        } else {
-            loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
-                    brokerDesc, fileGroups, fileStatusList, fileNum);
-            loadPlanner.setPartialUpdateMode(partialUpdateMode);
-            loadPlanner.plan();
-        }
+        loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                brokerDesc, fileGroups, fileStatusList, fileNum);
+        loadPlanner.setPartialUpdateMode(partialUpdateMode);
+        loadPlanner.plan();
     }
 
     public TUniqueId getLoadId() {
@@ -170,17 +162,7 @@ public class LoadLoadingTask extends LoadTask {
     private void executeOnce() throws Exception {
         // New one query id,
         Coordinator curCoordinator;
-        if (!Config.enable_pipeline_load) {
-            curCoordinator = getCoordinatorFactory().createNonPipelineBrokerLoadScheduler(
-                    callback.getCallbackId(), loadId,
-                    planner.getDescTable(),
-                    planner.getFragments(), planner.getScanNodes(),
-                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context, execMemLimit);
-
-            curCoordinator.setTimeoutSecond((int) (getLeftTimeMs() / 1000));
-        } else {
-            curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
-        }
+        curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
         curCoordinator.setLoadJobType(loadJobType);
 
         try {
@@ -291,11 +273,7 @@ public class LoadLoadingTask extends LoadTask {
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
 
-        if (!Config.enable_pipeline_load) {
-            planner.updateLoadInfo(this.loadId);
-        } else {
-            loadPlanner.updateLoadInfo(this.loadId);
-        }
+        loadPlanner.updateLoadInfo(this.loadId);
     }
 
     public static class Builder {

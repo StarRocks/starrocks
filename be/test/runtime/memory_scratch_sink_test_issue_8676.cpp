@@ -304,7 +304,7 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    CHECK(DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size).ok());
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);

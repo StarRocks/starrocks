@@ -2793,6 +2793,13 @@ public class GlobalStateMgr {
                 }
             }
 
+            if (olapTable.primaryIndexCacheExpireSec() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)
+                        .append("\" = \"");
+                sb.append(olapTable.primaryIndexCacheExpireSec()).append("\"");
+            }
+
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");

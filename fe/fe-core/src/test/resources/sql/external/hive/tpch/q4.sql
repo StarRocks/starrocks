@@ -122,7 +122,7 @@ OutPut Exchange Id: 05
 3:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 5: o_orderdate >= '1994-09-01', 5: o_orderdate < '1994-12-01'
-MIN/MAX PREDICATES: 28: o_orderdate >= '1994-09-01', 29: o_orderdate < '1994-12-01'
+MIN/MAX PREDICATES: 5: o_orderdate >= '1994-09-01', 5: o_orderdate < '1994-12-01'
 partitions=1/1
 avgRowSize=27.0
 cardinality: 5675676

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -94,9 +94,11 @@ public class DeltaLakeScanNode extends ScanNode {
             return;
         }
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        if (connector != null) {
-            cloudConfiguration = connector.getCloudConfiguration();
-        }
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalog));
+        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -253,7 +255,8 @@ public class DeltaLakeScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
         }

@@ -216,7 +216,7 @@ void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema
                                               const std::vector<int32_t>& referenced_column_ids) {
     _partial_update_tablet_schema = std::move(tschema);
     _referenced_column_ids = referenced_column_ids;
-    build_schema_and_writer();
+    CHECK(build_schema_and_writer().ok());
     // recover _tablet_schema with partial update schema
     _tablet_schema = _partial_update_tablet_schema;
 }
@@ -540,7 +540,8 @@ void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_flush_token != nullptr) {
-        (void)_flush_token->wait();
+        auto st = _flush_token->wait();
+        LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
         VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
 

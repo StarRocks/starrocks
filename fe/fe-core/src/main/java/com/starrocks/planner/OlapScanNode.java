@@ -838,8 +838,8 @@ public class OlapScanNode extends ScanNode {
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
-                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames,
-                        keyColumnTypes, isPreAggregation, columnsDesc);
+                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setColumns_desc(columnsDesc);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
@@ -859,8 +859,11 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-            msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
-            msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+
+            if (!scanTabletIds.isEmpty()) {
+                msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+                msg.olap_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));

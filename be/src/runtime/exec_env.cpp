@@ -241,14 +241,10 @@ void GlobalEnv::_reset_tracker() {
     }
 }
 
-Status GlobalEnv::_init_storage_page_cache() {
+void GlobalEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
-
-    // TODO(zc): The current memory usage configuration is a bit confusing,
-    // we need to sort out the use of memory
-    return Status::OK();
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
@@ -427,7 +423,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
-    _result_mgr->init();
+    RETURN_IF_ERROR(_result_mgr->init());
 
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
@@ -478,7 +474,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _agent_server->init_or_die();
 
     _broker_mgr->init();
-    _small_file_mgr->init();
+    RETURN_IF_ERROR(_small_file_mgr->init());
 
     RETURN_IF_ERROR(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
 
@@ -503,10 +499,6 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
-    if (_stream_mgr != nullptr) {
-        _stream_mgr->close();
-    }
-
     if (_load_channel_mgr) {
         // Clear load channel should be executed before stopping the storage engine,
         // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
@@ -520,6 +512,10 @@ void ExecEnv::stop() {
 
     if (_fragment_mgr) {
         _fragment_mgr->close();
+    }
+
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
     }
 
     if (_pipeline_sink_io_pool) {

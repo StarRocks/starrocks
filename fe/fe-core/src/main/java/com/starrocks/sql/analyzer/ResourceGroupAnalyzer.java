@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
@@ -92,6 +91,22 @@ public class ResourceGroupAnalyzer {
                         databaseIds.add(db.getId());
                     }
                     classifier.setDatabases(databaseIds);
+                } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_CPU_COST_RANGE)) {
+                    ResourceGroupClassifier.CostRange planCpuCostRange = ResourceGroupClassifier.CostRange.fromString(value);
+                    if (planCpuCostRange == null) {
+                        throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
+                                        + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
+                                ResourceGroup.PLAN_CPU_COST_RANGE, eqPred.toSql()));
+                    }
+                    classifier.setPlanCpuCostRange(planCpuCostRange);
+                } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_MEM_COST_RANGE)) {
+                    ResourceGroupClassifier.CostRange planMemCostRange = ResourceGroupClassifier.CostRange.fromString(value);
+                    if (planMemCostRange == null) {
+                        throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
+                                        + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
+                                ResourceGroup.PLAN_MEM_COST_RANGE, eqPred.toSql()));
+                    }
+                    classifier.setPlanMemCostRange(planMemCostRange);
                 } else {
                     throw new SemanticException(String.format("Unsupported classifier specifier: '%s'", key));
                 }
@@ -146,6 +161,15 @@ public class ResourceGroupAnalyzer {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
                 resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
+                continue;
+            }
+            if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
+                int maxCpuCores = Integer.parseInt(value);
+                int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+                if (maxCpuCores > avgCoreNum) {
+                    throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
+                }
+                resourceGroup.setMaxCpuCores(Integer.parseInt(value));
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {

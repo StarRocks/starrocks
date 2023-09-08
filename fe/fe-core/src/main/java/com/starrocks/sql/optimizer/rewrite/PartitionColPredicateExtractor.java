@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -30,7 +30,9 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -48,7 +50,7 @@ import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
  */
 public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<ScalarOperator, Void> {
 
-    private ColumnRefSet partitionColumnSet;
+    private final ColumnRefSet partitionColumnSet;
 
     public PartitionColPredicateExtractor(RangePartitionInfo rangePartitionInfo,
                                           Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
@@ -92,6 +94,30 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     @Override
     public ScalarOperator visitCall(CallOperator call, Void context) {
+        if (ConnectContext.get().getSessionVariable().isEnableExprPrunePartition()
+                && call.getColumnRefs().size() == 1 && partitionColumnSet.containsAll(call.getUsedColumns())) {
+            BaseScalarOperatorShuttle replaceShuttle = new BaseScalarOperatorShuttle() {
+                @Override
+                public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                    return ConstantOperator.createExampleValueByType(variable.getType());
+                }
+            };
+
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            try {
+                ScalarOperator replaced = call.accept(replaceShuttle, null);
+                ScalarOperator result = rewriter.rewrite(replaced,
+                        Collections.singletonList(new FoldConstantsRule(true)));
+
+                if (result instanceof ConstantOperator) {
+                    return call;
+                } else {
+                    return null;
+                }
+            } catch (Exception e) {
+                return null;
+            }
+        }
         return null;
     }
 
@@ -99,11 +125,11 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
         if (partitionColumnSet.containsAll(predicate.getUsedColumns())) {
             ScalarOperator left = predicate.getChild(0).accept(this, null);
-            if (isColumnOrPrune(left)) {
+            if (!isPartitionColExpr(left)) {
                 return ConstantOperator.createBoolean(true);
             }
             ScalarOperator right = predicate.getChild(1).accept(this, null);
-            if (isValueOrPrune(right)) {
+            if (!isConstantValue(right)) {
                 return ConstantOperator.createBoolean(true);
             }
 
@@ -174,7 +200,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isColumnOrPrune(first)) {
+        if (!isPartitionColExpr(first)) {
             return ConstantOperator.createBoolean(true);
         } else {
             if (predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
@@ -192,7 +218,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isColumnOrPrune(first) || predicate.isNotNull()) {
+        if (predicate.isNotNull() || !isPartitionColExpr(first)) {
             return ConstantOperator.createBoolean(true);
         } else {
             return predicate;
@@ -206,21 +232,22 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         return ConstantOperator.createBoolean(true);
     }
 
-    // For the operator in inExpr(first child), binaryExpr(first child), we need it's a columnRef.
+    // For the operator in inExpr(first child), binaryExpr(first child), we need it's a partition col or
+    // a callExpr just contains partition col and support constant fold.
     // For compoundExpr, its children may a bool type column or other expr.
-    // when it == null or it's not a columnRef,
+    // when it == null or it's not a satisfied expr,
     // it means this predicate node cannot been used for further evaluator
-    // we return a true flag to prune this predicate.
-    private boolean isColumnOrPrune(ScalarOperator operator) {
-        return operator == null || !operator.isColumnRef();
+    // we return a false flag to prune this predicate.
+    private boolean isPartitionColExpr(ScalarOperator operator) {
+        return operator != null && (operator instanceof ColumnRefOperator || operator instanceof CallOperator);
     }
 
     // For the second operator in binaryPredicateExpr, we need it's a constant value
-    // when it == null or it's not a constant,
+    // when it == null, or it's not a constant,
     // it means this predicate node cannot been used for further evaluator
-    // we return a true flag to prune this predicate.
-    private boolean isValueOrPrune(ScalarOperator operator) {
-        return operator == null || !operator.isConstant();
+    // we return a false flag to prune this predicate.
+    private boolean isConstantValue(ScalarOperator operator) {
+        return operator != null && operator.isConstant();
     }
 
     private boolean isConstantNull(ScalarOperator operator) {

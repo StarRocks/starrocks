@@ -24,9 +24,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -46,6 +48,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +61,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
     private final Catalog paimonNativeCatalog;
+    private final HdfsEnvironment hdfsEnvironment;
     private final String catalogType;
     private final String metastoreUris;
     private final String warehousePath;
@@ -65,9 +69,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
-    public PaimonMetadata(String catalogName, Catalog paimonNativeCatalog,
+
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           String catalogType, String metastoreUris, String warehousePath) {
         this.paimonNativeCatalog = paimonNativeCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.catalogType = catalogType;
         this.metastoreUris = metastoreUris;
         this.warehousePath = warehousePath;
@@ -153,8 +159,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
         for (DataField field : fields) {
             String fieldName = field.name();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(field.type());
-            Column column = new Column(fieldName, fieldType, true);
+            DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, type.isNullable());
             fullSchema.add(column);
         }
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
@@ -230,5 +237,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return predicates;
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hdfsEnvironment.getCloudConfiguration();
     }
 }
