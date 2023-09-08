@@ -73,6 +73,9 @@ struct HdfsScanStats {
     // page skip
     int64_t page_skip = 0;
 
+    // late materialize round-by-round
+    int64_t group_min_round_cost = 0;
+
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
