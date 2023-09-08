@@ -158,12 +158,9 @@ public class LakeMaterializedView extends MaterializedView {
 
         // storage_volume
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        String storageVolumeId = svm.getStorageVolumeIdOfTable(id);
-        if (storageVolumeId != null) {
-            String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeName(storageVolumeId);
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
-        }
+        String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(id);
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME).append("\" = \"").append(volume).append("\"");
     }
 
     @Override
