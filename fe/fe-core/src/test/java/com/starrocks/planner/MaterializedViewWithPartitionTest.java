@@ -280,10 +280,12 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 3000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 16: c3 <= 2999\n" +
                         "     partitions=1/5\n" +
                         "     rollup: test_base_part")
                 .contains("TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 21: c3 <= 2999\n" +
                         "     partitions=1/5\n" +
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=2/2");
@@ -372,9 +374,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 3000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 16: c3 <= 2999\n" +
                         "     partitions=1/5")
                 .contains("TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 21: c3 <= 2999\n" +
                         "     partitions=1/5");
 
         sql(
@@ -435,6 +439,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c3 < 1000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 3: c3 < 1000\n" +
                         "     partitions=3/5\n" +
                         "     rollup: test_base_part\n" +
                         "     tabletRatio=6/6");

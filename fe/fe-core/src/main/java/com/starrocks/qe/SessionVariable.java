@@ -456,6 +456,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
+    public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1164,6 +1166,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
+
+    @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
+    private boolean enableExprPrunePartition = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2218,6 +2223,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+    public boolean isEnableExprPrunePartition() {
+        return enableExprPrunePartition;
+    }
+
+    public void setEnableExprPrunePartition(boolean enableExprPrunePartition) {
+        this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
     // Serialize to thrift object

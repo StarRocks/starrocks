@@ -18,8 +18,12 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -36,6 +40,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
@@ -183,6 +188,12 @@ public class OptOlapPartitionPruner {
         }
 
         scanPredicates.removeAll(prunedPartitionPredicates);
+
+        if (column.isAllowNull() && containsNullValue(column, minRange)
+                && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
+            return null;
+        }
+
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
@@ -311,7 +322,7 @@ public class OptOlapPartitionPruner {
                 partitionInfo.getPartitionColumns(), operator.getColumnFilters());
         try {
             return partitionPruner.prune();
-        } catch (AnalysisException e) {
+        } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
         return null;
@@ -319,19 +330,72 @@ public class OptOlapPartitionPruner {
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
                                               PartitionInfo partitionInfo) {
-        boolean probeResult = true;
-        if (candidatePartitions.isEmpty()) {
-            probeResult = false;
-        } else if (!partitionInfo.isRangePartition()) {
-            probeResult = false;
-        } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
-            probeResult = false;
-        } else if (olapScanOperator.getPredicate() == null) {
-            probeResult = false;
+        if (candidatePartitions.isEmpty()
+                || olapScanOperator.getPredicate() == null) {
+            return false;
         }
 
-        return probeResult;
+        // only support RANGE and EXPR_RANGE
+        // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
+        if (partitionInfo.getType() == PartitionType.RANGE) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return rangePartitionInfo.getPartitionColumns().size() == 1
+                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+        } else if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
+            if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
+                String functionName = functionCallExpr.getFnName().getFunction();
+                return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
+                        || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
+                        && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+        PartitionKey nullValue = new PartitionKey();
+        try {
+            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            return minRange.compareTo(nullValue) <= 0;
+        } catch (AnalysisException e) {
+            return false;
+        }
     }
 
 
+    private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator newPredicate = Utils.compoundAnd(scanPredicates);
+        boolean newPredicateFilterNulls = false;
+        boolean predicateFilterNulls = false;
+
+        BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return ConstantOperator.createNull(variable.getType());
+            }
+        };
+
+        if (newPredicate != null) {
+            newPredicate = newPredicate.accept(shuttle, null);
+
+            ScalarOperator value = scalarRewriter.rewrite(newPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if ((value.isConstantRef() && ((ConstantOperator) value).isNull()) ||
+                    value.equals(ConstantOperator.createBoolean(false))) {
+                newPredicateFilterNulls = true;
+            }
+        }
+
+        predicate = predicate.accept(shuttle, null);
+        ScalarOperator value = scalarRewriter.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
+                || value.equals(ConstantOperator.createBoolean(false))) {
+            predicateFilterNulls = true;
+        }
+
+        return newPredicateFilterNulls == predicateFilterNulls;
+    }
 }
