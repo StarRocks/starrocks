@@ -1066,6 +1066,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
 
+    /**
+     * whether backup materialized views in backing databases. If not, will skip backing materialized views.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_backup_materialized_view = true;
+
     @ConfField
     public static boolean enable_udf = false;
 

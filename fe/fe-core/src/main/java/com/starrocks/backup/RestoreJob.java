@@ -1333,7 +1333,7 @@ public class RestoreJob extends AbstractJob {
                                 tblInfo.name);
                         continue;
                     }
-                    if (!tbl.isOlapTableOrMaterializedView()) {
+                    if (!tbl.isNativeTableOrMaterializedView()) {
                         continue;
                     }
                     LOG.info("do post actions for table : {}", tbl.getName());
