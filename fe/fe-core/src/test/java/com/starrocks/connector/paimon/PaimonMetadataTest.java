@@ -169,7 +169,7 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames);
+        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());

@@ -17,20 +17,29 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -58,6 +67,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
@@ -511,5 +521,53 @@ public class IcebergMetadataTest extends TableTestBase {
                 "commit failed",
                 () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo)));
         Assert.assertFalse(fakeFile.exists());
+    }
+
+    @Test
+    public void testGetRemoteFile() throws IOException {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
+                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getPartitionColumns();
+                result = new Column("data", Type.VARBINARY);
+                minTimes = 0;
+            }
+        };
+        table.newAppend().appendFile(FILE_A).commit();
+        table.newAppend().appendFile(FILE_B).commit();
+        table.refresh();
+
+        long snapshotId = table.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("0"));
+        List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.getCtx().getSessionVariable().setEnablePruneIcebergManifest(true);
+        table.refresh();
+        snapshotId = table.currentSnapshot().snapshotId();
+        predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("16"));
+        res = metadata.getRemoteFileInfos(
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+        Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
     }
 }
