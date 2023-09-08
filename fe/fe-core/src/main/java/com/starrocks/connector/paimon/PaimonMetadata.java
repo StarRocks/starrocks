@@ -263,13 +263,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     public long getTableCreateTime(String dbName, String tblName) throws Exception {
         Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
         RecordReaderIterator<InternalRow> iterator = null;
+        RecordReader<InternalRow> recordReader = null;
         try {
             SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
             PredicateBuilder predicateBuilder = new PredicateBuilder(table.rowType());
             Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
-            RecordReader<InternalRow> recordReader =
-                    table.newReadBuilder().withFilter(equal)
-                            .newRead().createReader(table.newScan().plan());
+            recordReader = table.newReadBuilder().withFilter(equal).newRead().createReader(table.newScan().plan());
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
@@ -279,12 +278,14 @@ public class PaimonMetadata implements ConnectorMetadata {
                     return updateTime.getMillisecond();
                 }
             }
-            iterator.close();
         } catch (Exception e) {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         } finally {
             if (iterator != null) {
                 iterator.close();
+            }
+            if (recordReader != null) {
+                recordReader.close();
             }
         }
         return 0;
