@@ -750,12 +750,11 @@ public class AnalyzerUtils {
                 int len = ScalarType.MAX_VARCHAR_LENGTH;
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                    if (scalarType.getLength() > 0) {
                         len = scalarType.getLength();
                     }
                 }
                 ScalarType stringType = ScalarType.createVarcharType(len);
-                stringType.setAssignedStrLenInColDefinition();
                 newType = stringType;
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
                     PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
