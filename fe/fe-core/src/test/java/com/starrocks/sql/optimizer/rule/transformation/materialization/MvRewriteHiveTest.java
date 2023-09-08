@@ -17,11 +17,18 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Set;
 
 public class MvRewriteHiveTest extends MvRewriteTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testHiveJoinMvRewrite() throws Exception {
         createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
@@ -211,5 +218,62 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
             Assert.assertTrue(partitionsToRefresh.isEmpty());
         }
         starRocksAssert.dropMaterializedView("hive_staleness_1");
+    }
+
+    @Test
+    public void testHivePartitionPrune1() throws Exception {
+        createAndRefreshMv("test", "hive_partition_prune_mv1",
+                "CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\"" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                        "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                        "GROUP BY " +
+                        "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+
+        // should not be rollup
+        {
+            String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "WHERE l_shipdate = '1998-01-01' GROUP BY `l_orderkey`, `l_suppkey`;";
+
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "partitions=1/6\n" +
+                    "     rollup: hive_partition_prune_mv1");
+        }
+        // should not be rollup
+        {
+            String query = "SELECT l_suppkey, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "WHERE l_shipdate = '1998-01-01' and l_orderkey=1 GROUP BY `l_suppkey`;";
+
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains(plan, "AGGREGATE");
+            PlanTestBase.assertContains(plan, "PREDICATES: 18: l_orderkey = 1\n" +
+                    "     partitions=1/6\n" +
+                    "     rollup: hive_partition_prune_mv1");
+        }
+        // rollup
+        {
+            String query = "SELECT l_suppkey, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "WHERE l_orderkey>1 GROUP BY `l_suppkey`;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                            "  |  STREAMING\n" +
+                            "  |  output: sum(21: sum(l_orderkey))\n" +
+                            "  |  group by: 19: l_suppkey");
+            PlanTestBase.assertContains(plan, "PREDICATES: 18: l_orderkey > 1\n" +
+                    "     partitions=6/6\n" +
+                    "     rollup: hive_partition_prune_mv1");
+        }
+        starRocksAssert.dropMaterializedView("hive_partition_prune_mv1");
     }
 }
