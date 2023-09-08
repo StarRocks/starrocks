@@ -3729,6 +3729,7 @@ public abstract class FileSystem extends Configured
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
         Cache.StarRocksUtils.addConfigResourcesToConfiguration(conf);
+        LOGGER.info("[hadoop-ext] FileSystem.createFileSystem. conf.XXX = " + conf.get("XXX", "null"));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
                 DurationInfo ignored =
