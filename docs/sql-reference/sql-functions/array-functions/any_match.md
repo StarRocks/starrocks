@@ -3,7 +3,18 @@
 ## Description
 
 Returns whether any elements of an array match the given predicate.
+<<<<<<< HEAD
 Returns true if one or more elements match the predicate; false if none of the elements matches (a special case is when the array is empty); NULL if the predicate function returns NULL for one or more elements and false for all other elements.
+=======
+
+- Returns `true` (1) if one or more elements match the predicate.
+
+- Returns `false` (0) if none of the elements matches (a special case is when the array is empty).
+
+- Returns NULL if the predicate returns NULL for one or more elements and `false` for all other elements.
+
+This function is supported from v3.0.6 onwards.
+>>>>>>> a196e9a745 ([Doc] modify version info or any/all_match and cp to 3.0 (#30597))
 
 ## Syntax
 
