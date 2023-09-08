@@ -4,28 +4,25 @@ StarRocks offers a rich set of functions to facilitate data queries and analysis
 
 You can find a function based on the following categories:
 
-- [Aggregate functions](#aggregate-functions)
-- [Array functions](#array-functions)
-- [Binary functions](#binary-functions)
-- [Bit functions](#bit-functions)
-- [Bitmap functions](#bitmap-functions)
-- [CAST](cast.md)
-- [Conditional functions](#conditional-functions)
-- [Cryptographic functions](#cryptographic-functions)
-- [Date functions](#date-functions)
-- [Geographic functions](#geographic-functions)
-- [Hash functions](#hash-functions)
-- [Java UDF](JAVA_UDF.md)
-- [JSON functions](#json-functions)
-- [Lambda expression](Lambda_expression.md)
-- [Map functions](#map-functions)
-- [Math functions](#math-functions)
-- [Pattern matching functions](#pattern-matching-functions)
-- [Percentile functions](#percentile-functions)
-- [Scalar functions](#scalar-functions)
-- [String functions](#string-functions)
-- [Utility functions](#utility-functions)
-- [Window functions](Window_function.md)
+- [Function list](#function-list)
+  - [Aggregate functions](#aggregate-functions)
+  - [Array functions](#array-functions)
+  - [Binary functions](#binary-functions)
+  - [Bit functions](#bit-functions)
+  - [Bitmap functions](#bitmap-functions)
+  - [Conditional functions](#conditional-functions)
+  - [Cryptographic functions](#cryptographic-functions)
+  - [Date functions](#date-functions)
+  - [Geographic functions](#geographic-functions)
+  - [Hash functions](#hash-functions)
+  - [JSON functions](#json-functions)
+  - [String functions](#string-functions)
+  - [Map functions](#map-functions)
+  - [Math functions](#math-functions)
+  - [Pattern matching functions](#pattern-matching-functions)
+  - [Percentile functions](#percentile-functions)
+  - [Scalar functions](#scalar-functions)
+  - [Utility functions](#utility-functions)
 
 ## Aggregate functions
 
@@ -66,6 +63,8 @@ You can find a function based on the following categories:
 
 ## Array functions
 
+- [all_match](./sql-reference/sql-functions/array-functions/all_match.md)
+- [any_match](./sql-reference/sql-functions/array-functions/any_match.md)
 - [array_agg](../sql-functions/array-functions/array_agg.md)
 - [array_append](../sql-functions/array-functions/array_append.md)
 - [array_avg](../sql-functions/array-functions/array_avg.md)

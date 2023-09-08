@@ -17,8 +17,8 @@ This function is supported from v3.0.6 onwards.
 ```Haskell
 any_match(lambda_function, arr1, arr2...)
 ```
-Returns whether any elements of `arr1` match the given predicate in the lambda function.
 
+Returns whether any elements of `arr1` match the given predicate in the lambda function.
 
 ## Parameters
 
