@@ -438,7 +438,9 @@ private:
     struct Context {
         uint32_t block_length = 0;
         uint32_t output_length = 0;
+
         std::vector<char> buffer;
+        char* buffer_data;
         size_t buffer_size = 0;
         size_t buffer_used = 0;
     };
@@ -463,7 +465,7 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
         // load block length if missing.
         if (ctx->block_length == 0) {
             if (input_len < 4) return st;
-            ctx->block_length = decode_fixed32_le(input);
+            ctx->block_length = decode_fixed32_be(input);
             input += 4;
             input_len -= 4;
             *input_bytes_read += 4;
@@ -471,21 +473,29 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
 
         // see if a compressed unit is ready.
         if (input_len < 4) return st;
-        uint32_t compressed_len = decode_fixed32_le(input);
+        uint32_t compressed_len = decode_fixed32_be(input);
         input += 4;
         input_len -= 4;
         if (input_len < compressed_len) {
             return st;
         }
 
-        *input_bytes_read += compressed_len;
+        *input_bytes_read += (compressed_len + 4);
+        input_len -= compressed_len;
         size_t uncompressed_len = 0;
         bool ok = snappy::GetUncompressedLength((const char*)input, compressed_len, &uncompressed_len);
         if (!ok) {
             return Status::InternalError("Snappy GetUncompressedLength failed because of data corruption");
         }
-        ctx->buffer.reserve(uncompressed_len);
-        ok = snappy::RawUncompress((const char*)input, compressed_len, ctx->buffer.data());
+
+        // if output space is not large enough, then we have to allocate space.
+        if (uncompressed_len > output_len) {
+            ctx->buffer.reserve(uncompressed_len);
+            ctx->buffer_data = ctx->buffer.data();
+        } else {
+            ctx->buffer_data = (char*)output;
+        }
+        ok = snappy::RawUncompress((const char*)input, compressed_len, ctx->buffer_data);
         if (!ok) {
             return Status::InternalError("Snappy RawUncompress failed because of data corruption");
         }
@@ -494,14 +504,18 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
     }
 
     output_len = std::min(output_len, ctx->buffer_size - ctx->buffer_used);
-    std::memcpy(output, ctx->buffer.data() + ctx->buffer_used, output_len);
+    if (ctx->buffer_data != (char*)output) {
+        std::memcpy(output, ctx->buffer_data + ctx->buffer_used, output_len);
+    }
     ctx->buffer_used += output_len;
     ctx->output_length += output_len;
     *output_bytes_write += output_len;
     if (ctx->output_length == ctx->block_length) {
         ctx->block_length = 0;
         ctx->output_length = 0;
-        *stream_end = true;
+        if (input_len == 0) {
+            *stream_end = true;
+        }
     }
     return st;
 }
