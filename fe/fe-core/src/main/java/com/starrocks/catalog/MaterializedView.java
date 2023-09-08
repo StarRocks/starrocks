@@ -1066,109 +1066,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // properties
         sb.append("\nPROPERTIES (\n");
-
-        // replicationNum
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(getDefaultReplicationNum()).append("\"");
-
         Map<String, String> properties = this.getTableProperty().getProperties();
-        // replicated storage
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)).append("\"");
-        }
-
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)).append("\"");
-        }
-
-        // partition TTL
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
-        }
-
-        // auto refresh partitions limit
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
-        }
-
-        // partition refresh number
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
-        }
-
-        // excluded trigger tables
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
-        }
-
-        // force_external_table_query_rewrite
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
-        }
-
-        // mv_rewrite_staleness
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
-        }
-
-        // unique constraints
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
-                    .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
-        }
-
-        // foreign keys constraints
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
-                    .append("\" = \"");
-            sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
-                    .append("\"");
-        }
-
-        // colocateTable
-        if (colocateGroup != null) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
-                    .append("\" = \"");
-            sb.append(colocateGroup).append("\"");
-        }
-
-        // resource group
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)).append("\"");
-        }
-
-        // storage medium
-        appendUniqueProperties(sb);
-
-        // session properties
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(entry.getKey())
-                        .append("\" = \"").append(entry.getValue()).append("\"");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : this.getTableProperty().getProperties().entrySet()) {
+            if (!first) {
+                sb.append(",\n");
             }
+            first = false;
+            String name = entry.getKey();
+            String value = entry.getValue();
+            sb.append("\"").append(name.toUpperCase()).append("\"");
+            sb.append(" = ");
+            sb.append("\"").append(value.toUpperCase()).append("\"");
         }
 
         sb.append("\n)");
