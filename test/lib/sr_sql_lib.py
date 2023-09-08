@@ -693,6 +693,8 @@ class StarrocksSQLApiLib(object):
         use_res = self.use_database(T_R_DB)
         tools.assert_true(use_res["status"], "use db: [%s] error" % T_R_DB)
 
+        self.execute_sql("set group_concat_max_len = 1024000;", True)
+        
         # get records
         query_sql = """
         select file, log_type, name, group_concat(log, ""), group_concat(hex(sequence), ",") 
