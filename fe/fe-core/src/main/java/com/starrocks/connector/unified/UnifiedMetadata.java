@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -201,5 +202,10 @@ public class UnifiedMetadata implements ConnectorMetadata {
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
         metadata.finishSink(dbName, table, commitInfos);
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return hiveMetadata.getCloudConfiguration();
     }
 }

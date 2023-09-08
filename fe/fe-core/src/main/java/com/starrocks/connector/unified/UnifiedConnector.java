@@ -25,7 +25,6 @@ import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
-import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.HashMap;
@@ -82,10 +81,5 @@ public class UnifiedConnector implements Connector {
     @Override
     public void bindConfig(ConnectorConfig config) {
         connectorMap.forEach((k, v) -> v.bindConfig(config));
-    }
-
-    @Override
-    public CloudConfiguration getCloudConfiguration() {
-        return connectorMap.get(HIVE).getCloudConfiguration();
     }
 }

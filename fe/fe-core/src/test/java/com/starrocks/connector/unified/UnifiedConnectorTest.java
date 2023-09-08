@@ -41,8 +41,6 @@ public class UnifiedConnectorTest {
         CatalogConnector catalogConnector = ConnectorFactory.createConnector(context);
         ConnectorMetadata metadata = catalogConnector.getMetadata();
         assertTrue(metadata instanceof CatalogConnectorMetadata);
-        CloudConfiguration cloudConfiguration = catalogConnector.getCloudConfiguration();
-        assertEquals(cloudConfiguration.getCloudType(), CloudType.DEFAULT);
         catalogConnector.shutdown();
     }
 
@@ -56,8 +54,6 @@ public class UnifiedConnectorTest {
         UnifiedConnector unifiedConnector = new UnifiedConnector(context);
         ConnectorMetadata metadata = unifiedConnector.getMetadata();
         assertTrue(metadata instanceof UnifiedMetadata);
-        CloudConfiguration cloudConfiguration = unifiedConnector.getCloudConfiguration();
-        assertEquals(cloudConfiguration.getCloudType(), CloudType.DEFAULT);
         unifiedConnector.shutdown();
     }
 }

@@ -30,6 +30,8 @@ import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,16 +98,23 @@ public class UnifiedMetadataTest {
                 hiveMetadata.dropDb("test_db", false);
                 times = 1;
             }
+            {
+                hiveMetadata.getCloudConfiguration();
+                result = new CloudConfiguration();
+                times = 1;
+            }
         };
 
         List<String> dbNames = unifiedMetadata.listDbNames();
-        assertEquals(dbNames, ImmutableList.of("test_db1", "test_db2"));
+        assertEquals(ImmutableList.of("test_db1", "test_db2"), dbNames);
         List<String> tblNames = unifiedMetadata.listTableNames("test_db");
-        assertEquals(tblNames, ImmutableList.of("test_tbl1", "test_tbl2"));
+        assertEquals(ImmutableList.of("test_tbl1", "test_tbl2"), tblNames);
         unifiedMetadata.createDb("test_db");
         unifiedMetadata.createDb("test_db", ImmutableMap.of("key", "value"));
         assertTrue(unifiedMetadata.dbExists("test_db"));
         unifiedMetadata.dropDb("test_db", false);
+        CloudConfiguration cloudConfiguration = unifiedMetadata.getCloudConfiguration();
+        assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
     }
 
     @Test
