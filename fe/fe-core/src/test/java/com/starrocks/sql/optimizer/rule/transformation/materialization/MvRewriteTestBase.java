@@ -16,14 +16,24 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -37,9 +47,12 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -77,6 +90,39 @@ public class MvRewriteTestBase {
 
         Config.enable_experimental_mv = true;
 
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    private static void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
+
+    public static void prepareDefaultDatas() throws Exception {
         starRocksAssert.withTable("create table emps (\n" +
                         "    empid int not null,\n" +
                         "    deptno int not null,\n" +
@@ -269,7 +315,7 @@ public class MvRewriteTestBase {
         return s;
     }
 
-    protected Table getTable(String dbName, String mvName) {
+    public static Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
         Assert.assertNotNull(table);

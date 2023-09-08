@@ -21,10 +21,17 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
+    }
+
     @Test
     public void testPartialPartition1() throws Exception {
         createAndRefreshMv("test", "partial_mv",

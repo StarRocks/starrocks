@@ -39,20 +39,12 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
-        new MockUp<PlanTestNoneDBBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
-
 
     @Test
     public void testQuery1() {
