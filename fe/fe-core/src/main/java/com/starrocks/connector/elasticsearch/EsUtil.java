@@ -53,6 +53,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.TimeZone;
 
 public class EsUtil {
@@ -231,7 +232,12 @@ public class EsUtil {
      * @return
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
-        String element = mappings.keySet().iterator().next();
+        Set<String> keySet = mappings.keySet();
+        // 移除es6 动态模板导致的 mappings里面的json多的key
+        if (keySet.size() > 1) {
+            keySet.remove("_default_");
+        }
+        String element = keySet.iterator().next();
         if (!"properties".equals(element)) {
             // If type is not passed in takes the first type.
             return (JSONObject) mappings.get(element);
