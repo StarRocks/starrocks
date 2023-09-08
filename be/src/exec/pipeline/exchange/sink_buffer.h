@@ -138,6 +138,7 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
@@ -171,7 +172,11 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
+<<<<<<< HEAD
     std::shared_ptr<QueryStatistics> _eos_query_stats = std::make_shared<QueryStatistics>();
+=======
+    int64_t _rpc_http_min_size = 0;
+>>>>>>> b8592172a9 ([BugFix] Fix negative audit (#30646))
 };
 
 } // namespace starrocks::pipeline
