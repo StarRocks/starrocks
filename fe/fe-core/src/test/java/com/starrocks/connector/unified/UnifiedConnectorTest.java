@@ -19,14 +19,11 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudType;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UnifiedConnectorTest {
