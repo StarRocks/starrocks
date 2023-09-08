@@ -34,6 +34,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -151,24 +152,7 @@ public class IcebergScanNode extends ScanNode {
                 .collect(Collectors.toMap(Column::getName, item -> item));
         for (String eqName : appendEqualityColumns) {
             if (nameToColumns.containsKey(eqName)) {
-                Column column = nameToColumns.get(eqName);
-                Field field;
-                TableName tableName = desc.getRef().getName();
-                if (referenceTable.getFullSchema().contains(column)) {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
-                } else {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
-                }
-                ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
-                        field.getType(), column.isAllowNull());
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
-                slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
+                throw new StarRocksConnectorException("Iceberg equality delete is not supported");
             }
         }
     }
