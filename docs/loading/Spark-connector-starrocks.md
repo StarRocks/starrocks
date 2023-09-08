@@ -4,7 +4,7 @@ StarRocks provides a self-developed connector named StarRocks Connector for Apac
 
 > **NOTICE**
 >
-> Only users with the SELECT and INSERT privileges on a StarRocks table can load data into this table. You can follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the required privileges.
+> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to a user.
 
 ## Version requirements
 
