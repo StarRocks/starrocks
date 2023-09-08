@@ -3033,6 +3033,55 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     EXPECT_EQ(100, total_row_nums);
 }
 
+TEST_F(FileReaderTest, TestReadRoundByRound) {
+    // c0 = np.arange(1, 100001)
+    // c1 = np.arange(100000, 0, -1)
+    // data = {
+    //     'c0': c0,
+    //     'c1': c1
+    // }
+    // df = pd.DataFrame(data)
+    // df_with_dict = pd.DataFrame({
+    //     "c0": df["c0"],
+    //     "c1": df["c1"],
+    //     "c2": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else str(x["c0"] % 100), axis = 1),
+    //     "c3": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else [x["c0"] % 1000, pd.NA, x["c1"] % 1000], axis = 1)
+    // })
+    const std::string file_path = "./be/test/formats/parquet/test_data/read_range_big_page_test.parquet";
+    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                         chunk->num_columns());
+    chunk->append_column(
+            ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
+            chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_array, true), chunk->num_columns());
+
+    auto ctx = _create_file_random_read_context(file_path);
+    auto file = _create_file(file_path);
+    // c0 >= 100
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 100, &ctx->conjunct_ctxs_by_slot[0]);
+    // c1 <= 100
+    _create_int_conjunct_ctxs(TExprOpcode::LE, 1, 100, &ctx->conjunct_ctxs_by_slot[1]);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path));
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+    }
+    EXPECT_EQ(100, total_row_nums);
+    EXPECT_EQ(g_hdfs_scan_stats.group_min_round_cost, 1);
+}
+
 TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
     const std::string struct_in_struct_file_path =
             "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
