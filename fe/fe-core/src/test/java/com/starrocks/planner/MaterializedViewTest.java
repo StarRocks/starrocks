@@ -3992,14 +3992,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select * from lineorder where lo_orderkey > 10000 or lo_linenumber > 5000";
             String query = "select * from lineorder where not( lo_orderkey <= 20000 and lo_linenumber <= 10000)";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: (18: lo_orderkey >= 20001) OR (19: lo_linenumber >= 10001)");
+            checker.contains("PREDICATES: (18: lo_orderkey > 20000) OR (19: lo_linenumber > 10000)");
         }
 
         {
             String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000)";
             String query = "select * from lineorder where lo_orderkey > 10000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("lo_orderkey >= 10001");
+            checker.contains("PREDICATES: 18: lo_orderkey > 10000");
         }
 
         {
@@ -4067,19 +4067,299 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String mv = "select * from lineorder where (lo_orderkey > 10000 and lo_linenumber > 5000) or (lo_orderkey < 1000 and lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey < 1000 and lo_linenumber < 2000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: 18: lo_orderkey <= 999, 19: lo_linenumber <= 1999");
+            checker.contains("PREDICATES: 18: lo_orderkey < 1000, 19: lo_linenumber < 2000");
         }
 
         {
             String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_linenumber > 5000) and (lo_orderkey < 1000 or lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("PREDICATES: 18: lo_orderkey >= 15001, 19: lo_linenumber <= 999");
+            checker.contains("PREDICATES: 18: lo_orderkey > 15000, 19: lo_linenumber < 1000");
         }
 
         {
             String mv = "select * from lineorder where (lo_orderkey > 10000 or lo_orderkey < 5000) and (lo_linenumber > 10000 or lo_linenumber < 2000)";
             String query = "select * from lineorder where lo_orderkey > 15000 and lo_linenumber < 1000";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testAggWithoutRollup() throws Exception {
+        {
+            starRocksAssert.withTable("create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");\n" +
+                    "\n");
+
+            starRocksAssert.withTable("CREATE TABLE test_sr_table_join(\n" +
+                    "fdate int,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "fqqid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(fqqid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");");
+
+            String mv = "select" +
+                    " t1.fdate, t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate >= 20230702 and t1.fdate <= 20230705\n" +
+                    "GROUP BY fdate, fplat_form_itg2_name;";
+
+            String query = "select" +
+                    " t2.fplat_form_itg2_name, count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                    "FROM test_sr_table_join t1\n" +
+                    "LEFT JOIN dim_test_sr_table t2\n" +
+                    "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
+                    "WHERE t1.fdate = 20230705\n" +
+                    "GROUP BY fplat_form_itg2_name;";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testRangePredicate() {
+        // integer
+        {
+            String mv = "select * from lineorder where lo_orderkey < 10001";
+            String query = "select * from lineorder where lo_orderkey <= 10000";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < 2147483647";
+            String query = "select * from lineorder where lo_orderkey < 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey <= 2147483646";
+            String query = "select * from lineorder where lo_orderkey < 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < 2147483647";
+            String query = "select * from lineorder where lo_orderkey <= 2147483646";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey >= 2147483647";
+            String query = "select * from lineorder where lo_orderkey > 2147483646";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > 2147483646";
+            String query = "select * from lineorder where lo_orderkey >= 2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey > -2147483648";
+            String query = "select * from lineorder where lo_orderkey >= -2147483647";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey >= -2147483647";
+            String query = "select * from lineorder where lo_orderkey > -2147483648";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from lineorder where lo_orderkey < -2147483647";
+            String query = "select * from lineorder where lo_orderkey <= -2147483648";
+            testRewriteOK(mv, query);
+        }
+
+        // small int
+        {
+            String mv = "select * from test.test_all_type where t1b < 100";
+            String query = "select * from test.test_all_type where t1b <= 99";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b <= 99";
+            String query = "select * from test.test_all_type where t1b < 100";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b < 32767";
+            String query = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b <= 32766";
+            String query = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b <= 32766";
+            String mv = "select * from test.test_all_type where t1b < 32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b >= 32767";
+            String mv = "select * from test.test_all_type where t1b > 32766";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b >= 32767";
+            String query = "select * from test.test_all_type where t1b > 32766";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1b > -32768";
+            String query = "select * from test.test_all_type where t1b >= -32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b > -32768";
+            String mv = "select * from test.test_all_type where t1b >= -32767";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1b < -32767";
+            String mv = "select * from test.test_all_type where t1b <= -32768";
+            testRewriteOK(mv, query);
+        }
+
+        // bigint
+        {
+            String mv = "select * from test.test_all_type where t1d < 100";
+            String query = "select * from test.test_all_type where t1d <= 99";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d <= 99";
+            String query = "select * from test.test_all_type where t1d < 100";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d < 9223372036854775807";
+            String query = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d <= 9223372036854775806";
+            String query = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d <= 9223372036854775806";
+            String mv = "select * from test.test_all_type where t1d < 9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d >= 9223372036854775807";
+            String mv = "select * from test.test_all_type where t1d > 9223372036854775806";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d >= 9223372036854775807";
+            String query = "select * from test.test_all_type where t1d > 9223372036854775806";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where t1d > -9223372036854775808";
+            String query = "select * from test.test_all_type where t1d >= -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d > -9223372036854775808";
+            String mv = "select * from test.test_all_type where t1d >= -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String query = "select * from test.test_all_type where t1d <= -9223372036854775808";
+            String mv = "select * from test.test_all_type where t1d < -9223372036854775807";
+            testRewriteOK(mv, query);
+        }
+
+        // date
+        {
+            String mv = "select * from test.test_all_type where id_date < '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date <= '2023-08-09'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date <= '2023-08-09'";
+            String query = "select * from test.test_all_type where id_date < '2023-08-10'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date > '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date >= '2023-08-11'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_date >= '2023-08-10'";
+            String query = "select * from test.test_all_type where id_date > '2023-08-11'";
+            testRewriteOK(mv, query);
+        }
+
+        // datetime
+        {
+            String mv = "select * from test.test_all_type where id_datetime < '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime <= '2023-08-10 12:00:00'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime <= '2023-08-10 12:00:00'";
+            String query = "select * from test.test_all_type where id_datetime < '2023-08-10 12:00:01'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime > '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime >= '2023-08-10 12:00:02'";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select * from test.test_all_type where id_datetime >= '2023-08-10 12:00:01'";
+            String query = "select * from test.test_all_type where id_datetime > '2023-08-10 12:00:00'";
             testRewriteOK(mv, query);
         }
     }
