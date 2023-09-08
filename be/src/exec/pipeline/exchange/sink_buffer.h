@@ -177,11 +177,6 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
-<<<<<<< HEAD
-    std::shared_ptr<QueryStatistics> _eos_query_stats = std::make_shared<QueryStatistics>();
-=======
-    int64_t _rpc_http_min_size = 0;
->>>>>>> b8592172a9 ([BugFix] Fix negative audit (#30646))
 };
 
 } // namespace starrocks::pipeline
