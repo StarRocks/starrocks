@@ -42,12 +42,12 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.Permission;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -210,6 +210,46 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
+    public static class UDFInternalClassLoader extends URLClassLoader {
+        public UDFInternalClassLoader(String udfPath) throws IOException {
+            super(new URL[] {new URL("jar:" + udfPath + "!/")});
+        }
+    }
+
+    public class UDFSecurityManager extends SecurityManager {
+        private Class<?> clazz;
+
+        public UDFSecurityManager(Class<?> clazz) {
+            this.clazz = clazz;
+        }
+
+        @Override
+        public void checkPermission(Permission perm) {
+            if (isCreateFromUDFClassLoader()) {
+                super.checkPermission(perm);
+            }
+        }
+
+        public void checkPermission(Permission perm, Object context) {
+            if (isCreateFromUDFClassLoader()) {
+                super.checkPermission(perm, context);
+            }
+        }
+
+        private boolean isCreateFromUDFClassLoader() {
+            Class<?>[] classContext = getClassContext();
+            if (classContext.length >= 2) {
+                for (int i = 1; i < classContext.length; i++) {
+                    if (classContext[i].getClassLoader() != null &&
+                            clazz.equals(classContext[i].getClassLoader().getClass())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
     private UDFInternalClass mainClass;
     private UDFInternalClass udafStateClass;
 
@@ -311,8 +351,8 @@ public class CreateFunctionStmt extends DdlStmt {
         }
 
         try {
-            URL[] urls = {new URL("jar:" + objectFile + "!/")};
-            try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
+            System.setSecurityManager(new UDFSecurityManager(UDFInternalClass.class));
+            try (URLClassLoader classLoader = new UDFInternalClassLoader(objectFile)) {
                 mainClass.setClazz(classLoader.loadClass(className));
 
                 if (isAggregate) {
@@ -329,9 +369,11 @@ public class CreateFunctionStmt extends DdlStmt {
                 throw new AnalysisException("Failed to load object_file: " + objectFile);
             } catch (ClassNotFoundException e) {
                 throw new AnalysisException("Class '" + className + "' not found in object_file :" + objectFile);
+            } catch (Exception e) {
+                throw new AnalysisException("other exception when load class. exception:", e);
             }
-        } catch (MalformedURLException e) {
-            throw new AnalysisException("Object file is invalid: " + objectFile);
+        } finally {
+            System.setSecurityManager(null);
         }
     }
 
