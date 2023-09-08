@@ -4561,4 +4561,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropTable("test_sr_table_join");
         }
     }
+
+    @Test
+    public void testMvOnHiveView() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_on_hive_view_1 " +
+                "DISTRIBUTED by hash(c_custkey) buckets 10" +
+                " properties (" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"TRUE\"\n" +
+                ")\n" +
+                "As select * from hive0.tpch.customer_view;");
+        String query = "select * from hive0.tpch.customer_view";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
+        starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
+    }
 }
