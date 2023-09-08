@@ -100,7 +100,7 @@ class RandomPartitioner final : public Partitioner {
 public:
     RandomPartitioner(LocalExchangeSourceOperatorFactory* source) : Partitioner(source) {}
 
-    virtual ~RandomPartitioner() override = default;
+    ~RandomPartitioner() override = default;
 
     Status shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) override;
 };
