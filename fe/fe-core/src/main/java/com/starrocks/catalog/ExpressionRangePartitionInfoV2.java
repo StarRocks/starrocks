@@ -231,14 +231,4 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
     public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
         this.sourcePartitionTypes = sourcePartitionTypes;
     }
-
-    @Override
-    protected Object clone() {
-        ExpressionRangePartitionInfoV2 v2 = (ExpressionRangePartitionInfoV2) super.clone();
-        v2.partitionExprs = Lists.newArrayList(this.partitionExprs);
-        v2.serializedPartitionExprs = Lists.newArrayList(this.serializedPartitionExprs);
-        v2.automaticPartition = this.automaticPartition;
-        v2.sourcePartitionTypes = Lists.newArrayList(sourcePartitionTypes);
-        return v2;
-    }
 }
