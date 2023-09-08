@@ -157,7 +157,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
-    public static final String ENABLE_ERROR_IF_OVERFLOW = "enable_error_if_overflow";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
@@ -799,9 +798,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
-
-    @VariableMgr.VarAttr(name = ENABLE_ERROR_IF_OVERFLOW)
-    private boolean enableErrorIfOverflow = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -2537,7 +2533,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
         }
 
-        if (enableErrorIfOverflow) {
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
 

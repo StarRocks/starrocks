@@ -21,7 +21,7 @@ select 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) 
 -- result:
 None
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) /round(1103.00000000000000000000,16));
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ 274.97790000000000000000 * (round(1103.00000000000000000000 * 1.0000,16) /round(1103.00000000000000000000,16));
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
@@ -73,51 +73,51 @@ select cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_
 -- result:
 None
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * c_d32 as decimal32) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * c_d64 as decimal64) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * c_d128 as decimal128) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d32 * 1.000 as decimal32) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d64 * 1.000000 as decimal64) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 1;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 1;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
-select /*+ SET_VAR(enable_error_if_overflow='true')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 2;
+select /*+ SET_VAR(sql_mode='ERROR_IF_OVERFLOW')*/ cast(c_d128 * 1.000000000 as decimal128) from t_decimal_overflow where c_id = 2;
 -- result:
 E: (1064, 'Expr evaluate meet error: Decimal overflow')
 -- !result
