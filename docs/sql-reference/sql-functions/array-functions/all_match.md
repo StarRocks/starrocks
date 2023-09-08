@@ -10,7 +10,7 @@ Returns whether all elements of an array match the given predicate.
 
 - Returns NULL if the predicate returns NULL for one or more elements and `true` for all other elements.
 
-This function is supported from v3.1 onwards.
+This function is supported from v3.0.6 onwards.
 
 ## Syntax
 
@@ -34,7 +34,7 @@ Returns a BOOLEAN value.
 
 ## Usage notes
 
-- The lambda function follows the usage notes in [array_map()](array_map.md). It returns array<bool\>.
+- The lambda function follows the usage notes in [array_map()](array_map.md).
 - If the input array is null or the lambda function results in null, null is returned.
 - If `arr1` is empty, `true` is returned.
 - To apply this function to MAP, rewrite `all_match((k,v)->k>v,map)` to `all_match(map_values(transform_values((k,v)->k>v, map)))`. For example, `select all_match(map_values(transform_values((k,v)->k>v, map{2:1})));` returns 1.
