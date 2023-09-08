@@ -1,0 +1,35 @@
+-- name: testCSVSnappyFormat
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ../be/test/exec/test_data/csv_scanner/decompress_test1.csv.snappy oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/ | grep -Pv "(average|elapsed)"
+
+--- test0
+-- a,b
+-- Alice,1
+-- Bob,2
+-- CharlieX,3
+
+--- test1
+-- a,b
+-- 0,1
+-- 1,2
+-- ...
+-- 99999, 100000
+
+CREATE EXTERNAL TABLE test_csv_snappy_format
+(
+    a string,
+    b string
+) 
+ENGINE=file
+PROPERTIES 
+(
+    "path" = "oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/",
+    "format" = "csv",
+    "column_separator" = ",",
+    "skip_header" = "true"
+);
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/  >/dev/null || echo "exit 0" >/dev/null

@@ -129,8 +129,7 @@ TEST_F(CompressedInputStreamTest, test_Snappy0) {
     const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy";
     std::string out;
     read_compressed_file(CompressionTypePB::SNAPPY, path, out);
-    std::string expected = R"(a,b
-Alice,1
+    std::string expected = R"(Alice,1
 Bob,2
 CharlieX,3
 )";
@@ -141,8 +140,7 @@ CharlieX,3
 TEST_F(CompressedInputStreamTest, test_Snappy1) {
     const char* path = "be/test/exec/test_data/csv_scanner/decompress_test1.csv.snappy";
 
-    std::string head = R"(a,b
-0,1
+    std::string head = R"(0,1
 1,2
 2,3
 3,4
@@ -160,7 +158,7 @@ TEST_F(CompressedInputStreamTest, test_Snappy1) {
     for (size_t buffer_size : buffer_sizes) {
         std::string out;
         read_compressed_file(CompressionTypePB::SNAPPY, path, out, buffer_size);
-        ASSERT_EQ(out.size(), 1177789);
+        ASSERT_EQ(out.size(), 1177785);
         ASSERT_EQ(out.substr(0, head.size()), head);
         ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
     }
