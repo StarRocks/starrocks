@@ -65,6 +65,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
@@ -563,8 +564,8 @@ public class RangePartitionInfo extends PartitionInfo {
     protected Object clone() {
         RangePartitionInfo info = (RangePartitionInfo) super.clone();
         info.partitionColumns = Lists.newArrayList(this.partitionColumns);
-        info.idToRange.putAll(this.idToRange);
-        info.idToTempRange.putAll(this.idToTempRange);
+        info.idToRange = new ConcurrentHashMap<>(this.idToRange);
+        info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
         info.isMultiColumnPartition = partitionColumns.size() > 1;
         return info;
     }
