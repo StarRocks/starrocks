@@ -54,6 +54,7 @@ import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.RowType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -263,18 +264,23 @@ public class PaimonMetadata implements ConnectorMetadata {
     public long getTableCreateTime(String dbName, String tblName) throws Exception {
         Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
         RecordReaderIterator<InternalRow> iterator = null;
-        RecordReader<InternalRow> recordReader = null;
         try {
             SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
-            PredicateBuilder predicateBuilder = new PredicateBuilder(table.rowType());
+            RowType rowType = table.rowType();
+            if (!rowType.getFieldNames().contains("update_time")) {
+                return 0;
+            }
+            int[] projected = new int[] {0, 6};
+            PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
             Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
-            recordReader = table.newReadBuilder().withFilter(equal).newRead().createReader(table.newScan().plan());
+            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected).
+                    withFilter(equal).newRead().createReader(table.newScan().plan());
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
-                Long schemaId = rowData.getLong(0);
-                org.apache.paimon.data.Timestamp updateTime = rowData.getTimestamp(6, 3);
-                if (schemaId == 0) {
+                Long schemaIdValue = rowData.getLong(0);
+                org.apache.paimon.data.Timestamp updateTime = rowData.getTimestamp(1, 3);
+                if (schemaIdValue == 0) {
                     return updateTime.getMillisecond();
                 }
             }
