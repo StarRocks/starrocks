@@ -94,6 +94,11 @@ public class CreateLakeTableTest {
             public String getStorageVolumeIdOfTable(long tableId) {
                 return fsInfo.getFsKey();
             }
+
+            @Mock
+            public StorageVolume getStorageVolume(String svId) {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
         };
     }
 
