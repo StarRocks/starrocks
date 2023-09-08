@@ -30,7 +30,6 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -285,7 +284,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         } finally {
             if (iterator != null) {
-               iterator.close();
+                iterator.close();
             }
         }
         return 0;
