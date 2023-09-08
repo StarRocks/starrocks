@@ -41,6 +41,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -160,6 +161,9 @@ public class LakeTable extends OlapTable {
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
+        // storage volume
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
         return properties;
     }
 
