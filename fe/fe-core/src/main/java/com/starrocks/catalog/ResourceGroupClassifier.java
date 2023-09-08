@@ -21,6 +21,14 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.thrift.TQueryType;
+>>>>>>> 04a1197150 ([BugFix] Fix lost resource group in audit log for insert (#30626))
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
@@ -217,6 +225,90 @@ public class ResourceGroupClassifier implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         MV,
+<<<<<<< HEAD
         SYSTEM_OTHER
+=======
+        SYSTEM_OTHER;
+
+        public static QueryType fromTQueryType(TQueryType type) {
+            return type == TQueryType.LOAD ? INSERT : SELECT;
+        }
+
+        public static QueryType fromStatement(StatementBase stmt) {
+            if (stmt instanceof QueryStatement) {
+                return SELECT;
+            }
+            if (stmt instanceof DmlStmt) {
+                return INSERT;
+            }
+            if (stmt instanceof LoadStmt) {
+                return INSERT;
+            }
+
+            return SELECT;
+        }
+    }
+
+    /**
+     * The cost range.
+     * <p> Fow now it always includes the left endpoint {@link #min} and excludes the right endpoint {@link #max}.
+     * The pattern is {@code [min, max)}, where min and max are double (including infinity and -infinity) and min must be less
+     * than max.
+     */
+    public static class CostRange {
+        private static final String STR_RANGE_REGEX = "^\\s*\\[\\s*(.+?)\\s*,\\s*(.+?)\\s*\\)\\s*$";
+        private static final Pattern STR_RANGE_PATTERN = Pattern.compile(STR_RANGE_REGEX, Pattern.CASE_INSENSITIVE);
+
+        public static final String FORMAT_STR_RANGE_MESSAGE = "the format must be '[min, max)' " +
+                "where min and max are double (including infinity and -infinity) " +
+                "and min must be less than max";
+
+        private final double min;
+        private final double max;
+
+        public CostRange(double min, double max) {
+            this.min = min;
+            this.max = max;
+        }
+
+        public static CostRange fromString(String rangeStr) {
+            Matcher matcher = STR_RANGE_PATTERN.matcher(rangeStr);
+            if (!matcher.find()) {
+                return null;
+            }
+
+            try {
+                double min = parseDoubleWithInfinity(matcher.group(1));
+                double max = parseDoubleWithInfinity(matcher.group(2));
+
+                if (min >= max) {
+                    return null;
+                }
+
+                return new CostRange(min, max);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        public boolean contains(double value) {
+            return min <= value && value < max;
+        }
+
+        @Override
+        public String toString() {
+            return "[" + min + ", " + max + ")";
+        }
+
+        private static double parseDoubleWithInfinity(String input) {
+            if ("infinity".equalsIgnoreCase(input)) {
+                return Double.POSITIVE_INFINITY;
+            } else if ("-infinity".equalsIgnoreCase(input)) {
+                return Double.NEGATIVE_INFINITY;
+            } else {
+                return Double.parseDouble(input);
+            }
+        }
+>>>>>>> 04a1197150 ([BugFix] Fix lost resource group in audit log for insert (#30626))
     }
 }
