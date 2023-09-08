@@ -3795,6 +3795,7 @@ public abstract class FileSystem extends Configured
 
         FileSystem get(URI uri, Configuration conf) throws IOException {
             Key key = new Key(uri, conf);
+            LOGGER.info("[hadoop-ext] FileSystem.get. key = " + key.toString());
             return getInternal(uri, conf, key);
         }
 
@@ -4019,13 +4020,13 @@ public abstract class FileSystem extends Configured
                 }
                 final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
                 if (STARROCKS_HOME_DIR == null) {
-                    LOGGER.warn(String.format("[hadoop-ext] env '%s' is not defined", STARROCKS_HOME_ENV));
+                    LOGGER.info(String.format("[hadoop-ext] env '%s' is not defined", STARROCKS_HOME_ENV));
                     return;
                 }
                 String[] parts = configResources.split(",");
                 for (String p : parts) {
                     Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
-                    LOGGER.debug(String.format("[hadoop-ext] Add path '%s' to configuration", path.toString()));
+                    LOGGER.info(String.format("[hadoop-ext] Add path '%s' to configuration", path.toString()));
                     conf.addResource(path);
                 }
                 conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
