@@ -471,6 +471,8 @@
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array 函数
+      + [all_match](/sql-reference/sql-functions/array-functions/all_match.md)
+      + [any_match](/sql-reference/sql-functions/array-functions/any_match.md)
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)

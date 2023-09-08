@@ -230,6 +230,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
+| [all_match](/sql-reference/sql-functions/array-functions/all_match.md)|判断数组中的所有元素是否都匹配谓词中 (predicate) 指定的条件。|
+| [any_match](/sql-reference/sql-functions/array-functions/any_match.md)|判断数组中是否有元素匹配谓词中 (predicate) 指定的条件。|
 |  [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
 |  [array_append](/sql-reference/sql-functions/array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
 |  [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
