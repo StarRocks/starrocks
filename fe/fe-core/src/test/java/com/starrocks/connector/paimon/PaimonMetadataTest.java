@@ -35,6 +35,7 @@ import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DateType;
+import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
 import org.junit.Assert;
@@ -91,7 +92,8 @@ public class PaimonMetadataTest {
     @Test
     public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
-        fields.add(new DataField(1, "col2", new IntType()));
+        fields.add(new DataField(1, "col2", new IntType(true)));
+        fields.add(new DataField(2, "col3", new DoubleType(false)));
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -111,7 +113,11 @@ public class PaimonMetadataTest {
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assert.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        Assert.assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        Assert.assertFalse(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
+        Assert.assertEquals("paimon_catalog.db1.tbl1", paimonTable.getUUID());
     }
 
     @Test
@@ -167,13 +173,6 @@ public class PaimonMetadataTest {
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, result.get(0).getFiles().get(0).getPaimonSplitsInfo().getPaimonSplits().size());
-    }
-
-    @Test
-    public void testUUID(@Mocked AbstractFileStoreTable paimonNativeTable,
-                         @Mocked ReadBuilder readBuilder) {
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
-        Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
     }
 
     @Test
