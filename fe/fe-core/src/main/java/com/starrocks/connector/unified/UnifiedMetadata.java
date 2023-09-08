@@ -131,12 +131,6 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
-        return metadata.getMaterializedViewIndex(dbName, tblName);
-    }
-
-    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames) {
         ConnectorMetadata metadata = metadataOfTable(table);
