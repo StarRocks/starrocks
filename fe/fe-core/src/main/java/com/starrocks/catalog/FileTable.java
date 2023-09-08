@@ -46,15 +46,15 @@ import java.util.Map;
 import java.util.Optional;
 
 public class FileTable extends Table {
-    private static final String JSON_KEY_FILE_PATH = "path";
-    private static final String JSON_KEY_FORMAT = "format";
+    public static final String JSON_KEY_FILE_PATH = "path";
+    public static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_RECURSIVE_DIRECTORIES = "enable_recursive_listing";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
 
-    private static final String JSON_KEY_COLUMN_SEPARATOR = "column_separator";
-    private static final String JSON_KEY_ROW_DELIMITER = "row_delimiter";
-    private static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
-    private static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
+    public static final String JSON_KEY_COLUMN_SEPARATOR = "column_separator";
+    public static final String JSON_KEY_ROW_DELIMITER = "row_delimiter";
+    public static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
+    public static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
 
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
@@ -110,23 +110,12 @@ public class FileTable extends Table {
         return fileProperties;
     }
 
-    public List<RemoteFileDesc> getFileDescs() throws DdlException {
+    public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
-
-        RemoteFileInputFormat format = getFileFormat();
-        TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXT)) {
-            textFileFormatDesc = new TextFileFormatDesc(
-                    fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
-                    fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
-                    fileProperties.getOrDefault(JSON_KEY_COLLECTION_DELIMITER, ","),
-                    fileProperties.getOrDefault(JSON_KEY_MAP_DELIMITER, ":")
-            );
-        }
 
         try {
             Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
@@ -141,14 +130,32 @@ public class FileTable extends Table {
                 if (!getTableLocation().endsWith("/") && !checkFileName(file.getFileName())) {
                     throw new DdlException("the path is a directory but didn't end with '/'");
                 }
-                if (textFileFormatDesc != null) {
-                    file.setTextFileFormatDesc(textFileFormatDesc);
-                }
             }
             return remoteFileDescs;
         } catch (StarRocksConnectorException e) {
             throw new DdlException("doesn't get file with path: " + getTableLocation(), e);
         }
+    }
+
+    public List<RemoteFileDesc> getFileDescs() throws DdlException {
+        List<RemoteFileDesc> fileDescs = getFileDescsFromHdfs();
+
+        RemoteFileInputFormat format = getFileFormat();
+        TextFileFormatDesc textFileFormatDesc = null;
+        if (format.equals(RemoteFileInputFormat.TEXT)) {
+            textFileFormatDesc = new TextFileFormatDesc(
+                    fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
+                    fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
+                    fileProperties.getOrDefault(JSON_KEY_COLLECTION_DELIMITER, ","),
+                    fileProperties.getOrDefault(JSON_KEY_MAP_DELIMITER, ":")
+            );
+        }
+        if (textFileFormatDesc != null) {
+            for (RemoteFileDesc f : fileDescs) {
+                f.setTextFileFormatDesc(textFileFormatDesc);
+            }
+        }
+        return fileDescs;
     }
 
     private boolean checkFileName(String fileDescName) {
