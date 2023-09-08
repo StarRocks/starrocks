@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableSet;
@@ -21,6 +20,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.thrift.TQueryType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
@@ -217,6 +221,24 @@ public class ResourceGroupClassifier implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         MV,
-        SYSTEM_OTHER
+        SYSTEM_OTHER;
+
+        public static QueryType fromTQueryType(TQueryType type) {
+            return type == TQueryType.LOAD ? INSERT : SELECT;
+        }
+
+        public static QueryType fromStatement(StatementBase stmt) {
+            if (stmt instanceof QueryStatement) {
+                return SELECT;
+            }
+            if (stmt instanceof DmlStmt) {
+                return INSERT;
+            }
+            if (stmt instanceof LoadStmt) {
+                return INSERT;
+            }
+
+            return SELECT;
+        }
     }
 }
