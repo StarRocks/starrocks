@@ -296,6 +296,7 @@ public class PlanTestNoneDBBase {
                                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
                                 continue;
                             }
+                            ex.printStackTrace();
                             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
                         }
 
