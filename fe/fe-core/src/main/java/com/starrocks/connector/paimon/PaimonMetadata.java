@@ -30,6 +30,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -169,7 +170,12 @@ public class PaimonMetadata implements ConnectorMetadata {
             Column column = new Column(fieldName, fieldType, type.isNullable());
             fullSchema.add(column);
         }
-        long createTime = getTableCreateTime(dbName, tblName);
+        long createTime = 0;
+        try {
+            createTime = getTableCreateTime(dbName, tblName);
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        }
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
                 catalogType, metastoreUris, warehousePath, paimonNativeTable, createTime);
         tables.put(identifier, table);
@@ -255,8 +261,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         return hdfsEnvironment.getCloudConfiguration();
     }
 
-    public long getTableCreateTime(String dbName, String tblName) {
+    public long getTableCreateTime(String dbName, String tblName) throws Exception {
         Identifier sysIdentifier = new Identifier(dbName, String.format("%s%s", tblName, "$schemas"));
+        RecordReaderIterator<InternalRow> iterator = null;
         try {
             SchemasTable table = (SchemasTable) paimonNativeCatalog.getTable(sysIdentifier);
             PredicateBuilder predicateBuilder = new PredicateBuilder(table.rowType());
@@ -264,7 +271,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             RecordReader<InternalRow> recordReader =
                     table.newReadBuilder().withFilter(equal)
                             .newRead().createReader(table.newScan().plan());
-            RecordReaderIterator<InternalRow> iterator = new RecordReaderIterator<>(recordReader);
+            iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
                 Long schemaId = rowData.getLong(0);
@@ -276,6 +283,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             iterator.close();
         } catch (Exception e) {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        } finally {
+            if (iterator != null) {
+               iterator.close();
+            }
         }
         return 0;
     }
