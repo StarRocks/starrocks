@@ -10,7 +10,7 @@ Returns whether any elements of an array match the given predicate.
 
 - Returns NULL if the predicate returns NULL for one or more elements and `false` for all other elements.
 
-This function is supported from v3.1 onwards.
+This function is supported from v3.0.6 onwards.
 
 ## Syntax
 
