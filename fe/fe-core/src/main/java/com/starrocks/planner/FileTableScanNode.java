@@ -22,6 +22,7 @@ import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
@@ -96,6 +97,10 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setFile_length(file.getLength());
             hdfsScanRange.setModification_time(file.getModificationTime());
             hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
+            if (RemoteScanRangeLocations.isTextFormat(hdfsScanRange.getFile_format())) {
+                hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
+            }
+
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocs.setScan_range(scanRange);
