@@ -14,8 +14,9 @@
 
 #include <benchmark/benchmark.h>
 #include <testutil/assert.h>
-#include "util/random.h"
+
 #include "column/binary_column.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -91,7 +92,7 @@ std::string BinaryColumnCopyBench::_rand_str() {
 std::shared_ptr<BinaryColumn> BinaryColumnCopyBench::_gen_binary_column() {
     std::shared_ptr<BinaryColumn> column = std::make_shared<BinaryColumn>();
 
-    for (size_t i=0; i < _chunk_size; i++) {
+    for (size_t i = 0; i < _chunk_size; i++) {
         std::string str = _rand_str();
         column->append_string(str);
     }
@@ -122,6 +123,6 @@ static void process_args(benchmark::internal::Benchmark* b) {
 }
 
 BENCHMARK(bench_func)->Apply(process_args);
-}
+} // namespace starrocks
 
 BENCHMARK_MAIN();
