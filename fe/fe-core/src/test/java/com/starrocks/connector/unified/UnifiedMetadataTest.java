@@ -16,6 +16,7 @@ package com.starrocks.connector.unified;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -32,6 +33,7 @@ import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.sql.ast.CreateTableStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +57,9 @@ public class UnifiedMetadataTest {
     @Mocked private IcebergMetadata icebergMetadata;
     @Mocked private HudiMetadata hudiMetadata;
     @Mocked private DeltaLakeMetadata deltaLakeMetadata;
+    private final CreateTableStmt createTableStmt = new CreateTableStmt(false, true,
+            new TableName("test_db", "test_tbl"), ImmutableList.of(), "hive",
+            null, null, null, null, null, null);
 
     private UnifiedMetadata unifiedMetadata;
 
@@ -118,7 +123,7 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testRouteToHiveConnector() {
+    public void testRouteToHiveConnector() throws DdlException {
         HiveTable hiveTable = new HiveTable();
 
         new Expectations() {
@@ -155,6 +160,11 @@ public class UnifiedMetadataTest {
                 hiveMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
                 times = 1;
             }
+            {
+                hiveMetadata.createTable(createTableStmt);
+                result = true;
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -169,10 +179,12 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", hiveTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        createTableStmt.setEngineName("hive");
+        assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
 
     @Test
-    public void testRouteToIcebergConnector(@Mocked HiveTable hiveTable) {
+    public void testRouteToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException {
         Table icebergTable = new IcebergTable();
 
         new Expectations() {
@@ -219,6 +231,11 @@ public class UnifiedMetadataTest {
                 icebergMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
                 times = 1;
             }
+            {
+                icebergMetadata.createTable(createTableStmt);
+                result = true;
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -234,10 +251,12 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", icebergTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        createTableStmt.setEngineName("iceberg");
+        assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
 
     @Test
-    public void testRouteToHudiConnector() {
+    public void testRouteToHudiConnector() throws DdlException {
         HudiTable hudiTable = new HudiTable();
 
         new Expectations() {
@@ -279,6 +298,11 @@ public class UnifiedMetadataTest {
                 hudiMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
                 times = 1;
             }
+            {
+                hudiMetadata.createTable(createTableStmt);
+                result = true;
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -293,10 +317,12 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", hudiTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        createTableStmt.setEngineName("hudi");
+        assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
 
     @Test
-    public void testRouteToDeltaLakeConnector(@Mocked HiveTable hiveTable) {
+    public void testRouteToDeltaLakeConnector(@Mocked HiveTable hiveTable) throws DdlException {
         Table deltaLakeTable = new DeltaLakeTable();
 
         new Expectations() {
@@ -343,6 +369,11 @@ public class UnifiedMetadataTest {
                 deltaLakeMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
                 times = 1;
             }
+            {
+                deltaLakeMetadata.createTable(createTableStmt);
+                result = true;
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -358,5 +389,7 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", deltaLakeTable, ImmutableList.of(), false);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
+        createTableStmt.setEngineName("deltalake");
+        assertTrue(unifiedMetadata.createTable(createTableStmt));
     }
 }
