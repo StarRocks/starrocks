@@ -20,6 +20,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -143,6 +144,16 @@ public class UDFHelper {
         Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
         Platform.copyMemory(dataArr, Platform.LONG_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
+    }
+
+    public static void getStringLargeIntResult(int numRows, BigInteger[] column, long columnAddr) {
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
     }
 
     private static void getFloatBoxedResult(int numRows, Float[] boxedArr, long columnAddr) {
@@ -294,6 +305,8 @@ public class UDFHelper {
                     getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigDecimal[]) {
                     getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof BigInteger[]) {
+                    getStringLargeIntResult(numRows, (BigInteger[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof String[]) {
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
                 } else {
