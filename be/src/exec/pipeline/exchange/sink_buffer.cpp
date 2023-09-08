@@ -48,6 +48,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
+            _eos_query_stats[instance_id.lo] = std::make_shared<QueryStatistics>();
             _mutexes[instance_id.lo] = std::make_unique<Mutex>();
 
             PUniqueId finst_id;
@@ -249,7 +250,8 @@ void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
         }
     }
     if (need_merge) {
-        _eos_query_stats->merge_pb(query_statistics);
+        auto& instance_id = request.fragment_instance_id;
+        _eos_query_stats[instance_id.lo]->merge_pb(query_statistics);
         request.params->clear_query_statistics();
     }
 }
@@ -334,9 +336,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                _eos_query_stats->merge_pb(request.params->query_statistics());
+                _eos_query_stats[instance_id.lo]->merge_pb(request.params->query_statistics());
                 request.params->clear_query_statistics();
-                _eos_query_stats->to_pb(request.params->mutable_query_statistics());
+                _eos_query_stats[instance_id.lo]->to_pb(request.params->mutable_query_statistics());
+                _eos_query_stats[instance_id.lo]->clear();
             }
         }
 
