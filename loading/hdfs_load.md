@@ -249,7 +249,7 @@ PROPERTIES
 2. 查询 `table2` 的数据，如下所示：
 
    ```SQL
-   SELECT * FROM table1;
+   SELECT * FROM table2;
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
