@@ -1493,8 +1493,7 @@ public class StmtExecutor {
             }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
-                    execPlan.getDescTbl().toThrift());
-            coord.setQueryType(TQueryType.LOAD);
+                    execPlan.getDescTbl().toThrift(), TQueryType.LOAD);
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 

@@ -191,6 +191,11 @@ public class Coordinator {
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                        TDescriptorTable descTable) {
+        this(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+    }
+
+    public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                       TDescriptorTable descTable, TQueryType queryType) {
         this.isBlockQuery = false;
         this.queryId = context.getExecutionId();
         this.connectContext = context;
@@ -199,6 +204,7 @@ public class Coordinator {
         this.descTable = descTable;
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
+        this.queryOptions.setQuery_type(queryType);
         long startTime = context.getStartTime();
         String timezone = context.getSessionVariable().getTimeZone();
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
@@ -262,6 +268,7 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
+        this.queryOptions.setQuery_type(TQueryType.LOAD);
         if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
             final TCompressionType loadCompressionType = CompressionUtils
                     .findTCompressionByName(
