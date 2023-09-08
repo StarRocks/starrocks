@@ -46,6 +46,10 @@ public class OuterJoinAddRedundantTopNRule extends TransformationRule {
             return false;
         }
 
+        if (topn.hasOffset()) {
+            return false;
+        }
+
         OptExpression childExpr = input.inputAt(0);
         LogicalJoinOperator joinOperator = childExpr.getOp().cast();
         JoinOperator joinType = joinOperator.getJoinType();
