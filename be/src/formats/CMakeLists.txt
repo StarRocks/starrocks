@@ -64,6 +64,7 @@ add_library(Formats STATIC
         parquet/chunk_writer.cpp
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
+        parquet/column_read_order_ctx.cpp
         utils.h
         )
 
