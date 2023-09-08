@@ -755,11 +755,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (auto idx : new_sort_key_idxes) {
             new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
         }
-        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
-                          base_sort_key_unique_ids.begin())
-                    .first != new_sort_key_unique_ids.end()) {
-            sc_params.sc_directly = !(sc_params.sc_sorting = true);
+
+        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+            // new sort keys' size is greater than base sort keys, must be sc_sorting
+            sc_params.sc_sorting = true;
+            sc_params.sc_directly = false;
+        } else {
+            auto base_iter = base_sort_key_unique_ids.cbegin();
+            auto new_iter = new_sort_key_unique_ids.cbegin();
+            // check wheather new sort keys are just subset of base sort keys
+            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+                ++base_iter;
+                ++new_iter;
+            }
+            if (new_iter != new_sort_key_unique_ids.cend()) {
+                sc_params.sc_sorting = true;
+                sc_params.sc_directly = false;
+            }
         }
+
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get(), _alter_msg_header);
