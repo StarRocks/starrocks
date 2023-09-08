@@ -87,6 +87,7 @@ Usage: $0 <options>
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
+     --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
 
   Eg.
@@ -112,6 +113,7 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
+  -l 'without-java-ext' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
@@ -132,6 +134,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
+BUILD_JAVA_EXT=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -216,6 +219,7 @@ else
             --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -252,6 +256,7 @@ echo "Get params:
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
 "
 
 check_tool()
@@ -347,14 +352,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
 
     ${BUILD_SYSTEM} install
 
-    # Build JDBC Bridge
-    echo "Build Java Extensions"
-    cd ${STARROCKS_HOME}/java-extensions
-    if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} clean
+    # Build Java Extensions
+    if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+        echo "Build Java Extensions"
+        cd ${STARROCKS_HOME}/java-extensions
+        if [ ${CLEAN} -eq 1 ]; then
+            ${MVN_CMD} clean
+        fi
+        ${MVN_CMD} package -DskipTests
+        cd ${STARROCKS_HOME}
+    else
+        echo "Skip Building Java Extensions"
     fi
-    ${MVN_CMD} package -DskipTests
-    cd ${STARROCKS_HOME}
 fi
 
 cd ${STARROCKS_HOME}
