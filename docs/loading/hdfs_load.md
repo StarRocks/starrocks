@@ -245,7 +245,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 2. Query `table2`:
 
    ```SQL
-   SELECT * FROM table1;
+   SELECT * FROM table2;
    +------+-------+-------+
    | id   | name  | score |
    +------+-------+-------+
