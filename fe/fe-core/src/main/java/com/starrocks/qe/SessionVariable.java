@@ -212,9 +212,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * and scan distribution keys, when there is only one BE.
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
-
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
+
+    public static final String QUERY_TABLET_AFFINITY_MODE = "query_tablet_affinity_mode";
 
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
@@ -573,6 +574,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
+
+    /**
+     * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
+     * fragments that access the same tablet to run on the same node to improve cache hit.
+     */
+    @VariableMgr.VarAttr(name = QUERY_TABLET_AFFINITY_MODE)
+    private String enableQueryTabletAffinityMode = "disable";
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1410,6 +1418,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+
+    public QueryTabletAffinityMode getQueryTabletAffinityMode() {
+        return QueryTabletAffinityMode.valueOf(enableQueryTabletAffinityMode.toUpperCase());
+    }
+
+    public void setEnableQueryTabletAffinityMode(QueryTabletAffinityMode value) {
+        this.enableQueryTabletAffinityMode = value.toString();
+    }
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
@@ -2737,6 +2754,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return GSON.fromJson(content, new TypeToken<Map<String, NonDefaultValue>>() {
             }.getType());
         }
+    }
+
+    public enum QueryTabletAffinityMode {
+        AUTO,
+        FORCE_AFFINITY,
+        DISABLE
     }
 
     @Override

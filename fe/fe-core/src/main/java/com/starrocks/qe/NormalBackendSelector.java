@@ -27,6 +27,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -38,16 +39,19 @@ public class NormalBackendSelector implements BackendSelector {
     private final FragmentScanRangeAssignment assignment;
 
     private final WorkerProvider workerProvider;
+
     private final boolean isLoad;
+    private final SessionVariable.QueryTabletAffinityMode queryTabletAffinityMode;
 
     public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                  FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
-                                 boolean isLoad) {
+                                 boolean isLoad, SessionVariable.QueryTabletAffinityMode queryTabletAffinityMode) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
         this.workerProvider = workerProvider;
         this.isLoad = isLoad;
+        this.queryTabletAffinityMode = queryTabletAffinityMode;
     }
 
     private boolean isEnableScheduleByRowCnt(TScanRangeLocations scanRangeLocations) {
@@ -60,6 +64,8 @@ public class NormalBackendSelector implements BackendSelector {
 
     @Override
     public void computeScanRangeAssignment() throws UserException {
+        maybeShuffleLocations(locations);
+
         HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
         // sort the scan ranges by row count
         // only sort the scan range when it is load job
@@ -107,6 +113,26 @@ public class NormalBackendSelector implements BackendSelector {
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("assignedRowCountPerHost: {}", assignedRowCountPerHost);
+        }
+    }
+
+    private boolean needShuffleLocations(List<TScanRangeLocations> scanRanges) {
+        switch (queryTabletAffinityMode) {
+            case FORCE_AFFINITY:
+                return false;
+            case AUTO:
+                final int numScanRanges = scanRanges.size();
+                return scanRanges.stream().anyMatch(scanRange -> scanRange.getLocationsSize() > numScanRanges);
+            case DISABLE:
+            default:
+                return true;
+        }
+
+    }
+
+    private void maybeShuffleLocations(List<TScanRangeLocations> scanRanges) {
+        if (needShuffleLocations(scanRanges)) {
+            scanRanges.forEach(scanRange -> Collections.shuffle(scanRange.getLocations()));
         }
     }
 }

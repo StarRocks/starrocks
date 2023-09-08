@@ -57,6 +57,7 @@ import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class SetStmtAnalyzer {
@@ -176,6 +177,10 @@ public class SetStmtAnalyzer {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.QUERY_TABLET_AFFINITY_MODE)) {
+            validateQueryTabletAffinityModeValue(resolvedExpression.getStringValue());
+        }
+
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
             String compressionName = resolvedExpression.getStringValue();
             TCompressionType compressionType = CompressionUtils.getCompressTypeByName(compressionName);
@@ -212,6 +217,16 @@ public class SetStmtAnalyzer {
             TTabletInternalParallelMode.valueOf(val.toUpperCase());
         } catch (Exception ignored) {
             throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}");
+        }
+    }
+
+    private static void validateQueryTabletAffinityModeValue(String val) {
+        try {
+            SessionVariable.QueryTabletAffinityMode.valueOf(val.toUpperCase());
+        } catch (Exception ignored) {
+            throw new SemanticException(String.format("Invalid %s, now we support %s",
+                    SessionVariable.QUERY_TABLET_AFFINITY_MODE,
+                    Arrays.toString(SessionVariable.QueryTabletAffinityMode.values())));
         }
     }
 

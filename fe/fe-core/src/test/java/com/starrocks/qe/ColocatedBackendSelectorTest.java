@@ -274,7 +274,8 @@ public class ColocatedBackendSelectorTest {
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =
                     new ColocatedBackendSelector(scanNode, assignment, colocatedAssignemnt, false,
-                            workerProvider, maxBucketsPerBeToUseBalancerAssignment);
+                            workerProvider, maxBucketsPerBeToUseBalancerAssignment,
+                            SessionVariable.QueryTabletAffinityMode.DISABLE);
             backendSelector.computeScanRangeAssignment();
         }
 

@@ -59,7 +59,8 @@ public class BackendSelectorFactory {
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
         if (scanNode instanceof SchemaScanNode) {
-            return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
+            return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false,
+                    sessionVariable.getQueryTabletAffinityMode());
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
                 scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                 scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
@@ -80,9 +81,11 @@ public class BackendSelectorFactory {
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                 return new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
                         colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,
-                        sessionVariable.getMaxBucketsPerBeToUseBalancerAssignment());
+                        sessionVariable.getMaxBucketsPerBeToUseBalancerAssignment(),
+                        sessionVariable.getQueryTabletAffinityMode());
             } else {
-                return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType);
+                return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, isLoadType,
+                        sessionVariable.getQueryTabletAffinityMode());
             }
         }
     }

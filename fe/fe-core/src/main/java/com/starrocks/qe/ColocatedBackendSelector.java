@@ -25,6 +25,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,21 +46,26 @@ public class ColocatedBackendSelector implements BackendSelector {
     private final boolean isRightOrFullBucketShuffleFragment;
     private final WorkerProvider workerProvider;
     private final BucketSequenceIterator bucketSequenceIterator;
+    private final SessionVariable.QueryTabletAffinityMode queryTabletAffinityMode;
 
     public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
                                     ColocatedBackendSelector.Assignment colocatedAssignment,
                                     boolean isRightOrFullBucketShuffleFragment, WorkerProvider workerProvider,
-                                    int maxBucketsPerBeToUseBalancerAssignment) {
+                                    int maxBucketsPerBeToUseBalancerAssignment,
+                                    SessionVariable.QueryTabletAffinityMode queryTabletAffinityMode) {
         this.scanNode = scanNode;
         this.assignment = assignment;
         this.colocatedAssignment = colocatedAssignment;
         this.isRightOrFullBucketShuffleFragment = isRightOrFullBucketShuffleFragment;
         this.workerProvider = workerProvider;
         this.bucketSequenceIterator = createBucketIterator(scanNode, maxBucketsPerBeToUseBalancerAssignment);
+        this.queryTabletAffinityMode = queryTabletAffinityMode;
     }
 
     @Override
     public void computeScanRangeAssignment() throws UserException {
+        maybeShuffleLocations(scanNode.bucketSeq2locations);
+
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
         ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange = colocatedAssignment.seqToScanRange;
 
@@ -354,6 +360,26 @@ public class ColocatedBackendSelector implements BackendSelector {
                 throw new NoSuchElementException();
             }
             return buckets.pollLast();
+        }
+    }
+
+    private boolean needShuffleLocations(ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations) {
+        switch (queryTabletAffinityMode) {
+            case FORCE_AFFINITY:
+                return false;
+            case AUTO:
+                final int numBuckets = bucketSeq2locations.size();
+                return bucketSeq2locations.values().stream()
+                        .anyMatch(scanRange -> scanRange.getLocationsSize() > numBuckets);
+            case DISABLE:
+            default:
+                return true;
+        }
+    }
+
+    private void maybeShuffleLocations(ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations) {
+        if (needShuffleLocations(bucketSeq2locations)) {
+            bucketSeq2locations.values().forEach(scanRange -> Collections.shuffle(scanRange.getLocations()));
         }
     }
 

@@ -442,7 +442,7 @@ public class OlapScanNode extends ScanNode {
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
-                                      long localBeId) throws UserException {
+                                      long localBeId, boolean needShuffleReplicas) throws UserException {
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
@@ -512,7 +512,10 @@ public class OlapScanNode extends ScanNode {
                 }
             }
 
-            Collections.shuffle(replicas);
+            if (needShuffleReplicas) {
+                Collections.shuffle(replicas);
+            }
+
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
@@ -631,7 +634,7 @@ public class OlapScanNode extends ScanNode {
                 }
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId, true);
             }
         }
     }
