@@ -882,7 +882,9 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
 }
 
 Status RepeatedStoredColumnReader::_lazy_skip_values(uint64_t begin) {
-    return _reader->skip_values(_not_null_to_skip);
+    size_t to_skip = _not_null_to_skip;
+    _not_null_to_skip = 0;
+    return _reader->skip_values(to_skip);
 }
 
 Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,
