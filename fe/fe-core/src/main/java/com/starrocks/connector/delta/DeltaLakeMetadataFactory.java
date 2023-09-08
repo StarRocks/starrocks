@@ -23,6 +23,7 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
@@ -53,7 +54,16 @@ public class DeltaLakeMetadataFactory {
                 createQueryLevelInstance(metastore, perQueryMetastoreMaxNum),
                 metastore instanceof CachingHiveMetastore,
                 hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
+        return new DeltaLakeMetadata(hdfsEnvironment, metastore, catalogName, hiveMetastoreOperations);
+    }
 
-        return new DeltaLakeMetadata(hdfsEnvironment, catalogName, hiveMetastoreOperations);
+    public synchronized Optional<CachingDeltaLakeMetadata> getCacheHiveMetadata() {
+        Optional<CachingDeltaLakeMetadata> cacheHivemetaStore;
+        if (metastore instanceof CachingDeltaLakeMetadata) {
+            cacheHivemetaStore = Optional.of((CachingDeltaLakeMetadata) metastore);
+        } else {
+            cacheHivemetaStore = Optional.empty();
+        }
+        return cacheHivemetaStore;
     }
 }

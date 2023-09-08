@@ -99,6 +99,50 @@ public class Config extends ConfigBase {
     public static boolean sys_log_to_console = false;
 
     /**
+     * delta lake table metadata cache directory
+     */
+    @ConfField
+    public static String delta_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/delta";
+
+    @ConfField(mutable = true)
+    public static long delta_timer_check_expired_cache_seconds = 5 * 60L;
+
+    @ConfField(mutable = true)
+    public static long delta_cache_expired_time_seconds = 24 * 60 * 60L;
+
+    /**
+     * default disk cache capacity 20G
+     */
+    @ConfField(mutable = true)
+    public static long delta_metadata_disk_cache_capacity = 20 * 1024 * 1024 * 1024L;
+
+    /**
+     * The maximum number of bdbs that can be opened at the same time
+     */
+    @ConfField(mutable = true)
+    public static int delta_db_dao_cache_size = 50;
+
+    /**
+     * By default, the expired cache is checked every 10 minutes
+     * and the metadata of the expired delta lake is removed
+     */
+    @ConfField(mutable = true)
+    public static int delta_snapshot_version_check_seconds = 10 * 60;
+
+    /**
+     * -1 not limit
+     * > 0 limit
+     */
+    @ConfField(mutable = true)
+    public static int delta_single_query_size_limit_gb = -1;
+
+    @ConfField(mutable = true)
+    public static int delta_asyn_refresh_cache_thread_core_size = 5;
+
+    @ConfField(mutable = true)
+    public static int delta_asyn_refresh_cache_thread_max_size = 50;
+
+    /**
      * audit_log_dir:
      * This specifies FE audit log dir.
      * Audit log fe.audit.log contains all requests with related infos such as user, host, cost, status, etc.

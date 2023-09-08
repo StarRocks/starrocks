@@ -71,5 +71,8 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        //clear cache
+        metadataFactory.getCacheHiveMetadata()
+                .ifPresent(CachingDeltaLakeMetadata::invalidateAll);
     }
 }

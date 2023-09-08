@@ -21,7 +21,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
-import com.starrocks.connector.hive.CachingHiveMetastore;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -76,13 +75,13 @@ public class DeltaLakeInternalMgr {
         } else {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
                     new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
-            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
+            baseHiveMetastore = CachingDeltaLakeMetadata.createCatalogLevelInstance(
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
                     hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
-                    hmsConf.enableListNamesCache());
+                    false);
         }
 
         return baseHiveMetastore;

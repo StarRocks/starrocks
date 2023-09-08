@@ -53,6 +53,7 @@ under the License.
         <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.12.2</hudi.version>
+        <rocksdb.version>7.7.8</rocksdb.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -755,6 +756,13 @@ under the License.
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.rocksdb/rocksdbjni -->
+            <dependency>
+                <groupId>org.rocksdb</groupId>
+                <artifactId>rocksdbjni</artifactId>
+                <version>${rocksdb.version}</version>
             </dependency>
 
         </dependencies>

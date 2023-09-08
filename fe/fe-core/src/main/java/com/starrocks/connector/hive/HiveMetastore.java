@@ -89,6 +89,10 @@ public class HiveMetastore implements IHiveMetastore {
         return client.getAllTableNames(dbName);
     }
 
+    public String getCatalogName() {
+        return this.catalogName;
+    }
+
     @Override
     public Database getDb(String dbName) {
         org.apache.hadoop.hive.metastore.api.Database db = client.getDb(dbName);
