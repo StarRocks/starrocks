@@ -94,7 +94,7 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
         : _fragment_id(id),
           _is_close(false),
           _is_cancelled(false),
-          _buffer_rows(0),
+          _buffer_bytes(0),
           _buffer_limit(buffer_size),
           _packet_num(0) {}
 
@@ -104,6 +104,7 @@ BufferControlBlock::~BufferControlBlock() {
     while (_batch_queue.try_dequeue(ser)) {
         ser.reset();
     }
+    _buffer_bytes = 0;
 }
 
 Status BufferControlBlock::init() {
@@ -119,7 +120,7 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     RETURN_IF_ERROR(status_or_value.status());
     auto ser_res = std::move(status_or_value.value());
     std::unique_lock<std::mutex> l(_lock);
-    while ((_batch_queue.size_approx() > _buffer_limit) && !_is_cancelled) {
+    while ((_batch_queue.size_approx() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
         _data_removal.wait(l);
     }
 
@@ -155,7 +156,7 @@ Status BufferControlBlock::add_batch(std::unique_ptr<TFetchDataResult>& result) 
 
 void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRes>& ser_res) {
     if (_waiting_rpc.empty()) {
-        _buffer_rows += ser_res->row_size;
+        _buffer_bytes += ser_res->attachment.length();
         _batch_queue.enqueue(std::move(ser_res));
         _data_arriaval.notify_one();
     } else {
@@ -170,7 +171,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResul
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
-    if (_batch_queue.size_approx() > _buffer_limit && !_is_cancelled) {
+    if ((_batch_queue.size_approx() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
         return false;
     }
     auto status_or_value = _serialize_result(result.get());
@@ -187,7 +188,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
     }
 
-    if (_batch_queue.size_approx() > _buffer_limit && !_is_cancelled) {
+    if ((_batch_queue.size_approx() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
         return false;
     }
 
@@ -196,18 +197,19 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         auto status_or_value = _serialize_result(result.get());
         RETURN_IF_ERROR(status_or_value.status());
         auto ser_res = std::move(status_or_value.value());
+        _buffer_bytes += ser_res->attachment.length();
         _batch_queue.enqueue(std::move(ser_res));
-        /*{
+        {
             std::unique_lock<std::mutex> l(_lock);
             _data_arriaval.notify_one();
         }
-         */
     }
 
     std::unique_lock<std::mutex> l(_lock);
     if (!_waiting_rpc.empty()) {
         std::unique_ptr<SerializeRes> ser = nullptr;
         if (_batch_queue.try_dequeue(ser)) {
+            _buffer_bytes -= ser->attachment.length();
             auto* ctx = _waiting_rpc.front();
             _waiting_rpc.pop_front();
             auto packet_num = _packet_num.load();
@@ -223,7 +225,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
 Status BufferControlBlock::get_batch(TFetchDataResult* result) {
     {
         std::unique_lock<std::mutex> l(_lock);
-        while ((_batch_queue.size_approx() == 0) && !_is_close && !_is_cancelled) {
+        while ((_batch_queue.size_approx() == 0 || _buffer_bytes == 0) && !_is_close && !_is_cancelled) {
             _data_arriaval.wait(l);
         }
         // if Status has been set, return fail;
@@ -233,7 +235,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
             return Status::Cancelled("Cancelled BufferControlBlock::get_batch");
         }
 
-        if (_batch_queue.size_approx() == 0) {
+        if (_batch_queue.size_approx() == 0 || _buffer_bytes == 0) {
             if (_is_close) {
                 // no result, normal end
                 result->eos = true;
@@ -249,6 +251,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
     }
     std::unique_ptr<SerializeRes> ser = nullptr;
     if (_batch_queue.try_dequeue(ser)) {
+        _buffer_bytes -= ser->attachment.length();
         std::vector<uint8_t> continuous_mem(ser->attachment.size());
         // IOBuf is not continuous
         auto copied_size = ser->attachment.copy_to(continuous_mem.data(), ser->attachment.size(), 0);
@@ -278,6 +281,7 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     }
     std::unique_ptr<SerializeRes> ser = nullptr;
     if (_batch_queue.try_dequeue(ser)) {
+        _buffer_bytes -= ser->attachment.length();
         std::unique_lock data_lock(_lock);
         // _data_removal.notify_one();
         auto packet_num = _packet_num.load();
@@ -300,7 +304,6 @@ Status BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
     _is_close = true;
     _status = std::move(exec_status);
-
     // notify blocked get thread
     _data_arriaval.notify_all();
     if (!_waiting_rpc.empty()) {

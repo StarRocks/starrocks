@@ -144,7 +144,7 @@ private:
     std::atomic_bool _is_close;
     std::atomic_bool _is_cancelled;
     Status _status;
-    int _buffer_rows;
+    std::atomic_int64_t _buffer_bytes;
     int _buffer_limit;
     std::atomic<int64_t> _packet_num;
 
@@ -165,6 +165,7 @@ private:
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
+    size_t _max_memory_usage = 1UL << 28; // 256MB
 };
 
 } // namespace starrocks
