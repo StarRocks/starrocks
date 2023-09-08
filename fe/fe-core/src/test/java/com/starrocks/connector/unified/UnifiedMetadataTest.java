@@ -37,10 +37,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static com.starrocks.catalog.Table.TableType.HIVE;
-import static com.starrocks.catalog.Table.TableType.ICEBERG;
-import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
+import static com.starrocks.catalog.Table.TableType.HIVE;
+import static com.starrocks.catalog.Table.TableType.HUDI;
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.unified.UnifiedMetadata.DELTA_LAKE_PROVIDER;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_NAME;
 import static com.starrocks.connector.unified.UnifiedMetadata.ICEBERG_TABLE_TYPE_VALUE;
@@ -57,7 +57,7 @@ public class UnifiedMetadataTest {
     private UnifiedMetadata unifiedMetadata;
 
     @BeforeEach
-    public void Setup() {
+    public void setUp() {
         this.unifiedMetadata = new UnifiedMetadata(ImmutableMap.of(
             HIVE, hiveMetadata,
             ICEBERG, icebergMetadata,
@@ -218,7 +218,8 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
-        List<RemoteFileInfo> remoteFileInfos = unifiedMetadata.getRemoteFileInfos(icebergTable, ImmutableList.of(), -1, null, null);
+        List<RemoteFileInfo> remoteFileInfos = unifiedMetadata.getRemoteFileInfos(icebergTable, ImmutableList.of(),
+                -1, null, null);
         assertEquals(ImmutableList.of(), remoteFileInfos);
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(icebergTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
@@ -341,7 +342,8 @@ public class UnifiedMetadataTest {
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
         partitionNames = unifiedMetadata.listPartitionNamesByValue("test_db", "test_tbl", ImmutableList.of());
         assertEquals(ImmutableList.of("test_part1", "test_part2"), partitionNames);
-        List<RemoteFileInfo> remoteFileInfos = unifiedMetadata.getRemoteFileInfos(deltaLakeTable, ImmutableList.of(), -1, null, null);
+        List<RemoteFileInfo> remoteFileInfos = unifiedMetadata.getRemoteFileInfos(deltaLakeTable, ImmutableList.of(),
+                -1, null, null);
         assertEquals(ImmutableList.of(), remoteFileInfos);
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(deltaLakeTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
