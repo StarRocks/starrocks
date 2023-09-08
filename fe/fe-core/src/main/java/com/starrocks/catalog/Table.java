@@ -203,8 +203,37 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.LAKE;
     }
 
+<<<<<<< HEAD
     public boolean isLocalTable() {
         return isOlapTable() || isMaterializedView();
+=======
+    public boolean isHiveView() {
+        return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isOlapTableOrMaterializedView() {
+        return isOlapTable() || isOlapMaterializedView();
+    }
+
+    public boolean isCloudNativeTable() {
+        return type == TableType.CLOUD_NATIVE;
+    }
+
+    public boolean isCloudNativeMaterializedView() {
+        return type == TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
+    public boolean isCloudNativeTableOrMaterializedView() {
+        return isCloudNativeTable() || isCloudNativeMaterializedView();
+    }
+
+    public boolean isMaterializedView() {
+        return isOlapMaterializedView() || isCloudNativeMaterializedView();
+    }
+
+    public boolean isNativeTableOrMaterializedView() {
+        return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
+>>>>>>> a71ffe41c8 ([BugFix] fix mv on hive view (#29422))
     }
 
     public boolean isNativeTable() {

@@ -277,7 +277,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
+<<<<<<< HEAD
             if (!table.isLocalTable()) {
+=======
+            if (!table.isNativeTableOrMaterializedView() && !table.isHiveView()) {
+>>>>>>> a71ffe41c8 ([BugFix] fix mv on hive view (#29422))
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
