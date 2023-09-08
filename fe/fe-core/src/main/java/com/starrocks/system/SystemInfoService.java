@@ -768,13 +768,8 @@ public class SystemInfoService {
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                db.readLock();
-                try {
-                    atomicLong.set(newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } finally {
-                    db.readUnlock();
-                }
+                atomicLong.set(newReportVersion);
+                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }
