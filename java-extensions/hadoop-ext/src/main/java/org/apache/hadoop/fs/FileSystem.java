@@ -4006,7 +4006,7 @@ public abstract class FileSystem extends Configured
             public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
             public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
             public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
-            public static final String HDFS_FS_CACHE_KEY = "hadoop.fs.cache.key";
+            public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
             public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
 
             public static void addConfigResourcesToConfiguration(Configuration conf) {
@@ -4031,8 +4031,8 @@ public abstract class FileSystem extends Configured
                 conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
             }
 
-            public static String getFSCredential(Configuration conf) {
-                return conf.get(HDFS_FS_CACHE_KEY, "");
+            public static String getCloudConfString(Configuration conf) {
+                return conf.get(HDFS_CLOUD_CONFIGURATION_STRING, "");
             }
         }
 
@@ -4046,7 +4046,7 @@ public abstract class FileSystem extends Configured
             final UserGroupInformation ugi;
             final long unique;   // an artificial way to make a key unique
 
-            final String cred;
+            final String cloudConf;
 
             Key(URI uri, Configuration conf) throws IOException {
                 this(uri, conf, 0);
@@ -4061,12 +4061,12 @@ public abstract class FileSystem extends Configured
 
                 this.ugi = UserGroupInformation.getCurrentUser();
 
-                this.cred = StarRocksUtils.getFSCredential(conf);
+                this.cloudConf = StarRocksUtils.getCloudConfString(conf);
             }
 
             @Override
             public int hashCode() {
-                return (scheme + authority + cred).hashCode() + ugi.hashCode() + (int) unique;
+                return (scheme + authority + cloudConf).hashCode() + ugi.hashCode() + (int) unique;
             }
 
             static boolean isEqual(Object a, Object b) {
@@ -4082,7 +4082,7 @@ public abstract class FileSystem extends Configured
                     Key that = (Key) obj;
                     return isEqual(this.scheme, that.scheme)
                             && isEqual(this.authority, that.authority)
-                            && isEqual(this.cred, that.cred)
+                            && isEqual(this.cloudConf, that.cloudConf)
                             && isEqual(this.ugi, that.ugi)
                             && (this.unique == that.unique);
                 }
@@ -4091,7 +4091,7 @@ public abstract class FileSystem extends Configured
 
             @Override
             public String toString() {
-                return "(ugi = " + ugi.toString() + ", cred = " + cred + ")@" + scheme + "://" + authority;
+                return "(ugi = " + ugi.toString() + ", cloudConf = " + cloudConf + ")@" + scheme + "://" + authority;
             }
 
         }
