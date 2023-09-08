@@ -3,7 +3,14 @@
 ## Description
 
 Returns whether any elements of an array match the given predicate.
-Returns true if one or more elements match the predicate; false if none of the elements matches (a special case is when the array is empty); NULL if the predicate function returns NULL for one or more elements and false for all other elements.
+
+- Returns `true` (1) if one or more elements match the predicate.
+
+- Returns `false` (0) if none of the elements matches (a special case is when the array is empty).
+
+- Returns NULL if the predicate returns NULL for one or more elements and `false` for all other elements.
+
+This function is supported from v3.0.6 onwards.
 
 ## Syntax
 
@@ -23,16 +30,16 @@ Returns whether any elements of `arr1` match the given predicate in the lambda f
 
 ## Usage notes
 
-- The lambda function follows the usage notes in [array_map()](array_map.md), it returns array<bool>.
+- The lambda function follows the usage notes in [array_map()](array_map.md).
 - If the input array is null or the lambda function results null, null is returned.
-- if `arr1` is empty, return false.
-- Map types can use it by rewriting `any/all_match((k,v)->k>v,map)` to `any/all_match(map_values(transform_values((k,v)->k>v, map)))`.
+- if `arr1` is empty, `false` is returned.
+- To apply this function to MAP, rewrite `any_match((k,v)->k>v,map)` to `any_match(map_values(transform_values((k,v)->k>v, map)))`. For example, `select any_match(map_values(transform_values((k,v)->k>v, map{2:1})));` returns 1.
 
 ## Examples
 
-```Plain
--- check whether any element in x that is less than the elements in y.
+Check whether any element in `x` is less than the elements in `y`.
 
+```Plain
 select any_match((x,y) -> x < y, [1,2,8], [4,5,6]);
 +--------------------------------------------------+
 | any_match((x, y) -> x < y, [1, 2, 8], [4, 5, 6]) |
