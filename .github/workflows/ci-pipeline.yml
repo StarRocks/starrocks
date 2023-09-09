@@ -752,6 +752,18 @@ jobs:
         run: |
           eci rm ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
 
+      - name: upload info
+        if: always()
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v2
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
       - name: Clean
         if: always()
         run: |
