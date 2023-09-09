@@ -222,6 +222,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
     LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
+    LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
     bool is_task_timeout = false;
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
