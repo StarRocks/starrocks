@@ -759,7 +759,7 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: pr_num
           path: ./pr_num.txt
