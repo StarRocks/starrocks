@@ -53,10 +53,6 @@ public class CompactionTask {
         return nodeId;
     }
 
-    public Future<CompactResponse> getResponseFuture() {
-        return responseFuture;
-    }
-
     public boolean isDone() {
         return responseFuture != null && responseFuture.isDone();
     }
@@ -116,10 +112,15 @@ public class CompactionTask {
 
     public void abort() {
         if (!isCompleted()) {
-            LOG.info("abort compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
             AbortCompactionRequest abortRequest = new AbortCompactionRequest();
             abortRequest.txnId = request.txnId;
-            Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
+            try {
+                Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
+                LOG.info("aborted compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
+            } catch (Exception e) {
+                LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
+                        nodeId, e.getMessage());
+            }
         }
     }
 
