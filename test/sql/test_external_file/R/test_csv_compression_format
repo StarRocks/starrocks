@@ -1,8 +1,8 @@
 -- name: testCSVSnappyFormat
-shell: snappy_prefix=echo "oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/"
+[UC]shell: snappy_prefix=echo "oss://${oss_bucket}/test_csv_/${uuid0}/snappy_format/"
 -- result:
 0
-oss://starrocks-env-s3-unit-test/test_csv_/800fd3910b12468e8b198368290dfd0c/snappy_format/
+oss://starrocks-env-s3-unit-test/test_csv_/3ee55901171a4a4b8d60e28c79e2ff79/snappy_format/
 -- !result
 shell: ossutil64 mkdir ${snappy_prefix[1]} /dev/null || echo "exit 0" >/dev/null
 -- result:
