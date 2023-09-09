@@ -722,13 +722,14 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Teardown
     needs: [ deploy, SQL-Tester, admit ]
-    if: always() && needs.deploy.outputs.deploy_conf_file != ''
+    if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: Backup SR Info
+        if: needs.deploy.outputs.deploy_conf_file != ''
         id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -751,6 +752,18 @@ jobs:
         if: always() && needs.SQL-Tester.outputs.MYSQL_ECI_ID != ''
         run: |
           eci rm ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+
+      - name: upload info
+        if: always()
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v3
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
 
       - name: Clean
         if: always()
