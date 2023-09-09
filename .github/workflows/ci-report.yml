@@ -358,9 +358,8 @@ jobs:
   NOTIFICATION:
     runs-on: [ self-hosted, quick ]
     needs: [ INFO, FE-REPORT, Admit-REPORT, BE-REPORT, SQL-Tester-REPORT ]
-    if: always() && env.PR_NUMBER != ''
+    if: always()
     env:
-      PR_ID: ${{ env.PR_NUMBER }}
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
       FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
