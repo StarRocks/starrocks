@@ -722,13 +722,14 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Teardown
     needs: [ deploy, SQL-Tester, admit ]
-    if: always() && needs.deploy.outputs.deploy_conf_file != ''
+    if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: Backup SR Info
+        if: needs.deploy.outputs.deploy_conf_file != ''
         id: backup
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
