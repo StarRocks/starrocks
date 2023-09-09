@@ -143,6 +143,10 @@ public:
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
 
+    // Used in UT only
+    bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
