@@ -261,7 +261,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     public static LiteralExpr parseLiteral(int encode) throws AnalysisException {
         LiteralExpr literalExpr = MYSQL_LITERAL_TYPE_ENCODE_MAP.get(encode);
         if (null != literalExpr) {
-            return literalExpr;
+            return (LiteralExpr) literalExpr.clone();
         } else {
             throw new AnalysisException("unknown mysql type code " + encode);
         }
