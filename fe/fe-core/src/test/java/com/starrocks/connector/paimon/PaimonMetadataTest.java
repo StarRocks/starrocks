@@ -92,6 +92,11 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testRowCount() {
+        long rowCount = metadata.getRowCount(splits);
+        Assert.assertTrue(rowCount > 0);
+    }
+    @Test
     public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
         fields.add(new DataField(1, "col2", new IntType(true)));
