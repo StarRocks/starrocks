@@ -25,6 +25,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
@@ -37,7 +38,6 @@ import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
-import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -307,12 +307,12 @@ public class HDFSBackendSelector implements BackendSelector {
         for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
             sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
         }
-        PlannerProfile.addCustomProperties(scanNode.getTableName() + " scan_range_bytes", sb.toString());
+        Tracers.record(Tracers.Module.EXTERNAL, scanNode.getTableName() + " scan_range_bytes", sb.toString());
         // record re-balance bytes for each backend
         sb = new StringBuilder();
         for (Map.Entry<ComputeNode, Long> entry : reBalanceBytesPerComputeNode.entrySet()) {
             sb.append(entry.getKey().getAddress().hostname).append(":").append(entry.getValue()).append(",");
         }
-        PlannerProfile.addCustomProperties(scanNode.getTableName() + " rebalance_bytes", sb.toString());
+        Tracers.record(Tracers.Module.EXTERNAL, scanNode.getTableName() + " rebalance_bytes", sb.toString());
     }
 }

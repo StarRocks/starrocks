@@ -43,6 +43,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -303,7 +304,7 @@ public class ConnectProcessor {
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 ctx.getCurrentWarehouseName());
         ctx.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
+        // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
     }
 
@@ -327,7 +328,7 @@ public class ConnectProcessor {
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
-        ctx.getPlannerProfile().reset();
+        Tracers.register(ctx);
 
         // execute this query.
         StatementBase parsedStmt = null;
@@ -348,7 +349,7 @@ public class ConnectProcessor {
                 }
                 parsedStmt = stmts.get(i);
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
-
+                Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
                 // Only add the last running stmt for multi statement,
                 // because the audit log will only show the last stmt.
                 if (i == stmts.size() - 1) {
@@ -394,6 +395,8 @@ public class ConnectProcessor {
                 // ignore kill stmt execute err(not monitor it)
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
+        } finally {
+            Tracers.close();
         }
 
         // audit after exec

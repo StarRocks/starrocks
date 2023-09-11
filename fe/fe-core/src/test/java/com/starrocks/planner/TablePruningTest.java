@@ -598,7 +598,6 @@ public class TablePruningTest extends TablePruningTestBase {
     public void testCboFKOuterJoinPKOfTwoTablesPruneSuccess() throws Exception {
         ctx.getSessionVariable().setEnableRboTablePrune(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(3000000);
-        ctx.getSessionVariable().setEnableOptimizerTraceLog(true);
 
         List<String> selectItems = Lists.newArrayList(
                 "e_c0, e_fi_fk",
