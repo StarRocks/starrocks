@@ -160,11 +160,20 @@ Step4: The user (external system) polls to see the job status (FINISHED or CANCE
 
 To prevent imports from taking up too much memory and causing system OOM, users can set parameters to limit the memory consumed by import jobs. Different import methods limit memory in slightly different ways, see each import method for details.
 
+<<<<<<< HEAD
 An import job is usually distributed across multiple BEs. The memory parameters limit the memory usage of an import job on a single BE, not on the entire cluster.
 
 Also, each BE sets the total memory limit that can be used for the import job. See the section "4.1.5 General System Configuration" for details. This configuration limits the overall memory usage for all import jobs running on that BE.
 
 A stricter memory limit may affect the efficiency of the import, as the import process may frequently write data from memory to disk  when the memory limit is reached. However, an overly lenient memory limit may lead to system OOM when the import concurrency is high. In conclusion, the memory parameters need to be set properly based on  your requirements and use cases.
+=======
+- `write_buffer_size`
+  
+  This parameter specifies the maximum memory block size. The default size is 100 MB. The loaded data is first written to a memory block on the BE. When the amount of data that is loaded reaches the maximum memory block size that you specify, the data is flushed to disk. You must specify a proper maximum memory block size based on your business scenario.
+
+  - If the maximum memory block size is exceedingly small, a large number of small files may be generated on the BE. In this case, query performance degrades. You can increase the maximum memory block size to reduce the number of files generated.
+  - If the maximum memory block size is exceedingly large, remote procedure calls (RPCs) may time out. In this case, you can adjust the value of this parameter based on your business needs.
+>>>>>>> a68dfa1d00 ([Doc] Deprecate two params from and add query_timeout to load overview doc (#30701))
 
 ## General System Configuration
 
@@ -174,7 +183,19 @@ This section explains the system configuration that is available for all import 
 
 The following system configurations belong to FE and can be modified by FE's configuration file (`fe.conf`).
 
+<<<<<<< HEAD
 * `max_load_timeout_second and min_load_timeout_second`
+=======
+### System variable configurations
+
+You can configure the following [system variable](../reference/System_variable.md):
+
+- `query_timeout`
+
+  The query timeout duration. Unit: seconds. Value range: `1` to `259200`. Default value: `300`. This variable will act on all query statements in the current connection, as well as INSERT statements.
+
+## Troubleshooting
+>>>>>>> a68dfa1d00 ([Doc] Deprecate two params from and add query_timeout to load overview doc (#30701))
 
 You can set the maximum and minimum range of values for the import timeout, both in seconds. The default maximum timeout is 3 days, and the minimum timeout is 1 second. This parameter is common to all types of import jobs.
 
